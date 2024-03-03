@@ -28,15 +28,20 @@ jobs:
       - name: Build library and static website
         run: npm run publish
 
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npx semantic-release
-
-      - name: Deploy
+      - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
 
+      - name: Deploy to tiddlyhost
+        env:
+          THOST_EMAIL: ${{ secrets.THOST_EMAIL }}
+          TH_PASSWORD: ${{ secrets.TH_PASSWORD }}
+        run: for file in $(find dist/empty -type f -regex ".*\.html"); do site=${file%.html}; site=${site#dist/empty/}; if [ "$site" == "index" ]; then site="tidme"; else site="tidme-${site,,}"; fi; ./bin/thost-uploader $site $file $THOST_EMAIL $TH_PASSWORD; done
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx semantic-release

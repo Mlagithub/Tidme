@@ -130,14 +130,14 @@ public-dist
 # for TiddlyWiki
 dist/
 output/
-*/tiddlers/$__language.tid
-*/tiddlers/$__StoryList.tid
-*/tiddlers/$__StoryList_*.tid
-*/tiddlers/$__keepstate_*
-*/tiddlers/$__Import.tid
-*/tiddlers/$__UpgradeLibrary
-*/tiddlers/$__UpgradeLibrary_List
-*/tiddlers/$__temp_*
-*/tiddlers/$__view.tid
-*/tiddlers/$__config_Navigation_openLinkFromInsideRiver.tid
-*/tiddlers/$__config_Navigation_openLinkFromOutsideRiver.tid
+**/\$__language.tid
+**/\$__StoryList.tid
+**/\$__StoryList_*.tid
+**/\$__keepstate_*
+**/\$__Import.tid
+**/\$__UpgradeLibrary
+**/\$__UpgradeLibrary_List
+**/\$__temp_*
+**/\$__view.tid
+**/\$__config_Navigation_openLinkFromInsideRiver.tid
+**/\$__config_Navigation_openLinkFromOutsideRiver.tid
