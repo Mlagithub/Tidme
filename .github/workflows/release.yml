@@ -36,9 +36,9 @@ jobs:
 
       - name: Deploy to tiddlyhost
         env:
-          THOST_EMAIL: ${{ secrets.THOST_EMAIL }}
+          TH_EMAIL: ${{ secrets.TH_EMAIL }}
           TH_PASSWORD: ${{ secrets.TH_PASSWORD }}
-        run: for file in $(find dist/empty -type f -regex ".*\.html"); do site=${file%.html}; site=${site#dist/empty/}; if [ "$site" == "index" ]; then site="tidme"; else site="tidme-${site,,}"; fi; ./bin/thost-uploader $site $file $THOST_EMAIL $TH_PASSWORD; done
+        run: for file in $(find dist/empty -type f -regex ".*\.html"); do site=${file%.html}; site=${site#dist/empty/}; if [ "$site" == "index" ]; then site="tidme"; else site="tidme-${site,,}"; fi; ./bin/thost-uploader $site $file $TH_EMAIL $TH_PASSWORD; done
 
       - name: Release
         env:
