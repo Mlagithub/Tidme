@@ -28,14 +28,18 @@ export function tierRandom(tier: keyof typeof PRIORITY_TIERS, spread = 8): numbe
 	return Math.max(0, Math.min(100, base + Math.round((Math.random() - 0.5) * 2 * spread)));
 }
 
-/** TW 日期串（YYYYMMDDhhmmssmmm 17 位）→ Date；非法回退 now */
+/**
+ * TW 日期串（YYYY0MM0DD0hh0mm0ss0XXX，UTC 语义，与 $tw.utils.parseDate 一致）→ Date。
+ * 注意：TW 的日期字符串是 UTC 编码（stringifyDate 用 getUTC*），此前按本地时区解析
+ * 会造成 8 小时（=时区偏移）的系统性偏差（如评分间隔显示"8 hours from now"）。
+ */
 export function parseTwDate(v: unknown, fallback = new Date()): Date {
 	const s = String(v || "");
 	if (/^\d{17}$/.test(s)) {
-		const d = new Date(
+		const d = new Date(Date.UTC(
 			Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8)),
 			Number(s.slice(8, 10)), Number(s.slice(10, 12)), Number(s.slice(12, 14)), Number(s.slice(14, 17))
-		);
+		));
 		return Number.isNaN(d.getTime()) ? fallback : d;
 	}
 	const p = Date.parse(s);
@@ -46,9 +50,10 @@ function addDays(d: Date, days: number): Date {
 	return new Date(d.getTime() + days * 86400000);
 }
 
+/** Date → TW 日期串（UTC 语义，与 $tw.utils.stringifyDate 一致） */
 function twDate(d: Date): string {
 	const p = (n: number, l: number) => String(n).padStart(l, "0");
-	return `${d.getFullYear()}${p(d.getMonth() + 1, 2)}${p(d.getDate(), 2)}${p(d.getHours(), 2)}${p(d.getMinutes(), 2)}${p(d.getSeconds(), 2)}${p(d.getMilliseconds(), 3)}`;
+	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}${p(d.getUTCSeconds(), 2)}${p(d.getUTCMilliseconds(), 3)}`;
 }
 
 export interface CardLike { title: string; fields: Record<string, any> }

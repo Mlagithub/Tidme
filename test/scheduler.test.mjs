@@ -12,7 +12,7 @@ const sched = await import("../src/core/scheduler.ts");
 const T = (offsetHours) => {
 	const d = new Date(Date.now() + offsetHours * 3600000);
 	const p = (n, l = 2) => String(n).padStart(l, "0");
-	return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}${p(d.getMilliseconds(), 3)}`;
+	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
 };
 const PAST = () => T(-48); // 48 小时前（逾期）
 const FUTURE = () => T(48);
@@ -102,12 +102,12 @@ test("subsetQueue / subsetByDoc / subsetByTag", () => {
 	assert.equal(byTag, "[tag[数学]]");
 });
 
-test("parseTwDate: 17 位 TW 日期串", () => {
+test("parseTwDate: 17 位 TW 日期串（UTC 语义，与 $tw.utils.parseDate 一致）", () => {
 	const d = sched.parseTwDate("20260824201518283");
-	assert.equal(d.getFullYear(), 2026);
-	assert.equal(d.getMonth(), 7); // 8 月（0-based）
-	assert.equal(d.getDate(), 24);
-	assert.equal(d.getHours(), 20);
-	assert.equal(d.getMinutes(), 15);
-	assert.equal(d.getSeconds(), 18);
+	assert.equal(d.getUTCFullYear(), 2026);
+	assert.equal(d.getUTCMonth(), 7); // 8 月（0-based）
+	assert.equal(d.getUTCDate(), 24);
+	assert.equal(d.getUTCHours(), 20);
+	assert.equal(d.getUTCMinutes(), 15);
+	assert.equal(d.getUTCSeconds(), 18);
 });

@@ -42,10 +42,10 @@ export interface CardRequired extends SectionRequired {
 	"tidme.kind": "extract" | "qa" | "cloze";
 }
 
-/** TW 日期字符串（本地时区，YYYY0MM0DD0hh0mm0ss0XXX） */
+/** TW 日期字符串（UTC 语义，YYYY0MM0DD0hh0mm0ss0XXX，与 $tw.utils.stringifyDate 一致） */
 export function twDateString(d: Date): string {
 	const p = (n: number, l: number) => String(n).padStart(l, "0");
-	return `${d.getFullYear()}${p(d.getMonth() + 1, 2)}${p(d.getDate(), 2)}${p(d.getHours(), 2)}${p(d.getMinutes(), 2)}${p(d.getSeconds(), 2)}${p(d.getMilliseconds(), 3)}`;
+	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}${p(d.getUTCSeconds(), 2)}${p(d.getUTCMilliseconds(), 3)}`;
 }
 
 /**
