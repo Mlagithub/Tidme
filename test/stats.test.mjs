@@ -1,0 +1,71 @@
+/*
+stats.test.mjs — core 统计聚合单元测试（node:test）
+*/
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+const stats = await import("../src/core/stats.ts");
+
+const T = (offsetHours) => {
+	const d = new Date(Date.now() + offsetHours * 3600000);
+	const p = (n, l = 2) => String(n).padStart(l, "0");
+	return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}${p(d.getMilliseconds(), 3)}`;
+};
+
+test("deckLoad: new/learn/due/overdue 分类", () => {
+	const cards = [
+		{ title: "新卡", fields: { tags: ["?"], state: "0", due: T(48) } },
+		{ title: "学习中", fields: { tags: ["?"], state: "1", due: T(-1) } },
+		{ title: "到期", fields: { tags: ["?"], state: "2", due: T(6) } },
+		{ title: "逾期", fields: { tags: ["?"], state: "2", due: T(-24) } },
+		{ title: "已出队", fields: { tags: ["."], state: "2", due: T(-24) } },
+		{ title: "搁置", fields: { tags: ["?"], state: "2", due: T(-24), "tidme.suspended": "yes" } }
+	];
+	const load = stats.deckLoad(cards);
+	assert.equal(load.total, 6);
+	assert.equal(load.newCount, 1);
+	assert.equal(load.learn, 1);
+	assert.equal(load.due, 2); // 到期+逾期（已出队/搁置排除）
+	assert.equal(load.overdue, 1);
+});
+
+test("docProgress: 已读/剩余", () => {
+	const sections = [
+		{ title: "A", fields: { tags: ["?", "."] } },
+		{ title: "B", fields: { tags: ["?"] } },
+		{ title: "C", fields: { tags: ["."] } } // 已读
+	];
+	assert.deepEqual(stats.docProgress(sections), { total: 3, done: 1, left: 2 });
+});
+
+test("retentionFromLogs: 保留率 ≈ 1 - Again 占比", () => {
+	const r = stats.retentionFromLogs([{ rating: 1 }, { rating: 3 }, { rating: 4 }, { rating: 3 }]);
+	assert.equal(r.reviews, 4);
+	assert.equal(r.retention, 0.75);
+	assert.equal(stats.retentionFromLogs([]).retention, 1);
+});
+
+test("funnelCounts: 漏斗分层", () => {
+	const items = [
+		{ title: "文档", fields: { tags: ["tidme-import-doc"], "tidme.kind": undefined } },
+		{ title: "节", fields: { "tidme.kind": "section" } },
+		{ title: "节2", fields: { "tidme.kind": "section" } },
+		{ title: "摘录", fields: { "tidme.kind": "extract" } },
+		{ title: "挖空", fields: { "tidme.kind": "cloze" } }
+	];
+	assert.deepEqual(stats.funnelCounts(items), { docs: 1, sections: 2, extracts: 1, cards: 1 });
+});
+
+test("priorityBuckets: 分桶", () => {
+	const cards = [
+		{ title: "A", fields: { "tidme.priority": "10" } },
+		{ title: "B", fields: { "tidme.priority": "90" } },
+		{ title: "C", fields: { "tidme.priority": "50" } },
+		{ title: "D", fields: {} }
+	];
+	const b = stats.priorityBuckets(cards);
+	assert.equal(b.high, 1);
+	assert.equal(b.medium, 1);
+	assert.equal(b.low, 1);
+	assert.equal(b.none, 1);
+});

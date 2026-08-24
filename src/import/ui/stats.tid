@@ -1,0 +1,10 @@
+title: $:/plugins/tidme/import/ui/stats
+type: text/vnd.tiddlywiki
+
+! 统计面板
+
+<$stats-panel/>
+
+---
+
+[[← 导入中心|$:/plugins/tidme/import/ui/import-center]] · [[牌组批量操作|$:/plugins/tidme/import/ui/deck-ops]]
