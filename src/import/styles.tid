@@ -103,3 +103,23 @@ mark.tm-readpoint {
 .tm-doc-resume-row {
 	margin: 4px 0;
 }
+
+/* M3 阅读态排版：Section 卡展开正文（与 section-bar 同帧时生效） */
+.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body {
+	max-width: 42em;
+	line-height: 1.8;
+}
+.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body p {
+	margin: 0.7em 0;
+}
+.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body h1,
+.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body h2,
+.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body h3 {
+	margin-top: 1.2em;
+}
+
+/* 嵌套摘录 / 回看锚点高亮 */
+.tm-inline-anchor {
+	background: #d8ecff;
+	box-shadow: 0 0 0 2px #d8ecff;
+}

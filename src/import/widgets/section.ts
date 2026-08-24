@@ -68,6 +68,16 @@ function clearReadPoint(wiki: any, doc: string) {
 	wiki.deleteTiddler(READPOINT_PREFIX + doc);
 }
 
+/** 解析 tidme.anchor（{section, snippet}） */
+function parseAnchor(raw: any): { section: string; snippet: string } | null {
+	if (!raw) return null;
+	try {
+		const o = typeof raw === "string" ? JSON.parse(raw) : raw;
+		if (o && o.section) return { section: String(o.section), snippet: String(o.snippet || "") };
+	} catch { /* 忽略非法 anchor */ }
+	return null;
+}
+
 function frameTitleOfSelection(win: any): string | null {
 	const sel = win?.getSelection?.();
 	if (!sel || sel.isCollapsed || !sel.anchorNode) return null;
@@ -148,7 +158,7 @@ function highlightSnippetLater(doc: Document, targetTitle: string, snippet: stri
 	setTimeout(tick, 150);
 }
 
-/** 摘录卡字段（Alt+X） */
+/** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用） */
 function buildExtract(wiki: any, parentTitle: string, selection: string): Record<string, any> {
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
@@ -170,6 +180,7 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 		"tidme.doc": pf["tidme.doc"] || "",
 		"tidme.parent": parentTitle,
 		"tidme.kind": "extract",
+		"tidme.anchor": JSON.stringify({ section: parentTitle, snippet: selection.replace(/\s+/g, " ").trim().slice(0, 80) }),
 		"tidme.breadcrumb": `${crumbTail} › 摘录`,
 		"tidme.source": pf["tidme.source"] || "",
 		"tidme.author": pf["tidme.author"] || "",
@@ -202,6 +213,7 @@ function buildCloze(wiki: any, parentTitle: string, block: string, selected: str
 		"tidme.doc": pf["tidme.doc"] || "",
 		"tidme.parent": parentTitle,
 		"tidme.kind": "cloze",
+		"tidme.anchor": JSON.stringify({ section: parentTitle, snippet: selected.replace(/\s+/g, " ").trim().slice(0, 80) }),
 		"tidme.breadcrumb": `${crumbTail} › 挖空`,
 		"tidme.source": pf["tidme.source"] || "",
 		"tidme.author": pf["tidme.author"] || "",
@@ -329,7 +341,7 @@ function makeSectionBar(): WidgetCtor {
 				return b;
 			};
 
-			// 衍生卡（摘录/挖空）：迷你生命周期条
+			// 衍生卡（摘录/挖空）：迷你生命周期条 + 上下文回看
 			const kind = t.fields["tidme.kind"];
 			if (kind === "extract" || kind === "cloze") {
 				const mini = el(doc, "div", "tm-section-bar");
@@ -344,6 +356,14 @@ function makeSectionBar(): WidgetCtor {
 				});
 				span.appendChild(link);
 				mini.appendChild(span);
+				// 回原文：跳回父节并高亮 anchor 片段
+				const anchor = parseAnchor(t.fields["tidme.anchor"]);
+				if (anchor) {
+					mini.appendChild(mkBtn("↩ 回原文", "tm-section-rp-btn", "跳回原文并高亮此片段", false, () => {
+						this.dispatchEvent({ type: "tm-navigate", navigateTo: anchor.section });
+						highlightSnippetLater(doc, anchor.section, anchor.snippet);
+					}));
+				}
 				mini.appendChild(mkBtn("✔ 完成", "tm-section-done-btn", "读完此卡：移出学习队列", false, () => {
 					const tags = (t.fields.tags || []).filter((x: string) => x !== "?");
 					this.wiki.addTiddler({ ...t.fields, tags });
@@ -463,15 +483,21 @@ function makeDocResume(): WidgetCtor {
 			if (!t || !t.fields["tidme.doc"]) return;
 			CTX.widget = this;
 			const docId = String(t.fields["tidme.doc"]);
+			// 进度聚合（M3-T5）：已读 / 总数 / 剩余待学
+			const all = sectionsOfDoc(this.wiki, docId);
+			const done = all.filter((x) => isDone(this.wiki.getTiddler(x)?.fields)).length;
+			const left = all.length - done;
 			const btn = el(doc, "button", "tc-btn-primary", "▶ 继续阅读");
 			btn.addEventListener("click", () => {
 				const rp = parseReadPoint(this.wiki, docId);
-				const list = sectionsOfDoc(this.wiki, docId).filter((x) => !isDone(this.wiki.getTiddler(x)?.fields));
+				const list = all.filter((x) => !isDone(this.wiki.getTiddler(x)?.fields));
 				const target = rp && list.includes(rp.t) ? rp.t : list[0];
 				if (target) this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
 			});
 			const wrap = el(doc, "span", "tm-doc-resume");
 			wrap.appendChild(btn);
+			wrap.appendChild(el(doc, "span", "tm-import-muted",
+				`　已读 ${done} / ${all.length} · 剩余 ${left} 节待学`));
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
 		}
@@ -482,3 +508,8 @@ function makeDocResume(): WidgetCtor {
 
 exports["section-bar"] = makeSectionBar();
 exports["doc-resume"] = makeDocResume();
+
+// 供单元测试/复用：纯字段构建器与锚点解析
+exports.buildExtract = buildExtract;
+exports.buildCloze = buildCloze;
+exports.parseAnchor = parseAnchor;
