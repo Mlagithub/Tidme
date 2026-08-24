@@ -13,7 +13,7 @@ function JSZipLib(): any {
 	if (!_JSZip) _JSZip = require("$:/plugins/tidme/import/jszip");
 	return _JSZip;
 }
-import type { BookMeta } from "./ids";
+import type { BookMeta } from "$:/plugins/tidme/core/ids";
 
 const XHTML_TYPE = "application/xhtml+xml";
 

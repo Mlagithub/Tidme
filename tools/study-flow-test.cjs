@@ -13,7 +13,7 @@ const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 
 const pluginDir = path.resolve(__dirname, "../out-m2");
-const plugins = ["$__plugins_tidme_fsrs4tw", "$__plugins_tidme_import", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
+const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_fsrs4tw", "$__plugins_tidme_import", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
@@ -83,8 +83,8 @@ function runActions(text, variables) {
 }
 
 function startstudy() {
-	// 复刻 fsrs4tw ui/ViewTemplate/deck 的 <$let> 过滤器组合（M1 将提取为 core deck-engine）。
-	// 注：无头环境下 $(var)$ 替换不可用，直接 JS 插值 deck 标题。
+	// 复刻 core deck-engine（src/core/deck-engine.ts，composeDeckFilters）的过滤器组合。
+	// 无头环境不依赖 TW 运行时，故在测试内联等价逻辑；core 本体的组合由 test/core.test.mjs 覆盖。
 	const deckFields = wiki.getTiddler(DECK).fields;
 	const filter_learn = `[subfilter{${DECK}!!card}!subfilter{${DECK}!!card_exclude}subfilter{${DECK}!!state_learn}sort[due]]`;
 	const filter_due = `[subfilter{${DECK}!!card}!subfilter{${DECK}!!card_exclude}subfilter{${DECK}!!state_due}subfilter{${DECK}!!order_due}]`;

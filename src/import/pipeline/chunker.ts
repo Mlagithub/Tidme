@@ -3,7 +3,7 @@ chunker.ts — 大纲树递归切分器（浏览器版，与 Node 版同构）
 规则详见 D:\work\tidme-import\src\chunk\outline-chunker.js 头注。
 */
 
-import { normalizeText } from "./ids";
+import { normalizeText } from "$:/plugins/tidme/core/ids";
 import type { Block } from "./epub";
 
 export const DEFAULTS = { maxChars: 4000, minChars: 600 };

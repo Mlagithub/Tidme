@@ -6,7 +6,7 @@ ingest-text.ts — Markdown / TXT 的轻量摄取（M2 范围）
 - TXT：无标题 → 段落聚合为虚拟节（由切分器按尺寸分段）
 */
 
-import { normalizeText } from "./ids";
+import { normalizeText } from "$:/plugins/tidme/core/ids";
 import type { Block } from "./epub";
 
 function virtualBlock(text: string, isHeading = false, level = 0): Block {

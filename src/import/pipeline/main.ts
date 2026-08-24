@@ -6,8 +6,9 @@ main.ts — 导入管线入口（浏览器版）
 产物即标准 TW 导入格式；卡片带 ? 标签。
 */
 
-import { makeDocId, makeSectionId, contentFingerprint } from "./ids";
-import type { BookMeta } from "./ids";
+import { makeDocId, makeSectionId, contentFingerprint } from "$:/plugins/tidme/core/ids";
+import type { BookMeta } from "$:/plugins/tidme/core/ids";
+import { twDateString as coreTwDateString, initialFsrsFields as coreInitialFsrsFields } from "$:/plugins/tidme/core/schema";
 import { readEpubBytes, extractNcxTree, makeBreadcrumbResolver, collectBlocks, flattenNcx, anchorBoundaries } from "./epub";
 import type { Block } from "./epub";
 import { smartMergeParagraphs } from "./smart-merge";
@@ -37,30 +38,15 @@ function uniqueTitleFactory() {
 	};
 }
 
-/** TW 日期字符串（与 $tw.utils.stringifyDate 一致：YYYY0MM0DD0hh0mm0ss0XXX，本地时区） */
-export function twDateString(d: Date): string {
-	const p = (n: number, l: number) => String(n).padStart(l, "0");
-	return `${d.getFullYear()}${p(d.getMonth() + 1, 2)}${p(d.getDate(), 2)}${p(d.getHours(), 2)}${p(d.getMinutes(), 2)}${p(d.getSeconds(), 2)}${p(d.getMilliseconds(), 3)}`;
-}
+/** TW 日期字符串（与 $tw.utils.stringifyDate 一致：YYYY0MM0DD0hh0mm0ss0XXX，本地时区）——core 实现，兼容再导出 */
+export const twDateString = coreTwDateString;
 
 /**
- * FSRS 初始字段集。
+ * FSRS 初始字段集（core schema 实现，兼容再导出）。
  * 关键修复：fsrs4tw 的过滤器要求卡片已含全部 FSRS 字段才走评分写入路径；
  * 缺字段的卡评分静默失败 → 队列首位永不变（表现为"无法切换下一张"）。
  */
-export function initialFsrsFields(now: Date): Record<string, string> {
-	return {
-		due: twDateString(now),
-		state: "0",
-		reps: "0",
-		lapses: "0",
-		stability: "0",
-		difficulty: "0",
-		elapsed_days: "0",
-		scheduled_days: "0",
-		last_review: twDateString(now)
-	};
-}
+export const initialFsrsFields = coreInitialFsrsFields;
 
 async function emitTiddlers(docId: string, meta: MetaWithFormat, bookTitle: string, sections: RawSection[], bag: string): Promise<{ tiddlers: Record<string, any>[]; warnings: string[] }> {
 	const warnings: string[] = [];
