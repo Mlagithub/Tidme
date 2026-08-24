@@ -1,0 +1,16 @@
+const fs = require("fs");
+const path = require("path");
+const TiddlyWiki = require("tiddlywiki");
+const tw = TiddlyWiki.TiddlyWiki();
+tw.preloadTiddlerArray([JSON.parse(fs.readFileSync(path.resolve(__dirname, "../out-m2/$__plugins_tidme_fsrs4tw.json"), "utf8"))]);
+tw.boot.argv = [path.resolve(__dirname, "../wiki/manual/index")];
+tw.boot.boot();
+const wiki = tw.wiki;
+const fake = { createElement: () => ({ style: {}, childNodes: [], setAttribute() {}, getAttribute() { return ""; }, appendChild() {}, insertBefore() {}, addEventListener() {}, dispatchEvent() {}, textContent: "", classList: { add() {}, remove() {} }, hasAttribute() { return false }, ownerDocument: null }), body: {}, title: "f" };
+wiki.addTiddler({ title: "卡X", tags: ["?"], text: "?", due: "20260823120000000", state: "0", reps: "0", lapses: "0", stability: "0", difficulty: "0", elapsed_days: "0", scheduled_days: "0", last_review: "20260823120000000" });
+const p = wiki.getTiddler("$:/Deck/default").fields.p;
+const vw = wiki.makeWidget("", { variables: { studyTiddler: "卡X", p }, document: fake });
+const j = wiki.filterTiddlers("[<studyTiddler>fsrs<p>]", vw)[0];
+const d = JSON.parse(j);
+console.log("Cards keys:", Object.keys(d.Cards));
+console.log(JSON.stringify(d.Cards).slice(0, 600));

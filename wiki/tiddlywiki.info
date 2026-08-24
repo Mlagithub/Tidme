@@ -4,8 +4,6 @@
         "tiddlywiki/tiddlyweb",
         "tiddlywiki/filesystem",
         "tiddlywiki/pluginlibrary",
-        "tiddlywiki/dynaview",
-        "tiddlywiki/dynannotate",
         "tiddlywiki/browser-sniff",
         "tiddlywiki/github-fork-ribbon"
     ],

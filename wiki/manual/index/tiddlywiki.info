@@ -6,8 +6,6 @@
         "tiddlywiki/powered-by-tiddlywiki",
         "tiddlywiki/pluginlibrary",
         "tiddlywiki/github-fork-ribbon",
-        "tiddlywiki/dynaview",
-        "tiddlywiki/dynannotate",
         "tiddlywiki/browser-sniff"
     ],
     "themes": [

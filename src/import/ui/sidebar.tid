@@ -1,0 +1,20 @@
+title: $:/plugins/tidme/import/ui/sidebar
+caption: 导入
+tags: $:/tags/SideBar
+list-after: $:/core/ui/SideBar/Open
+
+<div class="tm-import-panel">
+
+''导入到渐进阅读'' —— 支持 `.epub`（目录锚点 + 大纲树切分）、`.md`、`.txt`
+
+<$import-file/>
+
+|参数（可选）:|k
+|最大节长|<$edit-text tiddler="$:/temp/tidme-import/max" default="4000" tag="input" type="number"/> 字|
+|最小节长|<$edit-text tiddler="$:/temp/tidme-import/min" default="600" tag="input" type="number"/> 字|
+|同步 bag|<$edit-text tiddler="$:/temp/tidme-import/bag" default="default" tag="input"/>（server 版）|
+
+[[快捷键与用法|$:/plugins/tidme/import/ui/help-shortcuts]]
+|同步 bag|<$edit-text tiddler="$:/temp/tidme-import/bag" default="default" tag="input"/>（server 版）|
+
+</div>

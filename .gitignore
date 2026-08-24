@@ -141,3 +141,8 @@ output/
 **/\$__view.tid
 **/\$__config_Navigation_openLinkFromInsideRiver.tid
 **/\$__config_Navigation_openLinkFromOutsideRiver.tid
+
+
+doc/
+out-m2/
+

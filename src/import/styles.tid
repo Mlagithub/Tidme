@@ -1,0 +1,105 @@
+title: $:/plugins/tidme/import/styles
+tags: $:/tags/Stylesheet
+
+.tm-import-panel {
+	margin-top: 0.5em;
+}
+.tm-import-dropzone {
+	border: 2px dashed <<colour muted-foreground>>;
+	border-radius: 6px;
+	padding: 1.5em;
+	text-align: center;
+	cursor: pointer;
+	margin: 0.5em 0;
+	color: <<colour muted-foreground>>;
+}
+.tm-import-dropzone.tm-import-over {
+	border-color: <<colour primary>>;
+	color: <<colour primary>>;
+	background: <<colour very-light-background>>;
+}
+.tm-import-row {
+	padding: 0.25em 0;
+}
+.tm-import-error {
+	color: <<colour danger>>;
+}
+.tm-import-muted {
+	opacity: 0.7;
+	font-size: 0.9em;
+}
+.tm-import-actions {
+	display: flex;
+	gap: 0.5em;
+	margin-top: 0.5em;
+}
+.tm-section-bar {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	flex-wrap: wrap;
+	padding: 2px 0;
+	margin-bottom: 4px;
+	border-bottom: 1px dotted <<colour muted-foreground>>;
+	font-size: 0.92em;
+}
+.tm-section-crumb {
+	cursor: pointer;
+}
+.tm-section-pos {
+	opacity: 0.75;
+}
+.tm-section-nav-btn,
+.tm-section-extract-btn,
+.tm-section-cloze-btn,
+.tm-section-rp-btn,
+.tm-section-setrp-btn,
+.tm-section-done-btn,
+.tm-section-later-btn,
+.tm-section-help-btn,
+.tm-section-rp-clear {
+	font-size: 0.9em;
+	padding: 1px 8px;
+}
+.tm-bar-sep {
+	width: 1px;
+	height: 1.2em;
+	background: <<colour muted-foreground>>;
+	opacity: 0.4;
+	margin: 0 4px;
+	display: inline-block;
+}
+.tm-section-done-btn {
+	color: <<colour primary>>;
+}
+.tm-import-dup {
+	color: <<colour danger>>;
+	font-size: 0.9em;
+	margin: 2px 0;
+}
+.tm-import-summary {
+	margin-top: 6px;
+	padding-top: 4px;
+	border-top: 1px dotted <<colour muted-foreground>>;
+}
+.tm-section-extract-btn {
+	margin-left: auto;
+}
+mark.tm-readpoint {
+	background: #fff3a0;
+	box-shadow: 0 0 0 2px #fff3a0;
+}
+.tm-import-outline {
+	margin: 2px 0 6px;
+}
+.tm-import-outline-pre {
+	white-space: pre-wrap;
+	max-height: 12em;
+	overflow: auto;
+	background: <<colour very-light-background>>;
+	padding: 6px;
+	border-radius: 4px;
+}
+.tm-doc-resume-row {
+	margin: 4px 0;
+}

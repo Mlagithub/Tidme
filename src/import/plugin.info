@@ -1,0 +1,11 @@
+{
+    "author": "oflg",
+    "core-version": ">=5.3.2",
+    "description": "Import EPUB/Markdown/TXT into incremental reading sections (M2)",
+    "list": "readme",
+    "name": "Tidme Import",
+    "plugin-type": "plugin",
+    "source": "https://github.com/oflg/Tidme",
+    "title": "$:/plugins/tidme/import",
+    "version": "0.2.1"
+}

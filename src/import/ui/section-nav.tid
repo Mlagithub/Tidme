@@ -1,0 +1,10 @@
+title: $:/plugins/tidme/import/ui/section-nav
+tags: $:/tags/ViewTemplate
+list-after: $:/core/ui/ViewTemplate/title
+code-body: yes
+
+\whitespace trim
+
+<$list filter="[<currentTiddler>has[tidme.doc]]" variable="ignore">
+<$section-bar/>
+</$list>
