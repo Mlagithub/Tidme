@@ -1,0 +1,33 @@
+caption: {{$:/language/tidme/split}}
+description: {{$:/language/tidme/splittip}}
+tags: $:/tags/ViewToolbar
+title: $:/plugins/tidme/import/ui/toolbar/split
+
+\whitespace trim
+
+<$list
+    filter="[<currentTiddler>!prefix[$:/]is[tiddler]]"
+    variable="ignore"
+>
+    <$button
+        tooltip={{$:/language/tidme/splittip}}
+        aria-label={{$:/language/tidme/split}}
+        class=<<tv-config-toolbar-class>>
+    >
+        <$action-setfield
+            $tiddler="$:/temp/tidme/split/source"
+            text=<<currentTiddler>>
+        />
+        <$action-navigate
+            $to="$:/plugins/tidme/import/ui/split-page"
+        />
+        <$list filter="[<tv-config-toolbar-icons>match[yes]]">
+            {{$:/core/images/chevron-right}}
+        </$list>
+        <$list filter="[<tv-config-toolbar-text>match[yes]]">
+            <span class="tc-btn-text">
+                <$text text={{$:/language/tidme/split}}/>
+            </span>
+        </$list>
+    </$button>
+</$list>

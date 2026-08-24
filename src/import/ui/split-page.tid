@@ -1,0 +1,11 @@
+title: $:/plugins/tidme/import/ui/split-page
+tags: 
+type: text/vnd.tiddlywiki
+
+! 切分 tiddler
+
+<$split-tool/>
+
+---
+
+[[← 返回|$:/plugins/tidme/import/ui/import-center]] · 快捷键帮助：[[$:/plugins/tidme/import/ui/help-shortcuts]]

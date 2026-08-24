@@ -76,6 +76,12 @@ function partitionBlocks(blocks: Block[], maxChars: number): { parts: Part[]; ha
 	for (const b of blocks) {
 		const t = normalizeText(b.text);
 		if (!t) continue;
+		if (b.atomic) {
+			// 原子块（围栏代码/表格）：永不切分，整块独立成段（超长记警告由 stats 体现）
+			flush();
+			parts.push({ htmlParts: [blockHtml(b)], textParts: [t], chars: t.length });
+			continue;
+		}
 		if (t.length > maxChars) {
 			flush();
 			for (const piece of splitSentences(t, maxChars)) {

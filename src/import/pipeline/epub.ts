@@ -164,9 +164,44 @@ export async function extractNcxTree(book: EpubBook): Promise<NcxNode[]> {
 	return visit(navMap, 0);
 }
 
+/**
+ * EPUB3 nav.xhtml 目录解析（与 NCX 同构输出 NcxNode 树）。
+ * 定位 nav[epub:type="toc"]（回退 role="doc-toc" / 首个 nav），走 ol/li/a 结构。
+ */
+export async function extractNavTree(book: EpubBook): Promise<NcxNode[]> {
+	if (!book.navHref) return [];
+	const doc = new DOMParser().parseFromString(await book.zip.file(book.navHref).async("string"), "text/xml");
+	const navDir = book.navHref.replace(/[^/]*$/, "");
+	const navs = doc.getElementsByTagName("nav");
+	let nav: any = null;
+	for (const n of Array.from(navs)) {
+		const type = n.getAttribute("epub:type") || "";
+		const role = n.getAttribute("role") || "";
+		if (type.includes("toc") || role === "doc-toc") { nav = n; break; }
+	}
+	if (!nav && navs.length) nav = navs[0];
+	if (!nav) return [];
+	const visit = (ol: any, depth: number): NcxNode[] => {
+		const out: NcxNode[] = [];
+		for (const li of Array.from(ol.childNodes || [])) {
+			if (li.nodeType !== 1 || localName(li) !== "li") continue;
+			const a = findNode(li, ["a"]) || findNode(li, ["span"]);
+			const text = a ? getText(a).replace(/\s+/g, " ").trim() : "";
+			const src = a ? a.getAttribute("href") || "" : "";
+			const hashIdx = src.indexOf("#");
+			const href = resolvePath(hashIdx === -1 ? src : src.slice(0, hashIdx), navDir);
+			const frag = hashIdx === -1 ? "" : src.slice(hashIdx + 1);
+			const childOl = findNode(li, ["ol"]);
+			out.push({ text, href, frag, depth, children: childOl ? visit(childOl, depth + 1) : [] });
+		}
+		return out;
+	};
+	const ol = findNode(nav, ["ol"]);
+	return ol ? visit(ol, 0) : [];
+}
+
 /** spine 序号 → NCX 祖先标题链；无匹配时继承前一文件（续章启发式） */
-export function makeBreadcrumbResolver(ncxTree: NcxNode[], spine: EpubBook["spine"]): (i: number) => string[] {
-	const byHref = new Map<string, string[]>();
+export function makeBreadcrumbResolver(ncxTree: NcxNode[], spine: EpubBook["spine"]): (i: number) => string[] {	const byHref = new Map<string, string[]>();
 	const walk = (nodes: NcxNode[], trail: string[]) => {
 		for (const n of nodes) {
 			const path = [...trail, n.text].filter(Boolean);
@@ -234,7 +269,16 @@ export function anchorBoundaries(
 	return out;
 }
 
-export interface Block { el?: any; text: string; tag: string; isHeading: boolean; level: number }
+export interface Block {
+	el?: any;
+	text: string;
+	tag: string;
+	isHeading: boolean;
+	level: number;
+	virtualHtml?: string;
+	/** 原子块：超长也不切分（围栏代码、表格等），计数为 oversize 警告 */
+	atomic?: boolean;
+}
 
 const BLOCK_TAGS = new Set([
 	"div", "p", "h1", "h2", "h3", "h4", "h5", "h6",

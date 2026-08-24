@@ -1,142 +1,42 @@
 /*
 main.ts — 导入管线入口（浏览器版）
 
-对外暴露 runImport(bytes, fileName, options)：
-  EPUB/MD/TXT bytes → 解析 → 归一化 → 大纲树切分 → 确定性 ID → tiddler JSON 数组
+对外暴露：
+  runImport(bytes, fileName, options)  文件字节 → tiddler JSON（EPUB 专用块路径；文本走 runSplit）
+  runSplit(input)                      任意 markdown/wikitext/HTML/TXT 文本 → tiddler JSON（通用切分）
 产物即标准 TW 导入格式；卡片带 ? 标签。
 */
 
-import { makeDocId, makeSectionId, contentFingerprint } from "$:/plugins/tidme/core/ids";
-import type { BookMeta } from "$:/plugins/tidme/core/ids";
-import { twDateString as coreTwDateString, initialFsrsFields as coreInitialFsrsFields } from "$:/plugins/tidme/core/schema";
-import { readEpubBytes, extractNcxTree, makeBreadcrumbResolver, collectBlocks, flattenNcx, anchorBoundaries } from "./epub";
-import type { Block } from "./epub";
+import { makeDocId, contentFingerprint } from "$:/plugins/tidme/core/ids";
+import { readEpubBytes, extractNcxTree, extractNavTree, makeBreadcrumbResolver, collectBlocks, flattenNcx, anchorBoundaries } from "./epub";
 import { smartMergeParagraphs } from "./smart-merge";
 import { chunkBook } from "./chunker";
-import type { ChunkOptions, RawSection } from "./chunker";
-import { blocksFromMarkdown, blocksFromPlainText, decodeBytes, guessTitleFromMarkdown } from "./ingest-text";
+import type { ChunkOptions } from "./chunker";
+import { decodeBytes, sniffFormat } from "./ingest-text";
+import { emitTiddlers, runSplit, twDateString, initialFsrsFields } from "./split";
+
+export { runSplit, twDateString, initialFsrsFields } from "./split";
 
 export interface ImportResult {
 	bookTitle: string;
 	docId: string;
-	meta: BookMeta;
-	format: "epub" | "markdown" | "txt";
+	meta: Record<string, string>;
+	format: "epub" | "markdown" | "wikitext" | "html" | "txt";
 	sectionCount: number;
 	stats: { sections: number; hardSplitCount: number };
 	tiddlers: Record<string, any>[];
 	warnings: string[];
 }
 
-type MetaWithFormat = BookMeta & { __format?: string };
-
-function uniqueTitleFactory() {
-	const used = new Map<string, number>();
-	return (base: string) => {
-		const n = (used.get(base) || 0) + 1;
-		used.set(base, n);
-		return n === 1 ? base : `${base} ~${n}`;
-	};
-}
-
-/** TW 日期字符串（与 $tw.utils.stringifyDate 一致：YYYY0MM0DD0hh0mm0ss0XXX，本地时区）——core 实现，兼容再导出 */
-export const twDateString = coreTwDateString;
-
-/**
- * FSRS 初始字段集（core schema 实现，兼容再导出）。
- * 关键修复：fsrs4tw 的过滤器要求卡片已含全部 FSRS 字段才走评分写入路径；
- * 缺字段的卡评分静默失败 → 队列首位永不变（表现为"无法切换下一张"）。
- */
-export const initialFsrsFields = coreInitialFsrsFields;
-
-async function emitTiddlers(docId: string, meta: MetaWithFormat, bookTitle: string, sections: RawSection[], bag: string): Promise<{ tiddlers: Record<string, any>[]; warnings: string[] }> {
-	const warnings: string[] = [];
-	const unique = uniqueTitleFactory();
-	const docTitle = unique(bookTitle || "未命名导入");
-	const format = meta.__format || "epub";
-	const nowFields = initialFsrsFields(new Date());
-	// TiddlyWeb server 版同步字段：bag 定位存储桶，revision=0 表示尚未与服务端同步
-	const syncFields = { bag, revision: "0" };
-
-	const cards: Record<string, any>[] = [];
-	for (const s of sections) {
-		if (!s.text.trim()) continue; // 丢弃零字节空节（NCX 锚点产物）
-		const trail = [docTitle, ...s.trail].map((t) => String(t || "").trim()).filter(Boolean);
-		const id = await makeSectionId(docId, trail, s.ordinal as number);
-		const hash = await contentFingerprint(s.text);
-		const joined = trail.join(" › ");
-		const title = unique(joined);
-		if (title !== joined) warnings.push(`标题去重：${joined}`);
-		cards.push({
-			title,
-			type: "text/vnd.tiddlywiki",
-			tags: ["?", "."], // ? 进牌堆；. 表示阅读卡默认展开（startstudy 不折叠）
-			caption: s.title || trail[trail.length - 1] || "", // 卡片正面：学习模式折叠态只渲染 caption
-			text: s.html,
-			...nowFields,
-			...syncFields,
-			"tidme.doc": docId,
-			"tidme.id": id,
-			"tidme.hash": hash,
-			"tidme.order": String(s.ordinal).padStart(6, "0"), // 零填充：字符串排序=阅读顺序
-			"tidme.level": String(s.level),
-			"tidme.kind": "section",
-			"tidme.chars": String(s.chars),
-			"tidme.breadcrumb": joined,
-			"tidme.source": meta.title || "",
-			"tidme.author": meta.creator || "",
-			"tidme.format": format,
-			...(s.merged ? { "tidme.merged": "yes" } : {}),
-			...(s.file ? { "tidme.file": s.file } : {})
-		});
-	}
-
-	const links = cards.map((t) => `* [[${t.title}]]`).join("\n");
-	const formatLabel = ({ epub: "导入自 EPUB", markdown: "导入自 Markdown", txt: "导入自 TXT" } as const)[format];
-	const docLines = [`//${formatLabel}//`];
-	if (meta.creator) docLines.push("作者：" + meta.creator);
-	if (meta.language) docLines.push("语言：" + meta.language);
-	docLines.push("文档 ID：" + docId);
-	docLines.push(`共 ${cards.length} 节：`, "", links);
-
-	const docTiddler = {
-		title: docTitle,
-		type: "text/vnd.tiddlywiki",
-		tags: ["tidme-import-doc"],
-		text: docLines.join("\n"),
-		bag,
-		revision: "0",
-		"tidme.doc": docId,
-		...(meta.title ? { "tidme.source": meta.title } : {}),
-		...(meta.creator ? { "tidme.author": meta.creator } : {})
-	};
-
-	return { tiddlers: [docTiddler, ...cards], warnings };
-}
-
 export interface ImportOptions extends ChunkOptions { bag?: string }
-
-async function finalize(sections: RawSection[], stats: { sections: number; hardSplitCount: number }, meta: MetaWithFormat, format: ImportResult["format"], fileName: string, bag: string): Promise<ImportResult> {
-	meta.__format = format;
-	const cleanMeta: BookMeta = { ...meta };
-	const docId = await makeDocId(cleanMeta);
-	const bookTitle = (cleanMeta.title || fileName.replace(/.*\//, "") || "未命名导入").trim();
-	const { tiddlers, warnings } = await emitTiddlers(docId, meta, bookTitle, sections, bag);
-	return {
-		bookTitle,
-		docId,
-		meta: cleanMeta,
-		format,
-		sectionCount: stats.sections,
-		stats,
-		tiddlers,
-		warnings
-	};
-}
 
 /** EPUB 主流程 */
 async function importEpubBytes(bytes: Uint8Array, fileName: string, options: ImportOptions): Promise<ImportResult> {
 	const book = await readEpubBytes(bytes);
-	const ncxTree = await extractNcxTree(book);
+	// EPUB3 nav.xhtml 优先，NCX 兜底（epub3-only 无 NCX 的书籍走 nav）
+	let ncxTree: import("./epub").NcxNode[] = [];
+	try { ncxTree = await extractNavTree(book); } catch { /* 解析失败回退 NCX */ }
+	if (!ncxTree.length) ncxTree = await extractNcxTree(book);
 	const resolveCrumb = makeBreadcrumbResolver(ncxTree, book.spine);
 	const flatNav = flattenNcx(ncxTree);
 
@@ -164,7 +64,7 @@ async function importEpubBytes(bytes: Uint8Array, fileName: string, options: Imp
 			const { idx, entry } = boundaries[b];
 			if (!entry.title) continue;
 			if (entry.title.trim() === crumbTail && idx === 0) continue;
-			const heading: Block = {
+			const heading: import("./epub").Block = {
 				text: entry.title,
 				tag: "h" + Math.max(1, Math.min(6, entry.depth + 1)),
 				isHeading: true,
@@ -177,27 +77,62 @@ async function importEpubBytes(bytes: Uint8Array, fileName: string, options: Imp
 	}
 
 	const { sections, stats } = chunkBook(files, options);
-	return finalize(sections, stats, { ...book.meta }, "epub", fileName, options.bag || "default");
+	const meta: Record<string, string> = {
+		...(book.meta.title ? { title: book.meta.title } : {}),
+		...(book.meta.creator ? { creator: book.meta.creator } : {}),
+		...(book.meta.language ? { language: book.meta.language } : {}),
+		...(book.meta.date ? { date: book.meta.date } : {}),
+		__format: "epub"
+	};
+	const docId = await makeDocId(book.meta);
+	const bookTitle = (meta.title || fileName.replace(/.*\//, "") || "未命名导入").trim();
+	const { tiddlers, warnings } = await emitTiddlers(docId, meta, bookTitle, sections, options.bag || "default");
+	return {
+		bookTitle,
+		docId,
+		meta,
+		format: "epub",
+		sectionCount: stats.sections,
+		stats,
+		tiddlers,
+		warnings
+	};
 }
 
-/** Markdown / TXT 主流程 */
+/** 文本主流程：解码 → runSplit（统一切分器） */
 async function importTextBytes(bytes: Uint8Array, fileName: string, options: ImportOptions): Promise<ImportResult> {
-	const isMd = /\.(md|markdown)$/i.test(fileName);
 	const text = decodeBytes(bytes);
-	const blocks = isMd ? blocksFromMarkdown(text) : blocksFromPlainText(text);
-	if (!blocks.length) throw new Error("文件内容为空");
+	if (!text.trim()) throw new Error("文件内容为空");
+	const ext = fileName.toLowerCase();
+	const type = /\.(md|markdown)$/.test(ext) ? "text/markdown"
+		: /\.html?$/.test(ext) ? "text/html"
+		: "text/plain";
 	const base = fileName.replace(/.*\//, "").replace(/\.[a-z0-9]+$/i, "");
-	const meta: MetaWithFormat = { title: isMd ? (guessTitleFromMarkdown(text) || base) : base };
-	const { sections, stats } = chunkBook([{ fileName, fileBreadcrumb: [], blocks }], options);
-	return finalize(sections, stats, meta, isMd ? "markdown" : "txt", fileName, options.bag || "default");
+	const r = await runSplit({
+		text,
+		title: base,
+		type,
+		bag: options.bag || "default",
+		maxChars: options.maxChars,
+		minChars: options.minChars
+	});
+	return {
+		bookTitle: r.bookTitle,
+		docId: r.docId,
+		meta: r.meta,
+		format: r.format,
+		sectionCount: r.sectionCount,
+		stats: r.stats,
+		tiddlers: r.tiddlers,
+		warnings: r.warnings
+	};
 }
 
 export async function runImport(bytes: Uint8Array, fileName: string, options: ImportOptions = {}): Promise<ImportResult> {
 	const lower = fileName.toLowerCase();
 	if (lower.endsWith(".epub")) return importEpubBytes(bytes, fileName, options);
-	if (/\.(md|markdown)$/.test(lower)) return importTextBytes(bytes, fileName, options);
-	if (lower.endsWith(".txt")) return importTextBytes(bytes, fileName, options);
-	throw new Error("不支持的格式（M2 支持 .epub / .md / .txt）");
+	if (/\.(md|markdown|txt|html?)$/.test(lower)) return importTextBytes(bytes, fileName, options);
+	throw new Error(`不支持的格式：${fileName}（支持 .epub / .md / .txt / .html）`);
 }
 
 /**

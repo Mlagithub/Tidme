@@ -1,0 +1,26 @@
+title: $:/plugins/tidme/import/ui/import-center
+type: text/vnd.tiddlywiki
+
+! 导入中心
+
+导入统一入口：本地文件、粘贴文本、剪藏收件箱——全部收敛为 tiddler 后经通用切分器入库。
+
+## 本地文件
+
+<$import-file/>
+
+---
+
+## 粘贴文本
+
+<$paste-split/>
+
+---
+
+## 剪藏收件箱
+
+<$inbox-split/>
+
+---
+
+[[快捷键与用法|$:/plugins/tidme/import/ui/help-shortcuts]]
