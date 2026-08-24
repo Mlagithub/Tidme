@@ -146,3 +146,9 @@ output/
 doc/
 out-m2/
 
+
+# dev ????(???)
+wiki/tiddlers/????*
+wiki/tiddlers/???*
+wiki/tiddlers/$__Deck_*log_*.json*
+wiki/tiddlers/$__Deck_*study*.tid*
