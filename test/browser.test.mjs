@@ -126,10 +126,8 @@ test("card-manager: 渲染视图过滤/树/批量工具条", () => {
 
 test("card-manager: Done 语义（去 ? 和 . + tidme.done）与恢复", () => {
 	const done = cardManager.doneFields({ title: "节", tags: ["?", "."], state: "0" });
-	assert.deepEqual(done.tags, [], "Done 去掉 ? 和 .");
+	assert.equal(done.tags.length, 0, "Done 去掉 ? 和 .");
 	assert.equal(done["tidme.done"], "yes");
-	// 自动牌组过滤：tag[?] 已排除已读卡
-	const section = wiki.filterTiddlers("[tidme.kind[section]tidme.done[yes]]");
 	// 恢复：按 kind 补回标签
 	const resumed = cardManager.resumeFields({ ...done, "tidme.kind": "section" });
 	assert.ok(resumed.tags.includes("?"), "恢复补回 ?");

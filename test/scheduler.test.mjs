@@ -79,6 +79,22 @@ test("autoPostpone: 搁置/已出队卡不处理", () => {
 	assert.deepEqual(r.patches.map((p) => p.title), ["可顺延"]);
 });
 
+test("doneCard/restoreCard: Done 语义与可逆恢复", () => {
+	const done = sched.doneCard({ title: "节", tags: ["?", "."], state: "0", "tidme.suspended": "yes" });
+	assert.equal(done.tags.length, 0, "Done 去掉 ? 和 .");
+	assert.equal(done["tidme.done"], "yes");
+	// section 恢复补回 ? 和 .，删 done/suspended
+	const resumed = sched.restoreCard({ ...done, "tidme.kind": "section" });
+	assert.ok(resumed.tags.includes("?"), "恢复补回 ?");
+	assert.ok(resumed.tags.includes("."), "section 恢复补回 .");
+	assert.equal(resumed["tidme.done"], undefined);
+	assert.equal(resumed["tidme.suspended"], undefined);
+	// 摘录卡恢复只补 ?（无 .）
+	const resumeExtract = sched.restoreCard({ ...done, "tidme.kind": "extract" });
+	assert.ok(resumeExtract.tags.includes("?"), "extract 恢复补回 ?");
+	assert.ok(!resumeExtract.tags.includes("."), "extract 不补 .");
+});
+
 test("subsetQueue / subsetByDoc / subsetByTag", () => {
 	const queue = sched.subsetQueue("[tag[?]]", sched.subsetByDoc("d123"), (f) => f);
 	assert.ok(queue.includes("tidme.doc[d123]"), "子集按 doc");

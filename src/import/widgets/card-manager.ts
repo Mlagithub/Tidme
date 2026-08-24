@@ -52,25 +52,14 @@ function kindMark(fields: Record<string, any>): string {
 	return "";
 }
 
-/** Done：移出队列（去 ? 和 . + tidme.done） */
+/** Done：移出队列（core scheduler 实现） */
 function doneFields(fields: Record<string, any>): Record<string, any> {
-	return {
-		...fields,
-		tags: (Array.isArray(fields.tags) ? fields.tags : []).filter((x: string) => x !== "?" && x !== "."),
-		"tidme.done": "yes"
-	};
+	return sched.doneCard(fields);
 }
 
-/** 恢复：回到队列（按 kind 补回 ?/./去 tidme.done） */
+/** 恢复：回到队列（core scheduler 实现） */
 function resumeFields(fields: Record<string, any>): Record<string, any> {
-	const kind = String(fields["tidme.kind"] || "");
-	const tags = Array.isArray(fields.tags) ? [...fields.tags] : [];
-	if (!tags.includes("?")) tags.push("?");
-	if (kind === "section" && !tags.includes(".")) tags.push(".");
-	const out: Record<string, any> = { ...fields, tags };
-	delete out["tidme.done"];
-	delete out["tidme.suspended"];
-	return out;
+	return sched.restoreCard(fields);
 }
 
 function makeCardManager(): WidgetCtor {

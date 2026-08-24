@@ -9,6 +9,7 @@ widgets/section.ts — M3 阅读闭环组件 v3.1（Phase A）
 
 declare function require(module: string): any;
 const pipeline = require("$:/plugins/tidme/import/pipeline.js");
+const sched = require("$:/plugins/tidme/core/scheduler.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
@@ -379,8 +380,7 @@ function makeSectionBar(): WidgetCtor {
 					}));
 				}
 				mini.appendChild(mkBtn("✔ 完成", "tm-section-done-btn", "读完此卡：移出学习队列", false, () => {
-					const tags = (t.fields.tags || []).filter((x: string) => x !== "?" && x !== ".");
-					this.wiki.addTiddler({ ...t.fields, tags, "tidme.done": "yes" });
+					this.wiki.addTiddler(sched.doneCard(t.fields));
 					notify("done");
 				}));
 				mini.appendChild(mkBtn("🗑 删除", "tm-section-later-btn", "彻底删除此卡", false, () => {
@@ -449,12 +449,11 @@ function makeSectionBar(): WidgetCtor {
 				bar.appendChild(el(doc, "span", "tm-import-muted", "✓ 已读"));
 			} else {
 				bar.appendChild(mkBtn("✔ 已读", "tm-section-done-btn", "Done！读完此节，移出学习队列", false, () => {
-					// Done 语义：出队 = 去掉 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记
-					const tags = (t.fields.tags || []).filter((x: string) => x !== "?" && x !== ".");
-					this.wiki.addTiddler({ ...t.fields, tags, "tidme.done": "yes" });
+					// Done 语义：出队 = 去 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记
+					this.wiki.addTiddler(sched.doneCard(t.fields));
 					// 撤销芯片：8 秒内可反悔（防止误触批量已读）
 					const undo = mkBtn("↩ 撤销已读", "tm-section-undo-btn", "恢复到学习队列", false, () => {
-						this.wiki.addTiddler({ ...t.fields });
+						this.wiki.addTiddler(sched.restoreCard(t.fields));
 						undo.parentNode?.removeChild(undo);
 					});
 					bar.insertBefore(undo, bar.querySelector(".tm-bar-sep"));
@@ -528,6 +527,31 @@ function makeDocResume(): WidgetCtor {
 			wrap.appendChild(btn);
 			wrap.appendChild(el(doc, "span", "tm-import-muted",
 				`　已读 ${done} / ${all.length} · 剩余 ${left} 节待学`));
+
+			// 已读区：列出已读节，可"重新加入"队列（恢复可逆性，替代 8 秒撤销窗口）
+			const doneTitles = all.filter((x) => isDone(this.wiki.getTiddler(x)?.fields));
+			if (doneTitles.length) {
+				const doneBox = el(doc, "details", "tm-doc-done");
+				const summary = el(doc, "summary", "tm-import-muted", `已读卡（${doneTitles.length}）—— 可重新加入`);
+				doneBox.appendChild(summary);
+				for (const dt of doneTitles) {
+					const row = el(doc, "div", "tm-doc-done-row");
+					const label = el(doc, "span", "tm-import-muted",
+						String(this.wiki.getTiddler(dt)?.fields["tidme.breadcrumb"] || dt).split(" › ").pop() || dt);
+					row.appendChild(label);
+					const back = el(doc, "button", "tm-cm-op", "重新加入");
+					back.title = "恢复到学习队列";
+					back.addEventListener("click", () => {
+						const f = this.wiki.getTiddler(dt)?.fields;
+						if (f) this.wiki.addTiddler(sched.restoreCard(f));
+						row.parentNode?.removeChild(row);
+					});
+					row.appendChild(back);
+					doneBox.appendChild(row);
+				}
+				wrap.appendChild(doneBox);
+			}
+
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
 		}

@@ -92,6 +92,30 @@ export function forgetCard(): Record<string, any> {
 	};
 }
 
+/**
+ * Done（已读）：移出学习队列 = 去 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记。
+ * 自动牌组按 tidme.doc + tag[?] 过滤，同样出队。完全可逆（resumeCard）。
+ */
+export function doneCard(fields: Record<string, any>): Record<string, any> {
+	return {
+		...fields,
+		tags: tagsOf(fields).filter((t) => t !== "?" && t !== "."),
+		"tidme.done": "yes"
+	};
+}
+
+/** 恢复队列（Done 的可逆反操作）：按 kind 补回 ?/./去 tidme.done 与搁置标记 */
+export function restoreCard(fields: Record<string, any>): Record<string, any> {
+	const kind = String(fields["tidme.kind"] || "");
+	const tags = tagsOf(fields);
+	if (!tags.includes("?")) tags.push("?");
+	if (kind === "section" && !tags.includes(".")) tags.push(".");
+	const out: Record<string, any> = { ...fields, tags };
+	delete out["tidme.done"];
+	delete out["tidme.suspended"];
+	return out;
+}
+
 export interface AutoPostponeOptions {
 	/** 逾期卡中超过该优先级（数值更大=更低优先）的才顺延 */
 	maxPriority?: number;
