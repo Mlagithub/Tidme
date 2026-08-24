@@ -1,5 +1,5 @@
 /*
-ids.ts — 确定性 ID 与内容指纹（双端：浏览器 WebCrypto / Node 24 全局 crypto.subtle）
+ids.ts — 确定性 ID 与内容指纹（双端：浏览器 WebCrypto / Node / TW 服务端 vm 沙箱）
 
 规格见 doc/research/data-model.md §4。纯函数、无副作用。
 */
@@ -12,18 +12,33 @@ export interface BookMeta {
 	date?: string;
 }
 
-let _encoder: TextEncoder | null = null;
-function getEncoder(): TextEncoder {
-	if (!_encoder) _encoder = new TextEncoder();
-	return _encoder;
+let _encoder: { encode(s: string): Uint8Array } | null = null;
+function getEncoder(): { encode(s: string): Uint8Array } {
+	if (_encoder) return _encoder;
+	if (typeof TextEncoder !== "undefined") {
+		_encoder = new TextEncoder();
+		return _encoder;
+	}
+	// TW 服务端 vm 沙箱无 TextEncoder：用沙箱提供的 Buffer
+	const buf: any = typeof Buffer !== "undefined" ? Buffer : null;
+	if (buf) {
+		_encoder = { encode: (s: string) => new Uint8Array(buf.from(s, "utf8")) };
+		return _encoder;
+	}
+	throw new Error("TextEncoder 不可用");
 }
 
 function getSubtle(): SubtleCrypto {
 	const subtle = globalThis.crypto?.subtle;
-	if (!subtle) {
-		throw new Error("crypto.subtle 不可用（需要浏览器或 Node >= 19）");
+	if (subtle) return subtle;
+	// TW 服务端模块运行在 vm 沙箱：globalThis.crypto/process 均不可见，但裸 process 可用
+	let proc: any;
+	try { proc = typeof process !== "undefined" ? process : undefined; } catch { proc = undefined; }
+	if (proc && typeof proc.getBuiltinModule === "function") {
+		const nodeCrypto = proc.getBuiltinModule("node:crypto");
+		if (nodeCrypto?.webcrypto?.subtle) return nodeCrypto.webcrypto.subtle;
 	}
-	return subtle;
+	throw new Error("crypto.subtle 不可用（需要浏览器或 Node >= 19）");
 }
 
 export async function hashHex(str: string): Promise<string> {

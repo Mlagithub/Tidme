@@ -1,0 +1,8 @@
+title: $:/plugins/tidme/import/ui/sidebar-cards
+caption: 卡片
+tags: $:/tags/SideBar
+list-after: $:/plugins/tidme/import/ui/sidebar
+
+<div class="tm-card-browser-panel">
+<$card-browser/>
+</div>

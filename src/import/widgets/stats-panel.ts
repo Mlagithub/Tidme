@@ -2,7 +2,7 @@
 widgets/stats-panel.ts — 统计面板（M5-T4）
 
 <$stats-panel/> 渲染：牌组负载 / 文档进度 / 漏斗 / 保留率 / 优先级分桶。
-数据源：core/stats 纯函数 + review log（$:/Deck/*/log/* 的 tiddler data）。
+数据源：core/stats 纯函数 + 复习日志（$:/Deck 下的 log tiddler data）。
 */
 
 declare function require(module: string): any;
@@ -39,7 +39,9 @@ function makeStatsPanel(): WidgetCtor {
 			deckTable.appendChild(thead);
 			const decks = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]");
 			if (!decks.length) {
-				deckTable.appendChild(el(doc, "tr", "", "")).appendChild(el(doc, "td", "tm-import-muted", "暂无牌组"));
+				const row = el(doc, "tr", "");
+				row.appendChild(el(doc, "td", "tm-import-muted", "暂无牌组"));
+				deckTable.appendChild(row);
 			}
 			for (const deck of decks) {
 				const cards = cardLikes(`[subfilter{${deck}!!card}!subfilter{${deck}!!card_exclude}]`);
@@ -74,7 +76,7 @@ function makeStatsPanel(): WidgetCtor {
 			wrap.appendChild(el(doc, "div", "tm-import-row",
 				`导入 ${funnel.docs} · 切分 ${funnel.sections} · 摘录 ${funnel.extracts} · 卡 ${funnel.cards}`));
 
-			// 4) 保留率（review log data）
+			// 4) 保留率（复习日志 data）
 			wrap.appendChild(el(doc, "h3", "", "复习与保留率"));
 			const logTitles = wiki.filterTiddlers("[prefix[$:/Deck/]suffix[/log/]]");
 			const entries: any[] = [];

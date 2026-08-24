@@ -101,18 +101,28 @@ function currentDocId(win: any): string | null {
 	return CTX.lastDoc || null;
 }
 
-function notify(kind: "extract" | "readpoint" | "select-first" | "done") {
+function notify(kind: "extract" | "cloze" | "readpoint" | "select-first" | "done" | "later") {
 	const map = {
 		extract: "$:/plugins/tidme/import/ui/notify-extract",
+		cloze: "$:/plugins/tidme/import/ui/notify-cloze",
 		readpoint: "$:/plugins/tidme/import/ui/notify-readpoint",
 		"select-first": "$:/plugins/tidme/import/ui/notify-select-first",
-		done: "$:/plugins/tidme/import/ui/notify-done"
+		done: "$:/plugins/tidme/import/ui/notify-section-done",
+		later: "$:/plugins/tidme/import/ui/notify-later"
 	} as const;
 	try { CTX.widget?.dispatchEvent({ type: "tm-notify", param: map[kind] }); } catch { /* ignore */ }
 }
 
 function navigate(target: string) {
 	try { CTX.widget?.dispatchEvent({ type: "tm-navigate", navigateTo: target }); } catch { /* ignore */ }
+}
+
+/** 关闭当前卡并跳转（避免故事流堆积；评分路径 fsrs4tw repeat 已有关闭） */
+function navigateClose(target: string) {
+	try {
+		CTX.widget?.dispatchEvent({ type: "tm-close-tiddler" });
+		CTX.widget?.dispatchEvent({ type: "tm-navigate", navigateTo: target });
+	} catch { /* ignore */ }
 }
 
 /** 在目标节的已渲染 DOM 中查找片段并临时包一层 <mark> */
@@ -250,7 +260,7 @@ function actionCloze(win: any) {
 	CTX.widget.wiki.addTiddler(fields);
 	sel.removeAllRanges();
 	navigate(tt);
-	notify("extract");
+	notify("cloze");
 }
 
 function actionSetReadPoint(win: any) {
@@ -272,7 +282,7 @@ function actionGotoReadPoint(win: any) {
 	const rp = parseReadPoint(CTX.widget.wiki, docId);
 	if (!rp) return;
 	highlightSnippetLater(document, rp.t, rp.s);
-	navigate(rp.t);
+	navigateClose(rp.t);
 }
 
 function actionClearReadPoint(win: any) {
@@ -352,6 +362,7 @@ function makeSectionBar(): WidgetCtor {
 				link.href = "#";
 				link.addEventListener("click", (e: Event) => {
 					e.preventDefault();
+					this.dispatchEvent({ type: "tm-close-tiddler" });
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: String(t.fields["tidme.parent"]) });
 				});
 				span.appendChild(link);
@@ -360,6 +371,7 @@ function makeSectionBar(): WidgetCtor {
 				const anchor = parseAnchor(t.fields["tidme.anchor"]);
 				if (anchor) {
 					mini.appendChild(mkBtn("↩ 回原文", "tm-section-rp-btn", "跳回原文并高亮此片段", false, () => {
+						this.dispatchEvent({ type: "tm-close-tiddler" });
 						this.dispatchEvent({ type: "tm-navigate", navigateTo: anchor.section });
 						highlightSnippetLater(doc, anchor.section, anchor.snippet);
 					}));
@@ -387,6 +399,7 @@ function makeSectionBar(): WidgetCtor {
 			const crumb = el(doc, "span", "tm-section-crumb tm-import-muted", String(t.fields["tidme.breadcrumb"] || ""));
 			crumb.title = "点击打开本书汇总页";
 			crumb.addEventListener("click", () => {
+				this.dispatchEvent({ type: "tm-close-tiddler" });
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: String(t.fields["tidme.breadcrumb"] || "").split(" › ")[0] });
 			});
 			bar.appendChild(crumb);
@@ -399,17 +412,20 @@ function makeSectionBar(): WidgetCtor {
 			const gotoSection = (target: string, snippet = "") => {
 				saveReadPoint(this.wiki, docId, { t: target, s: snippet });
 				highlightSnippetLater(doc, target, snippet);
+				this.dispatchEvent({ type: "tm-close-tiddler" }); // 关闭当前卡，避免故事流堆积
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
 			};
 
 			bar.appendChild(mkBtn("◀", "tm-section-nav-btn", "上一节", !prev, () => {
 				if (!prev) return;
 				saveReadPoint(this.wiki, docId, { t: prev, s: "" });
+				this.dispatchEvent({ type: "tm-close-tiddler" });
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: prev });
 			}));
 			bar.appendChild(mkBtn("▶", "tm-section-nav-btn", "下一节", !next, () => {
 				if (!next) return;
 				saveReadPoint(this.wiki, docId, { t: next, s: "" });
+				this.dispatchEvent({ type: "tm-close-tiddler" });
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: next });
 			}));
 
@@ -441,14 +457,22 @@ function makeSectionBar(): WidgetCtor {
 					bar.insertBefore(undo, bar.querySelector(".tm-bar-sep"));
 					setTimeout(() => { undo.parentNode?.removeChild(undo); }, 8000);
 					const nxt = list.find((x) => x !== title && !isDone(this.wiki.getTiddler(x)?.fields));
-					if (nxt) { saveReadPoint(this.wiki, docId, { t: nxt, s: "" }); this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt }); }
+					if (nxt) {
+						saveReadPoint(this.wiki, docId, { t: nxt, s: "" });
+						this.dispatchEvent({ type: "tm-close-tiddler" });
+						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
+					}
 					notify("done");
 				}));
 				bar.appendChild(mkBtn("⏩", "tm-section-later-btn", "稍后再看：明确顺延 333 天（不是拖延，是排程）", false, () => {
 					const due = twDateString(new Date(Date.now() + 333 * 86400000));
 					this.wiki.addTiddler({ ...t.fields, due });
 					const nxt = list.find((x) => x !== title && !isDone(this.wiki.getTiddler(x)?.fields));
-					if (nxt) this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
+					if (nxt) {
+						this.dispatchEvent({ type: "tm-close-tiddler" });
+						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
+					}
+					notify("later");
 				}));
 			}
 
@@ -492,7 +516,10 @@ function makeDocResume(): WidgetCtor {
 				const rp = parseReadPoint(this.wiki, docId);
 				const list = all.filter((x) => !isDone(this.wiki.getTiddler(x)?.fields));
 				const target = rp && list.includes(rp.t) ? rp.t : list[0];
-				if (target) this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
+				if (target) {
+					this.dispatchEvent({ type: "tm-close-tiddler" }); // 关闭文档页，进入阅读
+					this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
+				}
 			});
 			const wrap = el(doc, "span", "tm-doc-resume");
 			wrap.appendChild(btn);

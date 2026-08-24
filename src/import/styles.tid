@@ -104,6 +104,53 @@ mark.tm-readpoint {
 	margin: 4px 0;
 }
 
+/* 卡片浏览（侧边栏树形） */
+.tm-card-browser details {
+	margin-left: 0.4em;
+}
+.tm-card-browser summary {
+	cursor: pointer;
+}
+.tm-cb-deck {
+	margin-top: 0.4em;
+}
+.tm-cb-doc {
+	margin-left: 0.6em;
+}
+.tm-cb-doc-title {
+	opacity: 0.85;
+	font-size: 0.95em;
+}
+.tm-cb-card {
+	display: flex;
+	align-items: center;
+	gap: 0.3em;
+	font-size: 0.9em;
+	padding: 1px 0;
+}
+.tm-cb-badge {
+	font-size: 0.85em;
+	opacity: 0.8;
+	min-width: 1.2em;
+}
+.tm-cb-kind {
+	font-size: 0.8em;
+	opacity: 0.6;
+}
+.tm-cb-link {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 16em;
+}
+.tm-cb-del {
+	opacity: 0.4;
+	padding: 0 4px;
+}
+.tm-cb-del:hover {
+	opacity: 1;
+}
+
 /* M3 阅读态排版：Section 卡展开正文（与 section-bar 同帧时生效） */
 .tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body {
 	max-width: 42em;
