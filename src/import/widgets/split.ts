@@ -1,5 +1,5 @@
 /*
-widgets/split.ts — M2 切分入口组件
+widgets/split.ts — M2 切分入口组件（M4 加优先级三档）
 
 - <$split-tool/>  切分页：解析源 tiddler（$:/temp/tidme/split/source）→ 大纲预览 → 确认写库
 - <$paste-split/> 粘贴切分：textarea → runSplit → 写库
@@ -20,10 +20,6 @@ function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElemen
 	return e;
 }
 
-function escapeHtml(s: string): string {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 /** 从源 tiddler 提取溯源字段（切分后保留到文档页） */
 function provenanceOf(wiki: any, title: string): Record<string, string> {
 	const f = wiki.getTiddler(title)?.fields || {};
@@ -36,18 +32,19 @@ function provenanceOf(wiki: any, title: string): Record<string, string> {
 }
 
 /** 执行切分并写库：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签） */
-async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}) {
+async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number) {
 	const t = wiki.getTiddler(title);
 	if (!t) throw new Error("源 tiddler 不存在");
 	const r = await pipeline.runSplit({
 		text: String(t.fields.text || ""),
 		title,
 		type: t.fields.type,
-		sourceFields: { ...provenanceOf(wiki, title), ...extraSourceFields }
+		sourceFields: { ...provenanceOf(wiki, title), ...extraSourceFields },
+		priority
 	});
 	const [doc, ...cards] = r.tiddlers;
 	if (!cards.length) throw new Error("未切分出任何节（内容过短或无可识别结构）");
-	// 源 tiddler → 文档页：合并溯源字段、标签合并（去 tidme-inbox）、保留 FSRS 无关字段
+	// 源 tiddler → 文档页：合并溯源字段、标签合并（去 tidme-inbox）
 	const srcFields = t.fields;
 	const srcTags = Array.isArray(srcFields.tags) ? srcFields.tags.filter((x: string) => x !== "tidme-inbox") : [];
 	const mergedDoc: Record<string, any> = {
@@ -61,7 +58,6 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 	};
 	wiki.addTiddler(mergedDoc);
 	for (const c of cards) wiki.addTiddler(c);
-	// 自动 deck 已包含在 r.tiddlers（若 emit 生成）；这里显式补写以防 doc 覆盖时丢失
 	const deck = r.tiddlers.find((x: any) => String(x.title).startsWith("$:/Deck/read/"));
 	if (deck) wiki.addTiddler(deck);
 	return r;
@@ -88,17 +84,38 @@ function makeSplitTool(): WidgetCtor {
 
 			let parsed: any = null;
 			let busy = false;
+			let priorityTier: "high" | "medium" | "low" = "medium";
 			const status = el(doc, "div", "tm-import-muted", "解析中…");
 			const outlineBox = el(doc, "div", "");
 			const actions = el(doc, "div", "tm-import-actions", "");
 
+			// 优先级三档（M4）：高/中/低 → tierRandom 区间随机分散
+			const prioRow = el(doc, "div", "tm-import-actions", "");
+			prioRow.appendChild(el(doc, "span", "tm-import-muted", "优先级："));
+			const prioSel = doc.createElement("select");
+			prioSel.className = "tm-priority-select";
+			for (const [label, value] of [["高", "high"], ["中", "medium"], ["低", "low"]] as const) {
+				const opt = doc.createElement("option");
+				opt.value = value;
+				opt.textContent = label;
+				prioSel.appendChild(opt);
+			}
+			prioSel.value = "medium";
+			prioSel.addEventListener("change", () => {
+				priorityTier = prioSel.value as any;
+			});
+			prioRow.appendChild(prioSel);
+			wrap.appendChild(prioRow);
+
 			const renderPreview = async () => {
 				try {
+					const sched = require("$:/plugins/tidme/core/scheduler.js");
 					parsed = await pipeline.runSplit({
 						text: String(t.fields.text || ""),
 						title,
 						type: t.fields.type,
-						sourceFields: provenanceOf(wiki, title)
+						sourceFields: provenanceOf(wiki, title),
+						priority: sched.tierRandom(priorityTier)
 					});
 					const cards = parsed.tiddlers.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
 					status.textContent = `${cards.length} 节 · 硬切 ${parsed.stats.hardSplitCount} 块 · 文档 ID ${parsed.docId}`;
@@ -125,10 +142,10 @@ function makeSplitTool(): WidgetCtor {
 						btn.setAttribute("disabled", "true");
 						btn.textContent = "写入中…";
 						try {
-							await commitSplit(wiki, this, title);
-							const docTitle = parsed.tiddlers[0].title;
+							const sched = require("$:/plugins/tidme/core/scheduler.js");
+							await commitSplit(wiki, this, title, {}, sched.tierRandom(priorityTier));
 							this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/tidme/import/ui/notify-done" });
-							this.dispatchEvent({ type: "tm-navigate", navigateTo: docTitle });
+							this.dispatchEvent({ type: "tm-navigate", navigateTo: parsed.tiddlers[0].title });
 						} catch (e: any) {
 							status.textContent = "切分失败：" + String(e.message || e);
 							btn.removeAttribute("disabled");
@@ -217,8 +234,7 @@ function makeInboxSplit(): WidgetCtor {
 				}
 				for (const item of items) {
 					const row = el(doc, "div", "tm-import-row");
-					const head = el(doc, "strong", "", item);
-					row.appendChild(head);
+					row.appendChild(el(doc, "strong", "", item));
 					const btn = el(doc, "button", "tc-btn-primary", "切分");
 					btn.addEventListener("click", async () => {
 						btn.setAttribute("disabled", "true");

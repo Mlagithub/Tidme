@@ -1,0 +1,97 @@
+/*
+scheduler.test.mjs — core 调度体系单元测试（node:test）
+
+覆盖：优先级归一化/三档随机、批量操作补丁、autoPostpone 语义（保留 top N、顺延低优先级逾期）、
+子集队列构造。
+*/
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+const sched = await import("../src/core/scheduler.ts");
+
+const T = (offsetHours) => {
+	const d = new Date(Date.now() + offsetHours * 3600000);
+	const p = (n, l = 2) => String(n).padStart(l, "0");
+	return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}${p(d.getMilliseconds(), 3)}`;
+};
+const PAST = () => T(-48); // 48 小时前（逾期）
+const FUTURE = () => T(48);
+
+test("normalizePriority: 边界与非法值", () => {
+	assert.equal(sched.normalizePriority(0), 0);
+	assert.equal(sched.normalizePriority(100), 100);
+	assert.equal(sched.normalizePriority(150), 100);
+	assert.equal(sched.normalizePriority(-5), 0);
+	assert.equal(sched.normalizePriority("30"), 30);
+	assert.equal(sched.normalizePriority(undefined), 50);
+	assert.equal(sched.normalizePriority("abc"), 50);
+});
+
+test("tierRandom: 三档落在合理区间", () => {
+	for (let i = 0; i < 50; i++) {
+		const h = sched.tierRandom("high", 8);
+		const l = sched.tierRandom("low", 8);
+		assert.ok(h >= 0 && h <= 25, `high 应在 0-25，实际 ${h}`);
+		assert.ok(l >= 75 && l <= 100, `low 应在 75-100，实际 ${l}`);
+	}
+});
+
+test("postponeCard / advanceCard / ignoreCard / forgetCard", () => {
+	const due = PAST();
+	const postponed = sched.postponeCard({ due }, 7);
+	assert.ok(sched.parseTwDate(postponed.due).getTime() > Date.now(), "顺延 7 天后应在未来");
+	const advanced = sched.advanceCard();
+	assert.ok(sched.parseTwDate(advanced.due).getTime() <= Date.now() + 60000, "advance 到期时间≈现在");
+	assert.deepEqual(sched.ignoreCard({ tags: ["?", "."] }).tags, ["."]);
+	const forgotten = sched.forgetCard();
+	assert.equal(forgotten.state, "0");
+	assert.equal(forgotten.reps, "0");
+});
+
+test("autoPostpone: 保留 top N 高优先级，顺延其余低优先级逾期卡", () => {
+	const mk = (title, priority, due) => ({
+		title,
+		fields: { "tidme.priority": String(priority), due, tags: ["?"], state: "2" }
+	});
+	const cards = [
+		mk("高优A", 5, PAST()),
+		mk("高优B", 10, PAST()),
+		mk("低优C", 90, PAST()),
+		mk("低优D", 80, PAST()),
+		mk("未到期E", 90, FUTURE()) // 不应被处理
+	];
+	const r = sched.autoPostpone(cards, { maxPriority: 60, postponeDays: 7, keepTop: 2 });
+	assert.equal(r.stats.overdue, 4, "4 张逾期（E 未到期排除）");
+	assert.equal(r.stats.postponed, 2, "保留 top2（A/B），顺延 C/D");
+	assert.deepEqual(r.patches.map((p) => p.title).sort(), ["低优C", "低优D"]);
+	for (const p of r.patches) {
+		assert.ok(sched.parseTwDate(p.fields.due).getTime() > Date.now(), `${p.title} 被顺延到未来`);
+	}
+});
+
+test("autoPostpone: 搁置/已出队卡不处理", () => {
+	const cards = [
+		{ title: "搁置", fields: { "tidme.priority": "90", due: PAST(), tags: ["?"], "tidme.suspended": "yes" } },
+		{ title: "已读完", fields: { "tidme.priority": "90", due: PAST(), tags: ["."] } },
+		{ title: "可顺延", fields: { "tidme.priority": "90", due: PAST(), tags: ["?"] } }
+	];
+	const r = sched.autoPostpone(cards, { maxPriority: 60, keepTop: 0 });
+	assert.deepEqual(r.patches.map((p) => p.title), ["可顺延"]);
+});
+
+test("subsetQueue / subsetByDoc / subsetByTag", () => {
+	const queue = sched.subsetQueue("[tag[?]]", sched.subsetByDoc("d123"), (f) => f);
+	assert.ok(queue.includes("tidme.doc[d123]"), "子集按 doc");
+	const byTag = sched.subsetByTag("数学");
+	assert.equal(byTag, "[tag[数学]]");
+});
+
+test("parseTwDate: 17 位 TW 日期串", () => {
+	const d = sched.parseTwDate("20260824201518283");
+	assert.equal(d.getFullYear(), 2026);
+	assert.equal(d.getMonth(), 7); // 8 月（0-based）
+	assert.equal(d.getDate(), 24);
+	assert.equal(d.getHours(), 20);
+	assert.equal(d.getMinutes(), 15);
+	assert.equal(d.getSeconds(), 18);
+});

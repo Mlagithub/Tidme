@@ -11,6 +11,7 @@ docId 由源标题派生（同一 tiddler 重切分 ID 稳定；标题唯一性�
 import { makeDocId, makeSectionId, contentFingerprint, normalizeText } from "$:/plugins/tidme/core/ids";
 import type { BookMeta } from "$:/plugins/tidme/core/ids";
 import { initialFsrsFields, twDateString } from "$:/plugins/tidme/core/schema";
+import { normalizePriority, PRIORITY_DEFAULT } from "$:/plugins/tidme/core/scheduler";
 import { chunkBook } from "./chunker";
 import type { ChunkOptions, RawSection } from "./chunker";
 import { blocksFromMarkdown, blocksFromWikitext, blocksFromHtml, blocksFromPlainText, sniffFormat, guessTitle, formatLabel } from "./ingest-text";
@@ -30,6 +31,8 @@ export interface SplitInput {
 	minChars?: number;
 	/** 是否自动创建按文档 deck（默认 true） */
 	autoDeck?: boolean;
+	/** 卡片优先级 0–100（0 最高；默认 50；M4） */
+	priority?: number;
 }
 
 export interface SplitResult {
@@ -59,20 +62,20 @@ const DEFAULT_FSRS_P = JSON.stringify({
 	w: [0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61]
 });
 
-/** 按文档自动 deck（M2-T4）：card 过滤器按 tidme.doc 限定 */
+/** 按文档自动 deck（M2-T4）：card 过滤器按 tidme.doc 限定；M4 起新卡按优先级排序 */
 function buildAutoDeck(bookTitle: string, docId: string): Record<string, any> {
 	return {
 		title: `$:/Deck/read/${bookTitle}`,
 		tags: ["$:/tags/TidmeDeck"],
 		caption: bookTitle,
 		description: `按文档自动创建的阅读牌组（${docId}）`,
-		card: `[all[shadows+tiddlers]tidme.doc[${docId}]]`,
+		card: `[all[shadows+tiddlers]tidme.doc[${docId}]!has[tidme.suspended]]`,
 		card_unfold: "[tag[.]]",
 		card_exclude: "[tag[!]]",
 		order: "due-new",
 		order_learn: "[sort[due]]",
-		order_new: "[sortan[title]]",
-		order_due: "[sort[due]]",
+		order_new: "[sort[priority]sortan[title]]",
+		order_due: "[sort[priority]sort[due]]",
 		state_learn: "[state[1]] [state[3]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MMDD0hh0mm0ss0XXX>]",
 		state_due: "[state[2]has[due]] -[!days:due[1]]",
 		state_new: "[!has[state]] [state[0]]",
@@ -106,7 +109,8 @@ export async function emitTiddlers(
 	bookTitle: string,
 	sections: RawSection[],
 	bag: string,
-	autoDeck = true
+	autoDeck = true,
+	priority = PRIORITY_DEFAULT
 ): Promise<{ tiddlers: Record<string, any>[]; warnings: string[] }> {
 	const warnings: string[] = [];
 	const unique = uniqueTitleFactory();
@@ -139,6 +143,7 @@ export async function emitTiddlers(
 			"tidme.level": String(s.level),
 			"tidme.kind": "section",
 			"tidme.chars": String(s.chars),
+			"tidme.priority": String(normalizePriority(priority)),
 			"tidme.path": joined,
 			"tidme.breadcrumb": joined, // 兼容旧字段名
 			"tidme.source": meta.title || "",
@@ -201,7 +206,7 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
 		{ maxChars: input.maxChars, minChars: input.minChars }
 	);
 	const metaWithFormat = { ...meta, __format: format };
-	const { tiddlers, warnings } = await emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false);
+	const { tiddlers, warnings } = await emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority);
 	return {
 		bookTitle,
 		docId,
