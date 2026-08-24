@@ -21,9 +21,9 @@ const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_fsrs4tw", "$__plugin
 if (!plugins.length) throw new Error("缺少 out-m2 产物，先运行 node tools/build-plugins.cjs");
 
 function fakeElement(tag = "div") {
-	return {
+	const e = {
 		nodeType: 1, tagName: String(tag).toUpperCase(), childNodes: [], children: [],
-		style: {}, attributes: {}, parentNode: null, textContent: "", innerHTML: "",
+		style: {}, attributes: {}, parentNode: null, innerHTML: "", _text: "",
 		setAttribute(k, v) { this.attributes[k] = v; },
 		getAttribute(k) { return this.attributes[k]; },
 		appendChild(c) { this.childNodes.push(c); this.children.push(c); c.parentNode = this; return c; },
@@ -36,6 +36,15 @@ function fakeElement(tag = "div") {
 		setAttributeNS() {}, getBoundingClientRect() { return { top: 0, left: 0 }; },
 		focus() {}, scrollIntoView() {}, replaceChildren() {}
 	};
+	// textContent 赋值需像真实 DOM：空串清空子节点（widget rebuild 依赖此行为）
+	Object.defineProperty(e, "textContent", {
+		get() { return e._text; },
+		set(v) {
+			e._text = v;
+			if (v === "" || v === undefined) { e.childNodes = []; e.children = []; }
+		}
+	});
+	return e;
 }
 
 /** 递归收集 DOM 文本（fake 不自动聚合 textContent） */
@@ -56,7 +65,7 @@ const fakeDocument = {
 	defaultView: null
 };
 
-let wiki, cardBrowser, queueOps, statsPanel, cardManager;
+let wiki, cardBrowser, queueOps, statsPanel, cardManager, sectionBar;
 test.before(async () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-browser-"));
 	const tw = TiddlyWiki.TiddlyWiki();
@@ -80,13 +89,43 @@ test.before(async () => {
 	queueOps = tw.modules.execute("$:/plugins/tidme/import/widgets/queue-ops.js");
 	statsPanel = tw.modules.execute("$:/plugins/tidme/import/widgets/stats-panel.js");
 	cardManager = tw.modules.execute("$:/plugins/tidme/import/widgets/card-manager.js");
+	sectionBar = tw.modules.execute("$:/plugins/tidme/import/widgets/section.js");
 });
 
-function renderWidget(mod, name) {
+function renderWidgetEx(mod, name, opts = {}) {
 	const root = fakeElement("div");
-	const w = new mod[name]({}, { wiki, document: fakeDocument, parentWidget: null });
+	// TW 的 getVariable 只从 parentWidget.variables 链读取（变量存储格式为 {value,...} 对象）
+	const vars = {};
+	for (const [k, v] of Object.entries(opts.variables || {})) {
+		vars[k] = { value: v, params: [], isMacroDefinition: false, isFunctionDefinition: false, isProcedureDefinition: false, isWidgetDefinition: false, configTrimWhiteSpace: false };
+	}
+	// 属性需带 type（computeAttribute 只认 string/filtered/indirect/macro/substituted）
+	const attrs = {};
+	for (const [k, v] of Object.entries(opts.attributes || {})) {
+		attrs[k] = typeof v === "object" && v !== null ? v : { type: "string", value: String(v) };
+	}
+	const parentWidget = {
+		variables: vars,
+		getAncestorCount: () => 0,
+		getVariable: () => ""
+	};
+	const w = new mod[name]({ attributes: attrs }, {
+		wiki, document: fakeDocument, parentWidget, variables: {}
+	});
 	w.render(root, null);
-	return root;
+	return { root, w };
+}
+
+function renderWidget(mod, name, opts = {}) {
+	return renderWidgetEx(mod, name, opts).root;
+}
+
+/** 递归收集 button 元素（fake 不提供 querySelectorAll） */
+function collectButtons(node, out = []) {
+	if (!node) return out;
+	if (String(node.tagName) === "BUTTON") out.push(node);
+	for (const c of node.childNodes || []) collectButtons(c, out);
+	return out;
 }
 
 test("card-browser: 树形包含牌组/文档/卡片", () => {
@@ -133,4 +172,69 @@ test("card-manager: Done 语义（去 ? 和 . + tidme.done）与恢复", () => {
 	assert.ok(resumed.tags.includes("?"), "恢复补回 ?");
 	assert.ok(resumed.tags.includes("."), "section 恢复补回 .");
 	assert.equal(resumed["tidme.done"], undefined, "恢复删除 tidme.done");
+});
+
+test("card-manager: 全部卡片可见（含已读卡与手动散卡）", () => {
+	// 手动散卡：无 tidme.*，仅带 ? 学习标签（模拟用户手动建卡）
+	wiki.addTiddler({ title: "手动散卡甲", tags: ["?"], state: "0", due: "20261231000000000" });
+	// 已读一张节卡（模拟其他入口的 Done）
+	const secTitle = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[section]]")[0];
+	wiki.addTiddler({ ...wiki.getTiddler(secTitle).fields, tags: [], "tidme.done": "yes" });
+
+	const root = renderWidget(cardManager, "card-manager"); // 默认按文档（全量）
+	const text = collectText(root);
+	assert.ok(text.includes("未分组"), "手动散卡归入未分组（按文档默认）");
+	assert.ok(text.includes("手动散卡甲"), "手动散卡可见");
+	assert.ok(text.includes("按文档") && text.includes("按牌组") && text.includes("列表"), "组织切换按钮存在");
+	const secTail = String(wiki.getTiddler(secTitle).fields["tidme.breadcrumb"] || secTitle).split(" › ").pop();
+	assert.ok(text.includes(secTail), "已读节卡仍在树中（按文档组织全量）");
+});
+
+test("card-manager: 按牌组组织含「未入组」兜底分支", () => {
+	const root = renderWidget(cardManager, "card-manager", { attributes: { org: "deck" } });
+	const text = collectText(root);
+	assert.ok(text.includes("未入组"), "未入组兜底分支存在");
+	assert.ok(text.includes("手动散卡甲"), "散卡在未入组分支");
+});
+
+test("card-manager: 列表视图（Browser 式）平铺所有卡", () => {
+	const root = renderWidget(cardManager, "card-manager", { attributes: { org: "list" } });
+	const text = collectText(root);
+	assert.ok(text.includes("标题"), "排序表头-标题");
+	assert.ok(text.includes("牌组"), "排序表头-牌组");
+	assert.ok(text.includes("到期"), "排序表头-到期");
+	assert.ok(text.includes("手动散卡甲"), "列表包含手动散卡");
+	assert.ok(text.includes("书名甲"), "列表包含书内卡");
+});
+
+test("section-bar: 两行布局 + 统一按钮风格", () => {
+	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[section]tag[?]]")[0];
+	const root = renderWidget(sectionBar, "section-bar", { variables: { currentTiddler: title } });
+	const bar = (root.children || [])[0];
+	assert.ok(bar && String(bar.className || "").includes("tm-section-bar"), "条栏根节点");
+	const rows = (bar.children || []).filter((c) => String(c.className || "").includes("tm-section-row"));
+	assert.equal(rows.length, 2, "两行：信息 + 按钮");
+	assert.ok(String(rows[0].className).includes("tm-section-info"), "第一行=信息（面包屑/位置/剩余）");
+	assert.ok(String(rows[1].className).includes("tm-section-btns"), "第二行=按钮");
+	assert.ok(collectText(rows[0]).includes("剩"), "信息行含剩余待学");
+	const btns = collectButtons(rows[1]);
+	assert.ok(btns.length >= 6, "按钮行含导航/续读点/生命周期/制卡/帮助按钮");
+	for (const b of btns) {
+		assert.ok(String(b.className || "").startsWith("tm-sec-btn"), `按钮统一风格: ${b.className}`);
+	}
+});
+
+test("section-bar: 即时刷新（本文档卡变化 → 重建）", () => {
+	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[section]tag[?]]")[0];
+	const { root, w } = renderWidgetEx(sectionBar, "section-bar", { variables: { currentTiddler: title } });
+	// 初始未读：有「✔ 已读」按钮，无「✓ 已读」状态
+	assert.ok(collectText(root).includes("✔ 已读"), "初始为未读状态");
+	// 外部把本卡标为已读（模拟文档页/管理器入口）
+	const f = wiki.getTiddler(title).fields;
+	wiki.addTiddler({ ...f, tags: [], "tidme.done": "yes" });
+	assert.equal(w.refresh({ [title]: { modified: true } }), true, "refresh 处理了变化");
+	const text2 = collectText(root);
+	assert.ok(text2.includes("✓ 已读"), "重建后显示已读状态");
+	assert.ok(text2.includes("↩ 重新加入"), "重建后显示重新加入按钮");
+	assert.ok(!text2.includes("✔ 已读"), "已读按钮消失");
 });

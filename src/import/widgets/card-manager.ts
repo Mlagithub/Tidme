@@ -1,12 +1,14 @@
 /*
-widgets/card-manager.ts — 统一卡片管理器
+widgets/card-manager.ts — 统一卡片管理器 v2
 
-<$card-manager/> 把浏览/状态/操作集中到一个组件：
-- 视图过滤：全部 / 在队 / 已读 / 搁置 / 逾期
-- 树形浏览：Deck → 文档 → 卡片（可折叠）
-- 每卡：状态徽章 + 优先级 + 复选框 + 标题(点击打开) + 行内操作(移出/恢复/删除)
+对标 SuperMemo 的管理三件套（Contents 知识树 / Browser 子集浏览 / Find elements）：
+- 视图过滤：全部 / 在队 / 已读 / 搁置 / 逾期（定义一个"子集"）
+- 组织方式：按文档（树，默认，全量稳定）/ 按牌组（树，含「未入组」兜底）/ 列表（Browser 式平铺，可排序、行预览联动）
+- 每卡：状态徽章 + 类型 + 优先级 + 标题(点击打开) + 行内操作(读/回/删除)
 - 批量工具条：选中卡 → 顺延/提前/移出队列/搁置/恢复/遗忘/删除
-操作复用 core/scheduler 纯函数；状态徽章与 core/stats 语义一致。
+
+卡片 = 任何带 tidme.* 的 tiddler 或带 ?/. 学习标签的 tiddler（含手动建卡）。
+"全部"视图计数与实际显示一致：按文档树全量；按牌组树由各牌组分支 + 未入组分支兜底全量。
 Done 语义：移出队列 = 去 ? 和 . 标签 + tidme.done（默认/阅读/自动牌组均出队）。
 */
 
@@ -16,6 +18,8 @@ const stats = require("$:/plugins/tidme/core/stats.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 type View = "all" | "inqueue" | "done" | "suspended" | "overdue";
+type Org = "doc" | "deck" | "list";
+
 const VIEWS: { id: View; label: string }[] = [
 	{ id: "all", label: "全部" },
 	{ id: "inqueue", label: "在队" },
@@ -23,6 +27,16 @@ const VIEWS: { id: View; label: string }[] = [
 	{ id: "suspended", label: "搁置" },
 	{ id: "overdue", label: "逾期" }
 ];
+
+const ORGS: { id: Org; label: string; tip: string }[] = [
+	{ id: "doc", label: "按文档", tip: "所有卡片按文档/面包屑树形组织（含已读/搁置/散卡）" },
+	{ id: "deck", label: "按牌组", tip: "按学习牌组组织，未入组卡片收进「未入组」分支" },
+	{ id: "list", label: "列表", tip: "全部卡片平铺（SuperMemo Browser 式）：可排序、勾选、预览" }
+];
+
+interface Card { title: string; fields: Record<string, any> }
+
+interface DeckInfo { title: string; caption: string; strict: Set<string>; loose: Set<string> }
 
 function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
 	const e = doc.createElement(tag);
@@ -52,6 +66,35 @@ function kindMark(fields: Record<string, any>): string {
 	return "";
 }
 
+function stateLabel(fields: Record<string, any>): string {
+	const b = badgeOf(fields);
+	const state = String(fields.state || "0");
+	if (state === "1" || state === "3") return "学习中";
+	if (state === "2") {
+		const overdue = sched.parseTwDate(fields.due).getTime() < Date.now();
+		return overdue ? "已逾期" : "到期";
+	}
+	if (b.text === "✓") return "已读";
+	if (b.text === "⏸") return "搁置";
+	return "新卡";
+}
+
+function dueLabel(fields: Record<string, any>): string {
+	if (String(fields.state || "0") !== "2") return "—";
+	const d = sched.parseTwDate(fields.due);
+	return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
+}
+
+/** 卡片收集：带 tidme.* 或 FSRS 字段的 tiddler + 带 ?/. 学习标签的 tiddler（含手动建卡）
+ * 注意：空格分隔的 filter run 才是并集（`+` 前缀是交集）。
+ * 排除文档汇总页（仅有 tidme.doc，无 kind/parent/?/. /state）。 */
+const CARD_FILTER =
+	"[all[shadows+tiddlers]!is[draft]has[tidme.kind]] " +
+	"[all[shadows+tiddlers]!is[draft]has[tidme.parent]] " +
+	"[all[shadows+tiddlers]!is[draft]tag[?]] " +
+	"[all[shadows+tiddlers]!is[draft]tag[.]] " +
+	"[all[shadows+tiddlers]!is[draft]has[state]has[due]]";
+
 /** Done：移出队列（core scheduler 实现） */
 function doneFields(fields: Record<string, any>): Record<string, any> {
 	return sched.doneCard(fields);
@@ -72,28 +115,312 @@ function makeCardManager(): WidgetCtor {
 			const wiki = this.wiki;
 			const wrap = el(doc, "div", "tm-card-manager");
 
-			let view: View = "all";
+			// 可选属性：view / org（模板可固定初始视图与组织方式）
+			const viewAttr = this.getAttribute("view", "") as View;
+			const orgAttr = this.getAttribute("org", "") as Org;
+			let view: View = VIEWS.some((v) => v.id === viewAttr) ? viewAttr : "all";
+			let org: Org = ORGS.some((o) => o.id === orgAttr) ? orgAttr : "doc";
+			let sortKey: "breadcrumb" | "priority" | "due" | "deck" = "breadcrumb";
+			let sortAsc = true;
+			let previewTitle: string | null = null;
 			const selected = new Set<string>();
-			let allCards: { title: string; fields: Record<string, any> }[] = [];
+			let allCards: Card[] = [];
+			let deckInfos: DeckInfo[] = [];
 
 			const collectAll = () => {
-				// 所有带 tidme 标识的卡（在队 + 已读 + 搁置）
-				allCards = wiki.filterTiddlers("[has[tidme.doc]!is[draft]]")
-					.concat(wiki.filterTiddlers("[has[tidme.kind]!is[draft]]"))
+				allCards = wiki.filterTiddlers(CARD_FILTER)
 					.filter((t: string, i: number, arr: string[]) => arr.indexOf(t) === i)
-					.map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }))
-					.filter((c: any) => c.fields["tidme.doc"] || c.fields["tidme.kind"]);
+					.map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
+				deckInfos = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]").map((deck: string) => {
+					const f = wiki.getTiddler(deck)?.fields || {};
+					return {
+						title: deck,
+						caption: String(f.caption || deck.split("/").pop() || deck),
+						strict: new Set(wiki.filterTiddlers(`[subfilter{${deck}!!card}!subfilter{${deck}!!card_exclude}]`)),
+						loose: new Set(wiki.filterTiddlers(`[subfilter{${deck}!!card}]`))
+					};
+				});
 			};
 
-			const inView = (f: Record<string, any>): boolean => {
+			const inView = (f: Record<string, any>, v: View): boolean => {
 				const tags = Array.isArray(f.tags) ? f.tags : [];
 				const suspended = f["tidme.suspended"] === "yes";
 				const done = f["tidme.done"] === "yes" || !tags.includes("?");
-				if (view === "inqueue") return !done && !suspended;
-				if (view === "done") return done;
-				if (view === "suspended") return suspended;
-				if (view === "overdue") return String(f.state || "0") === "2" && sched.parseTwDate(f.due).getTime() < Date.now();
+				if (v === "inqueue") return !done && !suspended;
+				if (v === "done") return done;
+				if (v === "suspended") return suspended;
+				if (v === "overdue") return String(f.state || "0") === "2" && sched.parseTwDate(f.due).getTime() < Date.now();
 				return true;
+			};
+
+			const decksOf = (c: Card): DeckInfo[] => deckInfos.filter((d) => d.loose.has(c.title));
+			const anyStrict = (c: Card): boolean => deckInfos.some((d) => d.strict.has(c.title));
+
+			const crumbOf = (c: Card): string => String(c.fields["tidme.breadcrumb"] || c.title);
+			const docNameOf = (c: Card): string => {
+				const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "");
+				if (!key) return "未分组";
+				const first = crumbOf(c).split(" › ")[0];
+				return first || key;
+			};
+
+			/** 按文档分组（组间按文档名排序；docKey 为空 → 未分组） */
+			const docGroupsOf = (cards: Card[]): [string, Card[]][] => {
+				const m = new Map<string, Card[]>();
+				for (const c of cards) {
+					const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "");
+					if (!m.has(key)) m.set(key, []);
+					m.get(key)!.push(c);
+				}
+				return [...m.entries()].sort((a, b) => {
+					const na = docNameOf(a[1][0]); const nb = docNameOf(b[1][0]);
+					return na < nb ? -1 : na > nb ? 1 : 0;
+				});
+			};
+
+			/** 卡片行通用操作：读（移出队列）/ 回（恢复）+ 删除 */
+			const appendOps = (row: HTMLElement, c: Card) => {
+				const inQueue = (Array.isArray(c.fields.tags) && c.fields.tags.includes("?"))
+					&& c.fields["tidme.suspended"] !== "yes" && c.fields["tidme.done"] !== "yes";
+				if (inQueue) {
+					const readBtn = el(doc, "button", "tm-cm-op", "读");
+					readBtn.title = "移出队列（已读）";
+					readBtn.addEventListener("click", () => { wiki.addTiddler(doneFields(c.fields)); render(); });
+					row.appendChild(readBtn);
+				} else {
+					const resumeBtn = el(doc, "button", "tm-cm-op", "回");
+					resumeBtn.title = "恢复到学习队列";
+					resumeBtn.addEventListener("click", () => { wiki.addTiddler(resumeFields(c.fields)); render(); });
+					row.appendChild(resumeBtn);
+				}
+				const del = el(doc, "button", "tm-cm-op tm-cm-del", "✕");
+				del.title = "删除卡片";
+				del.addEventListener("click", () => {
+					selected.delete(c.title);
+					wiki.deleteTiddler(c.title);
+					render();
+				});
+				row.appendChild(del);
+			};
+
+			/** 卡片行基础：复选框 + 状态 + 类型 + 优先级 + 标题链接 */
+			const appendRowBase = (row: HTMLElement, c: Card, cb: HTMLInputElement) => {
+				const bd = badgeOf(c.fields);
+				row.appendChild(el(doc, "span", `tm-cm-badge ${bd.cls}`, bd.text));
+				const km = kindMark(c.fields);
+				if (km) row.appendChild(el(doc, "span", "tm-cm-kind", km));
+				const pri = c.fields["tidme.priority"];
+				if (pri !== undefined) {
+					row.appendChild(el(doc, "span", "tm-cm-pri", `p${String(pri).padStart(2, "0")}`));
+				}
+				const link = el(doc, "a", "tc-tiddlylink tm-cm-link",
+					String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title);
+				link.href = "#";
+				link.title = crumbOf(c);
+				link.addEventListener("click", (e: Event) => {
+					e.preventDefault();
+					this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
+				});
+				row.appendChild(link);
+				cb.addEventListener("change", () => {
+					if (cb.checked) selected.add(c.title); else selected.delete(c.title);
+					render();
+				});
+			};
+
+			/** 树形：按文档组织（全量，默认） */
+			const renderDocTree = (treeBox: HTMLElement, cards: Card[]) => {
+				const groups = docGroupsOf(cards);
+				if (!groups.length) {
+					treeBox.appendChild(el(doc, "div", "tm-import-muted", "当前视图下没有卡片。"));
+					return;
+				}
+				for (const [key, docCards] of groups) {
+					const dd = el(doc, "details", "tm-cm-doc");
+					dd.open = true;
+					const dsum = el(doc, "summary", "", "");
+					dsum.appendChild(el(doc, "span", "tm-cm-doc-title", `${docNameOf(docCards[0])}（${docCards.length}）`));
+					dd.appendChild(dsum);
+					const sorted = [...docCards].sort((a: Card, b: Card) => {
+						const pa = crumbOf(a); const pb = crumbOf(b);
+						return pa < pb ? -1 : pa > pb ? 1 : 0;
+					});
+					for (const c of sorted) renderCardRow(dd, c);
+					treeBox.appendChild(dd);
+				}
+			};
+
+			/** 树形：按牌组组织（牌组分支 + 未入组兜底） */
+			const renderDeckTree = (treeBox: HTMLElement, cards: Card[]) => {
+				if (!deckInfos.length) {
+					treeBox.appendChild(el(doc, "div", "tm-import-muted",
+						"暂无牌组——导入/切分后自动创建。未入组卡片见下方「未入组」分支。"));
+				}
+				for (const d of deckInfos) {
+					const deckCards = cards.filter((c) => d.strict.has(c.title));
+					const details = el(doc, "details", "tm-cm-deck");
+					details.open = deckCards.length > 0;
+					const ds = el(doc, "summary", "", "");
+					ds.appendChild(el(doc, "strong", "", `${d.caption}（${deckCards.length}）`));
+					details.appendChild(ds);
+					if (deckCards.length) {
+						const groups = docGroupsOf(deckCards);
+						for (const [, docCards] of groups) {
+							const dd = el(doc, "details", "tm-cm-doc");
+							dd.open = true;
+							const dsum = el(doc, "summary", "", "");
+							dsum.appendChild(el(doc, "span", "tm-cm-doc-title",
+								`${docNameOf(docCards[0])}（${docCards.length}）`));
+							dd.appendChild(dsum);
+							const sorted = [...docCards].sort((a: Card, b: Card) => {
+								const pa = crumbOf(a); const pb = crumbOf(b);
+								return pa < pb ? -1 : pa > pb ? 1 : 0;
+							});
+							for (const c of sorted) renderCardRow(dd, c);
+							details.appendChild(dd);
+						}
+					}
+					treeBox.appendChild(details);
+				}
+				// 未入组：不被任何牌组命中的卡（已读/搁置/手动散卡）
+				const orphans = cards.filter((c) => !anyStrict(c));
+				const ob = el(doc, "details", "tm-cm-deck tm-cm-orphan");
+				ob.open = orphans.length > 0;
+				const os = el(doc, "summary", "", "");
+				os.appendChild(el(doc, "strong", "", `未入组（${orphans.length}）`));
+				os.title = "不属于任何牌组队列的卡片：已读、搁置或手动创建的散卡";
+				ob.appendChild(os);
+				if (orphans.length) {
+					const groups = docGroupsOf(orphans);
+					for (const [, docCards] of groups) {
+						const dd = el(doc, "details", "tm-cm-doc");
+						dd.open = true;
+						const dsum = el(doc, "summary", "", "");
+						dsum.appendChild(el(doc, "span", "tm-cm-doc-title",
+							`${docNameOf(docCards[0])}（${docCards.length}）`));
+						dd.appendChild(dsum);
+						const sorted = [...docCards].sort((a: Card, b: Card) => {
+							const pa = crumbOf(a); const pb = crumbOf(b);
+							return pa < pb ? -1 : pa > pb ? 1 : 0;
+						});
+						for (const c of sorted) renderCardRow(dd, c);
+						ob.appendChild(dd);
+					}
+				}
+				treeBox.appendChild(ob);
+			};
+
+			/** 树行：复选框 + 徽章 + 标题 + 操作（缩进按 breadcrumb 深度） */
+			const renderCardRow = (parentEl: HTMLElement, c: Card) => {
+				const row = el(doc, "div", "tm-cm-card");
+				const depth = Math.max(0, crumbOf(c).split(" › ").length - 1);
+				row.style.paddingLeft = `${depth * 0.9}em`;
+				const cb = doc.createElement("input");
+				cb.type = "checkbox";
+				cb.checked = selected.has(c.title);
+				row.appendChild(cb);
+				appendRowBase(row, c, cb);
+				appendOps(row, c);
+				parentEl.appendChild(row);
+			};
+
+			/** 列表行（Browser 式）：勾选 + 状态 + 类型 + 优先 + 标题 + 牌组 + 到期 + 操作 */
+			const renderListRow = (listBox: HTMLElement, c: Card) => {
+				const row = el(doc, "div", "tm-cm-card tm-cm-listrow");
+				const cb = doc.createElement("input");
+				cb.type = "checkbox";
+				cb.checked = selected.has(c.title);
+				row.appendChild(cb);
+				appendRowBase(row, c, cb);
+				// 牌组列
+				const ds = decksOf(c);
+				row.appendChild(el(doc, "span", "tm-cm-col-deck", ds.length ? ds.map((d) => d.caption).join("·") : "—"));
+				// 到期列
+				row.appendChild(el(doc, "span", "tm-cm-col-due", dueLabel(c.fields)));
+				appendOps(row, c);
+				// 行点击 → 预览联动（对标 SuperMemo Browser 的 Synchronization）
+				row.addEventListener("click", (e: Event) => {
+					const t = e.target as HTMLElement;
+					if (t && (t.tagName === "A" || t.tagName === "BUTTON" || t.tagName === "INPUT")) return;
+					previewTitle = previewTitle === c.title ? null : c.title;
+					render();
+				});
+				listBox.appendChild(row);
+			};
+
+			/** 列表排序比较 */
+			const cmpCards = (a: Card, b: Card): number => {
+				let r = 0;
+				if (sortKey === "priority") {
+					const pa = Number(a.fields["tidme.priority"] ?? 99);
+					const pb = Number(b.fields["tidme.priority"] ?? 99);
+					r = pa - pb;
+				} else if (sortKey === "due") {
+					const da = String(a.fields.state || "0") === "2" ? sched.parseTwDate(a.fields.due).getTime() : Infinity;
+					const db = String(b.fields.state || "0") === "2" ? sched.parseTwDate(b.fields.due).getTime() : Infinity;
+					r = da - db;
+				} else if (sortKey === "deck") {
+					const da = decksOf(a).map((d) => d.caption).join("·");
+					const db = decksOf(b).map((d) => d.caption).join("·");
+					r = da < db ? -1 : da > db ? 1 : 0;
+				} else {
+					const pa = crumbOf(a); const pb = crumbOf(b);
+					r = pa < pb ? -1 : pa > pb ? 1 : 0;
+				}
+				return sortAsc ? r : -r;
+			};
+
+			/** 列表视图（Browser 式） */
+			const renderList = (listBox: HTMLElement, cards: Card[]) => {
+				const head = el(doc, "div", "tm-cm-card tm-cm-head");
+				const all = doc.createElement("input");
+				all.type = "checkbox";
+				all.checked = cards.length > 0 && cards.every((c) => selected.has(c.title));
+				all.title = "全选/清空当前列表";
+				all.addEventListener("change", () => {
+					for (const c of cards) { if (all.checked) selected.add(c.title); else selected.delete(c.title); }
+					render();
+				});
+				head.appendChild(all);
+				head.appendChild(el(doc, "span", "tm-cm-head-cell", "状态"));
+				head.appendChild(el(doc, "span", "tm-cm-head-cell", "类型"));
+				head.appendChild(el(doc, "span", "tm-cm-head-cell", "优先"));
+				const sortBtn = (label: string, key: "breadcrumb" | "priority" | "due" | "deck") => {
+					const b = el(doc, "button", "tm-cm-sort" + (sortKey === key ? " tm-cm-sort-active" : ""),
+						label + (sortKey === key ? (sortAsc ? " ↑" : " ↓") : ""));
+					b.title = "点击排序";
+					b.addEventListener("click", () => {
+						if (sortKey === key) sortAsc = !sortAsc; else { sortKey = key; sortAsc = true; }
+						render();
+					});
+					return b;
+				};
+				head.appendChild(sortBtn("标题", "breadcrumb"));
+				head.appendChild(sortBtn("牌组", "deck"));
+				head.appendChild(sortBtn("到期", "due"));
+				head.appendChild(el(doc, "span", "tm-cm-head-cell", "操作"));
+				listBox.appendChild(head);
+
+				if (!cards.length) {
+					listBox.appendChild(el(doc, "div", "tm-import-muted", "当前视图下没有卡片。"));
+					return;
+				}
+				const sorted = [...cards].sort(cmpCards);
+				for (const c of sorted) renderListRow(listBox, c);
+
+				// 预览联动区
+				const prev = previewTitle ? allCards.find((c) => c.title === previewTitle) : null;
+				if (prev) {
+					const pv = el(doc, "div", "tm-cm-preview");
+					const f = prev.fields;
+					pv.appendChild(el(doc, "div", "tm-cm-preview-head",
+						`${crumbOf(prev)} · ${kindMark(f) || "节"} · p${String(f["tidme.priority"] ?? "-").padStart(2, "0")} · ${stateLabel(f)}${dueLabel(f) !== "—" ? " · 到期 " + dueLabel(f) : ""}`));
+					const body = el(doc, "div", "tm-cm-preview-body");
+					const text = String(f.text || "").replace(/\s+/g, " ").trim();
+					body.appendChild(el(doc, "span", "", text.slice(0, 400) + (text.length > 400 ? " …" : "")));
+					pv.appendChild(body);
+					listBox.appendChild(pv);
+				}
 			};
 
 			/** 重新渲染整个面板 */
@@ -101,11 +428,11 @@ function makeCardManager(): WidgetCtor {
 				wrap.textContent = "";
 				collectAll();
 
-				// 视图过滤按钮
+				// 视图过滤按钮（计数 = 该子集实际卡数）
 				const viewRow = el(doc, "div", "tm-cm-views");
 				for (const v of VIEWS) {
 					const count = v.id === "all" ? allCards.length
-						: allCards.filter((c) => inView(c.fields)).length;
+						: allCards.filter((c) => inView(c.fields, v.id)).length;
 					const b = el(doc, "button", "tm-cm-view" + (view === v.id ? " tm-cm-view-active" : ""),
 						`${v.label}(${count})`);
 					b.addEventListener("click", () => { view = v.id; render(); });
@@ -113,19 +440,28 @@ function makeCardManager(): WidgetCtor {
 				}
 				wrap.appendChild(viewRow);
 
+				// 组织方式切换
+				const orgRow = el(doc, "div", "tm-cm-orgs");
+				for (const o of ORGS) {
+					const b = el(doc, "button", "tm-cm-org" + (org === o.id ? " tm-cm-org-active" : ""), o.label);
+					b.title = o.tip;
+					b.addEventListener("click", () => { org = o.id; render(); });
+					orgRow.appendChild(b);
+				}
+				wrap.appendChild(orgRow);
+
 				// 批量工具条
 				const bar = el(doc, "div", "tm-cm-bar");
 				bar.appendChild(el(doc, "span", "tm-import-muted",
 					selected.size ? `已选 ${selected.size} 张` : "勾选卡片后可批量操作"));
-				const batch = (label: string, apply: (f: Record<string, any>) => Record<string, any>) => {
+				const batch = (label: string, apply: (f: Record<string, any>) => Record<string, any>, destructive = false) => {
 					const b = el(doc, "button", "", label);
 					b.addEventListener("click", () => {
-						let n = 0;
 						for (const title of selected) {
 							const t = wiki.getTiddler(title);
 							if (!t) continue;
-							wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
-							n++;
+							if (destructive) wiki.deleteTiddler(title);
+							else wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
 						}
 						selected.clear();
 						render();
@@ -138,117 +474,16 @@ function makeCardManager(): WidgetCtor {
 				bar.appendChild(batch("搁置", () => sched.suspendCard()));
 				bar.appendChild(batch("恢复", (f) => resumeFields(f)));
 				bar.appendChild(batch("遗忘", () => sched.forgetCard()));
-				bar.appendChild(batch("删除", () => ({} as Record<string, any>)));
+				bar.appendChild(batch("删除", () => ({} as Record<string, any>), true));
 				wrap.appendChild(bar);
 
-				// 树：Deck → 文档 → 卡片
-				const treeBox = el(doc, "div", "tm-cm-tree");
-				const decks = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]");
-				if (!decks.length) {
-					treeBox.appendChild(el(doc, "div", "tm-import-muted", "暂无牌组——导入/切分后自动创建。"));
-				}
-				for (const deck of decks) {
-					const d = wiki.getTiddler(deck)?.fields || {};
-					const deckCards = allCards.filter((c) => {
-						// 属于该 deck：card 过滤器命中
-						return wiki.filterTiddlers(`[subfilter{${deck}!!card}!subfilter{${deck}!!card_exclude}match[${c.title}]]`).length > 0
-							|| (view === "done" || view === "suspended" || view === "all")
-								&& wiki.filterTiddlers(`[subfilter{${deck}!!card}match[${c.title}]]`).length > 0
-							&& inView(c.fields);
-					}).filter((c) => inView(c.fields));
-					if (!deckCards.length && view !== "all") continue;
-					const deckDetails = el(doc, "details", "tm-cm-deck");
-					deckDetails.open = true;
-					const ds = el(doc, "summary", "", "");
-					ds.appendChild(el(doc, "strong", "", `${String(d.caption || deck.split("/").pop() || deck)}（${deckCards.length}）`));
-					deckDetails.appendChild(ds);
-
-					// 按文档分组
-					const docGroups = new Map<string, any[]>();
-					for (const c of deckCards) {
-						const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "__none__");
-						if (!docGroups.has(key)) docGroups.set(key, []);
-						docGroups.get(key)!.push(c);
-					}
-					const docOrder = [...docGroups.entries()].sort((a, b) => {
-						const ta = String(a[1][0]?.fields["tidme.breadcrumb"] || "");
-						const tb = String(b[1][0]?.fields["tidme.breadcrumb"] || "");
-						return ta < tb ? -1 : ta > tb ? 1 : 0;
-					});
-					for (const [docKey, docCards] of docOrder) {
-						const bc = String(docCards[0]?.fields["tidme.breadcrumb"] || "");
-						const docTitle = bc.split(" › ")[0] || docKey;
-						const dd = el(doc, "details", "tm-cm-doc");
-						dd.open = true;
-						const dsum = el(doc, "summary", "", "");
-						dsum.appendChild(el(doc, "span", "tm-cm-doc-title", `${docTitle}（${docCards.length}）`));
-						dd.appendChild(dsum);
-						const sorted = [...docCards].sort((a: any, b: any) => {
-							const pa = String(a.fields["tidme.breadcrumb"] || "");
-							const pb = String(b.fields["tidme.breadcrumb"] || "");
-							return pa < pb ? -1 : pa > pb ? 1 : 0;
-						});
-						for (const c of sorted) {
-							const row = el(doc, "div", "tm-cm-card");
-							const depth = Math.max(0, String(c.fields["tidme.breadcrumb"] || "").split(" › ").length - 1);
-							row.style.paddingLeft = `${depth * 0.9}em`;
-							// 复选框
-							const cb = doc.createElement("input");
-							cb.type = "checkbox";
-							cb.checked = selected.has(c.title);
-							cb.addEventListener("change", () => {
-								if (cb.checked) selected.add(c.title); else selected.delete(c.title);
-								render();
-							});
-							row.appendChild(cb);
-							// 状态徽章
-							const bd = badgeOf(c.fields);
-							row.appendChild(el(doc, "span", `tm-cm-badge ${bd.cls}`, bd.text));
-							const km = kindMark(c.fields);
-							if (km) row.appendChild(el(doc, "span", "tm-cm-kind", km));
-							const pri = c.fields["tidme.priority"];
-							if (pri !== undefined) {
-								row.appendChild(el(doc, "span", "tm-cm-pri", `p${String(pri).padStart(2, "0")}`));
-							}
-							// 标题（点击打开）
-							const link = el(doc, "a", "tc-tiddlylink tm-cm-link",
-								String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title);
-							link.href = "#";
-							link.title = c.title;
-							link.addEventListener("click", (e: Event) => {
-								e.preventDefault();
-								this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
-							});
-							row.appendChild(link);
-							// 行内操作：在队 → 读（移出队列）；出队/搁置 → 回（恢复）
-							const inQueue = (Array.isArray(c.fields.tags) && c.fields.tags.includes("?"))
-								&& c.fields["tidme.suspended"] !== "yes" && c.fields["tidme.done"] !== "yes";
-							if (inQueue) {
-								const readBtn = el(doc, "button", "tm-cm-op", "读");
-								readBtn.title = "移出队列（已读）";
-								readBtn.addEventListener("click", () => { wiki.addTiddler(doneFields(c.fields)); render(); });
-								row.appendChild(readBtn);
-							} else {
-								const resumeBtn = el(doc, "button", "tm-cm-op", "回");
-								resumeBtn.title = "恢复到学习队列";
-								resumeBtn.addEventListener("click", () => { wiki.addTiddler(resumeFields(c.fields)); render(); });
-								row.appendChild(resumeBtn);
-							}
-							const del = el(doc, "button", "tm-cm-op tm-cm-del", "✕");
-							del.title = "删除卡片";
-							del.addEventListener("click", () => {
-								selected.delete(c.title);
-								wiki.deleteTiddler(c.title);
-								render();
-							});
-							row.appendChild(del);
-							dd.appendChild(row);
-						}
-						deckDetails.appendChild(dd);
-					}
-					treeBox.appendChild(deckDetails);
-				}
-				wrap.appendChild(treeBox);
+				// 主体：按组织方式渲染
+				const body = el(doc, "div", "tm-cm-body");
+				const visible = allCards.filter((c) => inView(c.fields, view));
+				if (org === "deck") renderDeckTree(body, visible);
+				else if (org === "list") renderList(body, visible);
+				else renderDocTree(body, visible);
+				wrap.appendChild(body);
 			};
 
 			render();

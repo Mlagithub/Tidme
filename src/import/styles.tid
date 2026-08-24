@@ -35,13 +35,18 @@ tags: $:/tags/Stylesheet
 }
 .tm-section-bar {
 	display: flex;
-	align-items: center;
-	gap: 0.5em;
-	flex-wrap: wrap;
+	flex-direction: column;
+	gap: 2px;
 	padding: 2px 0;
 	margin-bottom: 4px;
 	border-bottom: 1px dotted <<colour muted-foreground>>;
 	font-size: 0.92em;
+}
+.tm-section-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	flex-wrap: wrap;
 }
 .tm-section-crumb {
 	cursor: pointer;
@@ -49,17 +54,44 @@ tags: $:/tags/Stylesheet
 .tm-section-pos {
 	opacity: 0.75;
 }
-.tm-section-nav-btn,
-.tm-section-extract-btn,
-.tm-section-cloze-btn,
-.tm-section-rp-btn,
-.tm-section-setrp-btn,
-.tm-section-done-btn,
-.tm-section-later-btn,
-.tm-section-help-btn,
-.tm-section-rp-clear {
+.tm-section-load {
+	opacity: 0.75;
+}
+.tm-section-state {
+	color: <<colour primary>>;
+	opacity: 0.9;
+}
+/* 统一按钮风格：全部 tm-sec-btn 基类 + 语义修饰 */
+.tm-sec-btn {
 	font-size: 0.9em;
 	padding: 1px 8px;
+	border: 1px solid <<colour muted-foreground>>;
+	border-radius: 3px;
+	background: <<colour background>>;
+	color: inherit;
+	opacity: 0.85;
+	cursor: pointer;
+	line-height: 1.5;
+}
+.tm-sec-btn:hover {
+	opacity: 1;
+}
+.tm-sec-btn:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+.tm-sec-btn--done {
+	color: <<colour primary>>;
+	border-color: <<colour primary>>;
+}
+.tm-sec-btn--undo {
+	color: <<colour primary>>;
+	border-color: <<colour primary>>;
+}
+.tm-sec-btn--del {
+	color: <<colour danger>>;
+	border-color: <<colour danger>>;
+	opacity: 0.8;
 }
 .tm-bar-sep {
 	width: 1px;
@@ -68,9 +100,6 @@ tags: $:/tags/Stylesheet
 	opacity: 0.4;
 	margin: 0 4px;
 	display: inline-block;
-}
-.tm-section-done-btn {
-	color: <<colour primary>>;
 }
 .tm-import-dup {
 	color: <<colour danger>>;
@@ -81,9 +110,6 @@ tags: $:/tags/Stylesheet
 	margin-top: 6px;
 	padding-top: 4px;
 	border-top: 1px dotted <<colour muted-foreground>>;
-}
-.tm-section-extract-btn {
-	margin-left: auto;
 }
 mark.tm-readpoint {
 	background: #fff3a0;
@@ -159,7 +185,7 @@ mark.tm-readpoint {
 	display: flex;
 	gap: 0.4em;
 	flex-wrap: wrap;
-	margin-bottom: 0.4em;
+	margin-bottom: 0.3em;
 }
 .tm-cm-view {
 	padding: 2px 10px;
@@ -170,6 +196,28 @@ mark.tm-readpoint {
 .tm-cm-view-active {
 	background: <<colour primary>>;
 	color: <<colour background>>;
+	opacity: 1;
+}
+.tm-cm-orgs {
+	display: flex;
+	gap: 0.4em;
+	flex-wrap: wrap;
+	margin-bottom: 0.3em;
+}
+.tm-cm-org {
+	padding: 1px 8px;
+	border-radius: 3px;
+	border: 1px dashed <<colour muted-foreground>>;
+	opacity: 0.75;
+	font-size: 0.9em;
+}
+.tm-cm-org:hover {
+	opacity: 1;
+}
+.tm-cm-org-active {
+	border-style: solid;
+	border-color: <<colour primary>>;
+	color: <<colour primary>>;
 	opacity: 1;
 }
 .tm-cm-bar {
@@ -207,6 +255,67 @@ mark.tm-readpoint {
 	align-items: center;
 	gap: 0.35em;
 	padding: 2px 0;
+}
+.tm-cm-head {
+	border-bottom: 1px dotted <<colour muted-foreground>>;
+	margin-bottom: 2px;
+	font-size: 0.85em;
+	opacity: 0.8;
+}
+.tm-cm-head-cell {
+	min-width: 2em;
+}
+.tm-cm-sort {
+	padding: 0 4px;
+	font-size: 0.9em;
+	border-radius: 3px;
+	border: 1px solid transparent;
+}
+.tm-cm-sort:hover {
+	border-color: <<colour muted-foreground>>;
+}
+.tm-cm-sort-active {
+	border-color: <<colour primary>>;
+	color: <<colour primary>>;
+}
+.tm-cm-listrow {
+	font-size: 0.9em;
+}
+.tm-cm-col-deck {
+	font-size: 0.8em;
+	opacity: 0.6;
+	min-width: 6em;
+	max-width: 10em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.tm-cm-col-due {
+	font-size: 0.8em;
+	opacity: 0.6;
+	min-width: 5em;
+}
+.tm-cm-preview {
+	margin: 6px 0 2px;
+	padding: 6px 8px;
+	border: 1px solid <<colour muted-foreground>>;
+	border-radius: 4px;
+	background: <<colour very-light-background>>;
+}
+.tm-cm-preview-head {
+	font-size: 0.85em;
+	opacity: 0.8;
+	margin-bottom: 3px;
+}
+.tm-cm-preview-body {
+	font-size: 0.9em;
+	max-height: 10em;
+	overflow: auto;
+	white-space: pre-wrap;
+}
+.tm-cm-orphan summary strong {
+	opacity: 0.65;
+	font-style: italic;
 }
 .tm-cm-badge {
 	font-size: 0.85em;
