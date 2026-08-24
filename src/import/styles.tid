@@ -151,6 +151,102 @@ mark.tm-readpoint {
 	opacity: 1;
 }
 
+/* 卡片管理器 */
+.tm-card-manager {
+	font-size: 0.95em;
+}
+.tm-cm-views {
+	display: flex;
+	gap: 0.4em;
+	flex-wrap: wrap;
+	margin-bottom: 0.4em;
+}
+.tm-cm-view {
+	padding: 2px 10px;
+	border-radius: 4px;
+	border: 1px solid <<colour muted-foreground>>;
+	opacity: 0.85;
+}
+.tm-cm-view-active {
+	background: <<colour primary>>;
+	color: <<colour background>>;
+	opacity: 1;
+}
+.tm-cm-bar {
+	display: flex;
+	gap: 0.4em;
+	flex-wrap: wrap;
+	align-items: center;
+	margin-bottom: 0.5em;
+	padding: 4px 0;
+	border-top: 1px dotted <<colour muted-foreground>>;
+	border-bottom: 1px dotted <<colour muted-foreground>>;
+}
+.tm-cm-bar button {
+	padding: 1px 8px;
+	font-size: 0.9em;
+}
+.tm-cm-tree details {
+	margin-left: 0.4em;
+}
+.tm-cm-tree summary {
+	cursor: pointer;
+}
+.tm-cm-deck {
+	margin-top: 0.4em;
+}
+.tm-cm-doc {
+	margin-left: 0.6em;
+}
+.tm-cm-doc-title {
+	opacity: 0.85;
+	font-size: 0.95em;
+}
+.tm-cm-card {
+	display: flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 2px 0;
+}
+.tm-cm-badge {
+	font-size: 0.85em;
+	min-width: 1.3em;
+	text-align: center;
+	border-radius: 3px;
+	padding: 0 2px;
+}
+.tm-badge-new { background: #dbeafe; }
+.tm-badge-learn { background: #fef3c7; }
+.tm-badge-due { background: #d1fae5; }
+.tm-badge-overdue { background: #fee2e2; }
+.tm-badge-done { background: #e5e7eb; opacity: 0.8; }
+.tm-badge-suspended { background: #ede9fe; }
+.tm-cm-kind {
+	font-size: 0.8em;
+	opacity: 0.6;
+}
+.tm-cm-pri {
+	font-size: 0.75em;
+	opacity: 0.5;
+}
+.tm-cm-link {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 18em;
+}
+.tm-cm-op {
+	padding: 0 5px;
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+.tm-cm-op:hover {
+	opacity: 1;
+}
+.tm-cm-del:hover {
+	color: <<colour danger>>;
+}
+
 /* M3 阅读态排版：Section 卡展开正文（与 section-bar 同帧时生效） */
 .tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body {
 	max-width: 42em;

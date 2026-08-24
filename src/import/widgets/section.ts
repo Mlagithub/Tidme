@@ -46,6 +46,8 @@ function sectionsOfDoc(wiki: any, doc: string): string[] {
 }
 
 function isDone(f: any): boolean {
+	if (!f) return false;
+	if (f["tidme.done"] === "yes") return true;
 	const tags = f?.tags;
 	return !tags || !tags.includes("?");
 }
@@ -377,8 +379,8 @@ function makeSectionBar(): WidgetCtor {
 					}));
 				}
 				mini.appendChild(mkBtn("✔ 完成", "tm-section-done-btn", "读完此卡：移出学习队列", false, () => {
-					const tags = (t.fields.tags || []).filter((x: string) => x !== "?");
-					this.wiki.addTiddler({ ...t.fields, tags });
+					const tags = (t.fields.tags || []).filter((x: string) => x !== "?" && x !== ".");
+					this.wiki.addTiddler({ ...t.fields, tags, "tidme.done": "yes" });
 					notify("done");
 				}));
 				mini.appendChild(mkBtn("🗑 删除", "tm-section-later-btn", "彻底删除此卡", false, () => {
@@ -447,8 +449,9 @@ function makeSectionBar(): WidgetCtor {
 				bar.appendChild(el(doc, "span", "tm-import-muted", "✓ 已读"));
 			} else {
 				bar.appendChild(mkBtn("✔ 已读", "tm-section-done-btn", "Done！读完此节，移出学习队列", false, () => {
-					const tags = (t.fields.tags || []).filter((x: string) => x !== "?");
-					this.wiki.addTiddler({ ...t.fields, tags });
+					// Done 语义：出队 = 去掉 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记
+					const tags = (t.fields.tags || []).filter((x: string) => x !== "?" && x !== ".");
+					this.wiki.addTiddler({ ...t.fields, tags, "tidme.done": "yes" });
 					// 撤销芯片：8 秒内可反悔（防止误触批量已读）
 					const undo = mkBtn("↩ 撤销已读", "tm-section-undo-btn", "恢复到学习队列", false, () => {
 						this.wiki.addTiddler({ ...t.fields });

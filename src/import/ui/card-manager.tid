@@ -1,0 +1,12 @@
+title: $:/plugins/tidme/import/ui/card-manager
+type: text/vnd.tiddlywiki
+
+! 卡片管理器
+
+统一浏览、组织与管理所有渐进学习卡片：按牌组/文档树形浏览，支持视图过滤（全部/在队/已读/搁置/逾期）、单卡操作（打开/已读/恢复/删除）与批量操作（顺延/提前/移出队列/搁置/恢复/遗忘/删除）。
+
+<$card-manager/>
+
+---
+
+[[← 导入中心|$:/plugins/tidme/import/ui/import-center]] · [[牌组批量操作|$:/plugins/tidme/import/ui/deck-ops]] · [[统计|$:/plugins/tidme/import/ui/stats]]

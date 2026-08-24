@@ -56,7 +56,7 @@ const fakeDocument = {
 	defaultView: null
 };
 
-let wiki, cardBrowser, queueOps, statsPanel;
+let wiki, cardBrowser, queueOps, statsPanel, cardManager;
 test.before(async () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-browser-"));
 	const tw = TiddlyWiki.TiddlyWiki();
@@ -79,6 +79,7 @@ test.before(async () => {
 	cardBrowser = tw.modules.execute("$:/plugins/tidme/import/widgets/card-browser.js");
 	queueOps = tw.modules.execute("$:/plugins/tidme/import/widgets/queue-ops.js");
 	statsPanel = tw.modules.execute("$:/plugins/tidme/import/widgets/stats-panel.js");
+	cardManager = tw.modules.execute("$:/plugins/tidme/import/widgets/card-manager.js");
 });
 
 function renderWidget(mod, name) {
@@ -112,4 +113,26 @@ test("stats-panel: 渲染负载/文档进度/漏斗", () => {
 	assert.ok(text.includes("书名甲"), "应含文档进度");
 	assert.ok(text.includes("漏斗"), "应有漏斗");
 	assert.ok(text.includes("保留率"), "应有保留率");
+});
+
+test("card-manager: 渲染视图过滤/树/批量工具条", () => {
+	const root = renderWidget(cardManager, "card-manager");
+	const text = collectText(root);
+	assert.ok(text.includes("全部"), "应有视图过滤");
+	assert.ok(text.includes("顺延7d"), "应有批量操作");
+	assert.ok(text.includes("书名甲"), "应含文档");
+	assert.ok(text.includes("小节乙"), "应含节");
+});
+
+test("card-manager: Done 语义（去 ? 和 . + tidme.done）与恢复", () => {
+	const done = cardManager.doneFields({ title: "节", tags: ["?", "."], state: "0" });
+	assert.deepEqual(done.tags, [], "Done 去掉 ? 和 .");
+	assert.equal(done["tidme.done"], "yes");
+	// 自动牌组过滤：tag[?] 已排除已读卡
+	const section = wiki.filterTiddlers("[tidme.kind[section]tidme.done[yes]]");
+	// 恢复：按 kind 补回标签
+	const resumed = cardManager.resumeFields({ ...done, "tidme.kind": "section" });
+	assert.ok(resumed.tags.includes("?"), "恢复补回 ?");
+	assert.ok(resumed.tags.includes("."), "section 恢复补回 .");
+	assert.equal(resumed["tidme.done"], undefined, "恢复删除 tidme.done");
 });

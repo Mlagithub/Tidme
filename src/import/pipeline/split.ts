@@ -69,7 +69,7 @@ function buildAutoDeck(bookTitle: string, docId: string): Record<string, any> {
 		tags: ["$:/tags/TidmeDeck"],
 		caption: bookTitle,
 		description: `按文档自动创建的阅读牌组（${docId}）`,
-		card: `[all[shadows+tiddlers]tidme.doc[${docId}]!has[tidme.suspended]]`,
+		card: `[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`,
 		card_unfold: "[tag[.]]",
 		card_exclude: "[tag[!]]",
 		order: "due-new",
