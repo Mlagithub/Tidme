@@ -29,16 +29,17 @@ export function tierRandom(tier: keyof typeof PRIORITY_TIERS, spread = 8): numbe
 }
 
 /**
- * 评分 → 优先级调整量（G1 优先级动态化，对标 SM 复习后自动调整）。
- * 0 = 最高优先；数值减小 = 升优先（Again/Hard），增大 = 降优先（Good/Easy）。
- * cfg 可选（{again, hard, good, easy} 或 {enable:false} 关闭）；缺省 -10/-3/+5/+10。
+ * 评分 → 优先级调整量（G1 优先级动态化，对标 SM "pass grades automatically decrease priority"）。
+ * 0 = 最高优先；数值增大 = 降优先。SM 语义：及格评分（Good/Easy）自动降低 item 优先级；
+ * Again/Hard 不动优先级（遗忘靠 FSRS 间隔重学，不升优先——优先级是重要性，间隔是记忆状态）。
+ * cfg 可选（{again, hard, good, easy} 或 {enable:false} 关闭）；默认 0/0/+5/+10。
  */
 export function priorityDeltaForRating(rating: string | number, cfg?: Record<string, any>): number {
 	if (cfg && cfg.enable === false) return 0;
 	const c = cfg || {};
 	const r = String(rating).toLowerCase();
-	if (r === "again" || r === "1") return Number(c.again) || -10;
-	if (r === "hard" || r === "2") return Number(c.hard) || -3;
+	if (r === "again" || r === "1") return Number(c.again) || 0;
+	if (r === "hard" || r === "2") return Number(c.hard) || 0;
 	if (r === "good" || r === "3") return Number(c.good) || 5;
 	if (r === "easy" || r === "4") return Number(c.easy) || 10;
 	return 0;

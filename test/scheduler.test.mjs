@@ -36,15 +36,15 @@ test("tierRandom: 三档落在合理区间", () => {
 	}
 });
 
-test("G1 priorityDeltaForRating: 评分 → 优先级调整量", () => {
-	assert.equal(sched.priorityDeltaForRating("Again"), -10, "Again 升优先（数值减小）");
-	assert.equal(sched.priorityDeltaForRating("Hard"), -3);
-	assert.equal(sched.priorityDeltaForRating("Good"), 5, "Good 降优先");
-	assert.equal(sched.priorityDeltaForRating("Easy"), 10);
+test("G1 priorityDeltaForRating: 评分 → 优先级调整量（SM: pass grades 降优先）", () => {
+	assert.equal(sched.priorityDeltaForRating("Again"), 0, "Again 不动优先级（遗忘靠间隔重学）");
+	assert.equal(sched.priorityDeltaForRating("Hard"), 0, "Hard 不动优先级");
+	assert.equal(sched.priorityDeltaForRating("Good"), 5, "Good 及格降优先");
+	assert.equal(sched.priorityDeltaForRating("Easy"), 10, "Easy 及格降更多");
 	assert.equal(sched.priorityDeltaForRating("3"), 5, "数字 rating 兼容");
 	assert.equal(sched.priorityDeltaForRating("X"), 0, "未知 rating 不动");
 	assert.equal(sched.priorityDeltaForRating("Again", { enable: false }), 0, "enable:false 关闭");
-	assert.equal(sched.priorityDeltaForRating("Again", { again: -20 }), -20, "配置覆盖");
+	assert.equal(sched.priorityDeltaForRating("Again", { again: -20 }), -20, "配置可覆盖（自定义升优先）");
 });
 
 test("G1 adjustPriority / G2 shiftPriority: clamp 0-100", () => {
