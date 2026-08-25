@@ -418,6 +418,10 @@ function makeSectionBar(): WidgetCtor {
 						highlightSnippetLater(doc, anchor.section, anchor.snippet);
 					}));
 				}
+				// G4 加工路径：摘录 → 挖空（选中摘录卡内文字 Alt+Z 生成嵌套挖空卡）
+				if (kind === "extract") {
+					btnRow.appendChild(mkBtn("✂ 挖空", "cloze", "从摘录中挖空（先选中文字，Alt+Z）", false, () => actionCloze(win)));
+				}
 				btnRow.appendChild(mkBtn("✔ 完成", "done", "读完此卡：移出学习队列", false, () => {
 					wiki.addTiddler(sched.doneCard(fields));
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
@@ -640,6 +644,55 @@ function makeDocResume(): WidgetCtor {
 					doneBox.appendChild(row);
 				}
 				wrap.appendChild(doneBox);
+			}
+
+			// G4 摘录收件箱：聚合本书全部摘录/挖空卡（加工路径：可回原文、挖空、删除）
+			const derived = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${docId}]!is[draft]]`)
+				.map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }))
+				.filter((c: any) => c.fields["tidme.kind"] === "extract" || c.fields["tidme.kind"] === "cloze");
+			if (derived.length) {
+				const box = el(doc, "details", "tm-doc-derived");
+				const summary = el(doc, "summary", "tm-import-muted",
+					`摘录/挖空（${derived.length}）—— 加工为记忆卡的中间产物`);
+				box.appendChild(summary);
+				const sorted = [...derived].sort((a: any, b: any) => {
+					const pa = String(a.fields["tidme.breadcrumb"] || a.title);
+					const pb = String(b.fields["tidme.breadcrumb"] || b.title);
+					return pa < pb ? -1 : pa > pb ? 1 : 0;
+				});
+				for (const c of sorted) {
+					const row = el(doc, "div", "tm-doc-done-row");
+					const kindMark = c.fields["tidme.kind"] === "cloze" ? "挖" : "摘";
+					row.appendChild(el(doc, "span", "tm-cb-kind", kindMark));
+					row.appendChild(el(doc, "span", "tm-import-muted",
+						String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title));
+					const open = el(doc, "button", "tm-cm-op", "打开");
+					open.title = "打开此卡";
+					open.addEventListener("click", () => {
+						this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
+					});
+					row.appendChild(open);
+					const back = el(doc, "button", "tm-cm-op", "回原文");
+					back.title = "跳回原文并高亮";
+					back.addEventListener("click", () => {
+						const anchor = parseAnchor(c.fields["tidme.anchor"]);
+						const target = anchor?.section || c.fields["tidme.parent"] || "";
+						if (target) {
+							this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
+							if (anchor?.snippet) highlightSnippetLater(doc, target, anchor.snippet);
+						}
+					});
+					row.appendChild(back);
+					const del = el(doc, "button", "tm-cm-op tm-cm-del", "✕");
+					del.title = "删除此卡";
+					del.addEventListener("click", () => {
+						wiki.deleteTiddler(c.title);
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+					});
+					row.appendChild(del);
+					box.appendChild(row);
+				}
+				wrap.appendChild(box);
 			}
 		}
 

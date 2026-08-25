@@ -58,7 +58,7 @@ function collectText(node) {
 const fakeDocument = {
 	createElement: (t) => fakeElement(t),
 	createElementNS: (ns, t) => fakeElement(t),
-	createTextNode: () => fakeElement("#text"),
+	createTextNode: (text) => { const e = fakeElement("#text"); e.textContent = String(text); return e; },
 	body: fakeElement("body"), title: "fake",
 	querySelector: () => null, querySelectorAll: () => [], getElementById: () => null,
 	createRange: () => ({ setStart() {}, setEnd() {}, surroundContents() {} }),
@@ -283,4 +283,21 @@ test("doc-resume: 子集复习按钮（复习本书）", () => {
 	assert.ok(text.includes("继续阅读"), "继续阅读按钮");
 	assert.ok(text.includes("复习本书"), "子集复习按钮（G7）");
 	assert.ok(text.includes("已读"), "进度文案");
+});
+
+test("doc-resume: 摘录收件箱聚合（G4）", () => {
+	const root = renderWidget(sectionBar, "doc-resume", { variables: { currentTiddler: "书名甲" } });
+	const text = collectText(root);
+	assert.ok(text.includes("摘录/挖空"), "摘录聚合区标题");
+	assert.ok(text.includes("摘"), "摘录 kind 标记");
+	assert.ok(text.includes("回原文"), "回原文操作");
+});
+
+test("section-bar: 摘录卡加工按钮（✂ 挖空）", () => {
+	const extractTitle = wiki.filterTiddlers("[tidme.kind[extract]]")[0];
+	assert.ok(extractTitle, "测试数据应有摘录卡");
+	const root = renderWidget(sectionBar, "section-bar", { variables: { currentTiddler: extractTitle } });
+	const text = collectText(root);
+	assert.ok(text.includes("✂ 挖空"), "摘录卡显示挖空加工按钮（G4）");
+	assert.ok(text.includes("源自"), "来源链接");
 });
