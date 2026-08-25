@@ -40,19 +40,12 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 
 	function processOne(title) {
 		return new Promise(function (resolve) {
-			setImmediate(function () {
+			// 沙箱无 setImmediate，用 setTimeout(0) 分片，避免阻塞服务事件循环
+			setTimeout(function () {
 				try {
 					var t = $tw.wiki.getTiddler(title);
 					if (!t) return resolve();
 					if (String(t.fields["tidme.pending"]) !== "yes") return resolve();
-
-					if (!ensureDom()) {
-						$tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
-							"tidme.pending": undefined,
-							"tidme.import-error": "服务端缺少 DOMParser（可预置 globalThis.__tidmeDomShim）"
-						}));
-						return resolve();
-					}
 
 					var fileName = String(t.fields["tidme.file-name"] || "import");
 					var raw = String(t.fields.text || "");
@@ -72,6 +65,15 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 
 					var pipeline = require("$:/plugins/tidme/import/pipeline.js");
 					var lower = fileName.toLowerCase();
+					var needsDom = lower.endsWith(".epub") || /\.html?$/.test(lower);
+					// 仅 epub/html 需要 DOMParser（TW 沙箱默认无；可经 __tidmeDomShim 预置）
+					if (needsDom && !ensureDom()) {
+						$tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
+							"tidme.pending": undefined,
+							"tidme.import-error": "服务端缺少 DOMParser（epub/html 需要，可预置 globalThis.__tidmeDomShim）"
+						}));
+						return resolve();
+					}
 					var result;
 					if (lower.endsWith(".epub") || /\.(md|markdown|txt|html?)$/.test(lower)) {
 						// 同步等待（pipeline 的 runImport 是 async；在 setImmediate 内用 then 链）
@@ -124,5 +126,7 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 		scan();
 		var timer = setInterval(scan, 15000);
 		if (timer && typeof timer.unref === "function") timer.unref();
+		// 暴露扫描入口：测试 / 手动触发（如 pending 上传后立即处理）
+		exports.scan = scan;
 	};
 })();

@@ -263,8 +263,14 @@ export function guessTitleFromMarkdown(text: string): string | null {
 	return m ? m[1].trim() : null;
 }
 
-/** 解码字节：优先 UTF-8 严格模式，失败回退 GBK（中文 txt 常见） */
+/** 解码字节：优先 UTF-8 严格模式，失败回退 GBK（中文 txt 常见）；无 TextDecoder（TW 服务端沙箱）用 Buffer */
 export function decodeBytes(bytes: Uint8Array): string {
+	if (typeof TextDecoder === "undefined") {
+		// TW 服务端 vm 沙箱：无 TextDecoder，但注入 Buffer（Node 端）
+		const buf: any = typeof Buffer !== "undefined" ? Buffer : null;
+		if (buf) return buf.from(bytes).toString("utf8");
+		return new TextDecoder().decode(bytes); // 不会到这里（无 TextDecoder）
+	}
 	try {
 		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 	} catch {
