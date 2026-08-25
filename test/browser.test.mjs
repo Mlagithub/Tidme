@@ -143,7 +143,7 @@ test("queue-ops: 每牌组渲染批量操作按钮", () => {
 	const text = collectText(root);
 	assert.ok(text.includes("顺延7d"), "应有顺延按钮");
 	assert.ok(text.includes("遗忘"), "应有遗忘按钮");
-	assert.ok(text.includes("$:/Deck/read/书名甲"), "应含自动牌组");
+	assert.ok(text.includes("书名甲"), "应含牌组 caption");
 	assert.ok(text.includes("立即顺延"), "应有手动 auto-postpone 按钮（G8）");
 });
 

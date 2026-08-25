@@ -84,6 +84,9 @@ tags: [[$:/tags/Stylesheet]]
 }
 .tm-cb-doc {
 	margin-left: 0.6em;
+	padding-left: 0.5em;
+	border-left: 2px solid <<colour muted-foreground>>;
+	opacity: 0.9;
 }
 .tm-cb-doc-title {
 	opacity: 0.85;
@@ -186,7 +189,10 @@ tags: [[$:/tags/Stylesheet]]
 	margin-top: 0.4em;
 }
 .tm-cm-doc {
-	margin-left: 0.6em;
+	margin-left: 0.8em;
+	padding-left: 0.5em;
+	border-left: 2px solid <<colour muted-foreground>>;
+	opacity: 0.9;
 }
 .tm-cm-doc-title {
 	opacity: 0.85;
@@ -243,6 +249,47 @@ tags: [[$:/tags/Stylesheet]]
 	opacity: 0.65;
 	min-width: 4em;
 }
+/* 卡片列表真表格（P2） */
+.tm-cm-table {
+	border-collapse: collapse;
+	width: 100%;
+	font-size: 0.92em;
+}
+.tm-cm-table th,
+.tm-cm-table td {
+	border-bottom: 1px solid <<colour muted-foreground>>;
+	padding: 2px 6px;
+	text-align: left;
+	vertical-align: middle;
+}
+.tm-cm-table thead th {
+	position: sticky;
+	top: 0;
+	background: <<colour background>>;
+	opacity: 0.9;
+	font-weight: 500;
+	z-index: 1;
+	white-space: nowrap;
+}
+.tm-cm-table tbody tr:hover td {
+	background: <<colour very-light-background>>;
+}
+.tm-cm-table tbody tr.tm-cm-listrow-selected td {
+	background: <<colour very-light-background>>;
+}
+.tm-cm-cell-cb {
+	width: 2em;
+	text-align: center;
+}
+.tm-cm-cell-flex {
+	display: flex;
+	align-items: center;
+	gap: 0.35em;
+}
+.tm-cm-listrow {
+	cursor: pointer;
+}
+
 .tm-cm-preview {
 	margin: 6px 0 2px;
 	padding: 6px 8px;
@@ -297,6 +344,30 @@ tags: [[$:/tags/Stylesheet]]
 .tm-cm-edit-row input[type="number"] {
 	width: 12em;
 }
+/* 牌组批量操作卡片（P2） */
+.tm-queue-card {
+	border: 1px solid <<colour muted-foreground>>;
+	border-radius: var(--tm-radius);
+	padding: 6px 10px;
+	margin: 6px 0;
+	background: <<colour background>>;
+}
+.tm-queue-card-head {
+	display: flex;
+	align-items: baseline;
+	gap: var(--tm-gap-lg);
+	margin-bottom: 4px;
+}
+.tm-queue-card-count {
+	font-size: 0.85em;
+	opacity: 0.65;
+}
+.tm-queue-card-btns {
+	display: flex;
+	gap: var(--tm-gap);
+	flex-wrap: wrap;
+}
+
 .tm-cm-orphan summary strong {
 	opacity: 0.65;
 	font-style: italic;

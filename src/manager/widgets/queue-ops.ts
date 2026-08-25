@@ -71,8 +71,15 @@ function makeQueueOps(): WidgetCtor {
 				}
 				for (const deck of decks) {
 					const cards = wiki.filterTiddlers(`[subfilter{${deck}!!card}!subfilter{${deck}!!card_exclude}]`);
-					const row = el(doc, "div", "tm-import-row");
-					row.appendChild(el(doc, "strong", "", `${deck}（${cards.length} 卡）`));
+					// P2：每牌组一张卡片（名称 + 计数 + 动作组）
+					const card = el(doc, "div", "tm-queue-card");
+					const head = el(doc, "div", "tm-queue-card-head");
+					const caption = wiki.getTiddler(deck)?.fields?.caption || deck.split("/").pop() || deck;
+					head.appendChild(el(doc, "strong", "", String(caption)));
+					head.appendChild(el(doc, "span", "tm-queue-card-count", `${cards.length} 卡`));
+					head.title = deck;
+					card.appendChild(head);
+					const btns = el(doc, "div", "tm-queue-card-btns");
 					const apply = (op: (f: Record<string, any>) => Record<string, any>, label: string) => {
 						const b = el(doc, "button", "tm-btn", label);
 						b.addEventListener("click", () => {
@@ -86,13 +93,14 @@ function makeQueueOps(): WidgetCtor {
 						});
 						return b;
 					};
-					row.appendChild(apply((f) => sched.postponeCard(f, 7), "顺延7d"));
-					row.appendChild(apply(() => sched.advanceCard(), "提前"));
-					row.appendChild(apply((f) => sched.ignoreCard(f), "忽略"));
-					row.appendChild(apply(() => sched.suspendCard(), "搁置"));
-					row.appendChild(apply(() => sched.resumeCard(), "恢复"));
-					row.appendChild(apply(() => sched.forgetCard(), "遗忘"));
-					list.appendChild(row);
+					btns.appendChild(apply((f) => sched.postponeCard(f, 7), "顺延7d"));
+					btns.appendChild(apply(() => sched.advanceCard(), "提前"));
+					btns.appendChild(apply((f) => sched.ignoreCard(f), "忽略"));
+					btns.appendChild(apply(() => sched.suspendCard(), "搁置"));
+					btns.appendChild(apply(() => sched.resumeCard(), "恢复"));
+					btns.appendChild(apply(() => sched.forgetCard(), "遗忘"));
+					card.appendChild(btns);
+					list.appendChild(card);
 				}
 			};
 			renderList();

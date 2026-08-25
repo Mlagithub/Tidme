@@ -238,7 +238,9 @@ function makeCardManager(): WidgetCtor {
 			/** 卡片行基础：复选框 + 状态 + 类型 + 优先级 + 标题链接 */
 			const appendRowBase = (row: HTMLElement, c: Card, cb: HTMLInputElement) => {
 				const bd = badgeOf(c.fields);
-				row.appendChild(el(doc, "span", `tm-cm-badge ${bd.cls}`, bd.text));
+				const badge = el(doc, "span", `tm-cm-badge ${bd.cls}`, bd.text);
+				badge.title = stateLabel(c.fields); // P2：徽章 tooltip
+				row.appendChild(badge);
 				const km = kindMark(c.fields);
 				if (km) row.appendChild(el(doc, "span", "tm-cm-kind", km));
 				const pri = c.fields["tidme.priority"];
@@ -268,6 +270,37 @@ function makeCardManager(): WidgetCtor {
 				return e;
 			};
 
+			/** 树折叠状态持久化（P2）：$:/state/tidme/manager/fold/<view>/<key>，text = open/closed */
+			const foldState = (view: string, key: string): string =>
+				`$:/state/tidme/manager/fold/${view}/${encodeURIComponent(key)}`;
+			const isFoldOpen = (stateTitle: string, defOpen: boolean): boolean => {
+				const v = wiki.getTiddlerText(stateTitle, "");
+				if (v === "open") return true;
+				if (v === "closed") return false;
+				return defOpen;
+			};
+			const bindFold = (details: HTMLElement, stateTitle: string) => {
+				details.addEventListener("toggle", () => {
+					wiki.addTiddler({ title: stateTitle, text: (details as any).open ? "open" : "closed" });
+				});
+			};
+			/** 文档分组 details（带折叠状态） */
+			const docDetails = (view: string, key: string, docCards: Card[]): HTMLElement => {
+				const dd = el(doc, "details", "tm-cm-doc");
+				dd.open = isFoldOpen(foldState(view, key), true);
+				bindFold(dd, foldState(view, key));
+				const dsum = el(doc, "summary", "", "");
+				dsum.appendChild(el(doc, "span", "tm-cm-doc-title",
+					`${docNameOf(docCards[0])}（${docCards.length}）`));
+				dd.appendChild(dsum);
+				const sorted = [...docCards].sort((a: Card, b: Card) => {
+					const pa = crumbOf(a); const pb = crumbOf(b);
+					return pa < pb ? -1 : pa > pb ? 1 : 0;
+				});
+				for (const c of sorted) renderCardRow(dd, c);
+				return dd;
+			};
+
 			/** 树形：按文档组织（全量，默认） */
 			const renderDocTree = (treeBox: HTMLElement, cards: Card[]) => {
 				const groups = docGroupsOf(cards);
@@ -276,17 +309,7 @@ function makeCardManager(): WidgetCtor {
 					return;
 				}
 				for (const [key, docCards] of groups) {
-					const dd = el(doc, "details", "tm-cm-doc");
-					dd.open = true;
-					const dsum = el(doc, "summary", "", "");
-					dsum.appendChild(el(doc, "span", "tm-cm-doc-title", `${docNameOf(docCards[0])}（${docCards.length}）`));
-					dd.appendChild(dsum);
-					const sorted = [...docCards].sort((a: Card, b: Card) => {
-						const pa = crumbOf(a); const pb = crumbOf(b);
-						return pa < pb ? -1 : pa > pb ? 1 : 0;
-					});
-					for (const c of sorted) renderCardRow(dd, c);
-					treeBox.appendChild(dd);
+					treeBox.appendChild(docDetails("doc", key, docCards));
 				}
 			};
 
@@ -298,25 +321,16 @@ function makeCardManager(): WidgetCtor {
 				for (const d of deckInfos) {
 					const deckCards = cards.filter((c) => d.strict.has(c.title));
 					const details = el(doc, "details", "tm-cm-deck");
-					details.open = deckCards.length > 0;
+					const deckFold = foldState("deck", d.title);
+					details.open = isFoldOpen(deckFold, deckCards.length > 0);
+					bindFold(details, deckFold);
 					const ds = el(doc, "summary", "", "");
 					ds.appendChild(el(doc, "strong", "", `${d.caption}（${deckCards.length}）`));
 					details.appendChild(ds);
 					if (deckCards.length) {
 						const groups = docGroupsOf(deckCards);
-						for (const [, docCards] of groups) {
-							const dd = el(doc, "details", "tm-cm-doc");
-							dd.open = true;
-							const dsum = el(doc, "summary", "", "");
-							dsum.appendChild(el(doc, "span", "tm-cm-doc-title",
-								`${docNameOf(docCards[0])}（${docCards.length}）`));
-							dd.appendChild(dsum);
-							const sorted = [...docCards].sort((a: Card, b: Card) => {
-								const pa = crumbOf(a); const pb = crumbOf(b);
-								return pa < pb ? -1 : pa > pb ? 1 : 0;
-							});
-							for (const c of sorted) renderCardRow(dd, c);
-							details.appendChild(dd);
+						for (const [docKey, docCards] of groups) {
+							details.appendChild(docDetails("deck", d.title + "/" + docKey, docCards));
 						}
 					}
 					treeBox.appendChild(details);
@@ -324,26 +338,17 @@ function makeCardManager(): WidgetCtor {
 				// 未入组：不被任何牌组命中的卡（已读/搁置/手动散卡）
 				const orphans = cards.filter((c) => !anyStrict(c));
 				const ob = el(doc, "details", "tm-cm-deck tm-cm-orphan");
-				ob.open = orphans.length > 0;
+				const orphanFold = foldState("deck", "__orphan__");
+				ob.open = isFoldOpen(orphanFold, orphans.length > 0);
+				bindFold(ob, orphanFold);
 				const os = el(doc, "summary", "", "");
 				os.appendChild(el(doc, "strong", "", `未入组（${orphans.length}）`));
 				os.title = "不属于任何牌组队列的卡片：已读、搁置或手动创建的散卡";
 				ob.appendChild(os);
 				if (orphans.length) {
 					const groups = docGroupsOf(orphans);
-					for (const [, docCards] of groups) {
-						const dd = el(doc, "details", "tm-cm-doc");
-						dd.open = true;
-						const dsum = el(doc, "summary", "", "");
-						dsum.appendChild(el(doc, "span", "tm-cm-doc-title",
-							`${docNameOf(docCards[0])}（${docCards.length}）`));
-						dd.appendChild(dsum);
-						const sorted = [...docCards].sort((a: Card, b: Card) => {
-							const pa = crumbOf(a); const pb = crumbOf(b);
-							return pa < pb ? -1 : pa > pb ? 1 : 0;
-						});
-						for (const c of sorted) renderCardRow(dd, c);
-						ob.appendChild(dd);
+					for (const [docKey, docCards] of groups) {
+						ob.appendChild(docDetails("deck", "__orphan__/" + docKey, docCards));
 					}
 				}
 				treeBox.appendChild(ob);
@@ -363,33 +368,41 @@ function makeCardManager(): WidgetCtor {
 				parentEl.appendChild(row);
 			};
 
-			/** 列表行（Browser 式）：勾选 + 状态 + 类型 + 优先 + 标题 + 牌组 + 到期 + 间隔/重复/难度 + 操作 */
-			const renderListRow = (listBox: HTMLElement, c: Card) => {
-				const row = el(doc, "div", "tm-cm-card tm-cm-listrow");
+			/** 列表行（Browser 式表格行，P2）：勾选 + 状态 + 类型 + 优先 + 标题 + 牌组 + 到期 + 间隔/重复/难度 + 操作 */
+			const renderListRow = (tbody: HTMLElement, c: Card) => {
+				const tr = el(doc, "tr", "tm-cm-listrow");
+				const cbTd = el(doc, "td", "tm-cm-cell-cb");
 				const cb = doc.createElement("input");
 				cb.type = "checkbox";
 				cb.checked = selected.has(c.title);
-				row.appendChild(cb);
-				appendRowBase(row, c, cb);
+				cbTd.appendChild(cb);
+				tr.appendChild(cbTd);
+				// 状态/类型/优先/标题（flex 单元）
+				const baseTd = el(doc, "td", "tm-cm-cell-flex", "");
+				appendRowBase(baseTd, c, cb);
+				tr.appendChild(baseTd);
 				// 牌组列
 				const ds = decksOf(c);
-				row.appendChild(el(doc, "span", "tm-cm-col-deck", ds.length ? ds.map((d) => d.caption).join("·") : "—"));
+				tr.appendChild(el(doc, "td", "tm-cm-col-deck", ds.length ? ds.map((d) => d.caption).join("·") : "—"));
 				// 到期列
-				row.appendChild(el(doc, "span", "tm-cm-col-due", dueLabel(c.fields)));
+				tr.appendChild(el(doc, "td", "tm-cm-col-due", dueLabel(c.fields)));
 				// 信息列（对标 Element data）
-				row.appendChild(el(doc, "span", "tm-cm-col-info", intervalLabel(c.fields)));
-				row.appendChild(el(doc, "span", "tm-cm-col-info", repsLabel(c.fields)));
-				row.appendChild(el(doc, "span", "tm-cm-col-info", diffLabel(c.fields)));
-				appendOps(row, c);
+				tr.appendChild(el(doc, "td", "tm-cm-col-info", intervalLabel(c.fields)));
+				tr.appendChild(el(doc, "td", "tm-cm-col-info", repsLabel(c.fields)));
+				tr.appendChild(el(doc, "td", "tm-cm-col-info", diffLabel(c.fields)));
+				// 操作列（图标按钮）
+				const opTd = el(doc, "td", "tm-cm-cell-flex", "");
+				appendOps(opTd, c);
+				tr.appendChild(opTd);
 				// 行点击 → 预览联动（对标 SuperMemo Browser 的 Synchronization）
-				row.addEventListener("click", (e: Event) => {
+				tr.addEventListener("click", (e: Event) => {
 					const t = e.target as HTMLElement;
 					if (t && (t.tagName === "A" || t.tagName === "BUTTON" || t.tagName === "INPUT")) return;
 					previewTitle = previewTitle === c.title ? null : c.title;
 					editTitle = null;
 					render();
 				});
-				listBox.appendChild(row);
+				tbody.appendChild(tr);
 			};
 
 			/** 列表排序比较 */
@@ -414,9 +427,12 @@ function makeCardManager(): WidgetCtor {
 				return sortAsc ? r : -r;
 			};
 
-			/** 列表视图（Browser 式） */
+			/** 列表视图（P2：真 <table>，表头 sticky + 排序箭头 + hover） */
 			const renderList = (listBox: HTMLElement, cards: Card[]) => {
-				const head = el(doc, "div", "tm-cm-card tm-cm-head");
+				const table = el(doc, "table", "tm-cm-table");
+				const thead = el(doc, "thead", "");
+				const trh = el(doc, "tr", "");
+				const allTd = el(doc, "th", "tm-cm-cell-cb", "");
 				const all = doc.createElement("input");
 				all.type = "checkbox";
 				all.checked = cards.length > 0 && cards.every((c) => selected.has(c.title));
@@ -425,35 +441,46 @@ function makeCardManager(): WidgetCtor {
 					for (const c of cards) { if (all.checked) selected.add(c.title); else selected.delete(c.title); }
 					render();
 				});
-				head.appendChild(all);
-				head.appendChild(el(doc, "span", "tm-cm-head-cell", "状态"));
-				head.appendChild(el(doc, "span", "tm-cm-head-cell", "类型"));
-				head.appendChild(el(doc, "span", "tm-cm-head-cell", "优先"));
-				const sortBtn = (label: string, key: "breadcrumb" | "priority" | "due" | "deck") => {
-					const b = el(doc, "button", "tm-cm-sort" + (sortKey === key ? " tm-cm-sort-active" : ""),
-						label + (sortKey === key ? (sortAsc ? " ↑" : " ↓") : ""));
-					b.title = "点击排序";
-					b.addEventListener("click", () => {
-						if (sortKey === key) sortAsc = !sortAsc; else { sortKey = key; sortAsc = true; }
-						render();
-					});
-					return b;
+				allTd.appendChild(all);
+				trh.appendChild(allTd);
+				trh.appendChild(el(doc, "th", "", "状态"));
+				trh.appendChild(el(doc, "th", "", "类型"));
+				trh.appendChild(el(doc, "th", "", "优先"));
+				const th = (label: string, key?: "breadcrumb" | "priority" | "due" | "deck") => {
+					const t = el(doc, "th", "");
+					if (key) {
+						const b = el(doc, "button", "tm-cm-sort" + (sortKey === key ? " tm-cm-sort-active" : ""),
+							label + (sortKey === key ? (sortAsc ? " ↑" : " ↓") : ""));
+						b.title = "点击排序";
+						b.addEventListener("click", () => {
+							if (sortKey === key) sortAsc = !sortAsc; else { sortKey = key; sortAsc = true; }
+							render();
+						});
+						t.appendChild(b);
+					} else {
+						t.textContent = label;
+					}
+					return t;
 				};
-				head.appendChild(sortBtn("标题", "breadcrumb"));
-				head.appendChild(sortBtn("牌组", "deck"));
-				head.appendChild(sortBtn("到期", "due"));
-				head.appendChild(el(doc, "span", "tm-cm-head-cell", "间隔"));
-				head.appendChild(el(doc, "span", "tm-cm-head-cell", "重复"));
-				head.appendChild(el(doc, "span", "tm-cm-head-cell", "难度"));
-				head.appendChild(el(doc, "span", "tm-cm-head-cell", "操作"));
-				listBox.appendChild(head);
+				trh.appendChild(th("标题", "breadcrumb"));
+				trh.appendChild(th("牌组", "deck"));
+				trh.appendChild(th("到期", "due"));
+				trh.appendChild(th("间隔"));
+				trh.appendChild(th("重复"));
+				trh.appendChild(th("难度"));
+				trh.appendChild(th("操作"));
+				thead.appendChild(trh);
+				table.appendChild(thead);
 
 				if (!cards.length) {
 					listBox.appendChild(emptyEl("当前视图下没有卡片。"));
 					return;
 				}
+				const tbody = el(doc, "tbody", "");
 				const sorted = [...cards].sort(cmpCards);
-				for (const c of sorted) renderListRow(listBox, c);
+				for (const c of sorted) renderListRow(tbody, c);
+				table.appendChild(tbody);
+				listBox.appendChild(table);
 
 				// 预览联动区（对标 SuperMemo Browser Synchronization + Element data + Element parameters）
 				const prev = previewTitle ? allCards.find((c) => c.title === previewTitle) : null;
@@ -588,6 +615,10 @@ function makeCardManager(): WidgetCtor {
 				const batch = (label: string, apply: (f: Record<string, any>) => Record<string, any>, destructive = false) => {
 					const b = el(doc, "button", "tm-btn" + (destructive ? " tm-btn--danger" : ""), label);
 					b.addEventListener("click", () => {
+						// P2：危险操作确认
+						const confirmFn = (globalThis as any).confirm;
+						if (destructive && typeof confirmFn === "function" &&
+							!confirmFn(`确定删除选中的 ${selected.size} 张卡片？此操作不可恢复。`)) return;
 						for (const title of selected) {
 							const t = wiki.getTiddler(title);
 							if (!t) continue;
