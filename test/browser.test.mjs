@@ -301,3 +301,10 @@ test("section-bar: 摘录卡加工按钮（✂ 挖空）", () => {
 	assert.ok(text.includes("✂ 挖空"), "摘录卡显示挖空加工按钮（G4）");
 	assert.ok(text.includes("源自"), "来源链接");
 });
+
+test("section-bar: 忽略按钮（G3）", () => {
+	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[section]tag[?]]")[0];
+	const root = renderWidget(sectionBar, "section-bar", { variables: { currentTiddler: title } });
+	const text = collectText(root);
+	assert.ok(text.includes("忽略"), "未读节显示忽略按钮");
+});

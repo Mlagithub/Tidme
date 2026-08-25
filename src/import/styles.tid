@@ -93,6 +93,9 @@ tags: $:/tags/Stylesheet
 	border-color: <<colour danger>>;
 	opacity: 0.8;
 }
+.tm-sec-btn--ignore {
+	opacity: 0.6;
+}
 .tm-bar-sep {
 	width: 1px;
 	height: 1.2em;

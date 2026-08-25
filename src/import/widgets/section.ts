@@ -513,6 +513,18 @@ function makeSectionBar(): WidgetCtor {
 					}
 					notify("later");
 				}));
+				// G3 忽略（R5 轻量版）：移出学习队列但保留内容与 . 标签（阅读牌组仍可见），可经管理器「回」恢复
+				btnRow.appendChild(mkBtn("忽略", "ignore", "标记不重要：移出学习队列（内容保留，可恢复）", false, () => {
+					wiki.addTiddler(sched.ignoreCard(fields));
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+					const nxt = list.find((x) => x !== title && !isDone(wiki.getTiddler(x)?.fields));
+					if (nxt) {
+						saveReadPoint(wiki, docId, { t: nxt, s: "" });
+						this.dispatchEvent({ type: "tm-close-tiddler" });
+						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
+					}
+					notify("done");
+				}));
 			}
 
 			sep();
