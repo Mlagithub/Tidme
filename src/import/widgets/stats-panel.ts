@@ -95,7 +95,12 @@ function makeStatsPanel(): WidgetCtor {
 				// 2) 文档进度
 				wrap.appendChild(el(doc, "h3", "", "文档进度"));
 				const docList = el(doc, "div", "", "");
-				if (!docs.length) docList.appendChild(el(doc, "div", "tm-import-muted", "暂无导入文档"));
+				if (!docs.length) {
+					const empty = el(doc, "div", "tm-empty", "");
+					empty.appendChild(el(doc, "div", "tm-empty-icon", "📚"));
+					empty.appendChild(el(doc, "div", "", "暂无导入文档——导入中心导入书籍后显示进度。"));
+					docList.appendChild(empty);
+				}
 				for (const d of docs) {
 					const docId = wiki.getTiddler(d)?.fields["tidme.doc"];
 					if (!docId) continue;

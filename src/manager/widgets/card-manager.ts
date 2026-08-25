@@ -150,6 +150,13 @@ function makeCardManager(): WidgetCtor {
 			let allCards: Card[] = [];
 			let deckInfos: DeckInfo[] = [];
 
+			// P3 toast 反馈（面板内临时提示；写库动作后调用）
+			const toast = (msg: string, kind = "") => {
+				const t = el(doc, "div", "tm-toast" + (kind ? " tm-toast--" + kind : ""), msg);
+				wrap.insertBefore(t, wrap.firstChild);
+				setTimeout(() => t.remove(), 2500);
+			};
+
 			const collectAll = () => {
 				allCards = wiki.filterTiddlers(CARD_FILTER)
 					.filter((t: string, i: number, arr: string[]) => arr.indexOf(t) === i)
@@ -571,6 +578,7 @@ function makeCardManager(): WidgetCtor {
 					editTitle = null;
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					render();
+					toast("✔ 已保存卡片参数", "ok");
 				});
 				const cancel = el(doc, "button", "tm-btn", "取消");
 				cancel.addEventListener("click", () => { editTitle = null; render(); });
@@ -619,15 +627,18 @@ function makeCardManager(): WidgetCtor {
 						const confirmFn = (globalThis as any).confirm;
 						if (destructive && typeof confirmFn === "function" &&
 							!confirmFn(`确定删除选中的 ${selected.size} 张卡片？此操作不可恢复。`)) return;
+						let n = 0;
 						for (const title of selected) {
 							const t = wiki.getTiddler(title);
 							if (!t) continue;
 							if (destructive) wiki.deleteTiddler(title);
 							else wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
+							n++;
 						}
 						selected.clear();
 						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 						render();
+						toast(destructive ? `已删除 ${n} 张卡片` : `${label}：已处理 ${n} 张`, destructive ? "err" : "ok");
 					});
 					return b;
 				};

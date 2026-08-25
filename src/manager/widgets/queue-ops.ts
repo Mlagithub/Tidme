@@ -28,6 +28,14 @@ function makeQueueOps(): WidgetCtor {
 			const doc = this.document;
 			const wiki = this.wiki;
 			const wrap = el(doc, "div", "tm-queue-ops");
+
+			// P3 toast 反馈
+			const toast = (msg: string, kind = "") => {
+				const t = el(doc, "div", "tm-toast" + (kind ? " tm-toast--" + kind : ""), msg);
+				wrap.insertBefore(t, wrap.firstChild);
+				setTimeout(() => t.remove(), 2500);
+			};
+
 			wrap.appendChild(el(doc, "h3", "", "牌组批量操作（优先级调度）"));
 			wrap.appendChild(el(doc, "div", "tm-import-muted",
 				"顺延=due+7d（低优先级积压）· 提前=今天复习 · 忽略=移出队列 · 搁置=暂停（deck.card 已排除）· 遗忘=回新卡"));
@@ -83,13 +91,16 @@ function makeQueueOps(): WidgetCtor {
 					const apply = (op: (f: Record<string, any>) => Record<string, any>, label: string) => {
 						const b = el(doc, "button", "tm-btn", label);
 						b.addEventListener("click", () => {
+							let n = 0;
 							for (const title of cards) {
 								const t = wiki.getTiddler(title);
 								if (!t) continue;
 								wiki.addTiddler({ ...t.fields, ...op(t.fields) });
+								n++;
 							}
 							events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 							renderList();
+							toast(`${label}：已处理 ${n} 张`, "ok");
 						});
 						return b;
 					};
