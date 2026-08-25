@@ -7,4 +7,4 @@ type: text/vnd.tiddlywiki
 
 ---
 
-[[← 导入中心|$:/plugins/tidme/import/ui/import-center]] · [[牌组批量操作|$:/plugins/tidme/import/ui/deck-ops]]
+[[← 导入中心|$:/plugins/tidme/import/ui/import-center]] · [[牌组批量操作|$:/plugins/tidme/manager/ui/deck-ops]]

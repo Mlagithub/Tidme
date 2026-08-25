@@ -1,4 +1,4 @@
-title: $:/plugins/tidme/import/ui/sidebar-cards
+title: $:/plugins/tidme/manager/ui/sidebar-cards
 caption: 卡片
 tags: $:/tags/SideBar
 list-after: $:/plugins/tidme/import/ui/sidebar
@@ -9,7 +9,7 @@ list-after: $:/plugins/tidme/import/ui/sidebar
     tooltip="打开卡片管理器（浏览/组织/批量操作）"
 >
     <$action-navigate
-        $to="$:/plugins/tidme/import/ui/card-manager"
+        $to="$:/plugins/tidme/manager/ui/card-manager"
     />
     <strong>📇 卡片管理器</strong>
 </$button>

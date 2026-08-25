@@ -86,6 +86,27 @@ function dueLabel(fields: Record<string, any>): string {
 	return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
 }
 
+/** 信息列（对标 SuperMemo Element data） */
+function intervalLabel(fields: Record<string, any>): string {
+	const s = Number(fields.scheduled_days);
+	return Number.isFinite(s) && s > 0 ? `${Math.round(s)}天` : "—";
+}
+function repsLabel(fields: Record<string, any>): string {
+	return fields.reps !== undefined && fields.reps !== "" ? String(fields.reps) : "—";
+}
+function lapsesLabel(fields: Record<string, any>): string {
+	return fields.lapses !== undefined && fields.lapses !== "" ? String(fields.lapses) : "—";
+}
+function diffLabel(fields: Record<string, any>): string {
+	const d = Number(fields.difficulty);
+	return Number.isFinite(d) && d > 0 ? `${Math.round(d * 100)}%` : "—";
+}
+function dateLabel(raw: any): string {
+	if (raw === undefined || raw === null || raw === "") return "—";
+	const d = sched.parseTwDate(raw);
+	return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
+}
+
 /** 卡片收集：带 tidme.* 或 FSRS 字段的 tiddler + 带 ?/. 学习标签的 tiddler（含手动建卡）
  * 注意：空格分隔的 filter run 才是并集（`+` 前缀是交集）。
  * 排除文档汇总页（仅有 tidme.doc，无 kind/parent/?/. /state）。 */
@@ -124,6 +145,7 @@ function makeCardManager(): WidgetCtor {
 			let sortKey: "breadcrumb" | "priority" | "due" | "deck" = "breadcrumb";
 			let sortAsc = true;
 			let previewTitle: string | null = null;
+			let editTitle: string | null = null; // 单卡参数编辑（对标 Element parameters）
 			const selected = new Set<string>();
 			let allCards: Card[] = [];
 			let deckInfos: DeckInfo[] = [];
@@ -334,7 +356,7 @@ function makeCardManager(): WidgetCtor {
 				parentEl.appendChild(row);
 			};
 
-			/** 列表行（Browser 式）：勾选 + 状态 + 类型 + 优先 + 标题 + 牌组 + 到期 + 操作 */
+			/** 列表行（Browser 式）：勾选 + 状态 + 类型 + 优先 + 标题 + 牌组 + 到期 + 间隔/重复/难度 + 操作 */
 			const renderListRow = (listBox: HTMLElement, c: Card) => {
 				const row = el(doc, "div", "tm-cm-card tm-cm-listrow");
 				const cb = doc.createElement("input");
@@ -347,12 +369,17 @@ function makeCardManager(): WidgetCtor {
 				row.appendChild(el(doc, "span", "tm-cm-col-deck", ds.length ? ds.map((d) => d.caption).join("·") : "—"));
 				// 到期列
 				row.appendChild(el(doc, "span", "tm-cm-col-due", dueLabel(c.fields)));
+				// 信息列（对标 Element data）
+				row.appendChild(el(doc, "span", "tm-cm-col-info", intervalLabel(c.fields)));
+				row.appendChild(el(doc, "span", "tm-cm-col-info", repsLabel(c.fields)));
+				row.appendChild(el(doc, "span", "tm-cm-col-info", diffLabel(c.fields)));
 				appendOps(row, c);
 				// 行点击 → 预览联动（对标 SuperMemo Browser 的 Synchronization）
 				row.addEventListener("click", (e: Event) => {
 					const t = e.target as HTMLElement;
 					if (t && (t.tagName === "A" || t.tagName === "BUTTON" || t.tagName === "INPUT")) return;
 					previewTitle = previewTitle === c.title ? null : c.title;
+					editTitle = null;
 					render();
 				});
 				listBox.appendChild(row);
@@ -408,6 +435,9 @@ function makeCardManager(): WidgetCtor {
 				head.appendChild(sortBtn("标题", "breadcrumb"));
 				head.appendChild(sortBtn("牌组", "deck"));
 				head.appendChild(sortBtn("到期", "due"));
+				head.appendChild(el(doc, "span", "tm-cm-head-cell", "间隔"));
+				head.appendChild(el(doc, "span", "tm-cm-head-cell", "重复"));
+				head.appendChild(el(doc, "span", "tm-cm-head-cell", "难度"));
 				head.appendChild(el(doc, "span", "tm-cm-head-cell", "操作"));
 				listBox.appendChild(head);
 
@@ -418,19 +448,103 @@ function makeCardManager(): WidgetCtor {
 				const sorted = [...cards].sort(cmpCards);
 				for (const c of sorted) renderListRow(listBox, c);
 
-				// 预览联动区
+				// 预览联动区（对标 SuperMemo Browser Synchronization + Element data + Element parameters）
 				const prev = previewTitle ? allCards.find((c) => c.title === previewTitle) : null;
 				if (prev) {
 					const pv = el(doc, "div", "tm-cm-preview");
 					const f = prev.fields;
 					pv.appendChild(el(doc, "div", "tm-cm-preview-head",
 						`${crumbOf(prev)} · ${kindMark(f) || "节"} · p${String(f["tidme.priority"] ?? "-").padStart(2, "0")} · ${stateLabel(f)}${dueLabel(f) !== "—" ? " · 到期 " + dueLabel(f) : ""}`));
+					// 信息网格（对标 Element data：Dates/Interval/Repetitions/Difficulty/DSR）
+					const grid = el(doc, "div", "tm-cm-info-grid");
+					const info = (label: string, value: any) => {
+						const s = el(doc, "span", "");
+						s.appendChild(el(doc, "span", "tm-cm-info-label", label));
+						s.appendChild(doc.createTextNode(String(value ?? "—")));
+						grid.appendChild(s);
+					};
+					info("下次到期", dueLabel(f));
+					info("上次复习", dateLabel(f.last_review));
+					info("间隔", intervalLabel(f));
+					info("重复", repsLabel(f));
+					info("遗忘", lapsesLabel(f));
+					info("稳定性", f.stability !== undefined && f.stability !== "" ? String(Number(f.stability).toFixed(1)) : "—");
+					info("难度", diffLabel(f));
+					info("已过天数", f.elapsed_days !== undefined && f.elapsed_days !== "" ? String(Number(f.elapsed_days).toFixed(1)) : "—");
+					info("牌组", decksOf(prev).map((d) => d.caption).join("·") || "—");
+					if (f["tidme.comment"]) info("注释", f["tidme.comment"]);
+					pv.appendChild(grid);
+					// 单卡参数编辑（对标 Element parameters）
+					if (editTitle === prev.title) {
+						pv.appendChild(editForm(prev));
+					} else {
+						const editBtn = el(doc, "button", "tm-cm-op", "✎ 编辑参数");
+						editBtn.title = "修改下次到期 / 优先级 / 注释（对标 SuperMemo Element parameters）";
+						editBtn.addEventListener("click", () => { editTitle = prev.title; render(); });
+						pv.appendChild(editBtn);
+					}
+					// 正文预览
 					const body = el(doc, "div", "tm-cm-preview-body");
 					const text = String(f.text || "").replace(/\s+/g, " ").trim();
 					body.appendChild(el(doc, "span", "", text.slice(0, 400) + (text.length > 400 ? " …" : "")));
 					pv.appendChild(body);
 					listBox.appendChild(pv);
 				}
+			};
+
+			/** 单卡参数编辑表单（对标 Element parameters：下次到期 / 优先级 / 注释） */
+			const editForm = (c: Card) => {
+				const box = el(doc, "div", "tm-cm-edit");
+				const f = c.fields;
+				const row = (label: string, input: HTMLElement) => {
+					const r = el(doc, "div", "tm-cm-edit-row");
+					r.appendChild(el(doc, "span", "tm-cm-info-label", label));
+					r.appendChild(input);
+					box.appendChild(r);
+				};
+				const dueInput = doc.createElement("input");
+				dueInput.type = "text";
+				dueInput.value = dueLabel(f) !== "—" ? dueLabel(f) : "";
+				dueInput.placeholder = "YYYY-MM-DD（下次到期）";
+				row("下次到期", dueInput);
+				const priInput = doc.createElement("input");
+				priInput.type = "number";
+				priInput.min = "0";
+				priInput.max = "100";
+				priInput.value = String(f["tidme.priority"] ?? "");
+				priInput.placeholder = "0-100（0 最高）";
+				row("优先级", priInput);
+				const commentInput = doc.createElement("input");
+				commentInput.type = "text";
+				commentInput.value = String(f["tidme.comment"] || "");
+				commentInput.placeholder = "注释（tidme.comment）";
+				row("注释", commentInput);
+				const save = el(doc, "button", "tm-cm-op", "✔ 保存");
+				save.addEventListener("click", () => {
+					const patch: Record<string, any> = {};
+					const dueVal = String(dueInput.value || "").trim();
+					if (dueVal) {
+						const m = dueVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+						if (m) patch.due = `${m[1]}${m[2]}${m[3]}00000000000`;
+					}
+					const priVal = String(priInput.value || "").trim();
+					if (priVal !== "" && Number.isFinite(Number(priVal))) {
+						patch["tidme.priority"] = String(Math.max(0, Math.min(100, Math.round(Number(priVal)))));
+					}
+					patch["tidme.comment"] = String(commentInput.value || "");
+					const ex = wiki.getTiddler(c.title);
+					if (ex) wiki.addTiddler({ ...ex.fields, ...patch });
+					editTitle = null;
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+					render();
+				});
+				const cancel = el(doc, "button", "tm-cm-op", "取消");
+				cancel.addEventListener("click", () => { editTitle = null; render(); });
+				const r = el(doc, "div", "tm-cm-edit-row");
+				r.appendChild(save);
+				r.appendChild(cancel);
+				box.appendChild(r);
+				return box;
 			};
 
 			/** 重新渲染整个面板 */
@@ -522,3 +636,5 @@ exports["card-manager"] = makeCardManager();
 // 供测试/复用：Done 与恢复的字段转换
 exports.doneFields = doneFields;
 exports.resumeFields = resumeFields;
+// 供测试：卡片信息标签（对标 Element data 的显示层）
+exports.labels = { dueLabel, intervalLabel, repsLabel, lapsesLabel, diffLabel, dateLabel };

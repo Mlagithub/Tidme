@@ -14,7 +14,7 @@ import TiddlyWiki from "tiddlywiki";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginDir = path.resolve(here, "../out-m2");
-const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_fsrs4tw", "$__plugins_tidme_import", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
+const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_fsrs4tw", "$__plugins_tidme_import", "$__plugins_tidme_manager", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
@@ -85,10 +85,10 @@ test.before(async () => {
 		"tidme.breadcrumb": `${section["tidme.path"]} › 摘录`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
-	cardBrowser = tw.modules.execute("$:/plugins/tidme/import/widgets/card-browser.js");
-	queueOps = tw.modules.execute("$:/plugins/tidme/import/widgets/queue-ops.js");
+	cardBrowser = tw.modules.execute("$:/plugins/tidme/manager/widgets/card-browser.js");
+	queueOps = tw.modules.execute("$:/plugins/tidme/manager/widgets/queue-ops.js");
 	statsPanel = tw.modules.execute("$:/plugins/tidme/import/widgets/stats-panel.js");
-	cardManager = tw.modules.execute("$:/plugins/tidme/import/widgets/card-manager.js");
+	cardManager = tw.modules.execute("$:/plugins/tidme/manager/widgets/card-manager.js");
 	sectionBar = tw.modules.execute("$:/plugins/tidme/import/widgets/section.js");
 	splitTool = tw.modules.execute("$:/plugins/tidme/import/widgets/split.js");
 });
@@ -205,8 +205,24 @@ test("card-manager: 列表视图（Browser 式）平铺所有卡", () => {
 	assert.ok(text.includes("标题"), "排序表头-标题");
 	assert.ok(text.includes("牌组"), "排序表头-牌组");
 	assert.ok(text.includes("到期"), "排序表头-到期");
+	assert.ok(text.includes("间隔"), "信息列表头-间隔（Element data）");
+	assert.ok(text.includes("重复"), "信息列表头-重复");
+	assert.ok(text.includes("难度"), "信息列表头-难度");
 	assert.ok(text.includes("手动散卡甲"), "列表包含手动散卡");
 	assert.ok(text.includes("书名甲"), "列表包含书内卡");
+});
+
+test("card-manager: 信息标签（Element data 显示层）", () => {
+	const L = cardManager.labels;
+	assert.equal(L.dueLabel({ state: "2", due: "20261231000000000" }), "2026-12-31");
+	assert.equal(L.dueLabel({ state: "0" }), "—", "非到期态无日期");
+	assert.equal(L.intervalLabel({ scheduled_days: "7" }), "7天");
+	assert.equal(L.intervalLabel({}), "—");
+	assert.equal(L.repsLabel({ reps: "5" }), "5");
+	assert.equal(L.lapsesLabel({ lapses: "2" }), "2");
+	assert.equal(L.diffLabel({ difficulty: "0.45" }), "45%");
+	assert.equal(L.dateLabel("20261231000000000"), "2026-12-31");
+	assert.equal(L.dateLabel(undefined), "—");
 });
 
 test("section-bar: 两行布局 + 统一按钮风格", () => {
