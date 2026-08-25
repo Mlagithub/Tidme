@@ -31,6 +31,31 @@ function makeQueueOps(): WidgetCtor {
 			wrap.appendChild(el(doc, "h3", "", "牌组批量操作（优先级调度）"));
 			wrap.appendChild(el(doc, "div", "tm-import-muted",
 				"顺延=due+7d（低优先级积压）· 提前=今天复习 · 忽略=移出队列 · 搁置=暂停（deck.card 已排除）· 遗忘=回新卡"));
+
+			// G8 手动触发 auto-postpone（服务端每日自动执行，此处为手动兜底）
+			const autoRow = el(doc, "div", "tm-import-actions", "");
+			const autoStatus = el(doc, "span", "tm-import-muted", "");
+			const runAuto = el(doc, "button", "tm-sec-btn", "⚡ 立即顺延（auto-postpone）");
+			runAuto.title = "手动触发：低优先级逾期卡顺延 postponeDays 天，保留 top N 高优先级（配置见 $:/config/Tidme/AutoPostpone）";
+			runAuto.addEventListener("click", () => {
+				let cfg: any = {};
+				try { cfg = JSON.parse(wiki.getTiddlerText("$:/config/Tidme/AutoPostpone", "{}") || "{}"); } catch { /* 忽略非法配置 */ }
+				const cards = wiki.filterTiddlers("[tag[?]has[due]]")
+					.map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
+				const result = sched.autoPostpone(cards, cfg);
+				for (const p of result.patches) {
+					const existing = wiki.getTiddler(p.title);
+					if (existing) wiki.addTiddler({ ...existing.fields, ...p.fields });
+				}
+				events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+				autoStatus.textContent =
+					`✓ 逾期 ${result.stats.overdue} · 顺延 ${result.stats.postponed} · 保留高优 ${result.stats.kept}`;
+				renderList();
+			});
+			autoRow.appendChild(runAuto);
+			autoRow.appendChild(autoStatus);
+			wrap.appendChild(autoRow);
+
 			const list = el(doc, "div", "tm-queue-ops-list");
 			wrap.appendChild(list);
 

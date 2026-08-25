@@ -5,10 +5,11 @@ type: text/vnd.tiddlywiki
 
 <$queue-ops/>
 
----
+自动顺延（auto-postpone）：服务端每日（启动时 + 每小时检查）自动对低优先级逾期卡顺延、
+保留高优先级；上方「⚡ 立即顺延」可手动触发。配置 `$:/config/Tidme/AutoPostpone` 为
+`{"enable": true, "maxPriority": 60, "postponeDays": 7, "keepTop": 10}`。
 
-自动顺延（auto-postpone，服务端）：配置 `$:/config/Tidme/AutoPostpone` 为
-`{"enable": true, "maxPriority": 60, "postponeDays": 7, "keepTop": 10}` 后，
-服务端每日（启动时 + 每小时检查）自动对低优先级逾期卡顺延，保留高优先级。
+子集复习：文档页「📖 复习本书」会创建临时子集牌组（仅本书在队卡），
+复习完可删除；自定义按标签/按牌组复习可手动建牌组。
 
 [[← 导入中心|$:/plugins/tidme/import/ui/import-center]]

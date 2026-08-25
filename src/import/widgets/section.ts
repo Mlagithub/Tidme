@@ -591,6 +591,32 @@ function makeDocResume(): WidgetCtor {
 			wrap.appendChild(el(doc, "span", "tm-import-muted",
 				`　已读 ${done} / ${all.length} · 剩余 ${left} 节待学`));
 
+			// G7 子集复习：按本书强制复习（临时子集 deck → 复用 fsrs4tw 学习流）
+			const inQueueCount = wiki.filterTiddlers(
+				`[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`
+			).length;
+			if (inQueueCount > 0) {
+				const subsetBtn = el(doc, "button", "tc-btn-invisible tm-sec-btn tm-sec-btn--done", "📖 复习本书");
+				subsetBtn.title = `子集复习：仅复习本书 ${inQueueCount} 张在队卡（临时牌组，复习完可删除）`;
+				subsetBtn.addEventListener("click", () => {
+					// 从任意现有 deck 复制调度字段，覆盖 card 为本书子集过滤器
+					const baseDeck = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]")[0];
+					const bf = (baseDeck && wiki.getTiddler(baseDeck)?.fields) || {};
+					const deckTitle = `$:/temp/tidme/subset/${docId}`;
+					wiki.addTiddler({
+						...bf,
+						title: deckTitle,
+						tags: ["$:/tags/TidmeDeck"],
+						caption: `复习：${title}`,
+						description: "临时子集牌组（复习本书）——复习完可删除",
+						card: `[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`,
+						"tidme.subset-doc": docId
+					});
+					this.dispatchEvent({ type: "tm-navigate", navigateTo: deckTitle });
+				});
+				wrap.appendChild(subsetBtn);
+			}
+
 			// 已读区：列出已读节，可"重新加入"队列（恢复可逆性，替代 8 秒撤销窗口）
 			const doneTitles = all.filter((x) => isDone(wiki.getTiddler(x)?.fields));
 			if (doneTitles.length) {

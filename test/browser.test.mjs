@@ -144,6 +144,7 @@ test("queue-ops: 每牌组渲染批量操作按钮", () => {
 	assert.ok(text.includes("顺延7d"), "应有顺延按钮");
 	assert.ok(text.includes("遗忘"), "应有遗忘按钮");
 	assert.ok(text.includes("$:/Deck/read/书名甲"), "应含自动牌组");
+	assert.ok(text.includes("立即顺延"), "应有手动 auto-postpone 按钮（G8）");
 });
 
 test("stats-panel: 渲染负载/文档进度/漏斗", () => {
@@ -273,4 +274,13 @@ test("split-tool: 预览干预按钮（并入上一节 / 从此拆分）", async
 	await new Promise((r) => setTimeout(r, 120));
 	text = collectText(root2);
 	assert.ok(text.includes("⇈"), "独立节显示「并入上一节」按钮");
+});
+
+test("doc-resume: 子集复习按钮（复习本书）", () => {
+	// 文档页渲染（书名甲有在队卡 → 显示「复习本书」）
+	const root = renderWidget(sectionBar, "doc-resume", { variables: { currentTiddler: "书名甲" } });
+	const text = collectText(root);
+	assert.ok(text.includes("继续阅读"), "继续阅读按钮");
+	assert.ok(text.includes("复习本书"), "子集复习按钮（G7）");
+	assert.ok(text.includes("已读"), "进度文案");
 });
