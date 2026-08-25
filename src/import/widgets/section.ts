@@ -215,7 +215,9 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 		"tidme.breadcrumb": `${crumbTail} › 摘录`,
 		"tidme.source": pf["tidme.source"] || "",
 		"tidme.author": pf["tidme.author"] || "",
-		"tidme.format": pf["tidme.format"] || ""
+		"tidme.format": pf["tidme.format"] || "",
+		// G4：派生卡继承父卡优先级（SM 摘录/挖空继承文章优先）
+		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {})
 	};
 }
 
@@ -248,7 +250,9 @@ function buildCloze(wiki: any, parentTitle: string, block: string, selected: str
 		"tidme.breadcrumb": `${crumbTail} › 挖空`,
 		"tidme.source": pf["tidme.source"] || "",
 		"tidme.author": pf["tidme.author"] || "",
-		"tidme.format": pf["tidme.format"] || ""
+		"tidme.format": pf["tidme.format"] || "",
+		// G4：派生卡继承父卡优先级（SM 摘录/挖空继承文章优先）
+		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {})
 	};
 }
 
@@ -473,6 +477,10 @@ function makeSectionBar(): WidgetCtor {
 			infoRow.appendChild(crumb);
 			infoRow.appendChild(el(doc, "span", "tm-section-pos tm-import-muted", `　${index + 1} / ${list.length}`));
 			infoRow.appendChild(el(doc, "span", "tm-section-load tm-import-muted", `· 本书剩 ${left} 张待学`));
+			const priVal = fields["tidme.priority"];
+			if (priVal !== undefined) {
+				infoRow.appendChild(el(doc, "span", "tm-section-pri tm-import-muted", `p${String(priVal).padStart(2, "0")}`));
+			}
 			if (isDone(fields)) {
 				infoRow.appendChild(el(doc, "span", "tm-section-state", "✓ 已读"));
 			}
@@ -554,6 +562,20 @@ function makeSectionBar(): WidgetCtor {
 			// 制卡
 			btnRow.appendChild(mkBtn("摘录", "extract", "摘录制卡 (Alt+X)", false, () => actionExtract(win)));
 			btnRow.appendChild(mkBtn("挖空", "cloze", "挖空制卡 (Alt+Z)", false, () => actionCloze(win)));
+
+			// G2 优先级快速调整（对标 SM Alt+P / Shift+Ctrl+↑↓）：数值减小 = 升优先
+			if (priVal !== undefined) {
+				btnRow.appendChild(mkBtn("优先↑", "pri", "提高优先级（更早复习）", false, () => {
+					wiki.addTiddler({ ...fields, "tidme.priority": sched.shiftPriority(priVal, -5) });
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+					this.build();
+				}));
+				btnRow.appendChild(mkBtn("优先↓", "pri", "降低优先级（延后复习）", false, () => {
+					wiki.addTiddler({ ...fields, "tidme.priority": sched.shiftPriority(priVal, 5) });
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+					this.build();
+				}));
+			}
 
 			// 帮助
 			btnRow.appendChild(mkBtn("", "help", "快捷键与用法帮助", false, () => {

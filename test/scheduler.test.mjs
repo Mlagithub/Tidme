@@ -36,6 +36,26 @@ test("tierRandom: 三档落在合理区间", () => {
 	}
 });
 
+test("G1 priorityDeltaForRating: 评分 → 优先级调整量", () => {
+	assert.equal(sched.priorityDeltaForRating("Again"), -10, "Again 升优先（数值减小）");
+	assert.equal(sched.priorityDeltaForRating("Hard"), -3);
+	assert.equal(sched.priorityDeltaForRating("Good"), 5, "Good 降优先");
+	assert.equal(sched.priorityDeltaForRating("Easy"), 10);
+	assert.equal(sched.priorityDeltaForRating("3"), 5, "数字 rating 兼容");
+	assert.equal(sched.priorityDeltaForRating("X"), 0, "未知 rating 不动");
+	assert.equal(sched.priorityDeltaForRating("Again", { enable: false }), 0, "enable:false 关闭");
+	assert.equal(sched.priorityDeltaForRating("Again", { again: -20 }), -20, "配置覆盖");
+});
+
+test("G1 adjustPriority / G2 shiftPriority: clamp 0-100", () => {
+	assert.equal(sched.adjustPriority(50, -10), "40", "升优先");
+	assert.equal(sched.adjustPriority(5, -10), "0", "下限 clamp");
+	assert.equal(sched.adjustPriority(95, 10), "100", "上限 clamp");
+	assert.equal(sched.adjustPriority(undefined, 5), "55", "缺省按 50");
+	assert.equal(sched.shiftPriority("50", -5), "45");
+	assert.equal(sched.shiftPriority("50", 5), "55");
+});
+
 test("postponeCard / advanceCard / ignoreCard / forgetCard", () => {
 	const due = PAST();
 	const postponed = sched.postponeCard({ due }, 7);

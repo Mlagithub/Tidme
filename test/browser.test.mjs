@@ -161,6 +161,7 @@ test("card-manager: 渲染视图过滤/树/批量工具条", () => {
 	const text = collectText(root);
 	assert.ok(text.includes("全部"), "应有视图过滤");
 	assert.ok(text.includes("顺延7d"), "应有批量操作");
+	assert.ok(text.includes("优先↑") && text.includes("设高"), "G3 批量优先级操作");
 	assert.ok(text.includes("书名甲"), "应含文档");
 	assert.ok(text.includes("小节乙"), "应含节");
 });
@@ -235,6 +236,8 @@ test("section-bar: 两行布局 + 统一按钮风格", () => {
 	assert.ok(String(rows[0].className).includes("tm-section-info"), "第一行=信息（面包屑/位置/剩余）");
 	assert.ok(String(rows[1].className).includes("tm-section-btns"), "第二行=按钮");
 	assert.ok(collectText(rows[0]).includes("剩"), "信息行含剩余待学");
+	assert.ok(collectText(rows[0]).includes("p"), "信息行含优先级（G2）");
+	assert.ok(collectText(rows[1]).includes("优先↑") && collectText(rows[1]).includes("优先↓"), "G2 优先级快速调整按钮");
 	const btns = collectButtons(rows[1]);
 	assert.ok(btns.length >= 6, "按钮行含导航/续读点/生命周期/制卡/帮助按钮");
 	for (const b of btns) {

@@ -34,11 +34,12 @@ test.before(() => {
 });
 
 test("buildExtract: parent 链 + anchor 记录", () => {
-	wiki.addTiddler({ title: "书 › 第一章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章", "tidme.source": "书", "tidme.format": "epub", text: "正文" });
+	wiki.addTiddler({ title: "书 › 第一章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章", "tidme.source": "书", "tidme.format": "epub", "tidme.priority": "30", text: "正文" });
 	const card = sectionMod.buildExtract(wiki, "书 › 第一章", "这是一段被选中的文字，用于摘录。");
 	assert.equal(card["tidme.parent"], "书 › 第一章");
 	assert.equal(card["tidme.kind"], "extract");
 	assert.equal(card["tidme.doc"], "d12345678");
+	assert.equal(card["tidme.priority"], "30", "G4 继承父卡优先级");
 	const anchor = sectionMod.parseAnchor(card["tidme.anchor"]);
 	assert.equal(anchor.section, "书 › 第一章");
 	assert.ok(anchor.snippet.includes("被选中"), "anchor 记录片段");
@@ -53,10 +54,11 @@ test("buildExtract: 嵌套摘录（parent = 摘录卡）", () => {
 });
 
 test("buildCloze: anchor + parent", () => {
-	wiki.addTiddler({ title: "书 › 第一章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章", text: "正文" });
+	wiki.addTiddler({ title: "书 › 第一章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章", "tidme.priority": "70", text: "正文" });
 	const card = sectionMod.buildCloze(wiki, "书 › 第一章", "Sierra Leone 的首都是 Freetown。", "Freetown");
 	assert.equal(card["tidme.kind"], "cloze");
 	assert.equal(card["tidme.parent"], "书 › 第一章");
+	assert.equal(card["tidme.priority"], "70", "G4 继承父卡优先级");
 	assert.ok(card.caption.includes("<<C"), "挖空宏");
 	const anchor = sectionMod.parseAnchor(card["tidme.anchor"]);
 	assert.equal(anchor.snippet, "Freetown");

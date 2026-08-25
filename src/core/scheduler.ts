@@ -29,6 +29,32 @@ export function tierRandom(tier: keyof typeof PRIORITY_TIERS, spread = 8): numbe
 }
 
 /**
+ * 评分 → 优先级调整量（G1 优先级动态化，对标 SM 复习后自动调整）。
+ * 0 = 最高优先；数值减小 = 升优先（Again/Hard），增大 = 降优先（Good/Easy）。
+ * cfg 可选（{again, hard, good, easy} 或 {enable:false} 关闭）；缺省 -10/-3/+5/+10。
+ */
+export function priorityDeltaForRating(rating: string | number, cfg?: Record<string, any>): number {
+	if (cfg && cfg.enable === false) return 0;
+	const c = cfg || {};
+	const r = String(rating).toLowerCase();
+	if (r === "again" || r === "1") return Number(c.again) || -10;
+	if (r === "hard" || r === "2") return Number(c.hard) || -3;
+	if (r === "good" || r === "3") return Number(c.good) || 5;
+	if (r === "easy" || r === "4") return Number(c.easy) || 10;
+	return 0;
+}
+
+/** 应用优先级调整（G1）：clamp 0-100，返回字符串字段值 */
+export function adjustPriority(priority: unknown, delta: number): string {
+	return String(Math.max(0, Math.min(100, normalizePriority(priority) + delta)));
+}
+
+/** 优先级快速增减（G2/G3）：步长默认 5，clamp 0-100 */
+export function shiftPriority(priority: unknown, step = 5): string {
+	return adjustPriority(priority, step);
+}
+
+/**
  * TW 日期串（YYYY0MM0DD0hh0mm0ss0XXX，UTC 语义，与 $tw.utils.parseDate 一致）→ Date。
  * 注意：TW 的日期字符串是 UTC 编码（stringifyDate 用 getUTC*），此前按本地时区解析
  * 会造成 8 小时（=时区偏移）的系统性偏差（如评分间隔显示"8 hours from now"）。

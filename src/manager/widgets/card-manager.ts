@@ -645,6 +645,12 @@ function makeCardManager(): WidgetCtor {
 				bar.appendChild(batch("顺延7d", (f) => sched.postponeCard(f, 7)));
 				bar.appendChild(batch("提前", () => sched.advanceCard()));
 				bar.appendChild(batch("遗忘", () => sched.forgetCard()));
+				// G3 批量优先级（对标 SM Browser Priority: Modify）
+				bar.appendChild(batch("优先↑", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], -5) })));
+				bar.appendChild(batch("优先↓", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], 5) })));
+				bar.appendChild(batch("设高", () => ({ "tidme.priority": "10" })));
+				bar.appendChild(batch("设中", () => ({ "tidme.priority": "50" })));
+				bar.appendChild(batch("设低", () => ({ "tidme.priority": "90" })));
 				bar.appendChild(batch("移出队列", (f) => doneFields(f)));
 				bar.appendChild(batch("搁置", () => sched.suspendCard()));
 				bar.appendChild(batch("恢复", (f) => resumeFields(f)));
