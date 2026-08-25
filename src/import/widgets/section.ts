@@ -34,6 +34,20 @@ function escapeHtml(s: string): string {
 	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * 取 TW 内置图标 SVG（$:/core/images/*）。
+ * TW 5.3.x 图标 tiddler 文本含 `\parameters (size:"22pt")` pragma 行 + `<svg width=<<size>> ...>`；
+ * 直接取 fields.text 会把 pragma 行泄漏成按钮文字。此处剥离 pragma 行并把 <<size>> 替换为默认 22pt。
+ */
+function iconSvgOf(wiki: any, name: string): string {
+	const t = wiki.getTiddler("$:/core/images/" + name);
+	if (!t) return "";
+	let svg = String(t.fields.text || "");
+	svg = svg.replace(/^\s*\\parameters\s*\([^)]*\)\s*[\r\n]+/m, "");
+	svg = svg.replace(/<<size>>/g, "22pt");
+	return svg;
+}
+
 function twDateString(d: Date): string {
 	return pipeline.twDateString(d);
 }
@@ -382,9 +396,9 @@ function makeSectionBar(): WidgetCtor {
 				else if (onClick) b.addEventListener("click", onClick);
 				// P1 图标化：内联 TW 内置 SVG（$:/core/images/*）
 				if (icon) {
-					const it = wiki.getTiddler("$:/core/images/" + icon);
-					if (it) {
-						b.innerHTML = String(it.fields.text || "") + label;
+					const svg = iconSvgOf(wiki, icon);
+					if (svg) {
+						b.innerHTML = svg + label;
 						b.classList.add("tm-sec-btn-icon");
 					}
 				}
