@@ -139,6 +139,88 @@ export interface RawSection {
 	level: number; title: string; trail: string[];
 	html: string; text: string; chars: number;
 	merged?: boolean; isContinuation?: boolean; file?: string; orderInFile?: number; ordinal?: number;
+	/** 分段明细（G1 干预边界）：parts[0]=自身内容；parts[1..]=并入的子节（title 有值 = 以标题开头） */
+	parts?: SectionPart[];
+}
+
+/** 干预指令（按 trail key = trail.join(" › ") 匹配，重切分后稳定不漂移） */
+export interface SplitOverrides {
+	/** 强制并入上一节的 trail key */
+	merge?: string[];
+	/** 强制拆分（容器内第一个带标题的并入子节拆为独立卡）的 trail key */
+	split?: string[];
+}
+
+export interface SectionPart { html: string; text: string; chars: number; title?: string }
+
+function deriveSection(sec: RawSection): RawSection {
+	if (sec.parts && sec.parts.length) {
+		sec.html = sec.parts
+			.map((p) => (p.title ? `<p><strong>${escapeHtml(p.title)}</strong></p>\n` : "") + p.html)
+			.join("\n");
+		sec.text = sec.parts.map((p) => (p.title ? "【" + p.title + "】" : "") + p.text).join("\n");
+		sec.chars = sec.parts.reduce((n, p) => n + p.chars, 0);
+	}
+	return sec;
+}
+
+/**
+ * 应用干预指令（G1）：按 trail key 拆分合并容器 / 合并独立节，重排 ordinal。
+ * 拆分依赖 parts 里的子节边界（parts[1..] 中第一个带 title 的段），无 parts 信息时跳过。
+ */
+export function applyOverrides(sections: RawSection[], overrides?: SplitOverrides): RawSection[] {
+	const o = overrides || {};
+	const mergeKeys = new Set(o.merge || []);
+	const splitKeys = new Set(o.split || []);
+	const keyOf = (s: RawSection) => s.trail.join(" › ");
+
+	// 第一遍：拆分（拆分增加节数，先处理；结果顺序保持）
+	const out: RawSection[] = [];
+	for (const sec of sections) {
+		out.push(sec);
+		if (splitKeys.has(keyOf(sec))) {
+			const parts = sec.parts || [];
+			const idx = parts.findIndex((p, i) => i > 0 && p.title);
+			if (idx > 0) {
+				const sub = parts[idx];
+				sec.parts = [parts[0], ...parts.slice(idx + 1)];
+				sec.merged = sec.parts.length > 1;
+				const newSec: RawSection = {
+					level: sec.level,
+					title: sub.title || "",
+					trail: [...sec.trail, sub.title || ""].filter(Boolean),
+					html: sub.html,
+					text: sub.text,
+					chars: sub.chars,
+					parts: [{ html: sub.html, text: sub.text, chars: sub.chars }]
+				};
+				out.push(newSec);
+			}
+		}
+	}
+
+	// 第二遍：合并（并入前一节）
+	const result: RawSection[] = [];
+	for (const sec of out) {
+		if (mergeKeys.has(keyOf(sec)) && result.length) {
+			const prev = result[result.length - 1];
+			const parts = sec.parts || [{ html: sec.html, text: sec.text, chars: sec.chars }];
+			prev.parts = prev.parts || [{ html: prev.html, text: prev.text, chars: prev.chars }];
+			prev.parts.push({ title: sec.title || undefined, html: parts[0].html, text: parts[0].text, chars: parts[0].chars });
+			for (const p of parts.slice(1)) prev.parts.push(p);
+			prev.merged = true;
+			prev.level = Math.min(prev.level, sec.level);
+			continue;
+		}
+		result.push(sec);
+	}
+
+	// 派生 html/text/chars + ordinal 重排
+	result.forEach((sec, i) => {
+		deriveSection(sec);
+		sec.ordinal = i;
+	});
+	return result;
 }
 
 function applySizeRules(leaves: Leaf[], cfg: { maxChars: number; minChars: number }, stats: { hardSplitCount: number }): RawSection[] {
@@ -148,27 +230,33 @@ function applySizeRules(leaves: Leaf[], cfg: { maxChars: number; minChars: numbe
 		const title = leaf.trail[leaf.trail.length - 1] || "";
 		if (total <= cfg.maxChars) {
 			const blocks = leaf.node.blocks.filter((b) => normalizeText(b.text));
+			const html = blocks.map(blockHtml).join("\n\n");
+			const text = blocks.map((b) => normalizeText(b.text)).join("\n");
 			expanded.push({
 				level: leaf.node.level,
 				title,
 				trail: leaf.trail,
-				html: blocks.map(blockHtml).join("\n\n"),
-				text: blocks.map((b) => normalizeText(b.text)).join("\n"),
-				chars: total
+				html,
+				text,
+				chars: total,
+				parts: [{ html, text, chars: total }]
 			});
 			continue;
 		}
 		const { parts, hardSplitCount } = partitionBlocks(leaf.node.blocks, cfg.maxChars);
 		stats.hardSplitCount += hardSplitCount;
 		parts.forEach((p, idx) => {
+			const html = p.htmlParts.join("\n\n");
+			const text = p.textParts.join("\n");
 			expanded.push({
 				level: leaf.node.level,
 				title: idx === 0 ? title : "",
 				trail: leaf.trail,
-				html: p.htmlParts.join("\n\n"),
-				text: p.textParts.join("\n"),
+				html,
+				text,
 				chars: p.chars,
-				isContinuation: idx > 0
+				isContinuation: idx > 0,
+				parts: [{ html, text, chars: p.chars }]
 			});
 		});
 	}
@@ -181,16 +269,14 @@ function applySizeRules(leaves: Leaf[], cfg: { maxChars: number; minChars: numbe
 			result[result.length - 1].chars + sec.chars <= cfg.maxChars;
 		if (canMergeIntoPrev) {
 			const prev = result[result.length - 1];
-			const leadIn = sec.title ? `<p><strong>${escapeHtml(sec.title)}</strong></p>\n` : "";
-			prev.html += "\n" + leadIn + sec.html;
-			prev.text += "\n" + (sec.title ? "【" + sec.title + "】" : "") + sec.text;
+			prev.parts!.push({ title: sec.title || undefined, html: sec.html, text: sec.text, chars: sec.chars });
 			prev.chars += sec.chars;
 			prev.merged = true;
 			continue;
 		}
 		result.push(sec);
 	}
-	return result;
+	return result.map(deriveSection);
 }
 
 function makeBreadcrumb(parts: (string | null | undefined)[]): string[] {
@@ -216,15 +302,20 @@ export function chunkFile(
 		const level = Math.max(2, Math.min(6, crumbBase.length + 1));
 		const { parts, hardSplitCount } = partitionBlocks(blocks, cfg.maxChars);
 		statsOut.hardSplitCount += hardSplitCount;
-		return parts.map((part, idx) => ({
-			level,
-			title: idx === 0 ? fallbackTitle : "",
-			trail: makeBreadcrumb([...crumbBase, idx === 0 ? fallbackTitle : ""]),
-			html: part.htmlParts.join("\n\n"),
-			text: part.textParts.join("\n"),
-			chars: part.chars,
-			isContinuation: idx > 0
-		}));
+		return parts.map((part, idx) => {
+			const html = part.htmlParts.join("\n\n");
+			const text = part.textParts.join("\n");
+			return {
+				level,
+				title: idx === 0 ? fallbackTitle : "",
+				trail: makeBreadcrumb([...crumbBase, idx === 0 ? fallbackTitle : ""]),
+				html,
+				text,
+				chars: part.chars,
+				isContinuation: idx > 0,
+				parts: [{ html, text, chars: part.chars }]
+			};
+		});
 	}
 
 	const { roots, preamble } = buildTree(blocks);
@@ -244,13 +335,18 @@ export function chunkFile(
 		text: sec.text,
 		chars: sec.chars,
 		merged: !!sec.merged,
-		isContinuation: !!sec.isContinuation
+		isContinuation: !!sec.isContinuation,
+		...(sec.parts ? { parts: sec.parts } : {})
 	}));
 }
 
 export interface InputFile { fileName: string; fileBreadcrumb: string[]; blocks: Block[] }
 
-export function chunkBook(files: InputFile[], options: ChunkOptions = {}): { sections: RawSection[]; stats: { sections: number; hardSplitCount: number } } {
+export function chunkBook(
+	files: InputFile[],
+	options: ChunkOptions = {},
+	overrides?: SplitOverrides
+): { sections: RawSection[]; stats: { sections: number; hardSplitCount: number } } {
 	const stats = { hardSplitCount: 0, sections: 0 };
 	const sections: RawSection[] = [];
 	for (const f of files) {
@@ -265,6 +361,8 @@ export function chunkBook(files: InputFile[], options: ChunkOptions = {}): { sec
 		}
 		if (!s.title) s.title = s.trail[s.trail.length - 1] || "续";
 	});
-	stats.sections = sections.length;
-	return { sections, stats };
+	// G1 干预：拆分/合并 + ordinal 重排
+	const final = applyOverrides(sections, overrides);
+	stats.sections = final.length;
+	return { sections: final, stats };
 }

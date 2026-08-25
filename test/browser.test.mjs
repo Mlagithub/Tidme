@@ -65,7 +65,7 @@ const fakeDocument = {
 	defaultView: null
 };
 
-let wiki, tw, cardBrowser, queueOps, statsPanel, cardManager, sectionBar;
+let wiki, tw, cardBrowser, queueOps, statsPanel, cardManager, sectionBar, splitTool;
 test.before(async () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-browser-"));
 	tw = TiddlyWiki.TiddlyWiki();
@@ -90,6 +90,7 @@ test.before(async () => {
 	statsPanel = tw.modules.execute("$:/plugins/tidme/import/widgets/stats-panel.js");
 	cardManager = tw.modules.execute("$:/plugins/tidme/import/widgets/card-manager.js");
 	sectionBar = tw.modules.execute("$:/plugins/tidme/import/widgets/section.js");
+	splitTool = tw.modules.execute("$:/plugins/tidme/import/widgets/split.js");
 });
 
 function renderWidgetEx(mod, name, opts = {}) {
@@ -252,4 +253,24 @@ test("事件总线: 队列变化通知 → 监听组件重建（stats-panel 数�
 	events.notifyTidme(events.EVENTS.QUEUE_CHANGED);
 	const text = collectText(root);
 	assert.ok(text.includes("第二本书"), "事件后统计面板重建，出现新书进度");
+});
+
+test("split-tool: 预览干预按钮（并入上一节 / 从此拆分）", async () => {
+	// 场景 1：短节全合并 → 容器显示「从此拆分」（无并入按钮）
+	wiki.addTiddler({ title: "干预源", type: "text/markdown", text: "# 章A\n\n内容一。\n\n## 节A1\n\n内容二。\n\n# 章B\n\n内容三。" });
+	wiki.addTiddler({ title: "$:/temp/tidme/split/source", text: "干预源" });
+	const root = renderWidget(splitTool, "split-tool");
+	await new Promise((r) => setTimeout(r, 120)); // 等待异步 runSplit 预览
+	let text = collectText(root);
+	assert.ok(text.includes("⇊"), "合并容器显示「从此拆分」");
+	assert.ok(!text.includes("⇈"), "单节场景无并入按钮");
+	// 场景 2：长文本两节独立 → 第二节显示「并入上一节」
+	const longA = "第一段内容。".repeat(200); // ~1200 字（> minChars 600，独立）
+	const longB = "第三段内容。".repeat(200);
+	wiki.addTiddler({ title: "干预源2", type: "text/markdown", text: `# 章甲\n\n${longA}\n\n# 章乙\n\n${longB}` });
+	wiki.addTiddler({ title: "$:/temp/tidme/split/source", text: "干预源2" });
+	const root2 = renderWidget(splitTool, "split-tool");
+	await new Promise((r) => setTimeout(r, 120));
+	text = collectText(root2);
+	assert.ok(text.includes("⇈"), "独立节显示「并入上一节」按钮");
 });

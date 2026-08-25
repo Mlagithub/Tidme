@@ -1,10 +1,14 @@
 /*
-widgets/split.ts — M2 切分入口组件（M4 加优先级三档）
+widgets/split.ts — M2 切分入口组件（M4 加优先级三档；G1 加预览干预）
 
-- <$split-tool/>  切分页：解析源 tiddler（$:/temp/tidme/split/source）→ 大纲预览 → 确认写库
+- <$split-tool/>  切分页：解析源 tiddler（$:/temp/tidme/split/source）→ 大纲预览（可干预：并入上一节 / 从此拆分）→ 确认写库
 - <$paste-split/> 粘贴切分：textarea → runSplit → 写库
 - <$inbox-split/> 剪藏收件箱：列出 tidme-inbox tiddler，逐条/批量切分
 切分后源 tiddler 被文档页覆盖（保留 url/author/date 等溯源字段，移除 tidme-inbox 标签）。
+
+干预模型（G1）：预览按节列出，每节以 trail key（breadcrumb）为稳定标识；
+"并入上一节"→ overrides.merge 加该 key；"从此拆分"→ overrides.split 加该 key；
+每次操作重新 runSplit（overrides 生效）→ 预览刷新；落库用最终结果。
 */
 
 declare function require(module: string): any;
@@ -33,7 +37,7 @@ function provenanceOf(wiki: any, title: string): Record<string, string> {
 }
 
 /** 执行切分并写库：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签） */
-async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number) {
+async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number, overrides?: any) {
 	const t = wiki.getTiddler(title);
 	if (!t) throw new Error("源 tiddler 不存在");
 	const r = await pipeline.runSplit({
@@ -41,7 +45,8 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 		title,
 		type: t.fields.type,
 		sourceFields: { ...provenanceOf(wiki, title), ...extraSourceFields },
-		priority
+		priority,
+		overrides
 	});
 	const [doc, ...cards] = r.tiddlers;
 	if (!cards.length) throw new Error("未切分出任何节（内容过短或无可识别结构）");
@@ -88,8 +93,10 @@ function makeSplitTool(): WidgetCtor {
 			let parsed: any = null;
 			let busy = false;
 			let priorityTier: "high" | "medium" | "low" = "medium";
+			// G1 干预指令（trail key 集合；重切分后 key 稳定不漂移）
+			const overrides = { merge: new Set<string>(), split: new Set<string>() };
 			const status = el(doc, "div", "tm-import-muted", "解析中…");
-			const outlineBox = el(doc, "div", "");
+			const previewBox = el(doc, "div", "tm-split-preview", "");
 			const actions = el(doc, "div", "tm-import-actions", "");
 
 			// 优先级三档（M4）：高/中/低 → tierRandom 区间随机分散
@@ -106,9 +113,16 @@ function makeSplitTool(): WidgetCtor {
 			prioSel.value = "medium";
 			prioSel.addEventListener("change", () => {
 				priorityTier = prioSel.value as any;
+				renderPreview();
 			});
 			prioRow.appendChild(prioSel);
 			wrap.appendChild(prioRow);
+
+			const toOverrides = () => ({
+				merge: [...overrides.merge],
+				split: [...overrides.split]
+			});
+			const keyOf = (s: any) => String((s.trail || []).join(" › "));
 
 			const renderPreview = async () => {
 				try {
@@ -118,25 +132,56 @@ function makeSplitTool(): WidgetCtor {
 						title,
 						type: t.fields.type,
 						sourceFields: provenanceOf(wiki, title),
-						priority: sched.tierRandom(priorityTier)
+						priority: sched.tierRandom(priorityTier),
+						overrides: toOverrides()
 					});
+					const sections = parsed.sections || [];
 					const cards = parsed.tiddlers.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
-					status.textContent = `${cards.length} 节 · 硬切 ${parsed.stats.hardSplitCount} 块 · 文档 ID ${parsed.docId}`;
-					outlineBox.textContent = "";
-					const details = el(doc, "details", "");
-					details.open = true;
-					const summary = el(doc, "summary", "tm-import-muted", `目录大纲（${Math.min(20, cards.length)}/${cards.length} 条）`);
-					details.appendChild(summary);
-					const pre = el(doc, "pre", "tm-import-outline-pre", "");
-					pre.textContent = cards.slice(0, 20).map((c: any) => {
-						const bc = String(c["tidme.path"] || "");
-						const segs = bc.split(" › ");
-						let line = "　".repeat(Math.max(0, segs.length - 2)) + segs[segs.length - 1];
-						if (c["tidme.merged"]) line += " ⟵已并入上一节";
-						return line;
-					}).join("\n");
-					details.appendChild(pre);
-					outlineBox.appendChild(details);
+					status.textContent = `${cards.length} 节 · 硬切 ${parsed.stats.hardSplitCount} 块 · 文档 ID ${parsed.docId}` +
+						(overrides.merge.size || overrides.split.size ? " · 已应用干预" : "");
+					previewBox.textContent = "";
+
+					// 逐节可操作预览（G1）
+					const listBox = el(doc, "div", "tm-split-list", "");
+					sections.forEach((s: any, idx: number) => {
+						const key = keyOf(s);
+						const parts: any[] = s.parts || [];
+						const isContainer = s.merged === true && parts.length > 1;
+						const splittable = parts.findIndex((p, i) => i > 0 && p.title) > 0;
+						const row = el(doc, "div", "tm-split-row" + (isContainer ? " tm-split-row-merged" : ""));
+						const depth = Math.max(0, (s.trail || []).length - 1);
+						row.style.paddingLeft = `${depth * 1.1}em`;
+						// 状态徽章
+						const mark = isContainer ? "⟵ 并入" : s.isContinuation ? "续" : "新";
+						row.appendChild(el(doc, "span", "tm-split-mark", mark));
+						// 干预状态
+						if (overrides.merge.has(key)) row.appendChild(el(doc, "span", "tm-split-done", "⇈ 已并入"));
+						if (overrides.split.has(key)) row.appendChild(el(doc, "span", "tm-split-done", "⇊ 已拆分"));
+						// 标题
+						row.appendChild(el(doc, "span", "tm-split-title",
+							String(s.title || (s.trail || []).slice(-1)[0] || "") + (s.chars ? `（${s.chars} 字）` : "")));
+						// 干预按钮
+						if (idx > 0) {
+							if (overrides.merge.has(key)) {
+								row.appendChild(opBtn("↩ 撤销合并", () => { overrides.merge.delete(key); renderPreview(); }));
+							} else {
+								row.appendChild(opBtn("⇈ 并入上一节", () => { overrides.merge.add(key); renderPreview(); }));
+							}
+						}
+						if (isContainer && splittable) {
+							if (overrides.split.has(key)) {
+								row.appendChild(opBtn("↩ 撤销拆分", () => { overrides.split.delete(key); renderPreview(); }));
+							} else {
+								row.appendChild(opBtn("⇊ 从此拆分", () => { overrides.split.add(key); renderPreview(); }));
+							}
+						}
+						listBox.appendChild(row);
+					});
+					previewBox.appendChild(listBox);
+					for (const w of parsed.warnings) {
+						previewBox.appendChild(el(doc, "div", "tm-import-muted", "⚠ " + w));
+					}
+
 					actions.textContent = "";
 					const btn = el(doc, "button", "tc-btn-primary", "✔ 切分并入库");
 					btn.addEventListener("click", async () => {
@@ -146,7 +191,7 @@ function makeSplitTool(): WidgetCtor {
 						btn.textContent = "写入中…";
 						try {
 							const sched = require("$:/plugins/tidme/core/scheduler.js");
-							await commitSplit(wiki, this, title, {}, sched.tierRandom(priorityTier));
+							await commitSplit(wiki, this, title, {}, sched.tierRandom(priorityTier), toOverrides());
 							this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/tidme/import/ui/notify-done" });
 							this.dispatchEvent({ type: "tm-navigate", navigateTo: parsed.tiddlers[0].title });
 						} catch (e: any) {
@@ -157,16 +202,19 @@ function makeSplitTool(): WidgetCtor {
 						busy = false;
 					});
 					actions.appendChild(btn);
-					for (const w of parsed.warnings) {
-						actions.appendChild(el(doc, "div", "tm-import-muted", "⚠ " + w));
-					}
 				} catch (e: any) {
 					status.textContent = "解析失败：" + String(e.message || e);
 				}
 			};
 
+			const opBtn = (label: string, onClick: () => void) => {
+				const b = el(doc, "button", "tm-split-op", label);
+				b.addEventListener("click", onClick);
+				return b;
+			};
+
 			wrap.appendChild(status);
-			wrap.appendChild(outlineBox);
+			wrap.appendChild(previewBox);
 			wrap.appendChild(actions);
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
@@ -202,6 +250,7 @@ function makePasteSplit(): WidgetCtor {
 					const r = await pipeline.runSplit({ text, title: firstLine, bag: this.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default" });
 					if (!r.tiddlers.some((x: any) => Array.isArray(x.tags) && x.tags.includes("?"))) throw new Error("未切分出任何节");
 					for (const tdl of r.tiddlers) this.wiki.addTiddler(tdl);
+					events.dispatch(this, events.EVENTS.IMPORT_DONE, { docId: r.docId, bookTitle: firstLine });
 					this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/tidme/import/ui/notify-done" });
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: r.tiddlers[0].title });
 				} catch (e: any) {

@@ -6,6 +6,7 @@ split.ts — 通用切分器（M2 核心）
 产物即标准 TW 导入格式；卡片带 ? 标签。
 
 docId 由源标题派生（同一 tiddler 重切分 ID 稳定；标题唯一性由 TW 保证）。
+G1 干预：runSplit 接受 overrides（按 trail key 强制合并/拆分），预览微调后落库。
 */
 
 import { makeDocId, makeSectionId, contentFingerprint, normalizeText } from "$:/plugins/tidme/core/ids";
@@ -13,7 +14,7 @@ import type { BookMeta } from "$:/plugins/tidme/core/ids";
 import { initialFsrsFields, twDateString } from "$:/plugins/tidme/core/schema";
 import { normalizePriority, PRIORITY_DEFAULT } from "$:/plugins/tidme/core/scheduler";
 import { chunkBook } from "./chunker";
-import type { ChunkOptions, RawSection } from "./chunker";
+import type { ChunkOptions, RawSection, SplitOverrides } from "./chunker";
 import { blocksFromMarkdown, blocksFromWikitext, blocksFromHtml, blocksFromPlainText, sniffFormat, guessTitle, formatLabel } from "./ingest-text";
 import type { TextFormat } from "./ingest-text";
 
@@ -33,6 +34,8 @@ export interface SplitInput {
 	autoDeck?: boolean;
 	/** 卡片优先级 0–100（0 最高；默认 50；M4） */
 	priority?: number;
+	/** G1 干预：按 trail key 强制合并/拆分（预览微调后落库用） */
+	overrides?: SplitOverrides;
 }
 
 export interface SplitResult {
@@ -44,6 +47,8 @@ export interface SplitResult {
 	stats: { sections: number; hardSplitCount: number };
 	tiddlers: Record<string, any>[];
 	warnings: string[];
+	/** 最终节明细（含 parts 子节边界与 merged 标记），供预览/干预 UI 使用 */
+	sections: RawSection[];
 }
 
 function uniqueTitleFactory() {
@@ -186,6 +191,7 @@ export async function emitTiddlers(
 /**
  * 通用切分：任意 markdown / wikitext / HTML / TXT 文本 → 文档页 + Section 卡 + 自动 deck。
  * 同一输入（title + text 不变）重切分产物确定（ID 稳定）。
+ * overrides 按 trail key 干预（合并/拆分），重切分后 key 稳定不漂移。
  */
 export async function runSplit(input: SplitInput): Promise<SplitResult> {
 	const text = String(input.text || "");
@@ -203,7 +209,8 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
 
 	const { sections, stats } = chunkBook(
 		[{ fileName: bookTitle, fileBreadcrumb: [], blocks }],
-		{ maxChars: input.maxChars, minChars: input.minChars }
+		{ maxChars: input.maxChars, minChars: input.minChars },
+		input.overrides
 	);
 	const metaWithFormat = { ...meta, __format: format };
 	const { tiddlers, warnings } = await emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority);
@@ -215,7 +222,8 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
 		sectionCount: stats.sections,
 		stats,
 		tiddlers,
-		warnings
+		warnings,
+		sections
 	};
 }
 

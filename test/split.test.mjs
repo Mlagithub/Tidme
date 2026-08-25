@@ -157,3 +157,92 @@ test("split: EPUB3 nav-only 书籍按 nav 目录切分", async () => {
 	const trails = cards.map((c) => c["tidme.path"]);
 	assert.ok(trails.some((t) => t.includes("第一章 起点")), `面包屑应来自 nav: ${JSON.stringify(trails.slice(0, 3))}`);
 });
+
+// ---------- G1 预览干预 ----------
+
+const INTERVENE_SAMPLE = `# 第一章
+
+第一段内容。
+
+## 小节甲
+
+第二段内容。
+
+# 第二章
+
+第三段内容。`;
+
+function sectionsOf(r) {
+	return r.sections.map((s) => ({
+		key: (s.trail || []).join(" › "),
+		title: s.title,
+		merged: !!s.merged,
+		partCount: (s.parts || []).length,
+		html: s.html,
+		ordinal: s.ordinal
+	}));
+}
+
+test("G1: 默认短节全部并入（merged 容器含 parts 子节边界）", async () => {
+	const r = await pipeline.runSplit({ text: INTERVENE_SAMPLE, title: "干预测试", type: "text/markdown" });
+	const secs = sectionsOf(r);
+	assert.equal(secs.length, 1, "三短节全部并入 → 1 节");
+	assert.equal(secs[0].key, "第一章");
+	assert.equal(secs[0].merged, true, "第一章是合并容器");
+	assert.equal(secs[0].partCount, 3, "容器 parts = 自身 + 小节甲 + 第二章");
+	assert.ok(secs[0].html.includes("小节甲") && secs[0].html.includes("第二章"), "容器 html 含子节标题");
+	const cards = cardsOf(r);
+	assert.equal(cards.length, 1, "产物 1 张卡");
+});
+
+test("G1: split override 拆出并入子节（节数增加）", async () => {
+	const r = await pipeline.runSplit({
+		text: INTERVENE_SAMPLE, title: "干预测试", type: "text/markdown",
+		overrides: { split: ["第一章"] }
+	});
+	const secs = sectionsOf(r);
+	assert.equal(secs.length, 2, "拆出小节甲 → 2 节（第二章仍在容器）");
+	assert.equal(secs[0].key, "第一章");
+	assert.equal(secs[0].partCount, 2, "容器剩自身 + 第二章");
+	assert.equal(secs[1].key, "第一章 › 小节甲", "新节 trail = 容器 + 子节标题");
+	assert.equal(secs[1].title, "小节甲");
+	assert.ok(secs[1].html.includes("第二段内容"), "拆分节内容正确");
+	assert.equal(secs[1].ordinal, 1, "ordinal 重排");
+	// 再拆分一次把第二章也拆出
+	const r2 = await pipeline.runSplit({
+		text: INTERVENE_SAMPLE, title: "干预测试", type: "text/markdown",
+		overrides: { split: ["第一章"] }
+	});
+	const secs2 = sectionsOf(r2);
+	// 用户界面按 key 操作：容器 key 仍为「第一章」，重复拆分应能继续拆（第二次作用于新的容器）
+	const r3 = await pipeline.runSplit({
+		text: INTERVENE_SAMPLE, title: "干预测试", type: "text/markdown",
+		overrides: { split: ["第一章", "第一章"] }
+	});
+	assert.equal(sectionsOf(r3).length, 2, "同 key 重复拆分幂等（不重复拆）");
+});
+
+test("G1: merge override 强制并入上一节（节数减少）", async () => {
+	// minChars=0 默认不合并 → 三节各自独立
+	const base = await pipeline.runSplit({ text: INTERVENE_SAMPLE, title: "干预测试", type: "text/markdown", minChars: 0 });
+	assert.equal(cardsOf(base).length, 3, "minChars=0 默认独立三节");
+	const r = await pipeline.runSplit({
+		text: INTERVENE_SAMPLE, title: "干预测试", type: "text/markdown", minChars: 0,
+		overrides: { merge: ["第二章"] }
+	});
+	const secs = sectionsOf(r);
+	assert.equal(secs.length, 2, "第二章并入上一节（小节甲）→ 2 节");
+	assert.equal(secs[1].key, "第一章 › 小节甲");
+	assert.equal(secs[1].partCount, 2, "小节甲容器 parts = 自身 + 第二章");
+	assert.ok(secs[1].html.includes("第二章"), "容器 html 含第二章标题");
+});
+
+test("G1: 干预 trail key 稳定（重切分不漂移）", async () => {
+	const overrides = { split: ["第一章"] };
+	const r1 = await pipeline.runSplit({ text: INTERVENE_SAMPLE, title: "干预测试", type: "text/markdown", overrides });
+	const r2 = await pipeline.runSplit({ text: INTERVENE_SAMPLE, title: "干预测试", type: "text/markdown", overrides });
+	assert.deepEqual(sectionsOf(r1).map((s) => s.key), sectionsOf(r2).map((s) => s.key), "两次干预切分 key 顺序一致");
+	const c1 = cardsOf(r1).map((c) => c["tidme.path"]);
+	const c2 = cardsOf(r2).map((c) => c["tidme.path"]);
+	assert.deepEqual(c1, c2, "干预产物稳定");
+});
