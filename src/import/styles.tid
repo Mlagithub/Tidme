@@ -228,6 +228,65 @@ tags: $:/tags/Stylesheet
 	opacity: 0.6;
 }
 
+/* 文档页进度横幅（P1 卡片化） */
+.tm-doc-banner {
+	display: flex;
+	align-items: center;
+	gap: var(--tm-gap-lg);
+	flex-wrap: wrap;
+	padding: 8px 12px;
+	border: 1px solid <<colour muted-foreground>>;
+	border-radius: var(--tm-radius);
+	background: <<colour very-light-background>>;
+	margin: 6px 0;
+}
+.tm-doc-prog {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 11em;
+}
+.tm-doc-prog-num {
+	font-size: 1.4em;
+	font-weight: 600;
+	line-height: 1.1;
+}
+.tm-doc-prog-done {
+	color: <<colour primary>>;
+}
+.tm-doc-prog-total {
+	opacity: 0.6;
+	font-weight: 400;
+}
+.tm-doc-prog-label {
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+.tm-doc-banner-actions {
+	display: flex;
+	gap: var(--tm-gap-lg);
+	margin-left: auto;
+	flex-wrap: wrap;
+}
+
+/* 导入中心 Tab（P1） */
+.tm-import-tabs {
+	display: flex;
+	gap: var(--tm-gap);
+	flex-wrap: wrap;
+	margin: 8px 0;
+	border-bottom: 1px solid <<colour muted-foreground>>;
+	padding-bottom: 6px;
+}
+.tm-import-tab {
+	border: 1px solid transparent;
+	border-bottom: 2px solid transparent;
+	border-radius: var(--tm-radius) var(--tm-radius) 0 0;
+}
+.tm-import-tab:hover {
+	border-color: <<colour muted-foreground>>;
+}
+
 .tm-import-panel {
 	margin-top: 0.5em;
 }
@@ -314,6 +373,11 @@ tags: $:/tags/Stylesheet
 .tm-sec-btn:disabled {
 	opacity: 0.4;
 	cursor: default;
+}
+.tm-sec-btn-icon svg {
+	width: 1em;
+	height: 1em;
+	vertical-align: -0.15em;
 }
 .tm-sec-btn--done {
 	color: <<colour primary>>;

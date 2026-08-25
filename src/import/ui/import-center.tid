@@ -5,21 +5,23 @@ type: text/vnd.tiddlywiki
 
 导入统一入口：本地文件、粘贴文本、剪藏收件箱——全部收敛为 tiddler 后经通用切分器入库。
 
-## 本地文件
+<div class="tm-import-tabs">
+<$radio tiddler="$:/state/tidme/import/tab" value="file" class="tm-btn tm-import-tab" selectedClass="tm-btn--active tm-import-tab">📁 本地文件</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="paste" class="tm-btn tm-import-tab" selectedClass="tm-btn--active tm-import-tab">📋 粘贴文本</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="inbox" class="tm-btn tm-import-tab" selectedClass="tm-btn--active tm-import-tab">📥 剪藏收件箱</$radio>
+</div>
 
+<$reveal type="match" state="$:/state/tidme/import/tab" text="file" default="file">
 <$import-file/>
+</$reveal>
 
----
-
-## 粘贴文本
-
+<$reveal type="match" state="$:/state/tidme/import/tab" text="paste">
 <$paste-split/>
+</$reveal>
 
----
-
-## 剪藏收件箱
-
+<$reveal type="match" state="$:/state/tidme/import/tab" text="inbox">
 <$inbox-split/>
+</$reveal>
 
 ---
 

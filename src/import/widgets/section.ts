@@ -375,11 +375,19 @@ function makeSectionBar(): WidgetCtor {
 			const root = this._root;
 			root.textContent = "";
 
-			const mkBtn = (label: string, variant: string, tip: string, disabled = false, onClick?: () => void) => {
+			const mkBtn = (label: string, variant: string, tip: string, disabled = false, onClick?: () => void, icon?: string) => {
 				const b = el(doc, "button", variant ? `tm-sec-btn tm-sec-btn--${variant}` : "tm-sec-btn", label);
 				b.title = tip;
 				if (disabled) b.setAttribute("disabled", "true");
 				else if (onClick) b.addEventListener("click", onClick);
+				// P1 图标化：内联 TW 内置 SVG（$:/core/images/*）
+				if (icon) {
+					const it = wiki.getTiddler("$:/core/images/" + icon);
+					if (it) {
+						b.innerHTML = String(it.fields.text || "") + label;
+						b.classList.add("tm-sec-btn-icon");
+					}
+				}
 				return b;
 			};
 
@@ -457,8 +465,8 @@ function makeSectionBar(): WidgetCtor {
 			root.appendChild(infoRow);
 
 			// 第二行：全部按钮（统一 tm-sec-btn 风格）
-			btnRow.appendChild(mkBtn("◀", "nav", "上一节", !prev, () => { if (prev) gotoSection(prev); }));
-			btnRow.appendChild(mkBtn("▶", "nav", "下一节", !next, () => { if (next) gotoSection(next); }));
+			btnRow.appendChild(mkBtn("", "nav", "上一节", !prev, () => { if (prev) gotoSection(prev); }, "chevron-left"));
+			btnRow.appendChild(mkBtn("", "nav", "下一节", !next, () => { if (next) gotoSection(next); }, "chevron-right"));
 
 			sep();
 
@@ -468,7 +476,7 @@ function makeSectionBar(): WidgetCtor {
 				if (rp.t !== title) {
 					btnRow.appendChild(mkBtn("⏮ " + (rp.s ? "「" + rp.s.slice(0, 10) + "…」" : rp.t.slice(0, 14)), "rp", "转到续读点 (Alt+F7)", false, () => actionGotoReadPoint(win)));
 				}
-				btnRow.appendChild(mkBtn("✕", "rpclear", "清除续读点 (Ctrl+Shift+F7)", false, () => actionClearReadPoint(win)));
+				btnRow.appendChild(mkBtn("", "rpclear", "清除续读点 (Ctrl+Shift+F7)", false, () => actionClearReadPoint(win), "close-button"));
 			}
 
 			sep();
@@ -534,9 +542,9 @@ function makeSectionBar(): WidgetCtor {
 			btnRow.appendChild(mkBtn("挖空", "cloze", "挖空制卡 (Alt+Z)", false, () => actionCloze(win)));
 
 			// 帮助
-			btnRow.appendChild(mkBtn("？", "help", "快捷键与用法帮助", false, () => {
+			btnRow.appendChild(mkBtn("", "help", "快捷键与用法帮助", false, () => {
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/plugins/tidme/import/ui/help-shortcuts" });
-			}));
+			}, "info-button"));
 
 			root.appendChild(btnRow);
 		}
@@ -589,10 +597,26 @@ function makeDocResume(): WidgetCtor {
 			const wrap = this._root;
 			wrap.textContent = "";
 
-			// 进度聚合（M3-T5）：已读 / 总数 / 剩余待学
+			// 进度横幅（P1 卡片化）：大数字 + 进度条 + 主按钮
 			const all = sectionsOfDoc(wiki, docId);
 			const done = all.filter((x) => isDone(wiki.getTiddler(x)?.fields)).length;
 			const left = all.length - done;
+			const banner = el(doc, "div", "tm-doc-banner");
+			// 左侧：进度数字 + 进度条
+			const prog = el(doc, "div", "tm-doc-prog");
+			const progNum = el(doc, "div", "tm-doc-prog-num", "");
+			progNum.appendChild(el(doc, "span", "tm-doc-prog-done", String(done)));
+			progNum.appendChild(el(doc, "span", "tm-doc-prog-total", ` / ${all.length}`));
+			prog.appendChild(progNum);
+			prog.appendChild(el(doc, "div", "tm-doc-prog-label", `剩余 ${left} 节待学`));
+			const barWrap = el(doc, "div", "tm-stat-bar tm-stat-bar-lg", "");
+			const bar = el(doc, "span", "tm-stat-bar-fill", "");
+			bar.style.width = all.length ? `${Math.round((done / all.length) * 100)}%` : "0%";
+			barWrap.appendChild(bar);
+			prog.appendChild(barWrap);
+			banner.appendChild(prog);
+			// 右侧：主按钮
+			const actions = el(doc, "div", "tm-doc-banner-actions");
 			const btn = el(doc, "button", "tc-btn-primary", "▶ 继续阅读");
 			btn.addEventListener("click", () => {
 				const rp = parseReadPoint(wiki, docId);
@@ -603,16 +627,16 @@ function makeDocResume(): WidgetCtor {
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
 				}
 			});
-			wrap.appendChild(btn);
-			wrap.appendChild(el(doc, "span", "tm-import-muted",
-				`　已读 ${done} / ${all.length} · 剩余 ${left} 节待学`));
+			actions.appendChild(btn);
+			banner.appendChild(actions);
+			wrap.appendChild(banner);
 
 			// G7 子集复习：按本书强制复习（临时子集 deck → 复用 fsrs4tw 学习流）
 			const inQueueCount = wiki.filterTiddlers(
 				`[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`
 			).length;
 			if (inQueueCount > 0) {
-				const subsetBtn = el(doc, "button", "tc-btn-invisible tm-sec-btn tm-sec-btn--done", "📖 复习本书");
+				const subsetBtn = el(doc, "button", "tm-btn tm-btn--primary", "📖 复习本书");
 				subsetBtn.title = `子集复习：仅复习本书 ${inQueueCount} 张在队卡（临时牌组，复习完可删除）`;
 				subsetBtn.addEventListener("click", () => {
 					// 从任意现有 deck 复制调度字段，覆盖 card 为本书子集过滤器
@@ -630,7 +654,10 @@ function makeDocResume(): WidgetCtor {
 					});
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: deckTitle });
 				});
-				wrap.appendChild(subsetBtn);
+				// 并入横幅右侧操作区（P1）
+				const bannerActions = wrap.querySelector(".tm-doc-banner-actions");
+				if (bannerActions) bannerActions.appendChild(subsetBtn);
+				else wrap.appendChild(subsetBtn);
 			}
 
 			// 已读区：列出已读节，可"重新加入"队列（恢复可逆性，替代 8 秒撤销窗口）
