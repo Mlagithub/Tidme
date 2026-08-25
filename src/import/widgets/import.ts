@@ -8,6 +8,7 @@ widgets/import.ts — 自包含导入组件
 
 declare function require(module: string): any;
 const pipeline = require("$:/plugins/tidme/import/pipeline.js");
+const events = require("$:/plugins/tidme/core/events.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 interface ImportResult {
@@ -136,6 +137,7 @@ function makeFileWidget(): WidgetCtor {
 				for (const [token, item] of pending) rowsBox.appendChild(buildRow(doc, token, item));
 				refreshActions();
 				this.wiki.addTiddler({ title: "$:/temp/tidme-import/last-created", text: String(created) });
+				events.dispatch(this, events.EVENTS.IMPORT_DONE, { token: "", docId: "", bookTitle: "" });
 				this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/tidme/import/ui/notify-done" });
 			});
 			btnClear.addEventListener("click", () => {

@@ -15,6 +15,7 @@ Done 语义：移出队列 = 去 ? 和 . 标签 + tidme.done（默认/阅读/自
 declare function require(module: string): any;
 const sched = require("$:/plugins/tidme/core/scheduler.js");
 const stats = require("$:/plugins/tidme/core/stats.js");
+const events = require("$:/plugins/tidme/core/events.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 type View = "all" | "inqueue" | "done" | "suspended" | "overdue";
@@ -185,12 +186,20 @@ function makeCardManager(): WidgetCtor {
 				if (inQueue) {
 					const readBtn = el(doc, "button", "tm-cm-op", "读");
 					readBtn.title = "移出队列（已读）";
-					readBtn.addEventListener("click", () => { wiki.addTiddler(doneFields(c.fields)); render(); });
+					readBtn.addEventListener("click", () => {
+						wiki.addTiddler(doneFields(c.fields));
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+						render();
+					});
 					row.appendChild(readBtn);
 				} else {
 					const resumeBtn = el(doc, "button", "tm-cm-op", "回");
 					resumeBtn.title = "恢复到学习队列";
-					resumeBtn.addEventListener("click", () => { wiki.addTiddler(resumeFields(c.fields)); render(); });
+					resumeBtn.addEventListener("click", () => {
+						wiki.addTiddler(resumeFields(c.fields));
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+						render();
+					});
 					row.appendChild(resumeBtn);
 				}
 				const del = el(doc, "button", "tm-cm-op tm-cm-del", "✕");
@@ -198,6 +207,7 @@ function makeCardManager(): WidgetCtor {
 				del.addEventListener("click", () => {
 					selected.delete(c.title);
 					wiki.deleteTiddler(c.title);
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					render();
 				});
 				row.appendChild(del);
@@ -464,6 +474,7 @@ function makeCardManager(): WidgetCtor {
 							else wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
 						}
 						selected.clear();
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 						render();
 					});
 					return b;
@@ -485,6 +496,16 @@ function makeCardManager(): WidgetCtor {
 				else renderDocTree(body, visible);
 				wrap.appendChild(body);
 			};
+
+			// 事件总线：队列/导入变化 → 重建面板（评分、阅读操作、批量操作后即时刷新）
+			this._rerender = render;
+			if (!this._bound) {
+				this._bound = true;
+				events.bindComponentRefresh(
+					[events.EVENTS.QUEUE_CHANGED, events.EVENTS.IMPORT_DONE, events.EVENTS.CARD_CREATED],
+					() => this._rerender?.()
+				);
+			}
 
 			render();
 			parent.insertBefore(wrap, nextSibling);

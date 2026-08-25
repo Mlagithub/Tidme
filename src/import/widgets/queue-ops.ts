@@ -4,10 +4,12 @@ widgets/queue-ops.ts — 牌组批量操作（M4-T4）
 <$queue-ops/> 对每个 TidmeDeck 列出批量动作：
   顺延(7天) / 提前(今天) / 忽略(出队) / 搁置(暂停) / 恢复 / 遗忘(回新卡)
 动作基于 core scheduler 纯函数，对 deck.card 过滤出的卡片批量写字段。
+事件总线：操作后发 tm-tidme-queue-changed；监听队列变化重建列表（计数保持最新）。
 */
 
 declare function require(module: string): any;
 const sched = require("$:/plugins/tidme/core/scheduler.js");
+const events = require("$:/plugins/tidme/core/events.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
@@ -46,15 +48,13 @@ function makeQueueOps(): WidgetCtor {
 					const apply = (op: (f: Record<string, any>) => Record<string, any>, label: string) => {
 						const b = el(doc, "button", "", label);
 						b.addEventListener("click", () => {
-							let n = 0;
 							for (const title of cards) {
 								const t = wiki.getTiddler(title);
 								if (!t) continue;
 								wiki.addTiddler({ ...t.fields, ...op(t.fields) });
-								n++;
 							}
-							row.appendChild(el(doc, "span", "tm-import-muted", `✓ ${n}`));
-							b.setAttribute("disabled", "true");
+							events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+							renderList();
 						});
 						return b;
 					};
@@ -68,6 +68,13 @@ function makeQueueOps(): WidgetCtor {
 				}
 			};
 			renderList();
+
+			// 事件总线：队列变化 → 重建列表（计数保持最新）
+			this._rerender = renderList;
+			if (!this._bound) {
+				this._bound = true;
+				events.bindComponentRefresh([events.EVENTS.QUEUE_CHANGED], () => this._rerender?.());
+			}
 
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);

@@ -5,9 +5,11 @@ widgets/card-browser.ts — 侧边栏卡片浏览/管理器（树形）
   Deck（牌组）→ 文档（按 tidme.doc 分组）→ 卡片（按 tidme.breadcrumb 序 + 缩进）
 每张卡：状态标记（新/学习中/到期/搁置/已读）+ 打开 + 删除。
 折叠层级用 <details>（Deck、文档可展开/收起）。
+事件总线：监听队列/导入变化 → 重建树（评分、阅读操作、批量操作后即时更新）。
 */
 
 declare function require(module: string): any;
+const events = require("$:/plugins/tidme/core/events.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
@@ -45,11 +47,11 @@ function makeCardBrowser(): WidgetCtor {
 			const doc = this.document;
 			const wiki = this.wiki;
 			const wrap = el(doc, "div", "tm-card-browser");
-			wrap.appendChild(el(doc, "div", "tm-import-muted",
-				"状态：新 学=学习中 到=到期 ✓=已读 ⏸=搁置 · 摘/挖=摘录/挖空卡"));
 
 			const renderTree = () => {
 				wrap.textContent = "";
+				wrap.appendChild(el(doc, "div", "tm-import-muted",
+					"状态：新 学=学习中 到=到期 ✓=已读 ⏸=搁置 · 摘/挖=摘录/挖空卡"));
 				const decks = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]");
 				if (!decks.length) {
 					wrap.appendChild(el(doc, "div", "tm-import-muted", "暂无牌组——导入/切分后自动创建。"));
@@ -116,6 +118,7 @@ function makeCardBrowser(): WidgetCtor {
 							del.title = "删除卡片";
 							del.addEventListener("click", () => {
 								wiki.deleteTiddler(c.title);
+								events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 								renderTree();
 							});
 							row.appendChild(del);
@@ -128,6 +131,17 @@ function makeCardBrowser(): WidgetCtor {
 			};
 
 			renderTree();
+
+			// 事件总线：队列/导入变化 → 重建树
+			this._rerender = renderTree;
+			if (!this._bound) {
+				this._bound = true;
+				events.bindComponentRefresh(
+					[events.EVENTS.QUEUE_CHANGED, events.EVENTS.IMPORT_DONE, events.EVENTS.CARD_CREATED],
+					() => this._rerender?.()
+				);
+			}
+
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
 		}

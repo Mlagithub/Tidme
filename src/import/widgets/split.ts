@@ -9,6 +9,7 @@ widgets/split.ts — M2 切分入口组件（M4 加优先级三档）
 
 declare function require(module: string): any;
 const pipeline = require("$:/plugins/tidme/import/pipeline.js");
+const events = require("$:/plugins/tidme/core/events.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const SOURCE_TIDDLER = "$:/temp/tidme/split/source";
@@ -60,6 +61,8 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 	for (const c of cards) wiki.addTiddler(c);
 	const deck = r.tiddlers.find((x: any) => String(x.title).startsWith("$:/Deck/read/"));
 	if (deck) wiki.addTiddler(deck);
+	// 事件总线：切分完成（split-tool / paste-split / inbox-split 共用此出口）
+	events.dispatch(widget, events.EVENTS.IMPORT_DONE, { docId: r.docId, bookTitle: title });
 	return r;
 }
 

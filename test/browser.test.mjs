@@ -65,10 +65,10 @@ const fakeDocument = {
 	defaultView: null
 };
 
-let wiki, cardBrowser, queueOps, statsPanel, cardManager, sectionBar;
+let wiki, tw, cardBrowser, queueOps, statsPanel, cardManager, sectionBar;
 test.before(async () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-browser-"));
-	const tw = TiddlyWiki.TiddlyWiki();
+	tw = TiddlyWiki.TiddlyWiki();
 	tw.preloadTiddlerArray(plugins);
 	tw.boot.argv = [tmp];
 	tw.boot.boot();
@@ -237,4 +237,19 @@ test("section-bar: 即时刷新（本文档卡变化 → 重建）", () => {
 	assert.ok(text2.includes("✓ 已读"), "重建后显示已读状态");
 	assert.ok(text2.includes("↩ 重新加入"), "重建后显示重新加入按钮");
 	assert.ok(!text2.includes("✔ 已读"), "已读按钮消失");
+});
+
+test("事件总线: 队列变化通知 → 监听组件重建（stats-panel 数字更新）", async () => {
+	const events = tw.modules.execute("$:/plugins/tidme/core/events.js");
+	// 先渲染统计面板（注册事件监听）
+	const root = renderWidget(statsPanel, "stats-panel");
+	// 新导入第二本书（直接写库，模拟切分/导入落库）
+	const pipeline2 = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const r = await pipeline2.runSplit({ text: "# 第二本书\n\n第二章正文。", title: "第二本书", type: "text/markdown", minChars: 0 });
+	for (const t of r.tiddlers) wiki.addTiddler(t);
+	// 直接进程内通知（等价于 tm-tidme-* 消息经 rootWidget 桥接到达）
+	events.notifyTidme(events.EVENTS.IMPORT_DONE);
+	events.notifyTidme(events.EVENTS.QUEUE_CHANGED);
+	const text = collectText(root);
+	assert.ok(text.includes("第二本书"), "事件后统计面板重建，出现新书进度");
 });

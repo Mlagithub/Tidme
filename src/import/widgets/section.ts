@@ -13,6 +13,7 @@ widgets/section.ts — M3 阅读闭环组件 v3.2（Phase B）
 declare function require(module: string): any;
 const pipeline = require("$:/plugins/tidme/import/pipeline.js");
 const sched = require("$:/plugins/tidme/core/scheduler.js");
+const events = require("$:/plugins/tidme/core/events.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
@@ -246,6 +247,7 @@ function actionExtract(win: any) {
 	if (selection.length < 2) { notify("select-first"); return; }
 	CTX.widget.wiki.addTiddler(buildExtract(CTX.widget.wiki, tt, selection));
 	sel!.removeAllRanges();
+	events.dispatch(CTX.widget, events.EVENTS.CARD_CREATED, tt + " › 摘录");
 	navigate(tt);
 	notify("extract");
 }
@@ -265,6 +267,7 @@ function actionCloze(win: any) {
 	if (!fields) { notify("select-first"); return; }
 	CTX.widget.wiki.addTiddler(fields);
 	sel.removeAllRanges();
+	events.dispatch(CTX.widget, events.EVENTS.CARD_CREATED, tt + " › 挖空");
 	navigate(tt);
 	notify("cloze");
 }
@@ -417,10 +420,12 @@ function makeSectionBar(): WidgetCtor {
 				}
 				btnRow.appendChild(mkBtn("✔ 完成", "done", "读完此卡：移出学习队列", false, () => {
 					wiki.addTiddler(sched.doneCard(fields));
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					notify("done");
 				}));
 				btnRow.appendChild(mkBtn("🗑 删除", "del", "彻底删除此卡", false, () => {
 					wiki.deleteTiddler(title);
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 				}));
 				root.appendChild(btnRow);
 				return;
@@ -468,14 +473,18 @@ function makeSectionBar(): WidgetCtor {
 			if (isDone(fields)) {
 				btnRow.appendChild(mkBtn("↩ 重新加入", "undo", "恢复到学习队列", false, () => {
 					wiki.addTiddler(sched.restoreCard(fields));
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 				}));
 			} else {
 				btnRow.appendChild(mkBtn("✔ 已读", "done", "Done！读完此节，移出学习队列", false, () => {
 					// Done 语义：出队 = 去 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记
 					wiki.addTiddler(sched.doneCard(fields));
+					events.dispatch(this, events.EVENTS.SECTION_DONE, title);
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					// 撤销芯片：8 秒内可反悔（防止误触批量已读）；刷新后自动消失
 					const undo = mkBtn("↩ 撤销已读", "undo", "恢复到学习队列", false, () => {
 						wiki.addTiddler(sched.restoreCard(fields));
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 						undo.parentNode?.removeChild(undo);
 					});
 					btnRow.insertBefore(undo, btnRow.querySelector(".tm-bar-sep"));
@@ -491,6 +500,8 @@ function makeSectionBar(): WidgetCtor {
 				btnRow.appendChild(mkBtn("⏩", "later", "稍后再看：明确顺延 333 天（不是拖延，是排程）", false, () => {
 					const due = twDateString(new Date(Date.now() + 333 * 86400000));
 					wiki.addTiddler({ ...fields, due });
+					events.dispatch(this, events.EVENTS.SECTION_LATER, title);
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					const nxt = list.find((x) => x !== title && !isDone(wiki.getTiddler(x)?.fields));
 					if (nxt) {
 						this.dispatchEvent({ type: "tm-close-tiddler" });
@@ -596,6 +607,7 @@ function makeDocResume(): WidgetCtor {
 					back.addEventListener("click", () => {
 						const f = wiki.getTiddler(dt)?.fields;
 						if (f) wiki.addTiddler(sched.restoreCard(f));
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 						row.parentNode?.removeChild(row);
 					});
 					row.appendChild(back);
