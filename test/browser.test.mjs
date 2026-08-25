@@ -65,7 +65,7 @@ const fakeDocument = {
 	defaultView: null
 };
 
-let wiki, tw, cardBrowser, queueOps, statsPanel, cardManager, sectionBar, splitTool;
+let wiki, tw, cardBrowser, queueOps, statsPanel, cardManager, sectionBar, splitTool, importFile;
 test.before(async () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-browser-"));
 	tw = TiddlyWiki.TiddlyWiki();
@@ -283,6 +283,14 @@ test("doc-resume: 子集复习按钮（复习本书）", () => {
 	assert.ok(text.includes("继续阅读"), "继续阅读按钮");
 	assert.ok(text.includes("复习本书"), "子集复习按钮（G7）");
 	assert.ok(text.includes("已读"), "进度文案");
+});
+
+test("import-file: 服务端后台处理选项（G10）", () => {
+	// 需要 importFile 模块
+	if (!importFile) importFile = tw.modules.execute("$:/plugins/tidme/import/widgets/import.js");
+	const root = renderWidget(importFile, "import-file");
+	const text = collectText(root);
+	assert.ok(text.includes("服务端后台处理"), "服务端处理选项（G10）");
 });
 
 test("doc-resume: 摘录收件箱聚合（G4）", () => {

@@ -44,6 +44,17 @@ function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: str
 	};
 }
 
+/** Uint8Array → base64（浏览器 btoa；分块避免栈溢出） */
+function bytesToBase64(bytes: Uint8Array): string {
+	let bin = "";
+	const chunk = 0x8000;
+	for (let i = 0; i < bytes.length; i += chunk) {
+		bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+	}
+	if (typeof btoa === "function") return btoa(bin);
+	return bin; // 兜底（无 btoa 环境由服务端容错）
+}
+
 function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
 	const e = doc.createElement(tag);
 	if (cls) e.className = cls;
@@ -118,7 +129,53 @@ function makeFileWidget(): WidgetCtor {
 			const btnImport = el(doc, "button", "tc-btn-primary", "✔ 全部导入");
 			const btnClear = el(doc, "button", "", "清除");
 
+			// G10 服务端处理选项（TiddlyWeb）：大文件上传 → 服务端后台解析，不阻塞页面
+			const serverRow = el(doc, "div", "tm-import-server-row", "");
+			const serverCheck = doc.createElement("input");
+			serverCheck.type = "checkbox";
+			serverCheck.id = "tm-import-server-mode";
+			serverRow.appendChild(serverCheck);
+			serverRow.appendChild(el(doc, "label", "tm-import-muted",
+				"上传到服务端后台处理（适合大文件，解析不阻塞页面；需要 TiddlyWeb 服务端）"));
+			const serverStatus = el(doc, "div", "tm-import-muted", "");
+
 			const pending = new Map<string, { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean }>();
+
+			// G10 服务端上传：建 pending tiddler（server importer 契约）→ 轮询状态
+			const serverUpload = (file: File) => {
+				const row = el(doc, "div", "tm-import-row", "");
+				row.appendChild(el(doc, "strong", "", file.name));
+				const statusEl = el(doc, "span", "tm-import-muted", "排队中…");
+				row.appendChild(statusEl);
+				rowsBox.appendChild(row);
+				file.arrayBuffer().then((buf) => {
+					const b64 = bytesToBase64(new Uint8Array(buf));
+					const title = `$:/temp/tidme-import/pending/${Date.now()}-${file.name.replace(/[\\/:*?"<>|]/g, "_")}`;
+					this.wiki.addTiddler({
+						title,
+						tags: ["tidme-pending-import"],
+						"tidme.file-name": file.name,
+						"tidme.pending": "yes",
+						text: b64,
+						bag: getOptions(this.wiki).bag
+					});
+					statusEl.textContent = `已上传（${Math.round(b64.length / 1024)} KB base64），等待服务端处理…`;
+					const timer = setInterval(() => {
+						const t = this.wiki.getTiddler(title);
+						if (!t) { clearInterval(timer); statusEl.textContent = "⚠ 任务 tiddler 丢失"; return; }
+						if (t.fields["tidme.import-done"]) {
+							clearInterval(timer);
+							const secs = t.fields["tidme.import-sections"];
+							statusEl.textContent = `✓ 导入完成（docId ${t.fields["tidme.import-docId"] || "?"}${secs ? "，" + secs + " 节" : ""}）`;
+							events.dispatch(this, events.EVENTS.IMPORT_DONE, { docId: t.fields["tidme.import-docId"] });
+						} else if (t.fields["tidme.import-error"]) {
+							clearInterval(timer);
+							statusEl.textContent = `✕ 失败：${t.fields["tidme.import-error"]}`;
+						}
+					}, 2000);
+					setTimeout(() => clearInterval(timer), 20 * 60 * 1000); // 兜底超时
+				}).catch((e) => { statusEl.textContent = "✕ 读取文件失败：" + String(e.message || e); });
+			};
 
 			const refreshActions = () => {
 				actions.style.display = pending.size ? "" : "none";
@@ -152,6 +209,11 @@ function makeFileWidget(): WidgetCtor {
 				const accepted = files.filter((f) => /\.(epub|md|markdown|txt)$/i.test(f.name));
 				if (!accepted.length) {
 					this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/tidme/import/ui/notify-unsupported" });
+					return;
+				}
+				// G10 服务端处理模式：上传 → 后台解析（不预览、不阻塞）
+				if (serverCheck.checked) {
+					for (const file of accepted) serverUpload(file);
 					return;
 				}
 				let totalSections = 0;
@@ -199,6 +261,8 @@ function makeFileWidget(): WidgetCtor {
 
 			drop.appendChild(input);
 			wrap.appendChild(drop);
+			wrap.appendChild(serverRow);
+			wrap.appendChild(serverStatus);
 			wrap.appendChild(rowsBox);
 			wrap.appendChild(actions);
 			actions.appendChild(btnImport);

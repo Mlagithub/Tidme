@@ -33,6 +33,14 @@ tags: $:/tags/Stylesheet
 	gap: 0.5em;
 	margin-top: 0.5em;
 }
+/* G10 服务端后台处理选项 */
+.tm-import-server-row {
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+	margin: 6px 0 2px;
+	font-size: 0.92em;
+}
 .tm-section-bar {
 	display: flex;
 	flex-direction: column;
