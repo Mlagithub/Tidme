@@ -293,6 +293,34 @@ test("import-file: 服务端后台处理选项（G10）", () => {
 	assert.ok(text.includes("服务端后台处理"), "服务端处理选项（G10）");
 });
 
+test("align: 重复导入（A）——同内容再导入不覆盖 SRS 进度", async () => {
+	const pipeline2 = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const align = tw.modules.execute("$:/plugins/tidme/core/align.js");
+	// 首次切分并写库（minChars=0 保持两节独立）
+	const r1 = await pipeline2.runSplit({ text: "# 重导书\n\n甲内容。\n\n## 乙\n\n乙内容。", title: "重导书", type: "text/markdown", minChars: 0 });
+	for (const t of r1.tiddlers) wiki.addTiddler(t);
+	// 给「甲」节设 SRS 进度（第一节：面包屑 = 文档标题 › H1 标题）
+	const jia = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[section]tidme.breadcrumb[重导书 › 重导书]]`)[0]
+		|| wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[section]]`)[0];
+	assert.ok(jia, "找到甲节");
+	wiki.addTiddler({ ...wiki.getTiddler(jia).fields, state: "2", reps: "5", due: "20261231000000000" });
+	// 再次导入同一内容（模拟重复导入/剪藏更新）
+	const r2 = await pipeline2.runSplit({ text: "# 重导书\n\n甲内容。\n\n## 乙\n\n乙内容。", title: "重导书", type: "text/markdown", minChars: 0 });
+	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[section]!is[draft]]`)
+		.map((t) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
+	const sectionCards = r2.tiddlers.filter((x) => Array.isArray(x.tags) && x.tags.includes("?"));
+	const aligned = await align.alignCards(oldCards, "重导书", sectionCards.map((c) => ({ title: c.title, fields: c })));
+	// 内容全同 → 全部 unchanged，不新增/不更新/不归档
+	assert.equal(aligned.unchanged, 2, "两节全部未变");
+	assert.equal(aligned.keep.length, 0);
+	assert.equal(aligned.patches.length, 0);
+	assert.equal(aligned.archives.length, 0);
+	// SRS 进度保留（旧卡未被覆盖）
+	const after = wiki.getTiddler(jia).fields;
+	assert.equal(after.state, "2", "SRS state 保留");
+	assert.equal(after.reps, "5", "SRS reps 保留");
+});
+
 test("doc-resume: 摘录收件箱聚合（G4）", () => {
 	const root = renderWidget(sectionBar, "doc-resume", { variables: { currentTiddler: "书名甲" } });
 	const text = collectText(root);

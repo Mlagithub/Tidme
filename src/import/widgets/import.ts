@@ -181,12 +181,54 @@ function makeFileWidget(): WidgetCtor {
 				actions.style.display = pending.size ? "" : "none";
 			};
 
-			btnImport.addEventListener("click", () => {
-				let created = 0;
+			// A：落库单个解析结果。同 docId 已有旧卡 → alignCards 增量（未变保 SRS 进度 /
+			// 修改重挂接 / 新增建卡 / 删除归档），否则全量写库。返回 { created, updated, archived }。
+			const commitResult = async (result: ImportResult): Promise<{ created: number; updated: number; archived: number }> => {
+				const [doc, ...cards] = result.tiddlers;
+				const sectionCards = cards.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
+				const align = require("$:/plugins/tidme/core/align.js");
+				const docPage = this.wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${result.docId}]]`)[0] || "";
+				const oldCards = this.wiki.filterTiddlers(`[tidme.doc[${result.docId}]tidme.kind[section]!is[draft]]`)
+					.map((ot: string) => ({ title: ot, fields: this.wiki.getTiddler(ot)?.fields || {} }));
+
+				let aligned: any = null;
+				if (oldCards.length) {
+					aligned = await align.alignCards(oldCards, docPage || result.bookTitle,
+						sectionCards.map((c: any) => ({ title: c.title, fields: c })));
+					for (const k of aligned.keep) this.wiki.addTiddler({ ...k.fields });
+					for (const p of aligned.patches) {
+						const ex = this.wiki.getTiddler(p.title);
+						if (ex) this.wiki.addTiddler({ ...ex.fields, ...p.fields });
+					}
+					for (const at of aligned.archives) {
+						const ex = this.wiki.getTiddler(at);
+						if (!ex) continue;
+						const tags = Array.isArray(ex.fields.tags) ? ex.fields.tags.filter((x: string) => x !== "?") : [];
+						this.wiki.addTiddler({ ...ex.fields, tags, "tidme.obsolete": "yes" });
+					}
+				}
+				// 文档页：复用旧标题（引用稳定），更新索引内容
+				const docTitle = docPage || doc.title;
+				this.wiki.addTiddler({ ...doc, title: docTitle, "tidme.doc": result.docId });
+				if (docPage && docTitle !== doc.title) this.wiki.deleteTiddler(doc.title);
+				// 非对齐模式：全量写卡；对齐模式：keep 已写，其余同 key 旧卡已在库
+				if (!aligned) {
+					for (const c of cards) this.wiki.addTiddler({ ...c });
+				}
+				// 自动 deck 更新（按 docId 过滤，覆盖字段无 SRS 影响）
+				const deck = result.tiddlers.find((x: any) => String(x.title).startsWith("$:/Deck/read/"));
+				if (deck) this.wiki.addTiddler({ ...deck });
+				return aligned
+					? { created: aligned.keep.length, updated: aligned.patches.length, archived: aligned.archives.length }
+					: { created: cards.length, updated: 0, archived: 0 };
+			};
+
+			btnImport.addEventListener("click", async () => {
+				let created = 0, updated = 0, archived = 0;
 				for (const [token, item] of pending) {
 					if (!item.result) continue;
-					for (const t of item.result.tiddlers) this.wiki.addTiddler({ ...t });
-					created += item.result.tiddlers.length;
+					const r = await commitResult(item.result);
+					created += r.created; updated += r.updated; archived += r.archived;
 					pending.delete(token);
 				}
 				// 重绘预览区
@@ -196,6 +238,10 @@ function makeFileWidget(): WidgetCtor {
 				this.wiki.addTiddler({ title: "$:/temp/tidme-import/last-created", text: String(created) });
 				events.dispatch(this, events.EVENTS.IMPORT_DONE, { token: "", docId: "", bookTitle: "" });
 				this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/tidme/import/ui/notify-done" });
+				if (updated || archived) {
+					rowsBox.appendChild(el(doc, "div", "tm-import-summary tm-import-muted",
+						`—— 对齐：新增 ${created} · 更新 ${updated} · 归档 ${archived}（SRS 进度保留）`));
+				}
 			});
 			btnClear.addEventListener("click", () => {
 				pending.clear();

@@ -76,27 +76,55 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 					}
 					var result;
 					if (lower.endsWith(".epub") || /\.(md|markdown|txt|html?)$/.test(lower)) {
-						// 同步等待（pipeline 的 runImport 是 async；在 setImmediate 内用 then 链）
-						pipeline.runImport(bytes, fileName, { bag: $tw.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default" })
-							.then(function (r) {
-								for (var i = 0; i < r.tiddlers.length; i++) $tw.wiki.addTiddler(r.tiddlers[i]);
-								$tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
-									"tidme.pending": undefined,
-									"tidme.import-done": new Date().toISOString(),
-									"tidme.import-docId": r.docId,
-									text: String(t.fields.text || "")
-								}));
-								console.log("[tidme] import done:", fileName, r.sectionCount, "sections");
-								resolve();
-							})
-							.catch(function (err) {
-								$tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
-									"tidme.pending": undefined,
-									"tidme.import-error": String(err && err.message || err)
-								}));
-								console.error("[tidme] import failed:", fileName, err);
-								resolve();
-							});
+						// 落库执行器（runImport → 写库 → 标记 done/error）
+						var doImport = function (importBytes) {
+							pipeline.runImport(importBytes, fileName, { bag: $tw.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default" })
+								.then(function (r) {
+									for (var i = 0; i < r.tiddlers.length; i++) $tw.wiki.addTiddler(r.tiddlers[i]);
+									$tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
+										"tidme.pending": undefined,
+										"tidme.import-done": new Date().toISOString(),
+										"tidme.import-docId": r.docId,
+										text: String(t.fields.text || "")
+									}));
+									console.log("[tidme] import done:", fileName, r.sectionCount, "sections");
+									resolve();
+								})
+								.catch(function (err) {
+									$tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
+										"tidme.pending": undefined,
+										"tidme.import-error": String(err && err.message || err)
+									}));
+									console.error("[tidme] import failed:", fileName, err);
+									resolve();
+								});
+						};
+						// 语义切分（M6-T2）：仅 md/txt 无结构散文，LLM 断点插虚拟标题；失败静默回退
+						if (/\.(md|markdown|txt)$/.test(lower)) {
+							var semCfg = {};
+							try {
+								semCfg = JSON.parse($tw.wiki.getTiddlerText("$:/config/Tidme/SemanticSplit", "{}") || "{}");
+							} catch (e) { /* 忽略非法配置 */ }
+							if (semCfg && semCfg.enable === true) {
+								var semantic = require("$:/plugins/tidme/core/server/semantic-split.js");
+								var decoded = Buffer.from(bytes).toString("utf8");
+								semantic.prepareText(decoded, semCfg)
+									.then(function (r) {
+										if (r.usedBreaks > 0) {
+											console.log("[tidme] semantic split:", r.virtual, "virtual headings");
+											doImport(new Uint8Array(Buffer.from(r.text, "utf8")));
+										} else {
+											doImport(bytes);
+										}
+									})
+									.catch(function (err) {
+										console.error("[tidme] semantic split error, fallback:", err && err.message || err);
+										doImport(bytes);
+									});
+								return; // 异步分支已接管
+							}
+						}
+						doImport(bytes);
 					} else {
 						$tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
 							"tidme.pending": undefined,
