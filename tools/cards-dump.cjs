@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 const tw = TiddlyWiki.TiddlyWiki();
-tw.preloadTiddlerArray([JSON.parse(fs.readFileSync(path.resolve(__dirname, "../out-m2/$__plugins_tidme_fsrs4tw.json"), "utf8"))]);
+tw.preloadTiddlerArray([JSON.parse(fs.readFileSync(path.resolve(__dirname, "../out-m2/$__plugins_tidme_review.json"), "utf8"))]);
 tw.boot.argv = [path.resolve(__dirname, "../wiki/manual/index")];
 tw.boot.boot();
 const wiki = tw.wiki;

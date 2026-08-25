@@ -4,7 +4,7 @@ const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 
 const tw = TiddlyWiki.TiddlyWiki();
-tw.preloadTiddlerArray([JSON.parse(fs.readFileSync(path.resolve(__dirname, "../out-m2/$__plugins_tidme_fsrs4tw.json"), "utf8"))]);
+tw.preloadTiddlerArray([JSON.parse(fs.readFileSync(path.resolve(__dirname, "../out-m2/$__plugins_tidme_review.json"), "utf8"))]);
 tw.boot.argv = [path.resolve(__dirname, "../wiki/manual/index")];
 tw.boot.boot();
 const wiki = tw.wiki;
@@ -37,7 +37,7 @@ function grade(title) {
 	const d = cardsJsonOf(title);
 	console.log(`【${title}】Cards键=[${Object.keys(d.Cards || {})}]`);
 	if (!d.Cards) { console.log("  无 Cards → 无法评分"); return; }
-	const text = wiki.getTiddlerText("$:/plugins/tidme/fsrs4tw/buttons/action/repeat");
+	const text = wiki.getTiddlerText("$:/plugins/tidme/review/buttons/action/repeat");
 	for (const rating of ["Good"]) {
 		const widgetNode = wiki.makeWidget(text, {
 			variables: { studyTiddler: title, rating, cards_json: JSON.stringify(d), deckTiddler: DECK, leech_threshold: "8" },

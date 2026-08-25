@@ -14,7 +14,7 @@ import TiddlyWiki from "tiddlywiki";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginDir = path.resolve(here, "../out-m2");
-const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_fsrs4tw", "$__plugins_tidme_import", "$__plugins_tidme_manager", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
+const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_review", "$__plugins_tidme_import", "$__plugins_tidme_manager", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));

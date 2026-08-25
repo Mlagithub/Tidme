@@ -1,5 +1,5 @@
-[submodule "src/fsrs4tw"]
-	path = src/fsrs4tw
+[submodule "src/review"]
+	path = src/review
 	url = https://github.com/open-spaced-repetition/fsrs4tw.git
 [submodule "src/read"]
 	path = src/read

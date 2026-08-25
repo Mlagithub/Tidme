@@ -7,9 +7,9 @@ const pluginDir = path.resolve(__dirname, "../out-m2");
 function boot(withImport) {
 	const tw = TiddlyWiki.TiddlyWiki();
 	const loads = [];
-	for (const n of ["$__plugins_tidme_fsrs4tw", "$__plugins_tidme_import", "$__tidme_languages_zh-Hans"]) {
+	for (const n of ["$__plugins_tidme_review", "$__plugins_tidme_import", "$__tidme_languages_zh-Hans"]) {
 		const f = path.join(pluginDir, n + ".json");
-		if ((withImport || n.includes("fsrs4tw")) && fs.existsSync(f)) {
+		if ((withImport || n.includes("review")) && fs.existsSync(f)) {
 			loads.push(JSON.parse(fs.readFileSync(f, "utf8")));
 		}
 	}
@@ -84,5 +84,5 @@ function run(label, withImport) {
 	]) console.log((html.includes(needle) ? "  ✓ " : "  ✘ ") + name);
 }
 
-run("仅 fsrs4tw（对照组）", false);
-run("fsrs4tw + import（复现组）", true);
+run("仅 review（对照组）", false);
+run("review + import（复现组）", true);

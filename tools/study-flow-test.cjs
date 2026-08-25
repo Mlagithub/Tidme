@@ -13,7 +13,7 @@ const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 
 const pluginDir = path.resolve(__dirname, "../out-m2");
-const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_fsrs4tw", "$__plugins_tidme_import", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
+const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_review", "$__plugins_tidme_import", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
@@ -96,7 +96,7 @@ function startstudy() {
 	const random = `${filter_learn} [subfilter<filter_random>]`;
 	const order = deckFields.order || "due-new";
 	const filter_queue = order === "new-due" ? newDue : order === "random" ? random : dueNew;
-	runActions(wiki.getTiddlerText("$:/plugins/tidme/fsrs4tw/buttons/action/startstudy"), {
+	runActions(wiki.getTiddlerText("$:/plugins/tidme/review/buttons/action/startstudy"), {
 		deckTiddler: DECK, currentTiddler: DECK, filter_queue, filter_unfold
 	});
 	return (wiki.getTiddler(DECK + "/study") || { fields: { list: [] } }).fields.list;
@@ -107,7 +107,7 @@ function grade(studyTiddler, rating) {
 	const varWidget = makeVarsWidget({ studyTiddler, p: deckFields.p });
 	const cardsJson = wiki.filterTiddlers("[<studyTiddler>fsrs<p>]", varWidget)[0];
 	if (!cardsJson) throw new Error(`fsrs 过滤器无输出: ${studyTiddler}`);
-	runActions(wiki.getTiddlerText("$:/plugins/tidme/fsrs4tw/buttons/action/repeat"), {
+	runActions(wiki.getTiddlerText("$:/plugins/tidme/review/buttons/action/repeat"), {
 		studyTiddler, rating, cards_json: cardsJson, deckTiddler: DECK,
 		leech_threshold: String(deckFields.leech_threshold || 8)
 	});

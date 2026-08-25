@@ -4,7 +4,7 @@ const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 
 const pluginDir = path.resolve(__dirname, "../out-m2");
-const plugins = ["$__plugins_tidme_fsrs4tw"]
+const plugins = ["$__plugins_tidme_review"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));

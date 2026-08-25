@@ -9,7 +9,7 @@ const importFile = importIdx !== -1 ? args[importIdx + 1] : null;
 const clean = args.includes("--clean");
 
 const pluginDir = path.resolve(__dirname, "../out-m2");
-const plugins = ["$__plugins_tidme_fsrs4tw", "$__plugins_tidme_import"]
+const plugins = ["$__plugins_tidme_review", "$__plugins_tidme_import"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
