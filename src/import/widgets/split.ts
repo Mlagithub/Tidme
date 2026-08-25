@@ -36,7 +36,9 @@ function provenanceOf(wiki: any, title: string): Record<string, string> {
 	return out;
 }
 
-/** 执行切分并写库：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签） */
+/** 执行切分并写库：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签）。
+ * G2 对齐：若同 docId 已存在旧 Section 卡（重切分），走 alignCards 增量修补
+ * （未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档），而非全量重建。 */
 async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number, overrides?: any) {
 	const t = wiki.getTiddler(title);
 	if (!t) throw new Error("源 tiddler 不存在");
@@ -50,6 +52,32 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 	});
 	const [doc, ...cards] = r.tiddlers;
 	if (!cards.length) throw new Error("未切分出任何节（内容过短或无可识别结构）");
+	const sectionCards = cards.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
+
+	// G2 对齐：重切分已有文档时增量修补
+	const align = require("$:/plugins/tidme/core/align.js");
+	const docPage = wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${r.docId}]]`)[0] || "";
+	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r.docId}]tidme.kind[section]!is[draft]]`)
+		.map((ot: string) => ({ title: ot, fields: wiki.getTiddler(ot)?.fields || {} }));
+	let aligned: any = null;
+	if (oldCards.length) {
+		aligned = await align.alignCards(oldCards, docPage || title, sectionCards.map((c: any) => ({ title: c.title, fields: c })));
+		// 保留的新卡（新增节）写库
+		for (const k of aligned.keep) wiki.addTiddler({ ...k.fields });
+		// 更新补丁（内容变 / 顺序变）：保留旧 ID 与 SRS 进度
+		for (const p of aligned.patches) {
+			const existing = wiki.getTiddler(p.title);
+			if (existing) wiki.addTiddler({ ...existing.fields, ...p.fields });
+		}
+		// 归档：标记 obsolete + 出队（不硬删）
+		for (const at of aligned.archives) {
+			const existing = wiki.getTiddler(at);
+			if (!existing) continue;
+			const tags = Array.isArray(existing.fields.tags) ? existing.fields.tags.filter((x: string) => x !== "?") : [];
+			wiki.addTiddler({ ...existing.fields, tags, "tidme.obsolete": "yes" });
+		}
+	}
+
 	// 源 tiddler → 文档页：合并溯源字段、标签合并（去 tidme-inbox）
 	const srcFields = t.fields;
 	const srcTags = Array.isArray(srcFields.tags) ? srcFields.tags.filter((x: string) => x !== "tidme-inbox") : [];
@@ -63,7 +91,17 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 		...(srcFields["tidme.date"] ? { "tidme.date": srcFields["tidme.date"] } : {})
 	};
 	wiki.addTiddler(mergedDoc);
-	for (const c of cards) wiki.addTiddler(c);
+	if (!aligned) {
+		// 首次切分：全量写库
+		for (const c of cards) wiki.addTiddler(c);
+	} else {
+		// 对齐模式：非新增卡不重复写（keep 已写；同 key 旧卡已在库）
+		for (const c of cards) {
+			if (aligned.keep.some((k: any) => k.title === c.title)) continue;
+			// 该新卡与旧卡同 key 被丢弃（保留旧卡）；仅当其标题不在库中时才写（防御）
+			if (!wiki.getTiddler(c.title)) wiki.addTiddler(c);
+		}
+	}
 	const deck = r.tiddlers.find((x: any) => String(x.title).startsWith("$:/Deck/read/"));
 	if (deck) wiki.addTiddler(deck);
 	// 事件总线：切分完成（split-tool / paste-split / inbox-split 共用此出口）
