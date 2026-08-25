@@ -127,7 +127,7 @@ function makeFileWidget(): WidgetCtor {
 			const actions = el(doc, "div", "tm-import-actions");
 			actions.style.display = "none";
 			const btnImport = el(doc, "button", "tc-btn-primary", "✔ 全部导入");
-			const btnClear = el(doc, "button", "", "清除");
+			const btnClear = el(doc, "button", "tm-btn", "清除");
 
 			// G10 服务端处理选项（TiddlyWeb）：大文件上传 → 服务端后台解析，不阻塞页面
 			const serverRow = el(doc, "div", "tm-import-server-row", "");

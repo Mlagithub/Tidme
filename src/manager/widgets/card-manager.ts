@@ -260,11 +260,19 @@ function makeCardManager(): WidgetCtor {
 				});
 			};
 
+			/** 空状态（P0：tm-empty 组件） */
+			const emptyEl = (text: string, icon = "🗂") => {
+				const e = el(doc, "div", "tm-empty", "");
+				e.appendChild(el(doc, "div", "tm-empty-icon", icon));
+				e.appendChild(el(doc, "div", "", text));
+				return e;
+			};
+
 			/** 树形：按文档组织（全量，默认） */
 			const renderDocTree = (treeBox: HTMLElement, cards: Card[]) => {
 				const groups = docGroupsOf(cards);
 				if (!groups.length) {
-					treeBox.appendChild(el(doc, "div", "tm-import-muted", "当前视图下没有卡片。"));
+					treeBox.appendChild(emptyEl("当前视图下没有卡片。"));
 					return;
 				}
 				for (const [key, docCards] of groups) {
@@ -285,8 +293,7 @@ function makeCardManager(): WidgetCtor {
 			/** 树形：按牌组组织（牌组分支 + 未入组兜底） */
 			const renderDeckTree = (treeBox: HTMLElement, cards: Card[]) => {
 				if (!deckInfos.length) {
-					treeBox.appendChild(el(doc, "div", "tm-import-muted",
-						"暂无牌组——导入/切分后自动创建。未入组卡片见下方「未入组」分支。"));
+					treeBox.appendChild(emptyEl("暂无牌组——导入/切分后自动创建。未入组卡片见下方「未入组」分支。", "🃏"));
 				}
 				for (const d of deckInfos) {
 					const deckCards = cards.filter((c) => d.strict.has(c.title));
@@ -442,7 +449,7 @@ function makeCardManager(): WidgetCtor {
 				listBox.appendChild(head);
 
 				if (!cards.length) {
-					listBox.appendChild(el(doc, "div", "tm-import-muted", "当前视图下没有卡片。"));
+					listBox.appendChild(emptyEl("当前视图下没有卡片。"));
 					return;
 				}
 				const sorted = [...cards].sort(cmpCards);
@@ -519,7 +526,7 @@ function makeCardManager(): WidgetCtor {
 				commentInput.value = String(f["tidme.comment"] || "");
 				commentInput.placeholder = "注释（tidme.comment）";
 				row("注释", commentInput);
-				const save = el(doc, "button", "tm-cm-op", "✔ 保存");
+				const save = el(doc, "button", "tm-btn tm-btn--primary", "✔ 保存");
 				save.addEventListener("click", () => {
 					const patch: Record<string, any> = {};
 					const dueVal = String(dueInput.value || "").trim();
@@ -538,7 +545,7 @@ function makeCardManager(): WidgetCtor {
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					render();
 				});
-				const cancel = el(doc, "button", "tm-cm-op", "取消");
+				const cancel = el(doc, "button", "tm-btn", "取消");
 				cancel.addEventListener("click", () => { editTitle = null; render(); });
 				const r = el(doc, "div", "tm-cm-edit-row");
 				r.appendChild(save);
@@ -557,7 +564,7 @@ function makeCardManager(): WidgetCtor {
 				for (const v of VIEWS) {
 					const count = v.id === "all" ? allCards.length
 						: allCards.filter((c) => inView(c.fields, v.id)).length;
-					const b = el(doc, "button", "tm-cm-view" + (view === v.id ? " tm-cm-view-active" : ""),
+					const b = el(doc, "button", "tm-btn" + (view === v.id ? " tm-btn--active" : ""),
 						`${v.label}(${count})`);
 					b.addEventListener("click", () => { view = v.id; render(); });
 					viewRow.appendChild(b);
@@ -567,19 +574,19 @@ function makeCardManager(): WidgetCtor {
 				// 组织方式切换
 				const orgRow = el(doc, "div", "tm-cm-orgs");
 				for (const o of ORGS) {
-					const b = el(doc, "button", "tm-cm-org" + (org === o.id ? " tm-cm-org-active" : ""), o.label);
+					const b = el(doc, "button", "tm-btn" + (org === o.id ? " tm-btn--active" : ""), o.label);
 					b.title = o.tip;
 					b.addEventListener("click", () => { org = o.id; render(); });
 					orgRow.appendChild(b);
 				}
 				wrap.appendChild(orgRow);
 
-				// 批量工具条
+				// 批量工具条（分组：调度 / 状态 / 危险）
 				const bar = el(doc, "div", "tm-cm-bar");
 				bar.appendChild(el(doc, "span", "tm-import-muted",
 					selected.size ? `已选 ${selected.size} 张` : "勾选卡片后可批量操作"));
 				const batch = (label: string, apply: (f: Record<string, any>) => Record<string, any>, destructive = false) => {
-					const b = el(doc, "button", "", label);
+					const b = el(doc, "button", "tm-btn" + (destructive ? " tm-btn--danger" : ""), label);
 					b.addEventListener("click", () => {
 						for (const title of selected) {
 							const t = wiki.getTiddler(title);
@@ -595,10 +602,10 @@ function makeCardManager(): WidgetCtor {
 				};
 				bar.appendChild(batch("顺延7d", (f) => sched.postponeCard(f, 7)));
 				bar.appendChild(batch("提前", () => sched.advanceCard()));
+				bar.appendChild(batch("遗忘", () => sched.forgetCard()));
 				bar.appendChild(batch("移出队列", (f) => doneFields(f)));
 				bar.appendChild(batch("搁置", () => sched.suspendCard()));
 				bar.appendChild(batch("恢复", (f) => resumeFields(f)));
-				bar.appendChild(batch("遗忘", () => sched.forgetCard()));
 				bar.appendChild(batch("删除", () => ({} as Record<string, any>), true));
 				wrap.appendChild(bar);
 

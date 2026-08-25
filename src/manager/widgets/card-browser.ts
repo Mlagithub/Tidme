@@ -54,7 +54,10 @@ function makeCardBrowser(): WidgetCtor {
 					"状态：新 学=学习中 到=到期 ✓=已读 ⏸=搁置 · 摘/挖=摘录/挖空卡"));
 				const decks = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]");
 				if (!decks.length) {
-					wrap.appendChild(el(doc, "div", "tm-import-muted", "暂无牌组——导入/切分后自动创建。"));
+					const empty = el(doc, "div", "tm-empty", "");
+					empty.appendChild(el(doc, "div", "tm-empty-icon", "🃏"));
+					empty.appendChild(el(doc, "div", "", "暂无牌组——导入/切分后自动创建。"));
+					wrap.appendChild(empty);
 					return;
 				}
 				for (const deck of decks) {

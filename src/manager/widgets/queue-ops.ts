@@ -35,7 +35,7 @@ function makeQueueOps(): WidgetCtor {
 			// G8 手动触发 auto-postpone（服务端每日自动执行，此处为手动兜底）
 			const autoRow = el(doc, "div", "tm-import-actions", "");
 			const autoStatus = el(doc, "span", "tm-import-muted", "");
-			const runAuto = el(doc, "button", "tm-sec-btn", "⚡ 立即顺延（auto-postpone）");
+			const runAuto = el(doc, "button", "tm-btn tm-btn--primary", "⚡ 立即顺延（auto-postpone）");
 			runAuto.title = "手动触发：低优先级逾期卡顺延 postponeDays 天，保留 top N 高优先级（配置见 $:/config/Tidme/AutoPostpone）";
 			runAuto.addEventListener("click", () => {
 				let cfg: any = {};
@@ -63,7 +63,10 @@ function makeQueueOps(): WidgetCtor {
 				list.textContent = "";
 				const decks = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]");
 				if (!decks.length) {
-					list.appendChild(el(doc, "div", "tm-import-muted", "暂无牌组。"));
+					const empty = el(doc, "div", "tm-empty", "");
+					empty.appendChild(el(doc, "div", "tm-empty-icon", "🃏"));
+					empty.appendChild(el(doc, "div", "", "暂无牌组。"));
+					list.appendChild(empty);
 					return;
 				}
 				for (const deck of decks) {
@@ -71,7 +74,7 @@ function makeQueueOps(): WidgetCtor {
 					const row = el(doc, "div", "tm-import-row");
 					row.appendChild(el(doc, "strong", "", `${deck}（${cards.length} 卡）`));
 					const apply = (op: (f: Record<string, any>) => Record<string, any>, label: string) => {
-						const b = el(doc, "button", "", label);
+						const b = el(doc, "button", "tm-btn", label);
 						b.addEventListener("click", () => {
 							for (const title of cards) {
 								const t = wiki.getTiddler(title);

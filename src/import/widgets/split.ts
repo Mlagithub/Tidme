@@ -246,7 +246,7 @@ function makeSplitTool(): WidgetCtor {
 			};
 
 			const opBtn = (label: string, onClick: () => void) => {
-				const b = el(doc, "button", "tm-split-op", label);
+				const b = el(doc, "button", "tm-btn tm-btn-icon", label);
 				b.addEventListener("click", onClick);
 				return b;
 			};
