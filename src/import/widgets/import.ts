@@ -62,46 +62,56 @@ function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElemen
 	return e;
 }
 
-/** 单本书的预览行：✔/✘、统计、可展开的目录大纲 */
+/** 单本书的预览卡片（P1）：标题行 + 状态 + 树形目录大纲 */
 function buildRow(doc: Document, token: string, resultOrErr: { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean }): HTMLElement {
-	const row = el(doc, "div", "tm-import-row");
+	const card = el(doc, "div", "tm-import-file-card");
 	const err = resultOrErr.error;
 	if (err) {
-		row.classList.add("tm-import-error");
-		row.appendChild(el(doc, "span", "", "✘ " + resultOrErr.fileName + " — " + err));
-		return row;
+		card.classList.add("tm-import-file-card-err");
+		card.appendChild(el(doc, "div", "tm-import-file-head",
+			`✘ ${resultOrErr.fileName} — ${err}`));
+		card.dataset.token = token;
+		return card;
 	}
 	const r = resultOrErr.result!;
-	const head = el(doc, "div", "");
-	const mark = el(doc, "strong", "", "✔ " + r.bookTitle);
-	head.appendChild(mark);
-	head.appendChild(el(doc, "span", "tm-import-muted",
-		`　(${r.format} · ${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? " · 标题去重 " + r.warnings.length : ""})`));
-	row.appendChild(head);
+	// 标题行：书名 + 格式徽章 + 统计
+	const head = el(doc, "div", "tm-import-file-head");
+	const title = el(doc, "span", "tm-import-file-title", r.bookTitle);
+	head.appendChild(title);
+	head.appendChild(el(doc, "span", "tm-import-file-badge", r.format));
+	head.appendChild(el(doc, "span", "tm-import-file-meta",
+		`${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? " · 标题去重 " + r.warnings.length : ""}`));
+	card.appendChild(head);
 
 	if (resultOrErr.duplicate) {
-		row.appendChild(el(doc, "div", "tm-import-dup", "⚠ 本书已在库中 —— 再次导入将以相同内容覆盖同名卡片（进度字段保留）"));
+		card.appendChild(el(doc, "div", "tm-import-dup", "⚠ 本书已在库中 —— 再次导入将走对齐（未变节保留 SRS 进度）"));
 	}
 
-	// 目录大纲（前 20 条，按层级缩进；标注合并/续切）
+	// 树形目录大纲（P1：缩进引导线替代 <pre>）
 	const crumbs = r.tiddlers
 		.filter((t) => Array.isArray(t.tags) && t.tags.includes("?"))
-		.map((t) => {
-			const bc = String(t["tidme.breadcrumb"] || "");
-			const segs = bc.split(" › ");
-			let line = "　".repeat(Math.max(0, segs.length - 2)) + segs[segs.length - 1];
-			if (t["tidme.merged"]) line += " ⟵已并入上一节";
-			return line;
-		});
+		.map((t) => ({
+			path: String(t["tidme.breadcrumb"] || ""),
+			merged: t["tidme.merged"] === "yes",
+			level: Math.max(0, String(t["tidme.breadcrumb"] || "").split(" › ").length - 2)
+		}));
 	if (crumbs.length) {
 		const details = el(doc, "details", "tm-import-outline");
-		details.appendChild(el(doc, "summary", "tm-import-muted", `目录大纲（前 ${Math.min(20, crumbs.length)} / ${crumbs.length} 条）`));
-		const pre = el(doc, "pre", "tm-import-outline-pre", crumbs.slice(0, 20).join("\n"));
-		details.appendChild(pre);
-		row.appendChild(details);
+		details.appendChild(el(doc, "summary", "tm-import-muted",
+			`目录大纲（前 ${Math.min(20, crumbs.length)} / ${crumbs.length} 条）`));
+		const tree = el(doc, "div", "tm-import-tree", "");
+		for (const c of crumbs.slice(0, 20)) {
+			const line = el(doc, "div", "tm-import-tree-row" + (c.merged ? " tm-import-tree-merged" : ""));
+			line.style.paddingLeft = `${c.level * 1.1}em`;
+			line.appendChild(el(doc, "span", "tm-import-tree-text", c.path.split(" › ").pop() || c.path));
+			if (c.merged) line.appendChild(el(doc, "span", "tm-import-tree-mark", "⟵ 已并入"));
+			tree.appendChild(line);
+		}
+		details.appendChild(tree);
+		card.appendChild(details);
 	}
-	row.dataset.token = token;
-	return row;
+	card.dataset.token = token;
+	return card;
 }
 
 function makeFileWidget(): WidgetCtor {

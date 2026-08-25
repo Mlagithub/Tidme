@@ -69,6 +69,165 @@ tags: $:/tags/Stylesheet
 .tm-toast--ok { border-color: #22c55e; color: #15803d; }
 .tm-toast--err { border-color: <<colour danger>>; color: <<colour danger>>; }
 
+/* 统计面板（P1：指标卡 / 表格 / 进度条 / 漏斗横条） */
+.tm-stat-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(7em, 1fr));
+	gap: var(--tm-gap-lg);
+	margin: 8px 0;
+}
+.tm-stat-card {
+	border: 1px solid <<colour muted-foreground>>;
+	border-radius: var(--tm-radius);
+	padding: 8px 10px;
+	text-align: center;
+	background: <<colour very-light-background>>;
+}
+.tm-stat-num {
+	font-size: 1.6em;
+	font-weight: 600;
+	line-height: 1.2;
+}
+.tm-stat-label {
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+.tm-stat-sub {
+	font-size: 0.8em;
+	opacity: 0.6;
+}
+.tm-stats-table {
+	border-collapse: collapse;
+	width: 100%;
+	font-size: 0.92em;
+}
+.tm-stats-table th,
+.tm-stats-table td {
+	border-bottom: 1px solid <<colour muted-foreground>>;
+	padding: 3px 8px;
+	text-align: left;
+}
+.tm-stats-table th {
+	opacity: 0.7;
+	font-weight: 500;
+}
+.tm-stats-table tr:nth-child(even) td {
+	background: <<colour very-light-background>>;
+}
+.tm-stats-num-cell {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.tm-stats-deck {
+	max-width: 14em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.tm-stat-doc {
+	justify-content: flex-start;
+}
+.tm-stat-bar {
+	display: inline-block;
+	width: 8em;
+	height: 8px;
+	border-radius: 4px;
+	background: <<colour muted-foreground>>;
+	opacity: 0.25;
+	vertical-align: middle;
+}
+.tm-stat-bar-lg {
+	width: 12em;
+}
+.tm-stat-bar-fill {
+	display: block;
+	height: 100%;
+	border-radius: 4px;
+	background: <<colour primary>>;
+}
+.tm-stat-funnel-row {
+	display: flex;
+	align-items: center;
+	gap: var(--tm-gap-lg);
+	margin: 3px 0;
+	font-size: 0.92em;
+}
+.tm-stat-funnel-label {
+	min-width: 3em;
+	opacity: 0.8;
+}
+.tm-stat-funnel-num {
+	min-width: 2em;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+/* 导入中心文件卡片（P1） */
+.tm-import-file-card {
+	border: 1px solid <<colour muted-foreground>>;
+	border-radius: var(--tm-radius);
+	padding: 6px 10px;
+	margin: 6px 0;
+	background: <<colour background>>;
+}
+.tm-import-file-card-err {
+	border-color: <<colour danger>>;
+	opacity: 0.8;
+}
+.tm-import-file-head {
+	display: flex;
+	align-items: center;
+	gap: var(--tm-gap-lg);
+	flex-wrap: wrap;
+}
+.tm-import-file-title {
+	font-weight: 600;
+}
+.tm-import-file-badge {
+	font-size: 0.75em;
+	padding: 0 6px;
+	border: 1px solid <<colour muted-foreground>>;
+	border-radius: 3px;
+	opacity: 0.75;
+	text-transform: uppercase;
+}
+.tm-import-file-meta {
+	font-size: 0.85em;
+	opacity: 0.65;
+}
+/* 树形目录大纲 */
+.tm-import-tree {
+	margin: 4px 0 2px;
+	max-height: 14em;
+	overflow: auto;
+}
+.tm-import-tree-row {
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+	border-left: 2px solid <<colour muted-foreground>>;
+	opacity: 0.85;
+	padding-left: 0.5em;
+	margin-left: 0.2em;
+	font-size: 0.9em;
+}
+.tm-import-tree-row:hover {
+	opacity: 1;
+}
+.tm-import-tree-merged {
+	border-left-color: #94a3b8;
+	background: var(--tm-mark-merged);
+}
+.tm-import-tree-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.tm-import-tree-mark {
+	font-size: 0.8em;
+	opacity: 0.6;
+}
+
 .tm-import-panel {
 	margin-top: 0.5em;
 }
@@ -221,10 +380,19 @@ mark.tm-readpoint {
 	padding: 2px 0;
 	flex-wrap: wrap;
 	font-size: 0.92em;
+	border-left: 2px solid <<colour muted-foreground>>;
+	opacity: 0.9;
 }
 .tm-split-row-merged {
-	background: <<colour very-light-background>>;
-	border-radius: 3px;
+	background: var(--tm-mark-merged);
+	border-left-color: #94a3b8;
+}
+.tm-split-row-cont {
+	border-left-color: #f59e0b;
+}
+.tm-split-row-tuned {
+	border-left-color: <<colour primary>>;
+	background: var(--tm-mark-split);
 }
 .tm-split-mark {
 	font-size: 0.8em;

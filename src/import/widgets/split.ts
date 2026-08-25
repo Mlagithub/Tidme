@@ -186,7 +186,12 @@ function makeSplitTool(): WidgetCtor {
 						const parts: any[] = s.parts || [];
 						const isContainer = s.merged === true && parts.length > 1;
 						const splittable = parts.findIndex((p, i) => i > 0 && p.title) > 0;
-						const row = el(doc, "div", "tm-split-row" + (isContainer ? " tm-split-row-merged" : ""));
+						// 状态类（P1：合并灰 / 续段橙 / 干预蓝）
+						const cls = "tm-split-row"
+							+ (isContainer ? " tm-split-row-merged" : "")
+							+ (s.isContinuation ? " tm-split-row-cont" : "")
+							+ (overrides.merge.has(key) || overrides.split.has(key) ? " tm-split-row-tuned" : "");
+						const row = el(doc, "div", cls);
 						const depth = Math.max(0, (s.trail || []).length - 1);
 						row.style.paddingLeft = `${depth * 1.1}em`;
 						// 状态徽章
