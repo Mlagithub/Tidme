@@ -597,6 +597,8 @@ function makeCardManager(): WidgetCtor {
 				wrap.textContent = "";
 				collectAll();
 
+				// 工具栏（sticky：视图/组织/批量操作固定在顶部）
+				const toolbar = el(doc, "div", "tm-cm-toolbar");
 				// 视图过滤按钮（计数 = 该子集实际卡数）
 				const viewRow = el(doc, "div", "tm-cm-views");
 				for (const v of VIEWS) {
@@ -607,7 +609,7 @@ function makeCardManager(): WidgetCtor {
 					b.addEventListener("click", () => { view = v.id; render(); });
 					viewRow.appendChild(b);
 				}
-				wrap.appendChild(viewRow);
+				toolbar.appendChild(viewRow);
 
 				// 组织方式切换
 				const orgRow = el(doc, "div", "tm-cm-orgs");
@@ -617,7 +619,7 @@ function makeCardManager(): WidgetCtor {
 					b.addEventListener("click", () => { org = o.id; render(); });
 					orgRow.appendChild(b);
 				}
-				wrap.appendChild(orgRow);
+				toolbar.appendChild(orgRow);
 
 				// 批量工具条（分组：调度 / 状态 / 危险）
 				const bar = el(doc, "div", "tm-cm-bar");
@@ -658,7 +660,8 @@ function makeCardManager(): WidgetCtor {
 				bar.appendChild(batch("搁置", () => sched.suspendCard()));
 				bar.appendChild(batch("恢复", (f) => resumeFields(f)));
 				bar.appendChild(batch("删除", () => ({} as Record<string, any>), true));
-				wrap.appendChild(bar);
+				toolbar.appendChild(bar);
+				wrap.appendChild(toolbar);
 
 				// 主体：按组织方式渲染
 				const body = el(doc, "div", "tm-cm-body");

@@ -391,6 +391,36 @@ function makeSectionBar(): WidgetCtor {
 
 			parent.insertBefore(root, nextSibling);
 			this.domNodes.push(root);
+
+			// 制卡按钮置灰（B：未在本文档选中文字时禁用摘录/挖空）——监听选区变化实时更新
+			if (!this._selBound) {
+				this._selBound = true;
+				const win = (doc as any).defaultView || globalThis;
+				if (win && typeof win.addEventListener === "function") {
+					win.addEventListener("selectionchange", () => this._syncPick_());
+				}
+				this._syncPick_();
+			}
+		}
+
+		/** 更新制卡按钮可用性：仅当选区位于本文档（data-tiddler-title 匹配）且未折叠时启用 */
+		_syncPick_() {
+			const btns: any[] = this._pickBtns || [];
+			if (!btns.length) return;
+			const win = (this.document as any).defaultView || globalThis;
+			const sel = win?.getSelection?.();
+			let hasSel = false;
+			if (sel && !sel.isCollapsed && sel.anchorNode) {
+				let n: any = sel.anchorNode;
+				while (n) {
+					if (n.getAttribute && n.getAttribute("data-tiddler-title") === this._title) { hasSel = true; break; }
+					n = n.parentNode;
+				}
+			}
+			for (const b of btns) {
+				if (hasSel) b.removeAttribute("disabled");
+				else b.setAttribute("disabled", "true");
+			}
 		}
 
 		build() {
@@ -581,9 +611,12 @@ function makeSectionBar(): WidgetCtor {
 
 			sep();
 
-			// 制卡
-			btnRow.appendChild(mkBtn("摘录", "extract", "摘录制卡 (Alt+X)", false, () => actionExtract(win)));
-			btnRow.appendChild(mkBtn("挖空", "cloze", "挖空制卡 (Alt+Z)", false, () => actionCloze(win)));
+			// 制卡（需选中文字；未选中时置灰，选中后自动启用）
+			const extractBtn = mkBtn("摘录", "extract", "摘录制卡 (Alt+X)：先选中文字", true, () => actionExtract(win));
+			const clozeBtn = mkBtn("挖空", "cloze", "挖空制卡 (Alt+Z)：先选中文字", true, () => actionCloze(win));
+			this._pickBtns = [extractBtn, clozeBtn];
+			btnRow.appendChild(extractBtn);
+			btnRow.appendChild(clozeBtn);
 
 			// G2 优先级快速调整（对标 SM Alt+P / Shift+Ctrl+↑↓）：数值减小 = 升优先
 			if (priVal !== undefined) {

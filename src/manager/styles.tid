@@ -88,6 +88,16 @@ tags: [[$:/tags/Stylesheet]]
 .tm-card-manager {
 	font-size: 0.95em;
 }
+.tm-cm-toolbar {
+	position: sticky;
+	top: 0;
+	z-index: 60;
+	background: var(--tm-surface);
+	padding: 8px 0 10px;
+	margin-bottom: 6px;
+	border-bottom: 1px solid var(--tm-border);
+	box-shadow: 0 2px 8px rgba(17, 24, 39, 0.05);
+}
 .tm-cm-views {
 	display: flex;
 	gap: 0.5em;
