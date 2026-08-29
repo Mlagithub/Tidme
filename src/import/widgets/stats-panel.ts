@@ -105,33 +105,44 @@ function makeStatsPanel(): WidgetCtor {
 				deckWrap.appendChild(deckTable);
 				wrap.appendChild(deckWrap);
 
-				// 2) 文档进度
+				// 2) 文档进度（表格）
 				wrap.appendChild(sectionTitle(doc, "文档进度"));
-				const docList = el(doc, "div", "", "");
+				const docWrap = el(doc, "div", "tm-table-wrap");
+				const docTable = el(doc, "table", "tm-table", "");
+				const dthead = el(doc, "thead", "");
+				const dhtr = el(doc, "tr", "");
+				for (const h of ["文档", "进度", "已读"]) dhtr.appendChild(el(doc, "th", "", h));
+				dthead.appendChild(dhtr);
+				docTable.appendChild(dthead);
+				const dtbody = el(doc, "tbody", "");
 				if (!docs.length) {
-					const empty = el(doc, "div", "tm-empty", "");
-					empty.appendChild(el(doc, "div", "tm-empty-icon", "📚"));
-					empty.appendChild(el(doc, "div", "", "暂无导入文档——导入中心导入书籍后显示进度。"));
-					docList.appendChild(empty);
+					const tr0 = el(doc, "tr", "");
+					const td0 = el(doc, "td", "tm-import-muted", "暂无导入文档——导入中心导入书籍后显示进度。");
+					td0.setAttribute("colspan", "3");
+					tr0.appendChild(td0);
+					dtbody.appendChild(tr0);
 				}
 				for (const d of docs) {
 					const docId = wiki.getTiddler(d)?.fields["tidme.doc"];
 					if (!docId) continue;
 					const sections = cardLikes(`[tidme.doc[${docId}]tidme.kind[section]]`);
 					const p = stats.docProgress(sections);
-					const row = el(doc, "div", "tm-stat-doc tm-doc-prog-row");
-					const label = el(doc, "span", "tm-stat-doc-name", d);
-					row.appendChild(label);
+					const tr = el(doc, "tr", "");
+					tr.appendChild(el(doc, "td", "tm-stat-doc-name", d));
+					const progTd = el(doc, "td", "", "");
 					const barWrap = el(doc, "span", "tm-progress tm-stat-bar");
 					const bar = el(doc, "span", "tm-progress-fill", "");
 					bar.style.width = p.total ? `${Math.round((p.done / p.total) * 100)}%` : "0%";
 					barWrap.appendChild(bar);
-					row.appendChild(barWrap);
-					row.appendChild(el(doc, "span", "tm-import-muted",
+					progTd.appendChild(barWrap);
+					tr.appendChild(progTd);
+					tr.appendChild(el(doc, "td", "tm-import-muted",
 						`已读 ${p.done} / ${p.total}（剩 ${p.left}）`));
-					docList.appendChild(row);
+					dtbody.appendChild(tr);
 				}
-				wrap.appendChild(docList);
+				docTable.appendChild(dtbody);
+				docWrap.appendChild(docTable);
+				wrap.appendChild(docWrap);
 
 				// 3) 漏斗
 				wrap.appendChild(sectionTitle(doc, "漏斗"));

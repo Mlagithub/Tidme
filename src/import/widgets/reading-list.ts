@@ -206,39 +206,57 @@ function makeReadingList(): any {
 				sum.appendChild(cont);
 				det.appendChild(sum);
 
-				// 卡片行（compact：只留标题与 kind）
-				const list = el(doc, "div", "tm-rl-cards");
+				// 卡片表格（列式紧凑，避免竖排条目拉长页面；compact 只留 类型/标题 两列）
+				const table = el(doc, "table", "tm-rl-table");
+				const thead = el(doc, "thead", "");
+				const htr = el(doc, "tr", "");
+				htr.appendChild(el(doc, "th", "", ""));
+				htr.appendChild(el(doc, "th", "", "卡片"));
+				if (!compact) {
+					htr.appendChild(el(doc, "th", "", "优先"));
+					htr.appendChild(el(doc, "th", "", "状态"));
+				}
+				thead.appendChild(htr);
+				table.appendChild(thead);
+				const tbody = el(doc, "tbody", "");
 				for (const c of g.cards) {
-					const row = el(doc, "div", "tm-rl-row");
+					const tr = el(doc, "tr", "tm-rl-row");
+					const kindTd = el(doc, "td", "", "");
 					const mark = el(doc, "span",
 						c.kind === "extract" ? "tm-rl-kind tm-rl-kind-extract" : "tm-rl-kind",
 						c.kind === "extract" ? "摘" : "节");
 					mark.title = c.kind === "extract" ? "摘录卡（阅读材料）" : "节卡（阅读单元）";
-					row.appendChild(mark);
+					kindTd.appendChild(mark);
+					tr.appendChild(kindTd);
 
-					const title = el(doc, "a", "tc-tiddlylink tm-rl-title", c.title);
-					title.href = "#";
-					title.title = "打开阅读";
-					title.addEventListener("click", (e: Event) => {
+					const titleTd = el(doc, "td", "", "");
+					const titleLink = el(doc, "a", "tc-tiddlylink tm-rl-title", c.title);
+					titleLink.href = "#";
+					titleLink.title = "打开阅读";
+					titleLink.addEventListener("click", (e: Event) => {
 						e.preventDefault(); e.stopPropagation();
 						this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
 					});
-					row.appendChild(title);
+					titleTd.appendChild(titleLink);
+					tr.appendChild(titleTd);
 
 					if (!compact) {
-						const pri = el(doc, "span", "tm-rl-pri", `P${c.priority}`);
-						pri.title = `优先级 ${c.priority}（0 最高）`;
-						row.appendChild(pri);
+						const priTd = el(doc, "td", "tm-rl-pri", `P${c.priority}`);
+						priTd.title = `优先级 ${c.priority}（0 最高）`;
+						tr.appendChild(priTd);
+						const dueTd = el(doc, "td", "", "");
 						const dueTxt = dueLabel(c);
 						if (dueTxt) {
 							const badge = el(doc, "span", "tm-rl-due", dueTxt);
-							row.appendChild(badge);
+							dueTd.appendChild(badge);
 						}
+						tr.appendChild(dueTd);
 					}
 
-					list.appendChild(row);
+					tbody.appendChild(tr);
 				}
-				det.appendChild(list);
+				table.appendChild(tbody);
+				det.appendChild(table);
 				root.appendChild(det);
 			}
 		}

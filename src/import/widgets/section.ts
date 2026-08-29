@@ -757,22 +757,32 @@ function makeDocResume(): WidgetCtor {
 				const doneBox = el(doc, "details", "tm-doc-done");
 				const summary = el(doc, "summary", "tm-import-muted", `已读卡（${doneTitles.length}）—— 可重新加入`);
 				doneBox.appendChild(summary);
+				const table = el(doc, "table", "tm-doc-table");
+				const thead = el(doc, "thead", "");
+				const htr = el(doc, "tr", "");
+				for (const h of ["名称", "操作"]) htr.appendChild(el(doc, "th", "", h));
+				thead.appendChild(htr);
+				table.appendChild(thead);
+				const tbody = el(doc, "tbody", "");
 				for (const dt of doneTitles) {
-					const row = el(doc, "div", "tm-doc-done-row");
-					const label = el(doc, "span", "tm-import-muted",
-						String(wiki.getTiddler(dt)?.fields["tidme.breadcrumb"] || dt).split(" › ").pop() || dt);
-					row.appendChild(label);
-					const back = el(doc, "button", "tm-cm-op", "重新加入");
+					const tr = el(doc, "tr", "tm-doc-done-row");
+					tr.appendChild(el(doc, "td", "",
+						String(wiki.getTiddler(dt)?.fields["tidme.breadcrumb"] || dt).split(" › ").pop() || dt));
+					const actTd = el(doc, "td", "tm-cb-actions", "");
+					const back = el(doc, "button", "tm-btn tm-btn--ghost", "重新加入");
 					back.title = "恢复到学习队列";
 					back.addEventListener("click", () => {
 						const f = wiki.getTiddler(dt)?.fields;
 						if (f) wiki.addTiddler(sched.restoreCard(f));
 						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-						row.parentNode?.removeChild(row);
+						tr.parentNode?.removeChild(tr);
 					});
-					row.appendChild(back);
-					doneBox.appendChild(row);
+					actTd.appendChild(back);
+					tr.appendChild(actTd);
+					tbody.appendChild(tr);
 				}
+				table.appendChild(tbody);
+				doneBox.appendChild(table);
 				wrap.appendChild(doneBox);
 			}
 
@@ -793,27 +803,39 @@ function makeDocResume(): WidgetCtor {
 				});
 				const clozeChildrenOf = (title: string): number =>
 					wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, "")}]tidme.kind[cloze]]`).length;
+				const table = el(doc, "table", "tm-doc-table");
+				const thead = el(doc, "thead", "");
+				const htr = el(doc, "tr", "");
+				for (const h of ["", "名称", "加工", "操作"]) htr.appendChild(el(doc, "th", "", h));
+				thead.appendChild(htr);
+				table.appendChild(thead);
+				const tbody = el(doc, "tbody", "");
 				for (const c of sorted) {
-					const row = el(doc, "div", "tm-doc-done-row");
+					const tr = el(doc, "tr", "tm-doc-done-row");
+					const kindTd = el(doc, "td", "", "");
 					const kindMark = c.fields["tidme.kind"] === "cloze" ? "挖" : "摘";
-					row.appendChild(el(doc, "span", "tm-cb-kind", kindMark));
-					row.appendChild(el(doc, "span", "tm-import-muted",
+					kindTd.appendChild(el(doc, "span", "tm-cb-kind", kindMark));
+					tr.appendChild(kindTd);
+					tr.appendChild(el(doc, "td", "",
 						String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title));
 					// W3：摘录加工状态（可挖空/已挖空）
+					const stateTd = el(doc, "td", "", "");
 					if (c.fields["tidme.kind"] === "extract") {
 						const hasCloze = clozeChildrenOf(c.title) > 0;
 						const state = el(doc, "span", hasCloze ? "tm-cb-state tm-cb-state-done" : "tm-cb-state",
 							hasCloze ? "已挖空" : "可挖空");
 						state.title = hasCloze ? "已在此摘录上挖空成卡片" : "选中文字按 Alt+Z 挖空成卡片";
-						row.appendChild(state);
+						stateTd.appendChild(state);
 					}
-					const open = el(doc, "button", "tm-cm-op", "打开");
+					tr.appendChild(stateTd);
+					const actTd = el(doc, "td", "tm-cb-actions", "");
+					const open = el(doc, "button", "tm-btn tm-btn--ghost", "打开");
 					open.title = "打开此卡";
 					open.addEventListener("click", () => {
 						this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
 					});
-					row.appendChild(open);
-					const back = el(doc, "button", "tm-cm-op", "回原文");
+					actTd.appendChild(open);
+					const back = el(doc, "button", "tm-btn tm-btn--ghost", "回原文");
 					back.title = "跳回原文并高亮";
 					back.addEventListener("click", () => {
 						const anchor = parseAnchor(c.fields["tidme.anchor"]);
@@ -823,16 +845,19 @@ function makeDocResume(): WidgetCtor {
 							if (anchor?.snippet) highlightSnippetLater(doc, target, anchor.snippet);
 						}
 					});
-					row.appendChild(back);
-					const del = el(doc, "button", "tm-cm-op tm-cm-del", "✕");
+					actTd.appendChild(back);
+					const del = el(doc, "button", "tm-btn tm-btn--ghost tm-cb-del", "删除");
 					del.title = "删除此卡";
 					del.addEventListener("click", () => {
 						wiki.deleteTiddler(c.title);
 						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					});
-					row.appendChild(del);
-					box.appendChild(row);
+					actTd.appendChild(del);
+					tr.appendChild(actTd);
+					tbody.appendChild(tr);
 				}
+				table.appendChild(tbody);
+				box.appendChild(table);
 				wrap.appendChild(box);
 			}
 		}
