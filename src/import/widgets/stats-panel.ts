@@ -72,8 +72,17 @@ function makeStatsPanel(): WidgetCtor {
 				cards.appendChild(statCard("复习", String(ret.reviews), ret.reviews ? `保留率 ${Math.round(ret.retention * 100)}%` : ""));
 				wrap.appendChild(cards);
 
+				// 创建分栏网格布局
+				const grid = el(doc, "div", "tm-stats-grid");
+				const mainCol = el(doc, "div", "tm-stats-col-main");
+				const sideCol = el(doc, "div", "tm-stats-col-side");
+				grid.appendChild(mainCol);
+				grid.appendChild(sideCol);
+				wrap.appendChild(grid);
+
 				// 1) 牌组负载（卡片表格）
-				wrap.appendChild(sectionTitle(doc, "牌组负载"));
+				const cardLoad = el(doc, "div", "tm-dashboard-card");
+				cardLoad.appendChild(el(doc, "div", "tm-dashboard-card-title", "牌组负载"));
 				const deckWrap = el(doc, "div", "tm-table-wrap");
 				const deckTable = el(doc, "table", "tm-table", "");
 				const thead = el(doc, "thead", "");
@@ -103,10 +112,12 @@ function makeStatsPanel(): WidgetCtor {
 				}
 				deckTable.appendChild(tbody);
 				deckWrap.appendChild(deckTable);
-				wrap.appendChild(deckWrap);
+				cardLoad.appendChild(deckWrap);
+				mainCol.appendChild(cardLoad);
 
 				// 2) 文档进度（表格）
-				wrap.appendChild(sectionTitle(doc, "文档进度"));
+				const cardDoc = el(doc, "div", "tm-dashboard-card");
+				cardDoc.appendChild(el(doc, "div", "tm-dashboard-card-title", "文档进度"));
 				const docWrap = el(doc, "div", "tm-table-wrap");
 				const docTable = el(doc, "table", "tm-table", "");
 				const dthead = el(doc, "thead", "");
@@ -131,7 +142,7 @@ function makeStatsPanel(): WidgetCtor {
 					tr.appendChild(el(doc, "td", "tm-stat-doc-name", d));
 					const progTd = el(doc, "td", "", "");
 					const barWrap = el(doc, "span", "tm-progress tm-stat-bar");
-					const bar = el(doc, "span", "tm-progress-fill", "");
+					const bar = el(doc, "span", "tm-progress-fill tm-stat-bar-fill", "");
 					bar.style.width = p.total ? `${Math.round((p.done / p.total) * 100)}%` : "0%";
 					barWrap.appendChild(bar);
 					progTd.appendChild(barWrap);
@@ -143,17 +154,19 @@ function makeStatsPanel(): WidgetCtor {
 				docTable.appendChild(dtbody);
 				docWrap.appendChild(docTable);
 				docWrap.classList.add("tm-scroll");
-				wrap.appendChild(docWrap);
+				cardDoc.appendChild(docWrap);
+				mainCol.appendChild(cardDoc);
 
 				// 3) 漏斗
-				wrap.appendChild(sectionTitle(doc, "漏斗"));
+				const cardFunnel = el(doc, "div", "tm-dashboard-card");
+				cardFunnel.appendChild(el(doc, "div", "tm-dashboard-card-title", "学习漏斗"));
 				const funnelBox = el(doc, "div", "tm-stat-funnel");
 				const funnelMax = Math.max(1, funnel.docs, funnel.sections, funnel.extracts, funnel.cards);
 				const funnelRow = (label: string, n: number) => {
 					const row = el(doc, "div", "tm-stat-funnel-row");
 					row.appendChild(el(doc, "span", "tm-stat-funnel-label", label));
 					const barWrap = el(doc, "span", "tm-progress tm-stat-bar tm-stat-bar-lg");
-					const bar = el(doc, "span", "tm-progress-fill", "");
+					const bar = el(doc, "span", "tm-progress-fill tm-stat-bar-fill", "");
 					bar.style.width = `${Math.round((n / funnelMax) * 100)}%`;
 					barWrap.appendChild(bar);
 					row.appendChild(barWrap);
@@ -164,17 +177,30 @@ function makeStatsPanel(): WidgetCtor {
 				funnelBox.appendChild(funnelRow("切分", funnel.sections));
 				funnelBox.appendChild(funnelRow("摘录", funnel.extracts));
 				funnelBox.appendChild(funnelRow("卡", funnel.cards));
-				wrap.appendChild(funnelBox);
+				cardFunnel.appendChild(funnelBox);
+				sideCol.appendChild(cardFunnel);
 
 				// 4) 复习与保留率
-				wrap.appendChild(sectionTitle(doc, "复习与保留率"));
-				wrap.appendChild(el(doc, "div", "tm-stat-inline",
-					`复习 ${ret.reviews} 次 · 保留率 ${Math.round(ret.retention * 100)}%`));
+				const cardRet = el(doc, "div", "tm-dashboard-card");
+				cardRet.appendChild(el(doc, "div", "tm-dashboard-card-title", "复习与保留率"));
+				const retBox = el(doc, "div", "tm-stat-pills");
+				retBox.appendChild(el(doc, "span", "tm-badge tm-badge-learn", `复习 ${ret.reviews} 次`));
+				if (ret.reviews) {
+					retBox.appendChild(el(doc, "span", "tm-badge tm-badge-due", `保留率 ${Math.round(ret.retention * 100)}%`));
+				}
+				cardRet.appendChild(retBox);
+				sideCol.appendChild(cardRet);
 
 				// 5) 优先级分桶
-				wrap.appendChild(sectionTitle(doc, "优先级分桶"));
-				wrap.appendChild(el(doc, "div", "tm-stat-inline",
-					`高 ${buckets.high} · 中 ${buckets.medium} · 低 ${buckets.low} · 未设 ${buckets.none}`));
+				const cardBucket = el(doc, "div", "tm-dashboard-card");
+				cardBucket.appendChild(el(doc, "div", "tm-dashboard-card-title", "优先级分桶"));
+				const bucketBox = el(doc, "div", "tm-stat-pills");
+				bucketBox.appendChild(el(doc, "span", "tm-badge tm-badge-new", `高 ${buckets.high}`));
+				bucketBox.appendChild(el(doc, "span", "tm-badge tm-badge-due", `中 ${buckets.medium}`));
+				bucketBox.appendChild(el(doc, "span", "tm-badge tm-badge-learn", `低 ${buckets.low}`));
+				bucketBox.appendChild(el(doc, "span", "tm-badge tm-badge-suspended", `未设 ${buckets.none}`));
+				cardBucket.appendChild(bucketBox);
+				sideCol.appendChild(cardBucket);
 			};
 			build();
 

@@ -275,13 +275,15 @@ function makePasteSplit(): WidgetCtor {
 			this.computeAttributes();
 			this.execute();
 			const doc = this.document;
-			const wrap = el(doc, "div", "tm-paste-split");
+			const wrap = el(doc, "div", "tm-dashboard-card");
+			wrap.appendChild(el(doc, "div", "tm-dashboard-card-title", "粘贴文本"));
+			const inner = el(doc, "div", "tm-paste-split");
 			const ta = doc.createElement("textarea");
 			ta.className = "tm-paste-textarea";
 			ta.placeholder = "粘贴 markdown / HTML / 纯文本…";
 			ta.rows = 8;
-			wrap.appendChild(ta);
-			const btn = el(doc, "button", "tc-btn-primary", "切分文本");
+			inner.appendChild(ta);
+			const btn = el(doc, "button", "tm-btn tm-btn-primary", "切分文本并入库");
 			const status = el(doc, "div", "tm-import-muted", "");
 			btn.addEventListener("click", async () => {
 				const text = String(ta.value || "").trim();
@@ -301,8 +303,9 @@ function makePasteSplit(): WidgetCtor {
 					btn.removeAttribute("disabled");
 				}
 			});
-			wrap.appendChild(btn);
-			wrap.appendChild(status);
+			inner.appendChild(btn);
+			inner.appendChild(status);
+			wrap.appendChild(inner);
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
 		}
@@ -318,19 +321,21 @@ function makeInboxSplit(): WidgetCtor {
 			this.computeAttributes();
 			this.execute();
 			const doc = this.document;
-			const wrap = el(doc, "div", "tm-inbox-split");
+			const wrap = el(doc, "div", "tm-dashboard-card");
+			wrap.appendChild(el(doc, "div", "tm-dashboard-card-title", "剪藏收件箱 (tidme-inbox)"));
+			const inner = el(doc, "div", "tm-inbox-split");
 			const listBox = el(doc, "div", "");
 			const refresh = () => {
 				listBox.textContent = "";
 				const items = this.wiki.filterTiddlers("[tag[tidme-inbox]!is[draft]]");
 				if (!items.length) {
-					listBox.appendChild(el(doc, "div", "tm-import-muted", "收件箱为空——用 TW-WebClipper 剪藏时会带上 tidme-inbox 标签。"));
+					listBox.appendChild(el(doc, "div", "tm-import-muted", "收件箱为空——支持使用浏览器剪藏插件自动捕获内容入库。"));
 					return;
 				}
 				for (const item of items) {
 					const row = el(doc, "div", "tm-import-row");
 					row.appendChild(el(doc, "strong", "", item));
-					const btn = el(doc, "button", "tc-btn-primary", "切分");
+					const btn = el(doc, "button", "tm-btn tm-btn-primary", "切分并入库");
 					btn.addEventListener("click", async () => {
 						btn.setAttribute("disabled", "true");
 						btn.textContent = "…";
@@ -346,8 +351,8 @@ function makeInboxSplit(): WidgetCtor {
 					listBox.appendChild(row);
 				}
 			};
-			wrap.appendChild(el(doc, "h3", "", "剪藏收件箱（tidme-inbox）"));
-			wrap.appendChild(listBox);
+			inner.appendChild(listBox);
+			wrap.appendChild(inner);
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
 			refresh();

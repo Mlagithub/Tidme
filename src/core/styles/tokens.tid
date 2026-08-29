@@ -1,5 +1,6 @@
 title: $:/plugins/tidme/core/styles/tokens
 tags: $:/tags/Stylesheet
+type: text/css
 
 /* ============================================================
    Tidme 设计系统（统一 token + 组件基类）
@@ -9,57 +10,66 @@ tags: $:/tags/Stylesheet
 
 /* ---- 色板（中日/晨间浅色，可扩展暗色） ---- */
 :root {
+	/* ---- HSL 现代化色彩系统 ---- */
 	--tm-surface: #ffffff;
-	--tm-surface-2: #f7f8fa;
-	--tm-surface-3: #eef0f4;
-	--tm-border: #e4e6ea;
-	--tm-text-1: #1a1d23;
-	--tm-text-2: #6b7280;
-	--tm-text-3: #9ca3af;
+	--tm-surface-2: hsl(220, 14%, 97%);
+	--tm-surface-3: hsl(220, 14%, 94%);
+	--tm-border: hsl(220, 14%, 90%);
+	--tm-text-1: hsl(220, 15%, 15%);
+	--tm-text-2: hsl(220, 10%, 42%);
+	--tm-text-3: hsl(220, 10%, 62%);
 
-	--tm-accent: #4f46e5;
-	--tm-accent-strong: #4338ca;
-	--tm-accent-soft: #eef2ff;
+	--tm-accent: hsl(245, 75%, 60%);
+	--tm-accent-strong: hsl(245, 75%, 50%);
+	--tm-accent-soft: hsl(245, 100%, 96%);
 
-	--tm-success: #059669;
-	--tm-success-soft: #d1fae5;
-	--tm-warn: #d97706;
-	--tm-warn-soft: #fef3c7;
-	--tm-danger: #dc2626;
-	--tm-danger-soft: #fee2e2;
-	--tm-info: #2563eb;
-	--tm-info-soft: #dbeafe;
+	--tm-success: hsl(150, 75%, 32%);
+	--tm-success-soft: hsl(150, 75%, 95%);
+	--tm-warn: hsl(35, 85%, 40%);
+	--tm-warn-soft: hsl(35, 85%, 95%);
+	--tm-danger: hsl(0, 80%, 50%);
+	--tm-danger-soft: hsl(0, 80%, 96%);
+	--tm-info: hsl(210, 85%, 45%);
+	--tm-info-soft: hsl(210, 85%, 95%);
 
-	/* 徽章 pastel 语义（背景/前景成对） */
-	--tm-badge-new-bg: #dbeafe;   --tm-badge-new-fg: #1e40af;
-	--tm-badge-learn-bg: #fef3c7; --tm-badge-learn-fg: #92400e;
-	--tm-badge-due-bg: #d1fae5;   --tm-badge-due-fg: #047857;
-	--tm-badge-overdue-bg: #fee2e2; --tm-badge-overdue-fg: #b91c1c;
-	--tm-badge-suspended-bg: #ede9fe; --tm-badge-suspended-fg: #6d28d9;
+	/* 渐变色 */
+	--tm-gradient-primary: linear-gradient(135deg, hsl(245, 75%, 64%) 0%, hsl(245, 75%, 54%) 100%);
+	--tm-gradient-success: linear-gradient(135deg, hsl(150, 75%, 38%) 0%, hsl(150, 75%, 28%) 100%);
+	--tm-gradient-warn: linear-gradient(135deg, hsl(35, 85%, 48%) 0%, hsl(35, 85%, 38%) 100%);
+
+	/* 徽章 pastel 语义（背景/前景成对，调和 HSL） */
+	--tm-badge-new-bg: hsl(210, 90%, 94%);   --tm-badge-new-fg: hsl(210, 90%, 35%);
+	--tm-badge-learn-bg: hsl(35, 90%, 94%);  --tm-badge-learn-fg: hsl(35, 90%, 35%);
+	--tm-badge-due-bg: hsl(150, 80%, 93%);   --tm-badge-due-fg: hsl(150, 80%, 28%);
+	--tm-badge-overdue-bg: hsl(0, 85%, 94%); --tm-badge-overdue-fg: hsl(0, 85%, 38%);
+	--tm-badge-suspended-bg: hsl(270, 80%, 95%); --tm-badge-suspended-fg: hsl(270, 80%, 35%);
 
 	/* 圆角 */
-	--tm-radius: 10px;
-	--tm-radius-sm: 6px;
-	--tm-radius-xs: 4px;
+	--tm-radius: 12px;
+	--tm-radius-sm: 8px;
+	--tm-radius-xs: 5px;
 
-	/* 阴影（柔和分层，替代「边线练墙」） */
-	--tm-shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
-	--tm-shadow: 0 1px 2px rgba(17, 24, 39, 0.06), 0 6px 16px rgba(17, 24, 39, 0.07);
-	--tm-shadow-lg: 0 2px 4px rgba(17, 24, 39, 0.06), 0 12px 28px rgba(17, 24, 39, 0.10);
+	/* 阴影（现代化分层，极其细腻） */
+	--tm-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+	--tm-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+	--tm-shadow-lg: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 16px -6px rgba(15, 23, 42, 0.04);
 
 	/* 字体 */
 	--tm-font: -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
 		"Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
 	--tm-font-mono: "SF Mono", "Cascadia Code", Consolas, "JetBrains Mono", monospace;
 
-	/* 间距（4/8 网格） */
-	--tm-gap: 4px;
-	--tm-gap-lg: 8px;
-	--tm-gap-xl: 12px;
-	--tm-gap-2xl: 20px;
+	/* 动效缓动 */
+	--tm-transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+
+	/* 间距 */
+	--tm-gap: 5px;
+	--tm-gap-lg: 10px;
+	--tm-gap-xl: 16px;
+	--tm-gap-2xl: 24px;
 
 	/* 兼容旧引用 */
-	--tm-gap-lg-old: 8px;
+	--tm-gap-lg-old: 10px;
 	--tm-badge-new: var(--tm-badge-new-bg);
 	--tm-badge-learn: var(--tm-badge-learn-bg);
 	--tm-badge-due: var(--tm-badge-due-bg);
@@ -71,50 +81,58 @@ tags: $:/tags/Stylesheet
 .tm-btn {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: 0.4em;
 	font-family: var(--tm-font);
-	font-size: 0.86em;
-	font-weight: 500;
-	padding: 6px 14px;
+	font-size: 0.85em;
+	font-weight: 550;
+	padding: 7px 15px;
 	border: 1px solid var(--tm-border);
 	border-radius: var(--tm-radius-sm);
 	background: var(--tm-surface);
 	color: var(--tm-text-2);
 	cursor: pointer;
 	line-height: 1.4;
-	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
-		box-shadow 0.15s ease, transform 0.05s ease;
+	transition: var(--tm-transition);
 }
 .tm-btn:hover {
 	background: var(--tm-surface-2);
 	color: var(--tm-text-1);
-	border-color: rgba(17, 24, 39, 0.18);
+	border-color: hsl(220, 10%, 75%);
+	transform: translateY(-1px);
+	box-shadow: var(--tm-shadow-sm);
 }
 .tm-btn:active { transform: translateY(0.5px); }
-.tm-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.tm-btn:disabled { opacity: 0.45; cursor: default; transform: none; box-shadow: none; }
 .tm-btn.focus, .tm-btn:focus-visible { outline: 2px solid var(--tm-accent-soft); outline-offset: 1px; }
 
 .tm-btn--primary {
-	background: var(--tm-accent);
-	border-color: var(--tm-accent);
+	background: var(--tm-gradient-primary);
+	border-color: transparent;
 	color: #fff;
 	font-weight: 600;
 	box-shadow: var(--tm-shadow-sm);
 }
 .tm-btn--primary:hover {
-	background: var(--tm-accent-strong);
-	border-color: var(--tm-accent-strong);
+	background: var(--tm-gradient-primary);
+	filter: brightness(1.08);
+	border-color: transparent;
 	color: #fff;
 	box-shadow: var(--tm-shadow);
+	transform: translateY(-1.5px);
 }
 .tm-btn--danger {
 	background: var(--tm-danger-soft);
 	border-color: transparent;
 	color: var(--tm-danger);
 }
-.tm-btn--danger:hover { background: #fecaca; color: var(--tm-danger); }
+.tm-btn--danger:hover {
+	background: hsl(0, 80%, 90%);
+	color: var(--tm-danger);
+	transform: translateY(-1px);
+}
 .tm-btn--ghost { border-color: transparent; background: transparent; color: var(--tm-text-2); }
-.tm-btn--ghost:hover { background: var(--tm-surface-2); color: var(--tm-text-1); }
+.tm-btn--ghost:hover { background: var(--tm-surface-2); color: var(--tm-text-1); transform: none; box-shadow: none; }
 .tm-btn--active {
 	background: var(--tm-accent-soft);
 	border-color: transparent;
@@ -126,8 +144,14 @@ tags: $:/tags/Stylesheet
 	background: var(--tm-surface);
 	border: 1px solid var(--tm-border);
 	border-radius: var(--tm-radius);
-	box-shadow: var(--tm-shadow-sm);
+	box-shadow: var(--tm-shadow);
+	transition: var(--tm-transition);
 }
+.tm-card:hover {
+	box-shadow: var(--tm-shadow-lg);
+}
+.tm-card--flat { box-shadow: none; }
+.tm-card--flat:hover { box-shadow: none; }
 .tm-card--flat { box-shadow: none; }
 
 /* ---- 页面级标题/说明（替代系统路径标题的气场） ---- */
@@ -220,6 +244,27 @@ tags: $:/tags/Stylesheet
 	overflow: hidden;
 }
 .tm-progress-fill { height: 100%; border-radius: 999px; background: var(--tm-accent); transition: width 0.2s ease; }
+
+/* ---- 仪表盘卡片块 (Dashboard Card Blocks) ---- */
+.tm-dashboard-card {
+	background: var(--tm-surface);
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius);
+	padding: 18px 22px;
+	box-shadow: var(--tm-shadow-sm);
+	margin-bottom: 18px;
+	transition: var(--tm-transition);
+}
+.tm-dashboard-card-title {
+	font-size: 0.82em;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--tm-text-3);
+	margin-bottom: 12px;
+	border-bottom: 1px dashed var(--tm-border);
+	padding-bottom: 8px;
+}
 
 /* ============================================================
    暗色模式：html 挂 data-tme-dark 时覆盖 token 与跨 TW 的关键容器。

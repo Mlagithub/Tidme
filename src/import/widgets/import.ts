@@ -98,9 +98,9 @@ function buildRow(doc: Document, token: string, resultOrErr: { result?: ImportRe
 	if (crumbs.length) {
 		const details = el(doc, "details", "tm-import-outline");
 		details.appendChild(el(doc, "summary", "tm-import-muted",
-			`目录大纲（前 ${Math.min(20, crumbs.length)} / ${crumbs.length} 条）`));
+			`目录大纲（共 ${crumbs.length} 条）`));
 		const tree = el(doc, "div", "tm-import-tree", "");
-		for (const c of crumbs.slice(0, 20)) {
+		for (const c of crumbs) {
 			const line = el(doc, "div", "tm-import-tree-row" + (c.merged ? " tm-import-tree-merged" : ""));
 			line.style.paddingLeft = `${c.level * 1.1}em`;
 			line.appendChild(el(doc, "span", "tm-import-tree-text", c.path.split(" › ").pop() || c.path));
@@ -124,13 +124,18 @@ function makeFileWidget(): WidgetCtor {
 			const doc = this.document;
 			const wrap = el(doc, "div", "tm-import-widget");
 
-			// 拖放区
-			const drop = el(doc, "div", "tm-import-dropzone", this.getAttribute("caption", "点击选择或拖入 .epub / .md / .txt"));
+			// 选择文件上传按钮与说明
+			const btnSelect = el(doc, "button", "tm-btn tm-btn-primary tm-import-select-btn", "选择文件上传 (.epub / .md / .txt)");
 			const input = doc.createElement("input");
 			input.type = "file";
 			input.multiple = true;
 			input.accept = ".epub,.md,.markdown,.txt";
 			input.style.display = "none";
+			const hint = el(doc, "div", "tm-import-hint", "或者：直接将文件拖拽到此页面的任意位置即可导入。");
+
+			// 全页面拖放覆盖层
+			const overlay = el(doc, "div", "tm-import-drag-overlay", "释放文件以导入到 Tidme (.epub / .md / .txt)");
+			overlay.style.display = "none";
 
 			// 预览容器 + 操作按钮
 			const rowsBox = el(doc, "div", "tm-import-rows");
@@ -188,7 +193,9 @@ function makeFileWidget(): WidgetCtor {
 			};
 
 			const refreshActions = () => {
-				actions.style.display = pending.size ? "" : "none";
+				const hasPending = !!pending.size;
+				actions.style.display = hasPending ? "" : "none";
+				previewCard.style.display = hasPending ? "" : "none";
 			};
 
 			// A：落库单个解析结果。同 docId 已有旧卡 → alignCards 增量（未变保 SRS 进度 /
@@ -306,21 +313,50 @@ function makeFileWidget(): WidgetCtor {
 				input.value = "";
 				await handleFiles(files);
 			});
-			drop.addEventListener("click", () => input.click());
-			drop.addEventListener("dragover", (e: DragEvent) => { e.preventDefault(); drop.classList.add("tm-import-over"); });
-			drop.addEventListener("dragleave", () => drop.classList.remove("tm-import-over"));
-			drop.addEventListener("drop", async (e: DragEvent) => {
+			btnSelect.addEventListener("click", () => input.click());
+			
+			let dragCounter = 0;
+			wrap.addEventListener("dragenter", (e: DragEvent) => {
 				e.preventDefault();
-				drop.classList.remove("tm-import-over");
+				dragCounter++;
+				overlay.style.display = "";
+			});
+			wrap.addEventListener("dragover", (e: DragEvent) => {
+				e.preventDefault();
+			});
+			wrap.addEventListener("dragleave", (e: DragEvent) => {
+				e.preventDefault();
+				dragCounter--;
+				if (dragCounter === 0) {
+					overlay.style.display = "none";
+				}
+			});
+			wrap.addEventListener("drop", async (e: DragEvent) => {
+				e.preventDefault();
+				dragCounter = 0;
+				overlay.style.display = "none";
 				await handleFiles(Array.from(e.dataTransfer?.files || []) as File[]);
 			});
 
-			drop.appendChild(input);
-			wrap.appendChild(drop);
-			wrap.appendChild(serverRow);
-			wrap.appendChild(serverStatus);
-			wrap.appendChild(rowsBox);
-			wrap.appendChild(actions);
+			// 创建上传控制卡片
+			const uploaderCard = el(doc, "div", "tm-dashboard-card");
+			uploaderCard.appendChild(el(doc, "div", "tm-dashboard-card-title", "上传控制"));
+			uploaderCard.appendChild(btnSelect);
+			uploaderCard.appendChild(input);
+			uploaderCard.appendChild(hint);
+			uploaderCard.appendChild(serverRow);
+			uploaderCard.appendChild(serverStatus);
+			wrap.appendChild(uploaderCard);
+			wrap.appendChild(overlay);
+
+			// 创建待导预览队列卡片
+			const previewCard = el(doc, "div", "tm-dashboard-card");
+			previewCard.appendChild(el(doc, "div", "tm-dashboard-card-title", "待导入队列"));
+			previewCard.appendChild(rowsBox);
+			previewCard.appendChild(actions);
+			previewCard.style.display = "none";
+			wrap.appendChild(previewCard);
+
 			actions.appendChild(btnImport);
 			actions.appendChild(btnClear);
 			parent.insertBefore(wrap, nextSibling);

@@ -247,7 +247,12 @@ function makeReadingList(): any {
 						const dueTd = el(doc, "td", "", "");
 						const dueTxt = dueLabel(c);
 						if (dueTxt) {
-							const badge = el(doc, "span", "tm-rl-due", dueTxt);
+							const badgeCls =
+								dueTxt === "逾" ? "tm-badge tm-badge-overdue" :
+								dueTxt === "到" ? "tm-badge tm-badge-due" :
+								dueTxt === "学" ? "tm-badge tm-badge-learn" :
+								"tm-badge tm-badge-new";
+							const badge = el(doc, "span", badgeCls, dueTxt);
 							dueTd.appendChild(badge);
 						}
 						tr.appendChild(dueTd);

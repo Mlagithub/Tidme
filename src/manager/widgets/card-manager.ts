@@ -249,7 +249,7 @@ function makeCardManager(): WidgetCtor {
 			/** 卡片行基础：复选框 + 状态 + 类型 + 优先级 + 标题链接 */
 			const appendRowBase = (row: HTMLElement, c: Card, cb: HTMLInputElement) => {
 				const bd = badgeOf(c.fields);
-				const badge = el(doc, "span", `tm-cm-badge ${bd.cls}`, bd.text);
+				const badge = el(doc, "span", `tm-badge tm-cm-badge ${bd.cls}`, bd.text);
 				badge.title = stateLabel(c.fields); // P2：徽章 tooltip
 				row.appendChild(badge);
 				const km = kindMark(c.fields);
@@ -606,20 +606,35 @@ function makeCardManager(): WidgetCtor {
 
 				// 工具栏（sticky：查找/视图/组织/批量操作固定在顶部）
 				const toolbar = el(doc, "div", "tm-cm-toolbar");
+				const topRow = el(doc, "div", "tm-cm-top-row");
+
 				// 查找输入框
 				const searchRow = el(doc, "div", "tm-cm-search-row");
-				const searchInput = el(doc, "input", "tm-cm-search") as any;
-				searchInput.value = searchText;
-				searchInput.placeholder = "查找卡片…";
-				searchInput.addEventListener("input", () => { searchText = String(searchInput.value || ""); render(); });
-				searchRow.appendChild(searchInput);
+				const input = el(doc, "input", "tm-cm-search");
+				input.placeholder = "查找卡片...";
+				input.value = searchText;
+				input.addEventListener("input", () => {
+					searchText = (input.value || "").trim().toLowerCase();
+					render();
+				});
+				searchRow.appendChild(input);
 				if (searchText) {
-					const clear = el(doc, "button", "tm-btn tm-cm-clear", "×");
-					clear.title = "清空查找";
-					clear.addEventListener("click", () => { searchText = ""; searchInput.value = ""; render(); });
+					const clear = el(doc, "button", "tm-btn tm-cm-clear", "✕");
+					clear.addEventListener("click", () => { searchText = ""; render(); });
 					searchRow.appendChild(clear);
 				}
-				toolbar.appendChild(searchRow);
+				topRow.appendChild(searchRow);
+
+				// 组织方式切换
+				const orgRow = el(doc, "div", "tm-cm-orgs");
+				for (const o of ORGS) {
+					const b = el(doc, "button", "tm-btn" + (org === o.id ? " tm-btn--active" : ""), o.label);
+					b.title = o.tip;
+					b.addEventListener("click", () => { org = o.id; render(); });
+					orgRow.appendChild(b);
+				}
+				topRow.appendChild(orgRow);
+
 				// 视图过滤按钮（计数 = 该子集实际卡数）
 				const viewRow = el(doc, "div", "tm-cm-views");
 				for (const v of VIEWS) {
@@ -630,22 +645,25 @@ function makeCardManager(): WidgetCtor {
 					b.addEventListener("click", () => { view = v.id; render(); });
 					viewRow.appendChild(b);
 				}
-				toolbar.appendChild(viewRow);
+				topRow.appendChild(viewRow);
 
-				// 组织方式切换
-				const orgRow = el(doc, "div", "tm-cm-orgs");
-				for (const o of ORGS) {
-					const b = el(doc, "button", "tm-btn" + (org === o.id ? " tm-btn--active" : ""), o.label);
-					b.title = o.tip;
-					b.addEventListener("click", () => { org = o.id; render(); });
-					orgRow.appendChild(b);
-				}
-				toolbar.appendChild(orgRow);
+				toolbar.appendChild(topRow);
 
-				// 批量工具条（分组：调度 / 状态 / 危险）
+				// 批量工具条（单行排列，删除“勾选卡片后可批量操作”文本）
 				const bar = el(doc, "div", "tm-cm-bar");
-				bar.appendChild(el(doc, "span", "tm-import-muted",
-					selected.size ? `已选 ${selected.size} 张` : "勾选卡片后可批量操作"));
+				const row = el(doc, "div", "tm-cm-bar-row", "");
+
+				if (selected.size > 0) {
+					const selLabel = el(doc, "span", "tm-badge tm-badge-learn", `已选 ${selected.size} 张`);
+					selLabel.style.marginRight = "6px";
+					row.appendChild(selLabel);
+				}
+
+				const schedGroup = el(doc, "span", "tm-cm-bar-group", "");
+				const priGroup = el(doc, "span", "tm-cm-bar-group", "");
+				const stateGroup = el(doc, "span", "tm-cm-bar-group", "");
+				const dangerGroup = el(doc, "span", "tm-cm-bar-group", "");
+
 				const batch = (label: string, apply: (f: Record<string, any>) => Record<string, any>, destructive = false) => {
 					const b = el(doc, "button", "tm-btn" + (destructive ? " tm-btn--danger" : ""), label);
 					b.addEventListener("click", () => {
@@ -668,19 +686,30 @@ function makeCardManager(): WidgetCtor {
 					});
 					return b;
 				};
-				bar.appendChild(batch("顺延7d", (f) => sched.postponeCard(f, 7)));
-				bar.appendChild(batch("提前", () => sched.advanceCard()));
-				bar.appendChild(batch("遗忘", () => sched.forgetCard()));
+
+				schedGroup.appendChild(batch("顺延7d", (f) => sched.postponeCard(f, 7)));
+				schedGroup.appendChild(batch("提前", () => sched.advanceCard()));
+				schedGroup.appendChild(batch("遗忘", () => sched.forgetCard()));
+				row.appendChild(schedGroup);
+
+				stateGroup.appendChild(batch("移出队列", (f) => doneFields(f)));
+				stateGroup.appendChild(batch("搁置", () => sched.suspendCard()));
+				stateGroup.appendChild(batch("恢复", (f) => resumeFields(f)));
+				row.appendChild(stateGroup);
+
+				dangerGroup.appendChild(batch("删除", () => ({} as Record<string, any>), true));
+				row.appendChild(dangerGroup);
+
 				// G3 批量优先级（对标 SM Browser Priority: Modify）
-				bar.appendChild(batch("优先↑", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], -5) })));
-				bar.appendChild(batch("优先↓", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], 5) })));
-				bar.appendChild(batch("设高", () => ({ "tidme.priority": "10" })));
-				bar.appendChild(batch("设中", () => ({ "tidme.priority": "50" })));
-				bar.appendChild(batch("设低", () => ({ "tidme.priority": "90" })));
-				bar.appendChild(batch("移出队列", (f) => doneFields(f)));
-				bar.appendChild(batch("搁置", () => sched.suspendCard()));
-				bar.appendChild(batch("恢复", (f) => resumeFields(f)));
-				bar.appendChild(batch("删除", () => ({} as Record<string, any>), true));
+				priGroup.appendChild(batch("优先↑", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], -5) })));
+				priGroup.appendChild(batch("优先↓", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], 5) })));
+				priGroup.appendChild(batch("设高", () => ({ "tidme.priority": "10" })));
+				priGroup.appendChild(batch("设中", () => ({ "tidme.priority": "50" })));
+				priGroup.appendChild(batch("设低", () => ({ "tidme.priority": "90" })));
+				row.appendChild(priGroup);
+
+				bar.appendChild(row);
+
 				toolbar.appendChild(bar);
 				wrap.appendChild(toolbar);
 

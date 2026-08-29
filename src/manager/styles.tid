@@ -1,5 +1,5 @@
 title: $:/plugins/tidme/manager/styles
-type: text/vnd.tiddlywiki
+type: text/css
 tags: [[$:/tags/Stylesheet]]
 
 /* Tidme Manager：卡片浏览 / 管理器 / 牌组批量操作样式 */
@@ -98,7 +98,14 @@ tags: [[$:/tags/Stylesheet]]
 	border-bottom: 1px solid var(--tm-border);
 	box-shadow: 0 2px 8px rgba(17, 24, 39, 0.05);
 }
-.tm-cm-search-row { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+.tm-cm-top-row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+}
+.tm-cm-search-row { display: flex; gap: 6px; align-items: center; }
 .tm-cm-search {
 	flex: 1;
 	max-width: 260px;
@@ -119,57 +126,90 @@ tags: [[$:/tags/Stylesheet]]
 .tm-cm-body::-webkit-scrollbar-thumb:hover { background: var(--tm-text-3); }
 .tm-cm-views {
 	display: flex;
-	gap: 0.5em;
+	gap: 6px;
 	flex-wrap: wrap;
-	margin-bottom: 8px;
 }
 .tm-cm-view {
-	padding: 2px 10px;
-	border-radius: var(--tm-radius-sm);
+	padding: 4px 14px;
+	border-radius: 999px;
 	border: 1px solid var(--tm-border);
 	background: var(--tm-surface);
 	color: var(--tm-text-2);
+	font-size: 0.84em;
+	font-weight: 550;
+	cursor: pointer;
+	transition: var(--tm-transition);
+}
+.tm-cm-view:hover {
+	color: var(--tm-text-1);
+	border-color: hsl(220, 10%, 75%);
 }
 .tm-cm-view-active {
 	background: var(--tm-accent);
 	border-color: var(--tm-accent);
 	color: #fff;
+	box-shadow: var(--tm-shadow-sm);
 }
 .tm-cm-orgs {
 	display: flex;
-	gap: 0.5em;
+	gap: 6px;
 	flex-wrap: wrap;
-	margin-bottom: 12px;
 }
 .tm-cm-org {
-	padding: 1px 8px;
-	border-radius: var(--tm-radius-sm);
-	border: 1px dashed var(--tm-border);
+	padding: 3px 12px;
+	border-radius: 999px;
+	border: 1px solid var(--tm-border);
 	background: var(--tm-surface);
 	color: var(--tm-text-2);
-	font-size: 0.9em;
+	font-size: 0.82em;
+	font-weight: 550;
+	cursor: pointer;
+	transition: var(--tm-transition);
 }
 .tm-cm-org:hover {
 	color: var(--tm-text-1);
+	border-color: hsl(220, 10%, 75%);
 }
 .tm-cm-org-active {
 	border-style: solid;
 	border-color: var(--tm-accent);
-	color: var(--tm-accent);
+	color: var(--tm-accent-strong);
 	background: var(--tm-accent-soft);
 }
 .tm-cm-bar {
 	display: flex;
-	gap: 0.5em;
-	flex-wrap: wrap;
+	flex-direction: column;
+	gap: 10px;
+	align-items: stretch;
+	margin-bottom: 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-sm);
+	background: var(--tm-surface-2);
+}
+.tm-cm-bar-row {
+	display: flex;
 	align-items: center;
-	margin-bottom: 12px;
-	padding: 10px 0;
-	border-top: 1px solid var(--tm-border);
-	border-bottom: 1px solid var(--tm-border);
+	gap: 8px;
+	flex-wrap: wrap;
 }
 .tm-cm-bar button {
-	font-size: 0.85em;
+	font-size: 0.82em;
+	padding: 5px 12px;
+	background: var(--tm-surface);
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-sm);
+	color: var(--tm-text-2);
+	font-weight: 550;
+	cursor: pointer;
+	transition: var(--tm-transition);
+}
+.tm-cm-bar button:hover {
+	background: var(--tm-surface);
+	border-color: hsl(220, 10%, 70%);
+	color: var(--tm-text-1);
+	transform: translateY(-0.5px);
+	box-shadow: var(--tm-shadow-sm);
 }
 .tm-cm-tree details {
 	margin-left: 0.4em;
@@ -363,41 +403,87 @@ tags: [[$:/tags/Stylesheet]]
 	opacity: 0.65;
 	font-style: italic;
 }
-.tm-cm-badge {
-	font-size: 0.85em;
-	min-width: 1.3em;
-	text-align: center;
-	border-radius: 3px;
-	padding: 0 2px;
+.tm-cm-bar-group {
+	display: inline-flex;
+	gap: 6px;
+	border-right: 1px solid var(--tm-border);
+	padding-right: 10px;
+	margin-right: 4px;
+	align-items: center;
 }
-.tm-badge-new { background: var(--tm-badge-new); }
-.tm-badge-learn { background: var(--tm-badge-learn); }
-.tm-badge-due { background: var(--tm-badge-due); }
-.tm-badge-overdue { background: var(--tm-badge-overdue); }
-.tm-badge-done { background: var(--tm-badge-done); opacity: 0.8; }
-.tm-badge-suspended { background: var(--tm-badge-suspended); }
-.tm-cm-kind {
+.tm-cm-bar-group:last-child {
+	border-right: none;
+	padding-right: 0;
+	margin-right: 0;
+}
+.tm-cm-badge {
 	font-size: 0.8em;
-	opacity: 0.6;
+	padding: 2px 8px;
+	min-width: 2em;
+	height: 1.6em;
+	font-weight: 600;
+	border-radius: 999px;
+}
+.tm-badge-new { background: var(--tm-badge-new-bg); color: var(--tm-badge-new-fg); }
+.tm-badge-learn { background: var(--tm-badge-learn-bg); color: var(--tm-badge-learn-fg); }
+.tm-badge-due { background: var(--tm-badge-due-bg); color: var(--tm-badge-due-fg); }
+.tm-badge-overdue { background: var(--tm-badge-overdue-bg); color: var(--tm-badge-overdue-fg); }
+.tm-badge-done { background: hsl(220, 14%, 90%); color: hsl(220, 10%, 40%); opacity: 0.9; }
+.tm-badge-suspended { background: var(--tm-badge-suspended-bg); color: var(--tm-badge-suspended-fg); }
+.tm-cm-kind {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.74em;
+	font-weight: 600;
+	border-radius: var(--tm-radius-xs);
+	padding: 1px 5px;
+	margin: 0 4px;
+	background: var(--tm-badge-new-bg);
+	color: var(--tm-badge-new-fg);
 }
 .tm-cm-pri {
-	font-size: 0.75em;
-	opacity: 0.5;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.76em;
+	font-weight: 600;
+	color: var(--tm-text-2);
+	background: var(--tm-surface-3);
+	border-radius: var(--tm-radius-xs);
+	padding: 1px 6px;
+	margin: 0 4px;
+	font-family: var(--tm-font-mono);
 }
 .tm-cm-link {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	max-width: 18em;
+	max-width: 22em;
+	font-weight: 550;
 }
 .tm-cm-op {
-	padding: 0 5px;
-	font-size: 0.85em;
-	opacity: 0.7;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 3px 8px;
+	font-size: 0.78em;
+	font-weight: 600;
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-xs);
+	background: var(--tm-surface-2);
+	color: var(--tm-text-2);
+	cursor: pointer;
+	margin-left: 4px;
+	transition: var(--tm-transition);
 }
 .tm-cm-op:hover {
-	opacity: 1;
+	background: var(--tm-surface-3);
+	color: var(--tm-text-1);
+	border-color: hsl(220, 10%, 75%);
 }
 .tm-cm-del:hover {
-	color: <<colour danger>>;
+	color: var(--tm-danger);
+	background: var(--tm-danger-soft);
+	border-color: transparent;
 }
