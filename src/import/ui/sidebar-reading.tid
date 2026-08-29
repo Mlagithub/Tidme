@@ -5,16 +5,8 @@ list-after: $:/plugins/tidme/import/ui/sidebar
 
 <div class="tm-import-panel">
 
-''阅读列表'' —— 未读节卡与摘录（topic 队列），按优先级/到期排序
+''阅读列表'' —— 未读节卡与摘录（topic 队列），按文档分组（点开查看）
 
-<$button
-    class="tc-btn-invisible tc-tiddlylink"
-    tooltip="打开阅读列表（topic 队列：按文档/优先级被动重读）"
->
-    <$action-navigate
-        $to="$:/plugins/tidme/import/ui/reading-list"
-    />
-    <strong>📚 阅读列表</strong>
-</$button>
+<$reading-list compact="yes"/>
 
 </div>

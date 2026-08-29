@@ -104,12 +104,14 @@ function makeReadingList(): any {
 	class ReadingListWidget extends Widget {
 		_root: any = null;
 		_bound = false;
+		_compact = false;
 
 		render(parent: any, nextSibling: any) {
 			this.parentDomNode = parent;
 			this.computeAttributes();
 			this.execute();
-			const wrap = el(this.document, "div", "tm-reading-list");
+			this._compact = this.getAttribute("compact") === "yes";
+			const wrap = el(this.document, "div", "tm-reading-list" + (this._compact ? " tm-rl-compact" : ""));
 			this._root = wrap;
 			this.build();
 			parent.insertBefore(wrap, nextSibling);
@@ -129,77 +131,83 @@ function makeReadingList(): any {
 			const doc = this.document;
 			const wiki = this.wiki;
 			const root = this._root;
+			const compact = this._compact;
 			root.textContent = "";
 
 			const groups = groupByDoc(collectTopicCards(wiki));
 			const total = groups.reduce((n, g) => n + g.cards.length, 0);
 
-			// 页头：标题 + 计数 + 双轨说明
+			// 页头：标题 + 计数（compact：侧边栏精简）
 			const head = el(doc, "div", "tm-rl-head");
 			head.appendChild(el(doc, "div", "tm-rl-title", "📚 阅读列表"));
 			head.appendChild(el(doc, "div", "tm-rl-sub",
-				`${groups.length} 篇文档 · ${total} 张待读 —— 阅读轨（topic）：按优先级/到期被动重读`));
-			const toDeck = el(doc, "button", "tm-btn tm-rl-deck-btn", "复习测试卡 →");
-			toDeck.title = "跳转默认牌组（复习流：挖空/问答）";
-			toDeck.addEventListener("click", () => {
-				this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/Deck/default" });
-			});
-			head.appendChild(toDeck);
+				`${groups.length} 篇文档 · ${total} 张待读`));
+			if (!compact) {
+				head.appendChild(el(doc, "div", "tm-rl-sub", "阅读轨（topic）：按优先级/到期被动重读"));
+				const toDeck = el(doc, "button", "tm-btn tm-rl-deck-btn", "复习测试卡 →");
+				toDeck.title = "跳转默认牌组（复习流：挖空/问答）";
+				toDeck.addEventListener("click", () => {
+					this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/Deck/default" });
+				});
+				head.appendChild(toDeck);
+			}
 			root.appendChild(head);
 
 			if (!groups.length) {
 				const empty = el(doc, "div", "tm-empty");
 				empty.appendChild(el(doc, "div", "tm-empty-icon", "🎉"));
 				empty.appendChild(el(doc, "div", "", "没有待读材料。"));
-				const link = el(doc, "a", "tc-tiddlylink", "→ 去导入中心导入新内容");
-				link.href = "#";
-				link.addEventListener("click", (e: Event) => {
-					e.preventDefault();
-					this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/plugins/tidme/import/ui/import-center" });
-				});
-				empty.appendChild(link);
+				if (!compact) {
+					const link = el(doc, "a", "tc-tiddlylink", "→ 去导入中心导入新内容");
+					link.href = "#";
+					link.addEventListener("click", (ev: Event) => {
+						ev.preventDefault();
+						this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/plugins/tidme/import/ui/import-center" });
+					});
+					empty.appendChild(link);
+				}
 				root.appendChild(empty);
 				return;
 			}
 
 			for (const g of groups) {
-				const sec = el(doc, "section", "tm-rl-doc");
-				// 文档头：名 + 进度 + 继续阅读
+				const det = el(doc, "details", "tm-rl-doc");
+				// 文档组默认折叠（两本书也不占长页面）；summary = 名 + 进度 + 继续阅读
 				const docAll = sectionsOfDoc(wiki, g.doc);
 				const docDone = docAll.filter((t) => isReadDone(wiki.getTiddler(t)?.fields)).length;
 				const docTitle = g.cards[0].breadcrumb.split(" › ")[0] || g.doc;
 
-				const headRow = el(doc, "div", "tm-rl-doc-head");
+				const sum = el(doc, "summary", "tm-rl-doc-head");
 				const name = el(doc, "a", "tc-tiddlylink tm-rl-doc-name", docTitle);
 				name.href = "#";
 				name.title = `打开文档页：${docTitle}`;
 				name.addEventListener("click", (e: Event) => {
-					e.preventDefault();
+					e.preventDefault(); e.stopPropagation();
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: docTitle });
 				});
-				headRow.appendChild(name);
+				sum.appendChild(name);
 
-				if (docAll.length) {
-					const prog = el(doc, "span", "tm-rl-doc-prog",
-						`${docDone}/${docAll.length} 节已读`);
+				sum.appendChild(el(doc, "span", "tm-rl-doc-count", `${g.cards.length} 张待读`));
+				if (!compact && docAll.length) {
+					sum.appendChild(el(doc, "span", "tm-rl-doc-prog", `${docDone}/${docAll.length} 节已读`));
 					const barWrap = el(doc, "span", "tm-stat-bar tm-rl-doc-bar", "");
 					const bar = el(doc, "span", "tm-stat-bar-fill", "");
 					bar.style.width = `${Math.round((docDone / docAll.length) * 100)}%`;
 					barWrap.appendChild(bar);
-					headRow.appendChild(prog);
-					headRow.appendChild(barWrap);
+					sum.appendChild(barWrap);
 				}
 
 				const firstUnread = g.cards[0];
 				const cont = el(doc, "button", "tm-btn", "▶ 继续阅读");
 				cont.title = "从本组第一张待读卡开始";
-				cont.addEventListener("click", () => {
+				cont.addEventListener("click", (e: Event) => {
+					e.preventDefault(); e.stopPropagation();
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: firstUnread.title });
 				});
-				headRow.appendChild(cont);
-				sec.appendChild(headRow);
+				sum.appendChild(cont);
+				det.appendChild(sum);
 
-				// 卡片行
+				// 卡片行（compact：只留标题与 kind）
 				const list = el(doc, "div", "tm-rl-cards");
 				for (const c of g.cards) {
 					const row = el(doc, "div", "tm-rl-row");
@@ -213,25 +221,26 @@ function makeReadingList(): any {
 					title.href = "#";
 					title.title = "打开阅读";
 					title.addEventListener("click", (e: Event) => {
-						e.preventDefault();
+						e.preventDefault(); e.stopPropagation();
 						this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
 					});
 					row.appendChild(title);
 
-					const pri = el(doc, "span", "tm-rl-pri", `P${c.priority}`);
-					pri.title = `优先级 ${c.priority}（0 最高）`;
-					row.appendChild(pri);
-
-					const dueTxt = dueLabel(c);
-					if (dueTxt) {
-						const badge = el(doc, "span", "tm-rl-due", dueTxt);
-						row.appendChild(badge);
+					if (!compact) {
+						const pri = el(doc, "span", "tm-rl-pri", `P${c.priority}`);
+						pri.title = `优先级 ${c.priority}（0 最高）`;
+						row.appendChild(pri);
+						const dueTxt = dueLabel(c);
+						if (dueTxt) {
+							const badge = el(doc, "span", "tm-rl-due", dueTxt);
+							row.appendChild(badge);
+						}
 					}
 
 					list.appendChild(row);
 				}
-				sec.appendChild(list);
-				root.appendChild(sec);
+				det.appendChild(list);
+				root.appendChild(det);
 			}
 		}
 

@@ -100,9 +100,10 @@ function parseAnchor(raw: any): { section: string; snippet: string } | null {
 	return null;
 }
 
+/** 从当前选区/光标向上定位所在卡的标题（collapsed 光标也能定位，Alt+F7 无需选中文字即知当前 doc） */
 function frameTitleOfSelection(win: any): string | null {
 	const sel = win?.getSelection?.();
-	if (!sel || sel.isCollapsed || !sel.anchorNode) return null;
+	if (!sel || !sel.anchorNode) return null;
 	let node: any = sel.anchorNode;
 	while (node) {
 		if (node.getAttribute) {
@@ -457,9 +458,13 @@ function makeSectionBar(): WidgetCtor {
 				if (kind === "extract") {
 					btnRow.appendChild(mkBtn("✂ 挖空", "cloze", "从摘录中挖空（先选中文字，Alt+Z）", false, () => actionCloze(win)));
 				}
-				btnRow.appendChild(mkBtn("✔ 完成", "done", "读完此卡：移出学习队列", false, () => {
+				btnRow.appendChild(mkBtn("✔ 完成", "done", "读完此卡：移出队列并关闭", false, () => {
 					wiki.addTiddler(sched.doneCard(fields));
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+					// 读完自动关闭本卡，跳回来源（无来源则关闭即可）——阅读流不堆积
+					const backTo = fields["tidme.parent"] || "";
+					this.dispatchEvent({ type: "tm-close-tiddler" });
+					if (backTo) this.dispatchEvent({ type: "tm-navigate", navigateTo: backTo });
 					notify("done");
 				}));
 				btnRow.appendChild(mkBtn("🗑 删除", "del", "彻底删除此卡", false, () => {

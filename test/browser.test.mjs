@@ -431,4 +431,10 @@ test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
 	assert.ok(text.includes("摘"), "摘录卡标记");
 	assert.ok(text.includes("继续阅读"), "继续按钮");
 	assert.ok(text.includes("已读"), "进度文案");
+	// compact 模式（侧边栏）：文档分组折叠 + 不含页头"复习测试卡"与进度条
+	const compactRoot = renderWidgetEx(rl, "reading-list", { attributes: { compact: "yes" } }).root;
+	const ctext = collectText(compactRoot);
+	assert.ok(ctext.includes("张待读"), "compact 计数");
+	assert.ok(!ctext.includes("复习测试卡"), "compact 不含复习测试卡按钮");
+	assert.ok(ctext.includes("书名甲"), "compact 文档名");
 });

@@ -328,6 +328,11 @@ tags: $:/tags/Stylesheet
 	font-size: 0.92em;
 }
 .tm-section-bar {
+	position: sticky;
+	top: 0;
+	z-index: 60;
+	background: <<colour background>>;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
@@ -566,7 +571,14 @@ mark.tm-readpoint {
 	padding: 6px 10px;
 	background: <<colour tiddler-background>>;
 	border-bottom: 1px solid <<colour muted-foreground>>;
+	list-style: none;
+	cursor: pointer;
 }
+.tm-rl-doc-head::-webkit-details-marker { display: none; }
+.tm-rl-doc-head::before { content: "▸"; opacity: 0.55; transition: transform 0.15s; flex: none; }
+.tm-rl-doc[open] > .tm-rl-doc-head::before { transform: rotate(90deg); }
+.tm-rl-doc-head > .tc-tiddlylink { flex: 1; min-width: 0; }
+.tm-rl-doc-count { font-size: 0.8em; opacity: 0.7; white-space: nowrap; }
 .tm-rl-doc-name { font-weight: 600; }
 .tm-rl-doc-prog { font-size: 0.82em; opacity: 0.75; white-space: nowrap; }
 .tm-rl-doc-bar { flex: 0 0 90px; height: 6px; margin: 0 4px; }
@@ -603,6 +615,13 @@ mark.tm-readpoint {
 	border-radius: var(--tm-radius);
 }
 .tm-rl-row .tm-rl-due:empty { display: none; }
+
+/* 侧边栏紧凑阅读列表 */
+.tm-rl-compact .tm-rl-head { border-bottom: none; padding-bottom: 2px; }
+.tm-rl-compact .tm-rl-title { font-size: 1em; }
+.tm-rl-compact .tm-rl-doc-head { padding: 4px 6px; }
+.tm-rl-compact .tm-rl-row { padding: 2px 6px; font-size: 0.85em; }
+
 
 /* W3 摘录加工状态标注（文档页聚合区） */
 .tm-cb-state {
