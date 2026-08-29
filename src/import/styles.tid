@@ -295,20 +295,27 @@ tags: $:/tags/Stylesheet
 	color: <<colour primary>>;
 	opacity: 0.9;
 }
-/* 统一按钮风格：全部 tm-sec-btn 基类 + 语义修饰 */
+/* 统一按钮风格：全部 tm-sec-btn 基类 + 语义修饰（沿用 core design token） */
 .tm-sec-btn {
-	font-size: 0.9em;
-	padding: 1px 8px;
-	border: 1px solid <<colour muted-foreground>>;
-	border-radius: 3px;
-	background: <<colour background>>;
-	color: inherit;
-	opacity: 0.85;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	font-family: var(--tm-font);
+	font-size: 0.88em;
+	font-weight: 500;
+	padding: 4px 10px;
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-sm);
+	background: var(--tm-surface);
+	color: var(--tm-text-2);
 	cursor: pointer;
-	line-height: 1.5;
+	line-height: 1.4;
+	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .tm-sec-btn:hover {
-	opacity: 1;
+	background: var(--tm-surface-2);
+	color: var(--tm-text-1);
+	border-color: rgba(17, 24, 39, 0.18);
 }
 .tm-sec-btn:disabled {
 	opacity: 0.4;
@@ -320,20 +327,25 @@ tags: $:/tags/Stylesheet
 	vertical-align: -0.15em;
 }
 .tm-sec-btn--done {
-	color: <<colour primary>>;
-	border-color: <<colour primary>>;
+	color: var(--tm-accent);
+	border-color: var(--tm-accent);
+	background: var(--tm-accent-soft);
 }
+.tm-sec-btn--done:hover { background: var(--tm-accent-soft); color: var(--tm-accent-strong); }
 .tm-sec-btn--undo {
-	color: <<colour primary>>;
-	border-color: <<colour primary>>;
+	color: var(--tm-accent);
+	border-color: var(--tm-accent);
+	background: var(--tm-accent-soft);
 }
+.tm-sec-btn--undo:hover { background: var(--tm-accent-soft); color: var(--tm-accent-strong); }
 .tm-sec-btn--del {
-	color: <<colour danger>>;
-	border-color: <<colour danger>>;
-	opacity: 0.8;
+	color: var(--tm-danger);
+	border-color: var(--tm-danger-soft);
+	background: var(--tm-danger-soft);
 }
+.tm-sec-btn--del:hover { background: #fecaca; color: var(--tm-danger); }
 .tm-sec-btn--ignore {
-	opacity: 0.6;
+	color: var(--tm-text-3);
 }
 .tm-bar-sep {
 	width: 1px;

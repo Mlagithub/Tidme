@@ -215,3 +215,52 @@ tags: $:/tags/Stylesheet
 	overflow: hidden;
 }
 .tm-progress-fill { height: 100%; border-radius: 999px; background: var(--tm-accent); transition: width 0.2s ease; }
+
+/* ============================================================
+   暗色模式：html 挂 data-tme-dark 时覆盖 token 与跨 TW 的关键容器。
+   切换：主题切换按钮（$:/Decks / 阅读列表顶部）设置该属性。
+   ============================================================ */
+[data-tme-dark] {
+	/* 表面/边框 */
+	--tm-surface: #1e293b;
+	--tm-surface-2: #16233a;
+	--tm-surface-3: #101827;
+	--tm-border: #334155;
+	/* 文字 */
+	--tm-text-1: #f1f5f9;
+	--tm-text-2: #cbd5e1;
+	--tm-text-3: #94a3b8;
+	/* 主色（更亮，保证对比） */
+	--tm-accent: #818cf8;
+	--tm-accent-strong: #a5b4fc;
+	--tm-accent-soft: #37306e;
+	/* 阴影更重 */
+	--tm-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+	--tm-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.4);
+	/* 徽章 pastel 深色 */
+	--tm-badge-new-bg: #1e3a5f;   --tm-badge-new-fg: #93c5fd;
+	--tm-badge-learn-bg: #5b3d0e; --tm-badge-learn-fg: #fcd34d;
+	--tm-badge-due-bg: #0f3d2e;   --tm-badge-due-fg: #6ee7b7;
+	--tm-badge-overdue-bg: #5c1a1a; --tm-badge-overdue-fg: #fca5a5;
+	--tm-badge-suspended-bg: #3b2f63; --tm-badge-suspended-fg: #c4b5fd;
+}
+/* 让 TW 页面主体随暗色切换（页面背景/文字/内容卡） */
+[data-tme-dark] body {
+	background: #0f172a;
+	color: var(--tm-text-1);
+}
+[data-tme-dark] .tc-page-container,
+[data-tme-dark] .tc-story-river,
+[data-tme-dark] .tc-sidebar-scrollable,
+[data-tme-dark] .tc-tiddler-frame,
+[data-tme-dark] .tm-import-panel,
+[data-tme-dark] .tm-stat-cards,
+[data-tme-dark] .tm-section-bar {
+	background: var(--tm-surface);
+	color: var(--tm-text-1);
+}
+[data-tme-dark] .tc-tiddler-frame {
+	border-color: var(--tm-border);
+}
+[data-tme-dark] a.tc-tiddlylink { color: var(--tm-accent); }
+[data-tme-dark] .tc-page-container { background: var(--tm-surface-3); }
