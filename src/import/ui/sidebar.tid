@@ -14,7 +14,8 @@ list-after: $:/core/ui/SideBar/Open
 |最小节长|<$edit-text tiddler="$:/temp/tidme-import/min" default="600" tag="input" type="number"/> 字|
 |同步 bag|<$edit-text tiddler="$:/temp/tidme-import/bag" default="default" tag="input"/>（server 版）|
 
+完整导入（粘贴文本、剪藏收件箱）→ [[导入中心|$:/plugins/tidme/import/ui/import-center]]
+
 [[快捷键与用法|$:/plugins/tidme/import/ui/help-shortcuts]]
-|同步 bag|<$edit-text tiddler="$:/temp/tidme-import/bag" default="default" tag="input"/>（server 版）|
 
 </div>
