@@ -374,3 +374,25 @@ test("section-bar: 忽略按钮（G3）", () => {
 	const text = collectText(root);
 	assert.ok(text.includes("忽略"), "未读节显示忽略按钮");
 });
+
+test("W1 双轨: 默认牌组只装 item（含挖空，不含节卡/摘录）", () => {
+	const deck = wiki.getTiddler("$:/Deck/default");
+	assert.ok(deck, "默认牌组存在");
+	const queue = wiki.filterTiddlers(String(deck.fields.card));
+	assert.ok(queue.includes("书名甲 › 第一章 › 挖空"), "挖空卡（item）进复习流");
+	assert.ok(!queue.includes("书名甲 › 第一章 › 摘录"), "摘录卡（topic）不进复习流");
+	assert.ok(!queue.some((t) => wiki.getTiddler(t)?.fields?.["tidme.kind"] === "section"), "节卡（topic）不进复习流");
+	assert.ok(queue.includes("手动散卡甲"), "无 kind 手动卡按 item 进复习流");
+	// 自动牌组 = 本书 topic 阅读牌组（tag[.]）
+	const autoDeck = wiki.getTiddler("$:/Deck/read/书名甲");
+	assert.ok(autoDeck, "自动阅读牌组存在");
+	const readQueue = wiki.filterTiddlers(String(autoDeck.fields.card));
+	// 前面测试已把两节都标为已读，这里补一张未读节卡验证"未读节卡进阅读牌组"
+	const docId = wiki.getTiddler("书名甲 › 第一章 › 摘录").fields["tidme.doc"];
+	wiki.addTiddler({ title: "书名甲 › 新节", tags: ["?", "."], "tidme.doc": docId, "tidme.kind": "section", state: "0" });
+	const readQueue2 = wiki.filterTiddlers(String(autoDeck.fields.card));
+	assert.ok(readQueue2.includes("书名甲 › 新节"), "未读节卡在阅读牌组");
+	assert.ok(readQueue.includes("书名甲 › 第一章 › 摘录"), "摘录卡在阅读牌组");
+	assert.ok(!readQueue.includes("书名甲 › 第一章 › 挖空"), "挖空卡不在阅读牌组");
+	assert.ok(!readQueue.includes("书名甲 › 书名甲"), "已读节卡（done）不在阅读牌组");
+});
