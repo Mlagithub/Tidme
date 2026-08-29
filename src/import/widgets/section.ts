@@ -60,6 +60,7 @@ function sectionsOfDoc(wiki: any, doc: string): string[] {
 		.filter((t: string) => {
 			const f = wiki.getTiddler(t)?.fields;
 			if (!f) return false;
+			if (String(f["tidme.doc"]) !== String(doc)) return false; // 必须按文档过滤
 			const kind = f["tidme.kind"];
 			return kind === "section" || (kind === undefined && f["tidme.order"] !== undefined);
 		});
@@ -471,6 +472,10 @@ function makeSectionBar(): WidgetCtor {
 				btnRow.appendChild(mkBtn("🗑 删除", "del", "彻底删除此卡", false, () => {
 					wiki.deleteTiddler(title);
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+					// 删除后本卡不存在：关闭并跳回来源（无来源则关闭）——不留空卡
+					const backTo = fields["tidme.parent"] || "";
+					this.dispatchEvent({ type: "tm-close-tiddler" });
+					if (backTo) this.dispatchEvent({ type: "tm-navigate", navigateTo: backTo });
 				}));
 				root.appendChild(btnRow);
 				return;
