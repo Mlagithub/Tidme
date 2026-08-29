@@ -186,6 +186,17 @@ tags: $:/tags/Stylesheet
 .tm-nav-item:hover { color: var(--tm-text-1); background: var(--tm-surface-2); }
 .tm-nav-item.tm-nav-active { color: var(--tm-accent); font-weight: 600; }
 
+/* 文档页正文的节链接列表：限高内滚动（章节多的文档不撑长页面） */
+.tc-tiddler-frame:has(.tm-doc-resume) .tc-tiddler-body ul {
+	max-height: 300px;
+	overflow-y: auto;
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-sm);
+	padding: 6px 10px;
+	background: var(--tm-surface);
+}
+.tc-tiddler-frame:has(.tm-doc-resume) .tc-tiddler-body ul li { padding: 2px 0; }
+
 /* 文档页：进度横幅卡片化 */
 .tm-doc-banner {
 	display: flex;
