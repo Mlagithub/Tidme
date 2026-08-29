@@ -503,11 +503,12 @@ mark.tm-readpoint {
 .tm-doc-table {
 	width: 100%;
 	border-collapse: collapse;
+	table-layout: fixed;
 	font-size: 0.9em;
 }
 .tm-doc-table th {
 	text-align: left;
-	padding: 6px 14px;
+	padding: 6px 12px;
 	color: var(--tm-text-3);
 	font-size: 0.72em;
 	text-transform: uppercase;
@@ -516,16 +517,37 @@ mark.tm-readpoint {
 	border-bottom: 1px solid var(--tm-border);
 }
 .tm-doc-table td {
-	padding: 5px 14px;
+	padding: 5px 12px;
 	border-bottom: 1px solid var(--tm-border);
 	color: var(--tm-text-1);
 	vertical-align: middle;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .tm-doc-table tbody tr:hover { background: var(--tm-surface-2); }
-.tm-cb-actions { white-space: nowrap; }
-.tm-cb-actions .tm-btn { margin-right: 4px; padding: 2px 8px; font-size: 0.84em; }
+/* 已读区（名称弹性 / 操作固定右对齐） */
+.tm-doc-done-table th:last-child, .tm-doc-done-table td:last-child { width: 130px; }
+/* 摘录区（类型窄 / 名称弹性 / 加工窄 / 操作固定） */
+.tm-doc-derived-table td:first-child, .tm-doc-derived-table th:first-child { width: 48px; }
+.tm-doc-derived-table td:nth-child(3), .tm-doc-derived-table th:nth-child(3) { width: 80px; }
+.tm-doc-derived-table td:nth-child(4), .tm-doc-derived-table th:nth-child(4) { width: 250px; }
+.tm-cb-name { color: var(--tm-text-1); }
+.tm-cb-actions { white-space: nowrap; text-align: right; }
+.tm-cb-actions .tm-btn { margin-left: 4px; padding: 3px 10px; font-size: 0.84em; }
 .tm-cb-del { color: var(--tm-text-2); }
 .tm-cb-del:hover { color: var(--tm-danger); background: var(--tm-danger-soft); }
+.tm-cb-kind {
+	display: inline-flex;
+	min-width: 1.7em;
+	justify-content: center;
+	font-size: 0.74em;
+	border-radius: var(--tm-radius-sm);
+	background: var(--tm-badge-new-bg);
+	color: var(--tm-badge-new-fg);
+	font-weight: 600;
+	padding: 1px 4px;
+}
 .tm-doc-done-row {
 	display: flex;
 	align-items: center;

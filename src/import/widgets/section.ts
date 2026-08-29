@@ -757,7 +757,7 @@ function makeDocResume(): WidgetCtor {
 				const doneBox = el(doc, "details", "tm-doc-done");
 				const summary = el(doc, "summary", "tm-import-muted", `已读卡（${doneTitles.length}）—— 可重新加入`);
 				doneBox.appendChild(summary);
-				const table = el(doc, "table", "tm-doc-table");
+				const table = el(doc, "table", "tm-doc-table tm-doc-done-table");
 				const thead = el(doc, "thead", "");
 				const htr = el(doc, "tr", "");
 				for (const h of ["名称", "操作"]) htr.appendChild(el(doc, "th", "", h));
@@ -766,8 +766,7 @@ function makeDocResume(): WidgetCtor {
 				const tbody = el(doc, "tbody", "");
 				for (const dt of doneTitles) {
 					const tr = el(doc, "tr", "tm-doc-done-row");
-					tr.appendChild(el(doc, "td", "",
-						String(wiki.getTiddler(dt)?.fields["tidme.breadcrumb"] || dt).split(" › ").pop() || dt));
+					tr.appendChild(el(doc, "td", "tm-cb-name", dt));
 					const actTd = el(doc, "td", "tm-cb-actions", "");
 					const back = el(doc, "button", "tm-btn tm-btn--ghost", "重新加入");
 					back.title = "恢复到学习队列";
@@ -805,7 +804,7 @@ function makeDocResume(): WidgetCtor {
 				});
 				const clozeChildrenOf = (title: string): number =>
 					wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, "")}]tidme.kind[cloze]]`).length;
-				const table = el(doc, "table", "tm-doc-table");
+				const table = el(doc, "table", "tm-doc-table tm-doc-derived-table");
 				const thead = el(doc, "thead", "");
 				const htr = el(doc, "tr", "");
 				for (const h of ["", "名称", "加工", "操作"]) htr.appendChild(el(doc, "th", "", h));
@@ -818,8 +817,7 @@ function makeDocResume(): WidgetCtor {
 					const kindMark = c.fields["tidme.kind"] === "cloze" ? "挖" : "摘";
 					kindTd.appendChild(el(doc, "span", "tm-cb-kind", kindMark));
 					tr.appendChild(kindTd);
-					tr.appendChild(el(doc, "td", "",
-						String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title));
+					tr.appendChild(el(doc, "td", "tm-cb-name", c.title));
 					// W3：摘录加工状态（可挖空/已挖空）
 					const stateTd = el(doc, "td", "", "");
 					if (c.fields["tidme.kind"] === "extract") {
