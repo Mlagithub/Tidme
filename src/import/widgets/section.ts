@@ -689,7 +689,7 @@ function makeDocResume(): WidgetCtor {
 			const itemFilter = docItemFilter(wiki, docId);
 			const inQueueCount = wiki.filterTiddlers(itemFilter).length;
 			if (inQueueCount > 0) {
-				const subsetBtn = el(doc, "button", "tm-btn tm-btn--primary", "📖 复习本书");
+				const subsetBtn = el(doc, "button", "tm-btn tm-btn--primary", "复习本书");
 				subsetBtn.title = `子集复习：仅复习本书 ${inQueueCount} 张挖空/问答卡（临时牌组，复习完可删除）`;
 				subsetBtn.addEventListener("click", () => {
 					// 从任意现有 deck 复制调度字段，覆盖 card 为本书 item 子集过滤器

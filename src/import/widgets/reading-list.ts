@@ -139,7 +139,7 @@ function makeReadingList(): any {
 
 			// 页头：标题 + 计数（compact：侧边栏精简）
 			const head = el(doc, "div", "tm-rl-head");
-			head.appendChild(el(doc, "div", "tm-rl-title", "📚 阅读列表"));
+			head.appendChild(el(doc, "div", "tm-rl-title", "阅读列表"));
 			head.appendChild(el(doc, "div", "tm-rl-sub",
 				`${groups.length} 篇文档 · ${total} 张待读`));
 			if (!compact) {
@@ -155,7 +155,6 @@ function makeReadingList(): any {
 
 			if (!groups.length) {
 				const empty = el(doc, "div", "tm-empty");
-				empty.appendChild(el(doc, "div", "tm-empty-icon", "🎉"));
 				empty.appendChild(el(doc, "div", "", "没有待读材料。"));
 				if (!compact) {
 					const link = el(doc, "a", "tc-tiddlylink", "→ 去导入中心导入新内容");
