@@ -356,9 +356,9 @@ test("doc-resume: 摘录收件箱聚合（G4/W3 加工标注）", () => {
 	const text = collectText(root);
 	assert.ok(text.includes("摘录/挖空"), "摘录聚合区标题");
 	assert.ok(text.includes("摘"), "摘录 kind 标记");
-	assert.ok(text.includes("待提炼"), "无子挖空的摘录显示待提炼（W3）");
+	assert.ok(text.includes("可挖空"), "无子挖空的摘录显示可挖空（W3）");
 	assert.ok(text.includes("回原文"), "回原文操作");
-	// 给摘录卡加一个子挖空 → 已加工
+	// 给摘录卡加一个子挖空 → 已挖空
 	const extractTitle = wiki.filterTiddlers("[tidme.kind[extract]]")[0];
 	const extFields = wiki.getTiddler(extractTitle).fields;
 	wiki.addTiddler({
@@ -367,7 +367,7 @@ test("doc-resume: 摘录收件箱聚合（G4/W3 加工标注）", () => {
 		"tidme.breadcrumb": `${extFields["tidme.breadcrumb"]} › 挖空`
 	});
 	const root2 = renderWidget(sectionBar, "doc-resume", { variables: { currentTiddler: "书名甲" } });
-	assert.ok(collectText(root2).includes("已加工"), "有子挖空的摘录显示已加工（W3）");
+	assert.ok(collectText(root2).includes("已挖空"), "有子挖空的摘录显示已挖空（W3）");
 });
 
 test("section-bar: 摘录卡加工按钮（✂ 挖空）", () => {
@@ -435,7 +435,7 @@ test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
 	const compactRoot = renderWidgetEx(rl, "reading-list", { attributes: { compact: "yes" } }).root;
 	const ctext = collectText(compactRoot);
 	assert.ok(ctext.includes("张待读"), "compact 计数");
-	assert.ok(!ctext.includes("复习测试卡"), "compact 不含复习测试卡按钮");
+	assert.ok(!ctext.includes("去复习"), "compact 不含去复习按钮");
 	assert.ok(ctext.includes("书名甲"), "compact 文档名");
 });
 

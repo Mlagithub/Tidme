@@ -143,8 +143,8 @@ function makeReadingList(): any {
 			head.appendChild(el(doc, "div", "tm-rl-sub",
 				`${groups.length} 篇文档 · ${total} 张待读`));
 			if (!compact) {
-				head.appendChild(el(doc, "div", "tm-rl-sub", "阅读轨（topic）：按优先级/到期被动重读"));
-				const toDeck = el(doc, "button", "tm-btn tm-rl-deck-btn", "复习测试卡 →");
+				head.appendChild(el(doc, "div", "tm-rl-sub", "按优先级和到期时间排序"));
+				const toDeck = el(doc, "button", "tm-btn tm-rl-deck-btn", "去复习 →");
 				toDeck.title = "跳转默认牌组（复习流：挖空/问答）";
 				toDeck.addEventListener("click", () => {
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/Deck/default" });

@@ -690,7 +690,7 @@ function makeDocResume(): WidgetCtor {
 			const inQueueCount = wiki.filterTiddlers(itemFilter).length;
 			if (inQueueCount > 0) {
 				const subsetBtn = el(doc, "button", "tm-btn tm-btn--primary", "📖 复习本书");
-				subsetBtn.title = `子集复习：仅测本书 ${inQueueCount} 张测试卡（挖空/问答；临时牌组，复习完可删除）`;
+				subsetBtn.title = `子集复习：仅复习本书 ${inQueueCount} 张挖空/问答卡（临时牌组，复习完可删除）`;
 				subsetBtn.addEventListener("click", () => {
 					// 从任意现有 deck 复制调度字段，覆盖 card 为本书 item 子集过滤器
 					const baseDeck = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]")[0];
@@ -746,7 +746,7 @@ function makeDocResume(): WidgetCtor {
 			if (derived.length) {
 				const box = el(doc, "details", "tm-doc-derived");
 				const summary = el(doc, "summary", "tm-import-muted",
-					`摘录/挖空（${derived.length}）—— 摘录=阅读材料（可挖空转测试卡）· 挖空=测试卡`);
+					`摘录/挖空（${derived.length}）—— 摘录可挖空成卡片`);
 				box.appendChild(summary);
 				const sorted = [...derived].sort((a: any, b: any) => {
 					const pa = String(a.fields["tidme.breadcrumb"] || a.title);
@@ -761,12 +761,12 @@ function makeDocResume(): WidgetCtor {
 					row.appendChild(el(doc, "span", "tm-cb-kind", kindMark));
 					row.appendChild(el(doc, "span", "tm-import-muted",
 						String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title));
-					// W3：摘录加工状态（待提炼/已加工）
+					// W3：摘录加工状态（可挖空/已挖空）
 					if (c.fields["tidme.kind"] === "extract") {
 						const hasCloze = clozeChildrenOf(c.title) > 0;
 						const state = el(doc, "span", hasCloze ? "tm-cb-state tm-cb-state-done" : "tm-cb-state",
-							hasCloze ? "已加工" : "待提炼");
-						state.title = hasCloze ? "已在此摘录上挖空生成测试卡" : "选中摘录内文字按 Alt+Z 挖空 → 生成测试卡";
+							hasCloze ? "已挖空" : "可挖空");
+						state.title = hasCloze ? "已在此摘录上挖空成卡片" : "选中文字按 Alt+Z 挖空成卡片";
 						row.appendChild(state);
 					}
 					const open = el(doc, "button", "tm-cm-op", "打开");
