@@ -4,24 +4,32 @@ type: text/vnd.tiddlywiki
 
 ! 导入中心
 
+<$tidme-nav/>
+
 导入统一入口：本地文件、粘贴文本、剪藏收件箱——全部收敛为 tiddler 后经通用切分器入库。
 
 <div class="tm-import-tabs">
-<$radio tiddler="$:/state/tidme/import/tab" value="file" class="tm-btn tm-import-tab" selectedClass="tm-btn--active tm-import-tab">本地文件</$radio>
-<$radio tiddler="$:/state/tidme/import/tab" value="paste" class="tm-btn tm-import-tab" selectedClass="tm-btn--active tm-import-tab">粘贴文本</$radio>
-<$radio tiddler="$:/state/tidme/import/tab" value="inbox" class="tm-btn tm-import-tab" selectedClass="tm-btn--active tm-import-tab">剪藏收件箱</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="file" class="tm-tab tm-import-tab" selectedClass="tm-tab--active tm-import-tab">本地文件</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="paste" class="tm-tab tm-import-tab" selectedClass="tm-tab--active tm-import-tab">粘贴文本</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="inbox" class="tm-tab tm-import-tab" selectedClass="tm-tab--active tm-import-tab">剪藏收件箱</$radio>
 </div>
 
 <$reveal type="match" state="$:/state/tidme/import/tab" text="file" default="file">
+<div class="tm-card tm-import-body">
 <$import-file/>
+</div>
 </$reveal>
 
 <$reveal type="match" state="$:/state/tidme/import/tab" text="paste">
+<div class="tm-card tm-import-body">
 <$paste-split/>
+</div>
 </$reveal>
 
 <$reveal type="match" state="$:/state/tidme/import/tab" text="inbox">
+<div class="tm-card tm-import-body">
 <$inbox-split/>
+</div>
 </$reveal>
 
 ---

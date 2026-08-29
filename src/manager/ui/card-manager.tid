@@ -4,6 +4,8 @@ type: text/vnd.tiddlywiki
 
 ! 卡片管理器
 
+<$tidme-nav/>
+
 浏览、组织与管理全部学习卡片（含已读、搁置与手动创建的散卡）。
 
 <$card-manager/>

@@ -4,6 +4,8 @@ type: text/vnd.tiddlywiki
 
 ! 统计面板
 
+<$tidme-nav/>
+
 <$stats-panel/>
 
 ---
