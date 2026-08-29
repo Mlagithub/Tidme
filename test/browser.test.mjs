@@ -438,3 +438,22 @@ test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
 	assert.ok(!ctext.includes("复习测试卡"), "compact 不含复习测试卡按钮");
 	assert.ok(ctext.includes("书名甲"), "compact 文档名");
 });
+
+test("workflow: $:/Decks 工作流中心（开始阅读/开始复习 + 阅读目标）", () => {
+	const wf = tw.modules.execute("$:/plugins/tidme/review/widgets/workflow.js");
+	// 渲染：两个按钮
+	const root = renderWidget(wf, "tidme-workflow");
+	const text = collectText(root);
+	assert.ok(text.includes("开始阅读"), "开始阅读按钮");
+	assert.ok(text.includes("开始复习"), "开始复习按钮");
+	// 开始阅读目标：无全局续读点 → 第一待读节卡
+	const target1 = wf.globalReadingTarget(wiki);
+	assert.ok(target1 && wiki.getTiddler(target1), "开始阅读跳到一张存在节卡");
+	// 有全局续读点 → 用它
+	wf && wiki.addTiddler({ title: "$:/state/tidme-import/readpoint/global", text: "书名甲 › 第一章 › 摘录" });
+	const target2 = wf.globalReadingTarget(wiki);
+	assert.equal(target2, "书名甲 › 第一章 › 摘录", "有续读点则跳续读点卡");
+	// 全无 → 阅读列表页
+	const emptyWiki = { filterTiddlers: () => [], getTiddler: () => null };
+	assert.equal(wf.globalReadingTarget(emptyWiki), "$:/plugins/tidme/import/ui/reading-list", "全无跳阅读列表");
+});

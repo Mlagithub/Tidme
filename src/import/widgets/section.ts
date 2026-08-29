@@ -17,6 +17,7 @@ const events = require("$:/plugins/tidme/core/events.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
+const GLOBAL_READPOINT = "$:/state/tidme-import/readpoint/global";
 
 interface ReadPoint { t: string; s: string }
 
@@ -480,6 +481,8 @@ function makeSectionBar(): WidgetCtor {
 			const { prev, next, index } = pipeline.neighborsOf(list, title);
 			const rp = parseReadPoint(wiki, docId);
 			const left = list.filter((x) => !isDone(wiki.getTiddler(x)?.fields)).length;
+			// 全局续读点：记录最近阅读位置（「开始阅读」一键跳回；不设空则清）
+			wiki.addTiddler({ title: GLOBAL_READPOINT, text: title });
 
 			// 第一行：面包屑 · 位置 · 本书剩余 · 已读状态
 			const crumb = el(doc, "span", "tm-section-crumb tm-import-muted", String(fields["tidme.breadcrumb"] || ""));
