@@ -1,0 +1,217 @@
+title: $:/plugins/tidme/core/styles/tokens
+tags: $:/tags/Stylesheet
+
+/* ============================================================
+   Tidme 设计系统（统一 token + 组件基类）
+   风格：现代学习/知识应用（卡面 + 柔和阴影 + 圆角 + 主色按钮 + 留白分隔）
+   所有插件页面的 tm-* 组件统一引用此处的 token 与基类。
+   ============================================================ */
+
+/* ---- 色板（中日/晨间浅色，可扩展暗色） ---- */
+:root {
+	--tm-surface: #ffffff;
+	--tm-surface-2: #f7f8fa;
+	--tm-surface-3: #eef0f4;
+	--tm-border: #e4e6ea;
+	--tm-text-1: #1a1d23;
+	--tm-text-2: #6b7280;
+	--tm-text-3: #9ca3af;
+
+	--tm-accent: #4f46e5;
+	--tm-accent-strong: #4338ca;
+	--tm-accent-soft: #eef2ff;
+
+	--tm-success: #059669;
+	--tm-success-soft: #d1fae5;
+	--tm-warn: #d97706;
+	--tm-warn-soft: #fef3c7;
+	--tm-danger: #dc2626;
+	--tm-danger-soft: #fee2e2;
+	--tm-info: #2563eb;
+	--tm-info-soft: #dbeafe;
+
+	/* 徽章 pastel 语义（背景/前景成对） */
+	--tm-badge-new-bg: #dbeafe;   --tm-badge-new-fg: #1e40af;
+	--tm-badge-learn-bg: #fef3c7; --tm-badge-learn-fg: #92400e;
+	--tm-badge-due-bg: #d1fae5;   --tm-badge-due-fg: #047857;
+	--tm-badge-overdue-bg: #fee2e2; --tm-badge-overdue-fg: #b91c1c;
+	--tm-badge-suspended-bg: #ede9fe; --tm-badge-suspended-fg: #6d28d9;
+
+	/* 圆角 */
+	--tm-radius: 10px;
+	--tm-radius-sm: 6px;
+	--tm-radius-xs: 4px;
+
+	/* 阴影（柔和分层，替代「边线练墙」） */
+	--tm-shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
+	--tm-shadow: 0 1px 2px rgba(17, 24, 39, 0.06), 0 6px 16px rgba(17, 24, 39, 0.07);
+	--tm-shadow-lg: 0 2px 4px rgba(17, 24, 39, 0.06), 0 12px 28px rgba(17, 24, 39, 0.10);
+
+	/* 字体 */
+	--tm-font: -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+		"Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+	--tm-font-mono: "SF Mono", "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+
+	/* 间距（4/8 网格） */
+	--tm-gap: 4px;
+	--tm-gap-lg: 8px;
+	--tm-gap-xl: 12px;
+	--tm-gap-2xl: 20px;
+
+	/* 兼容旧引用 */
+	--tm-gap-lg-old: 8px;
+	--tm-badge-new: var(--tm-badge-new-bg);
+	--tm-badge-learn: var(--tm-badge-learn-bg);
+	--tm-badge-due: var(--tm-badge-due-bg);
+	--tm-badge-overdue: var(--tm-badge-overdue-bg);
+	--tm-badge-suspended: var(--tm-badge-suspended-bg);
+}
+
+/* ---- 按钮（统一：ghost/描边/主色/危险/文字） ---- */
+.tm-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4em;
+	font-family: var(--tm-font);
+	font-size: 0.86em;
+	font-weight: 500;
+	padding: 6px 14px;
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-sm);
+	background: var(--tm-surface);
+	color: var(--tm-text-2);
+	cursor: pointer;
+	line-height: 1.4;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+		box-shadow 0.15s ease, transform 0.05s ease;
+}
+.tm-btn:hover {
+	background: var(--tm-surface-2);
+	color: var(--tm-text-1);
+	border-color: rgba(17, 24, 39, 0.18);
+}
+.tm-btn:active { transform: translateY(0.5px); }
+.tm-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.tm-btn.focus, .tm-btn:focus-visible { outline: 2px solid var(--tm-accent-soft); outline-offset: 1px; }
+
+.tm-btn--primary {
+	background: var(--tm-accent);
+	border-color: var(--tm-accent);
+	color: #fff;
+	font-weight: 600;
+	box-shadow: var(--tm-shadow-sm);
+}
+.tm-btn--primary:hover {
+	background: var(--tm-accent-strong);
+	border-color: var(--tm-accent-strong);
+	color: #fff;
+	box-shadow: var(--tm-shadow);
+}
+.tm-btn--danger {
+	background: var(--tm-danger-soft);
+	border-color: transparent;
+	color: var(--tm-danger);
+}
+.tm-btn--danger:hover { background: #fecaca; color: var(--tm-danger); }
+.tm-btn--ghost { border-color: transparent; background: transparent; color: var(--tm-text-2); }
+.tm-btn--ghost:hover { background: var(--tm-surface-2); color: var(--tm-text-1); }
+.tm-btn--active {
+	background: var(--tm-accent-soft);
+	border-color: transparent;
+	color: var(--tm-accent-strong);
+}
+
+/* ---- 卡片（卡面） ---- */
+.tm-card {
+	background: var(--tm-surface);
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius);
+	box-shadow: var(--tm-shadow-sm);
+}
+.tm-card--flat { box-shadow: none; }
+
+/* ---- 页面级标题/说明（替代系统路径标题的气场） ---- */
+.tm-page-head { margin: 4px 0 8px; }
+.tm-page-title {
+	font-family: var(--tm-font);
+	font-size: 1.4em;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--tm-text-1);
+}
+.tm-page-desc { margin-top: 4px; font-size: 0.9em; color: var(--tm-text-2); line-height: 1.5; }
+
+/* ---- 表格（hairline 分隔 + 行 hover） ---- */
+.tm-table-wrap {
+	background: var(--tm-surface);
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius);
+	box-shadow: var(--tm-shadow-sm);
+	overflow: hidden;
+}
+.tm-table { width: 100%; border-collapse: collapse; }
+.tm-table th {
+	text-align: left;
+	font-size: 0.78em;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--tm-text-3);
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--tm-border);
+	background: var(--tm-surface-2);
+}
+.tm-table td { padding: 10px 14px; border-bottom: 1px solid var(--tm-border); color: var(--tm-text-1); font-size: 0.88em; }
+.tm-table tr:last-child td { border-bottom: none; }
+.tm-table tbody tr:hover { background: var(--tm-surface-2); }
+
+/* ---- 徽章（pill） ---- */
+.tm-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.25em;
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: 0.74em;
+	font-weight: 600;
+	line-height: 1.6;
+	white-space: nowrap;
+}
+.tm-badge-new { background: var(--tm-badge-new-bg); color: var(--tm-badge-new-fg); }
+.tm-badge-learn { background: var(--tm-badge-learn-bg); color: var(--tm-badge-learn-fg); }
+.tm-badge-due { background: var(--tm-badge-due-bg); color: var(--tm-badge-due-fg); }
+.tm-badge-overdue { background: var(--tm-badge-overdue-bg); color: var(--tm-badge-overdue-fg); }
+.tm-badge-suspended { background: var(--tm-badge-suspended-bg); color: var(--tm-badge-suspended-fg); }
+
+/* ---- 标签页（pill） ---- */
+.tm-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 5px 12px;
+	font-size: 0.85em;
+	font-weight: 500;
+	border: 1px solid var(--tm-border);
+	border-radius: 999px;
+	background: var(--tm-surface);
+	color: var(--tm-text-2);
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.tm-tab:hover { color: var(--tm-text-1); border-color: rgba(17, 24, 39, 0.18); }
+.tm-tab--active {
+	background: var(--tm-accent);
+	border-color: var(--tm-accent);
+	color: #fff;
+	font-weight: 600;
+}
+
+/* ---- 进度条（圆角） ---- */
+.tm-progress {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--tm-surface-3);
+	overflow: hidden;
+}
+.tm-progress-fill { height: 100%; border-radius: 999px; background: var(--tm-accent); transition: width 0.2s ease; }

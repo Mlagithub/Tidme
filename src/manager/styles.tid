@@ -4,21 +4,7 @@ tags: [[$:/tags/Stylesheet]]
 
 /* Tidme Manager：卡片浏览 / 管理器 / 牌组批量操作样式 */
 
-/* ===== P0 设计 token（语义色/尺寸；组件统一引用，勿散落硬编码） ===== */
-:root {
-	--tm-radius: 4px;
-	--tm-gap: 4px;
-	--tm-gap-lg: 8px;
-	--tm-badge-new: #dbeafe;
-	--tm-badge-learn: #fef3c7;
-	--tm-badge-due: #d1fae5;
-	--tm-badge-overdue: #fee2e2;
-	--tm-badge-done: #e5e7eb;
-	--tm-badge-suspended: #ede9fe;
-	--tm-mark-merged: #f1f5f9;
-	--tm-mark-split: #eff6ff;
-}
-
+/* 设计 token / tm-btn 基类统一由 $:/plugins/tidme/core/styles/tokens 提供 */
 /* ===== 按钮体系（次操作统一 tm-btn；主操作沿用 tc-btn-primary） ===== */
 .tm-btn {
 	display: inline-flex;
