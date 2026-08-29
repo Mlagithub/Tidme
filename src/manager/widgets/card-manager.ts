@@ -144,6 +144,7 @@ function makeCardManager(): WidgetCtor {
 			let org: Org = ORGS.some((o) => o.id === orgAttr) ? orgAttr : "doc";
 			let sortKey: "breadcrumb" | "priority" | "due" | "deck" = "breadcrumb";
 			let sortAsc = true;
+			let searchText = ""; // 查找：按标题/面包屑过滤当前视图
 			let previewTitle: string | null = null;
 			let editTitle: string | null = null; // 单卡参数编辑（对标 Element parameters）
 			const selected = new Set<string>();
@@ -596,9 +597,29 @@ function makeCardManager(): WidgetCtor {
 			const render = () => {
 				wrap.textContent = "";
 				collectAll();
+				// 查找：按标题/面包屑包含过滤
+				const matches = (c: Card) => {
+					if (!searchText.trim()) return true;
+					const hay = String(c.title + " " + (c.fields["tidme.breadcrumb"] || "")).toLowerCase();
+					return hay.includes(searchText.trim().toLowerCase());
+				};
 
-				// 工具栏（sticky：视图/组织/批量操作固定在顶部）
+				// 工具栏（sticky：查找/视图/组织/批量操作固定在顶部）
 				const toolbar = el(doc, "div", "tm-cm-toolbar");
+				// 查找输入框
+				const searchRow = el(doc, "div", "tm-cm-search-row");
+				const searchInput = el(doc, "input", "tm-cm-search") as any;
+				searchInput.value = searchText;
+				searchInput.placeholder = "查找卡片…";
+				searchInput.addEventListener("input", () => { searchText = String(searchInput.value || ""); render(); });
+				searchRow.appendChild(searchInput);
+				if (searchText) {
+					const clear = el(doc, "button", "tm-btn tm-cm-clear", "×");
+					clear.title = "清空查找";
+					clear.addEventListener("click", () => { searchText = ""; searchInput.value = ""; render(); });
+					searchRow.appendChild(clear);
+				}
+				toolbar.appendChild(searchRow);
 				// 视图过滤按钮（计数 = 该子集实际卡数）
 				const viewRow = el(doc, "div", "tm-cm-views");
 				for (const v of VIEWS) {
@@ -665,7 +686,7 @@ function makeCardManager(): WidgetCtor {
 
 				// 主体：按组织方式渲染
 				const body = el(doc, "div", "tm-cm-body");
-				const visible = allCards.filter((c) => inView(c.fields, view));
+				const visible = allCards.filter((c) => inView(c.fields, view) && matches(c));
 				if (org === "deck") renderDeckTree(body, visible);
 				else if (org === "list") renderList(body, visible);
 				else renderDocTree(body, visible);

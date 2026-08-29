@@ -98,6 +98,20 @@ tags: [[$:/tags/Stylesheet]]
 	border-bottom: 1px solid var(--tm-border);
 	box-shadow: 0 2px 8px rgba(17, 24, 39, 0.05);
 }
+.tm-cm-search-row { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+.tm-cm-search {
+	flex: 1;
+	max-width: 260px;
+	padding: 6px 12px;
+	font-size: 0.85em;
+	font-family: var(--tm-font);
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-sm);
+	background: var(--tm-surface-2);
+	color: var(--tm-text-1);
+}
+.tm-cm-search:focus { outline: 2px solid var(--tm-accent-soft); border-color: var(--tm-accent); }
+.tm-cm-clear { padding: 4px 10px; }
 .tm-cm-views {
 	display: flex;
 	gap: 0.5em;
