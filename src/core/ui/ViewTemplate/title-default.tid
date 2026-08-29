@@ -2,5 +2,7 @@ title: $:/core/ui/ViewTemplate/title/default
 
 \whitespace trim
 <h2 class="tc-title">
-<$text text={{{ [<currentTiddler>get[caption]!is[blank]else[<currentTiddler>]] }}}/>
+<$view field="caption">
+	<$view field="title"/>
+</$view>
 </h2>
