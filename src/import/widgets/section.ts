@@ -730,26 +730,37 @@ function makeDocResume(): WidgetCtor {
 				wrap.appendChild(doneBox);
 			}
 
-			// G4 摘录收件箱：聚合本书全部摘录/挖空卡（加工路径：可回原文、挖空、删除）
+			// G4 摘录收件箱：聚合本书全部摘录/挖空卡（加工路径：可回原文、挖空、删除）。
+			// W3 加工标注：摘录=阅读材料（待提炼/已加工）；挖空=测试卡（进复习流）
 			const derived = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${docId}]!is[draft]]`)
 				.map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }))
 				.filter((c: any) => c.fields["tidme.kind"] === "extract" || c.fields["tidme.kind"] === "cloze");
 			if (derived.length) {
 				const box = el(doc, "details", "tm-doc-derived");
 				const summary = el(doc, "summary", "tm-import-muted",
-					`摘录/挖空（${derived.length}）—— 加工为记忆卡的中间产物`);
+					`摘录/挖空（${derived.length}）—— 摘录=阅读材料（可挖空转测试卡）· 挖空=测试卡`);
 				box.appendChild(summary);
 				const sorted = [...derived].sort((a: any, b: any) => {
 					const pa = String(a.fields["tidme.breadcrumb"] || a.title);
 					const pb = String(b.fields["tidme.breadcrumb"] || b.title);
 					return pa < pb ? -1 : pa > pb ? 1 : 0;
 				});
+				const clozeChildrenOf = (title: string): number =>
+					wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, "")}]tidme.kind[cloze]]`).length;
 				for (const c of sorted) {
 					const row = el(doc, "div", "tm-doc-done-row");
 					const kindMark = c.fields["tidme.kind"] === "cloze" ? "挖" : "摘";
 					row.appendChild(el(doc, "span", "tm-cb-kind", kindMark));
 					row.appendChild(el(doc, "span", "tm-import-muted",
 						String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title));
+					// W3：摘录加工状态（待提炼/已加工）
+					if (c.fields["tidme.kind"] === "extract") {
+						const hasCloze = clozeChildrenOf(c.title) > 0;
+						const state = el(doc, "span", hasCloze ? "tm-cb-state tm-cb-state-done" : "tm-cb-state",
+							hasCloze ? "已加工" : "待提炼");
+						state.title = hasCloze ? "已在此摘录上挖空生成测试卡" : "选中摘录内文字按 Alt+Z 挖空 → 生成测试卡";
+						row.appendChild(state);
+					}
 					const open = el(doc, "button", "tm-cm-op", "打开");
 					open.title = "打开此卡";
 					open.addEventListener("click", () => {

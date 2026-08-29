@@ -604,3 +604,14 @@ mark.tm-readpoint {
 }
 .tm-rl-row .tm-rl-due:empty { display: none; }
 
+/* W3 摘录加工状态标注（文档页聚合区） */
+.tm-cb-state {
+	flex: none;
+	font-size: 0.72em;
+	padding: 0 6px;
+	border-radius: var(--tm-radius);
+	background: var(--tm-badge-new);
+	opacity: 0.9;
+}
+.tm-cb-state-done { background: var(--tm-badge-due); }
+
