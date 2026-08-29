@@ -256,7 +256,9 @@ function makeReadingList(): any {
 					tbody.appendChild(tr);
 				}
 				table.appendChild(tbody);
-				det.appendChild(table);
+				const scrollBox = el(doc, "div", "tm-scroll");
+				scrollBox.appendChild(table);
+				det.appendChild(scrollBox);
 				root.appendChild(det);
 			}
 		}

@@ -142,6 +142,7 @@ function makeStatsPanel(): WidgetCtor {
 				}
 				docTable.appendChild(dtbody);
 				docWrap.appendChild(docTable);
+				docWrap.classList.add("tm-scroll");
 				wrap.appendChild(docWrap);
 
 				// 3) 漏斗

@@ -782,7 +782,9 @@ function makeDocResume(): WidgetCtor {
 					tbody.appendChild(tr);
 				}
 				table.appendChild(tbody);
-				doneBox.appendChild(table);
+				const doneScroll = el(doc, "div", "tm-scroll-sm");
+				doneScroll.appendChild(table);
+				doneBox.appendChild(doneScroll);
 				wrap.appendChild(doneBox);
 			}
 
@@ -857,7 +859,9 @@ function makeDocResume(): WidgetCtor {
 					tbody.appendChild(tr);
 				}
 				table.appendChild(tbody);
-				box.appendChild(table);
+				const scrollBox = el(doc, "div", "tm-scroll");
+				scrollBox.appendChild(table);
+				box.appendChild(scrollBox);
 				wrap.appendChild(box);
 			}
 		}

@@ -207,6 +207,11 @@ tags: $:/tags/Stylesheet
 	font-weight: 600;
 }
 
+/* ---- 内滚动容器（限制高度，长列表在容器内滚动，避免撑长 tiddler） ---- */
+.tm-scroll { max-height: 340px; overflow-y: auto; }
+.tm-scroll-lg { max-height: 480px; overflow-y: auto; }
+.tm-scroll-sm { max-height: 220px; overflow-y: auto; }
+
 /* ---- 进度条（圆角） ---- */
 .tm-progress {
 	height: 6px;
