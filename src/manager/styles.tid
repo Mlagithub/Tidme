@@ -5,31 +5,7 @@ tags: [[$:/tags/Stylesheet]]
 /* Tidme Manager：卡片浏览 / 管理器 / 牌组批量操作样式 */
 
 /* 设计 token / tm-btn 基类统一由 $:/plugins/tidme/core/styles/tokens 提供 */
-/* ===== 按钮体系（次操作统一 tm-btn；主操作沿用 tc-btn-primary） ===== */
-.tm-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.35em;
-	font-size: 0.9em;
-	padding: 2px 10px;
-	border: 1px solid <<colour muted-foreground>>;
-	border-radius: var(--tm-radius);
-	background: <<colour background>>;
-	color: inherit;
-	opacity: 0.85;
-	cursor: pointer;
-	line-height: 1.5;
-}
-.tm-btn:hover { opacity: 1; }
-.tm-btn:disabled { opacity: 0.4; cursor: default; }
-.tm-btn--primary { border-color: <<colour primary>>; color: <<colour primary>>; }
-.tm-btn--danger { border-color: <<colour danger>>; color: <<colour danger>>; }
-.tm-btn--active {
-	background: <<colour primary>>;
-	color: <<colour background>>;
-	border-color: <<colour primary>>;
-	opacity: 1;
-}
+/* ===== 按钮：tm-btn 基类与变体统一由 core/styles/tokens 提供；此处仅图标尺寸 ===== */
 .tm-btn-icon { padding: 2px 6px; }
 .tm-btn-icon img, .tm-btn-icon svg { width: 1em; height: 1em; vertical-align: -0.15em; }
 
