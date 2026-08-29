@@ -396,3 +396,28 @@ test("W1 双轨: 默认牌组只装 item（含挖空，不含节卡/摘录）", 
 	assert.ok(!readQueue.includes("书名甲 › 第一章 › 挖空"), "挖空卡不在阅读牌组");
 	assert.ok(!readQueue.includes("书名甲 › 书名甲"), "已读节卡（done）不在阅读牌组");
 });
+
+test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅读）", () => {
+	const rl = tw.modules.execute("$:/plugins/tidme/import/widgets/reading-list.js");
+	// 纯函数：收集 + 分组（W2）
+	const cards = rl.collectTopicCards(wiki);
+	const groups = rl.groupByDoc(cards);
+	const jia = groups.find((g) => g.cards[0].breadcrumb.startsWith("书名甲"));
+	assert.ok(jia, "书名甲分组存在");
+	assert.ok(jia.cards.some((c) => c.kind === "extract"), "摘录卡（topic）在阅读列表");
+	assert.ok(!jia.cards.some((c) => c.kind === "cloze"), "挖空卡（item）不在阅读列表");
+	// 排序：高优先级在前
+	const docId2 = wiki.getTiddler("书名甲 › 第一章 › 摘录").fields["tidme.doc"];
+	wiki.addTiddler({ title: "书名甲 › 高优摘录", tags: ["."], "tidme.doc": docId2, "tidme.kind": "extract", "tidme.priority": "5", "tidme.breadcrumb": "书名甲 › 高优摘录", state: "0" });
+	const sorted = rl.sortTopicCards(rl.collectTopicCards(wiki).filter((c) => c.breadcrumb.startsWith("书名甲")));
+	assert.equal(sorted[0].title, "书名甲 › 高优摘录", "优先级 5 排在优先级 50 前");
+	// 渲染 widget
+	const root = renderWidget(rl, "reading-list");
+	const text = collectText(root);
+	assert.ok(text.includes("阅读列表"), "标题");
+	assert.ok(text.includes("待读"), "计数");
+	assert.ok(text.includes("书名甲"), "文档名");
+	assert.ok(text.includes("摘"), "摘录卡标记");
+	assert.ok(text.includes("继续阅读"), "继续按钮");
+	assert.ok(text.includes("已读"), "进度文案");
+});

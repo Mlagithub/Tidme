@@ -64,11 +64,12 @@ function sectionsOfDoc(wiki: any, doc: string): string[] {
 		});
 }
 
+/** 已读判定（W1 双轨：. = 阅读态；读完/忽略都去 .，视为完成） */
 function isDone(f: any): boolean {
 	if (!f) return false;
 	if (f["tidme.done"] === "yes") return true;
 	const tags = f?.tags;
-	return !tags || !tags.includes("?");
+	return !tags || !tags.includes(".");
 }
 
 function parseReadPoint(wiki: any, doc: string): ReadPoint | null {
@@ -551,8 +552,8 @@ function makeSectionBar(): WidgetCtor {
 					}
 					notify("later");
 				}));
-				// G3 忽略（R5 轻量版）：移出学习队列但保留内容与 . 标签（阅读牌组仍可见），可经管理器「回」恢复
-				btnRow.appendChild(mkBtn("忽略", "ignore", "标记不重要：移出学习队列（内容保留，可恢复）", false, () => {
+				// G3 忽略：移出阅读队列（去 .，topic 出阅读流；内容保留，可经管理器「回」恢复）
+				btnRow.appendChild(mkBtn("忽略", "ignore", "标记不重要：移出阅读队列（内容保留，可恢复）", false, () => {
 					wiki.addTiddler(sched.ignoreCard(fields));
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					const nxt = list.find((x) => x !== title && !isDone(wiki.getTiddler(x)?.fields));

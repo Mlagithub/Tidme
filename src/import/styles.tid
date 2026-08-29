@@ -540,3 +540,67 @@ mark.tm-readpoint {
 	background: #d8ecff;
 	box-shadow: 0 0 0 2px #d8ecff;
 }
+
+/* ===== W2 阅读列表（topic 队列页） ===== */
+.tm-reading-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--tm-gap-lg);
+}
+.tm-rl-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0 12px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid <<colour muted-foreground>>;
+}
+.tm-rl-title { font-size: 1.1em; font-weight: 600; }
+.tm-rl-sub { font-size: 0.85em; opacity: 0.75; }
+.tm-rl-deck-btn { margin-left: auto; }
+.tm-rl-doc { border: 1px solid <<colour muted-foreground>>; border-radius: var(--tm-radius); }
+.tm-rl-doc-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 10px;
+	background: <<colour tiddler-background>>;
+	border-bottom: 1px solid <<colour muted-foreground>>;
+}
+.tm-rl-doc-name { font-weight: 600; }
+.tm-rl-doc-prog { font-size: 0.82em; opacity: 0.75; white-space: nowrap; }
+.tm-rl-doc-bar { flex: 0 0 90px; height: 6px; margin: 0 4px; }
+.tm-rl-cards { padding: 4px 0; }
+.tm-rl-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 10px;
+	font-size: 0.9em;
+}
+.tm-rl-row:hover { background: <<colour tiddler-background>>; }
+.tm-rl-kind {
+	flex: none;
+	width: 1.6em;
+	text-align: center;
+	font-size: 0.75em;
+	border-radius: var(--tm-radius);
+	background: var(--tm-badge-new);
+	padding: 1px 0;
+}
+.tm-rl-kind-extract { background: var(--tm-badge-due); }
+.tm-rl-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-rl-pri {
+	flex: none;
+	font-size: 0.75em;
+	opacity: 0.65;
+	font-variant-numeric: tabular-nums;
+}
+.tm-rl-due {
+	flex: none;
+	font-size: 0.75em;
+	padding: 0 6px;
+	border-radius: var(--tm-radius);
+}
+.tm-rl-row .tm-rl-due:empty { display: none; }
+

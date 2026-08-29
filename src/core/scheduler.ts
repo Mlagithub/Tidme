@@ -110,9 +110,14 @@ export function advanceCard(): Record<string, any> {
 	return { due: twDate(new Date()) };
 }
 
-/** 忽略：移出学习队列（去 ? 标签，保留内容） */
+/**
+ * 忽略：移出所属队列，保留内容（可经 restoreCard 恢复）。
+ * W1 双轨：item 类（cloze/qa/无 kind）去 ?（出复习流）；topic 类（section/extract）去 .（出阅读流）。
+ */
 export function ignoreCard(fields: Record<string, any>): Record<string, any> {
-	return { tags: tagsOf(fields).filter((t) => t !== "?") };
+	const kind = String(fields["tidme.kind"] || "");
+	const drop = kind === "section" || kind === "extract" ? "." : "?";
+	return { tags: tagsOf(fields).filter((t) => t !== drop) };
 }
 
 /** 搁置：tidme.suspended=yes（配合 deck card_exclude 过滤器） */

@@ -62,7 +62,11 @@ test("postponeCard / advanceCard / ignoreCard / forgetCard", () => {
 	assert.ok(sched.parseTwDate(postponed.due).getTime() > Date.now(), "顺延 7 天后应在未来");
 	const advanced = sched.advanceCard();
 	assert.ok(sched.parseTwDate(advanced.due).getTime() <= Date.now() + 60000, "advance 到期时间≈现在");
-	assert.deepEqual(sched.ignoreCard({ tags: ["?", "."] }).tags, ["."]);
+	assert.deepEqual(sched.ignoreCard({ tags: ["?", "."] }).tags, ["."], "无 kind 按 item：去 ?");
+	// W1 双轨：topic（section/extract）忽略去 .（出阅读流）；item（cloze）忽略去 ?（出复习流）
+	assert.deepEqual(sched.ignoreCard({ tags: ["?", "."], "tidme.kind": "section" }).tags, ["?"], "section 忽略去 .");
+	assert.deepEqual(sched.ignoreCard({ tags: ["."], "tidme.kind": "extract" }).tags, [], "extract 忽略去 .");
+	assert.deepEqual(sched.ignoreCard({ tags: ["?"], "tidme.kind": "cloze" }).tags, [], "cloze 忽略去 ?");
 	const forgotten = sched.forgetCard();
 	assert.equal(forgotten.state, "0");
 	assert.equal(forgotten.reps, "0");
