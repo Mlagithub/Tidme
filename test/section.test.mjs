@@ -44,6 +44,9 @@ test("buildExtract: parent 链 + anchor 记录", () => {
 	assert.equal(anchor.section, "书 › 第一章");
 	assert.ok(anchor.snippet.includes("被选中"), "anchor 记录片段");
 	assert.ok(card.state === "0", "FSRS 初始字段");
+	// W1 双轨：摘录 = topic（阅读态 .，不带 ?，不进主动复习流）
+	assert.ok(card.tags.includes("."), "摘录卡带 .（阅读态）");
+	assert.ok(!card.tags.includes("?"), "摘录卡不带 ?（topic 不进复习流）");
 });
 
 test("buildExtract: 嵌套摘录（parent = 摘录卡）", () => {
@@ -62,6 +65,9 @@ test("buildCloze: anchor + parent", () => {
 	assert.ok(card.caption.includes("<<C"), "挖空宏");
 	const anchor = sectionMod.parseAnchor(card["tidme.anchor"]);
 	assert.equal(anchor.snippet, "Freetown");
+	// W1 双轨：挖空 = item（带 ?，进主动复习流）
+	assert.ok(card.tags.includes("?"), "挖空卡带 ?（item 进复习流）");
+	assert.ok(!card.tags.includes("."), "挖空卡不带 .");
 });
 
 test("parseAnchor: 容错", () => {

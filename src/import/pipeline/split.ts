@@ -67,14 +67,18 @@ const DEFAULT_FSRS_P = JSON.stringify({
 	w: [0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61]
 });
 
-/** 按文档自动 deck（M2-T4）：card 过滤器按 tidme.doc 限定；M4 起新卡按优先级排序 */
+/**
+ * 按文档自动 deck（M2-T4）：card 按 tidme.doc + tag[.] 限定 → 本书阅读牌组。
+ * W1 双轨分流：自动牌组只装 topic（节卡 ?. / 摘录 .），按 due 被动重读（card_unfold 展开）；
+ * 主动复习流（item）走默认牌组 / 「复习本书」临时牌组。
+ */
 function buildAutoDeck(bookTitle: string, docId: string): Record<string, any> {
 	return {
 		title: `$:/Deck/read/${bookTitle}`,
 		tags: ["$:/tags/TidmeDeck"],
 		caption: bookTitle,
-		description: `按文档自动创建的阅读牌组（${docId}）`,
-		card: `[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`,
+		description: `按文档自动创建的阅读牌组（${docId}）——节卡/摘录按 due 被动重读`,
+		card: `[all[shadows+tiddlers]tidme.doc[${docId}]tag[.]!has[tidme.suspended]]`,
 		card_unfold: "[tag[.]]",
 		card_exclude: "[tag[!]]",
 		order: "due-new",

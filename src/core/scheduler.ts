@@ -12,6 +12,15 @@ scheduler.ts — 调度体系（M4，对标 SuperMemo 优先级）
 export const PRIORITY_DEFAULT = 50;
 export const PRIORITY_TIERS = { high: 10, medium: 50, low: 90 } as const;
 
+/**
+ * 主动复习流（item 类）的 kind 过滤片段（W1 双轨分流，方案 A）。
+ * topic（阅读流）：section 节卡 / extract 摘录卡 → 不进主动复习流；
+ * item（复习流）：cloze 挖空 / qa 问答 / 无 kind 的历史与手动卡 → 进复习流。
+ * 拼进 deck card / 子集过滤器，如 `[tag[?]] <ITEM_FILTER>`。
+ */
+export const ITEM_FILTER =
+	`[tidme.kind[cloze]] [tidme.kind[qa]] [!has[tidme.kind]]`;
+
 /** 归一化优先级：非法值回默认 50 */
 export function normalizePriority(v: unknown): number {
 	if (typeof v === "number" && Number.isFinite(v)) return Math.max(0, Math.min(100, Math.round(v)));
@@ -136,12 +145,19 @@ export function doneCard(fields: Record<string, any>): Record<string, any> {
 	};
 }
 
-/** 恢复队列（Done 的可逆反操作）：按 kind 补回 ?/./去 tidme.done 与搁置标记 */
+/**
+ * 恢复队列（Done 的可逆反操作）：按 kind 补回标签/去 tidme.done 与搁置标记。
+ * 双轨（W1）：item 类（cloze/qa/无 kind）恢复回 ?（进主动复习流）；
+ * topic 类（section/extract）恢复回 .（阅读态，不进主动复习流）。
+ */
 export function restoreCard(fields: Record<string, any>): Record<string, any> {
 	const kind = String(fields["tidme.kind"] || "");
 	const tags = tagsOf(fields);
-	if (!tags.includes("?")) tags.push("?");
-	if (kind === "section" && !tags.includes(".")) tags.push(".");
+	if (kind === "extract" || kind === "section") {
+		if (!tags.includes(".")) tags.push("."); // topic：回到阅读态
+	} else {
+		if (!tags.includes("?")) tags.push("?"); // item：回到复习流
+	}
 	const out: Record<string, any> = { ...fields, tags };
 	delete out["tidme.done"];
 	delete out["tidme.suspended"];

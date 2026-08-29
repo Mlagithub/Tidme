@@ -103,16 +103,31 @@ test("doneCard/restoreCard: Done 语义与可逆恢复", () => {
 	const done = sched.doneCard({ title: "节", tags: ["?", "."], state: "0", "tidme.suspended": "yes" });
 	assert.equal(done.tags.length, 0, "Done 去掉 ? 和 .");
 	assert.equal(done["tidme.done"], "yes");
-	// section 恢复补回 ? 和 .，删 done/suspended
+	// section 恢复 = topic 回到阅读态：补 . 不补 ?（W1 双轨，节卡不进主动复习流）
 	const resumed = sched.restoreCard({ ...done, "tidme.kind": "section" });
-	assert.ok(resumed.tags.includes("?"), "恢复补回 ?");
-	assert.ok(resumed.tags.includes("."), "section 恢复补回 .");
+	assert.ok(resumed.tags.includes("."), "section 恢复补回 .（阅读态）");
+	assert.ok(!resumed.tags.includes("?"), "section 恢复不补 ?（topic 不进复习流）");
 	assert.equal(resumed["tidme.done"], undefined);
 	assert.equal(resumed["tidme.suspended"], undefined);
-	// 摘录卡恢复只补 ?（无 .）
+	// 摘录卡恢复 = topic 回到阅读态：补 . 不补 ?（W1 双轨，摘录不进主动复习流）
 	const resumeExtract = sched.restoreCard({ ...done, "tidme.kind": "extract" });
-	assert.ok(resumeExtract.tags.includes("?"), "extract 恢复补回 ?");
-	assert.ok(!resumeExtract.tags.includes("."), "extract 不补 .");
+	assert.ok(resumeExtract.tags.includes("."), "extract 恢复补回 .（阅读态）");
+	assert.ok(!resumeExtract.tags.includes("?"), "extract 恢复不补 ?（topic 不进复习流）");
+	// item 类（cloze/qa/无 kind）恢复补回 ?，进复习流
+	const resumeCloze = sched.restoreCard({ ...done, "tidme.kind": "cloze" });
+	assert.ok(resumeCloze.tags.includes("?"), "cloze 恢复补回 ?（item 进复习流）");
+	assert.ok(!resumeCloze.tags.includes("."), "cloze 恢复不补 .");
+	const resumePlain = sched.restoreCard({ ...done });
+	assert.ok(resumePlain.tags.includes("?"), "无 kind 卡恢复补回 ?（按 item 处理）");
+});
+
+test("ITEM_FILTER: 双轨分流（topic 出、item 进）", () => {
+	const f = sched.ITEM_FILTER;
+	assert.ok(f.includes("[tidme.kind[cloze]]"), "含 cloze");
+	assert.ok(f.includes("[tidme.kind[qa]]"), "含 qa");
+	assert.ok(f.includes("[!has[tidme.kind]]"), "含无 kind 手动卡");
+	assert.ok(!f.includes("section"), "不含 section（topic）");
+	assert.ok(!f.includes("extract"), "不含 extract（topic）");
 });
 
 test("subsetQueue / subsetByDoc / subsetByTag", () => {

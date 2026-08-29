@@ -175,7 +175,10 @@ function makeCardManager(): WidgetCtor {
 			const inView = (f: Record<string, any>, v: View): boolean => {
 				const tags = Array.isArray(f.tags) ? f.tags : [];
 				const suspended = f["tidme.suspended"] === "yes";
-				const done = f["tidme.done"] === "yes" || !tags.includes("?");
+				// W1 双轨：? = 主动复习流（item 类/手动卡）；topic（section/extract）即使带 ? 也不在"在队"
+				const kind = String(f["tidme.kind"] || "");
+				const inReviewQueue = tags.includes("?") && kind !== "section" && kind !== "extract";
+				const done = f["tidme.done"] === "yes" || !inReviewQueue;
 				if (v === "inqueue") return !done && !suspended;
 				if (v === "done") return done;
 				if (v === "suspended") return suspended;

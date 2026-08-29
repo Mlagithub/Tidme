@@ -189,7 +189,15 @@ function highlightSnippetLater(doc: Document, targetTitle: string, snippet: stri
 	setTimeout(tick, 150);
 }
 
-/** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用） */
+/** 本书 item 类（主动复习流）在队卡过滤器：本书 ? 卡 ∩ ITEM_FILTER（W1 双轨分流） */
+function docItemFilter(wiki: any, docId: string): string {
+	const base = `[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`;
+	return sched.ITEM_FILTER.split(/\s+/).map((run) => `${base}${run}`).join(" ");
+}
+
+/** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用）。
+ * W1 双轨分流：摘录 = topic（阅读材料），tag "."（阅读态，阅读列表/文档页被动重读），
+ * 不带 "?"，不进主动复习流。要成为测试卡：在摘录上挖空 → cloze item（带 ?）。 */
 function buildExtract(wiki: any, parentTitle: string, selection: string): Record<string, any> {
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
@@ -202,7 +210,7 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 	return {
 		title,
 		type: "text/vnd.tiddlywiki",
-		tags: ["?"],
+		tags: ["."],
 		caption: preview + (selection.length > preview.length ? "…" : ""),
 		text: `<blockquote>\n${escapeHtml(selection.trim())}\n</blockquote>\n\n<p class="tm-import-muted">—— 摘自 [[${parentTitle}]]</p>`,
 		...fsrs,
@@ -221,7 +229,7 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 	};
 }
 
-/** 挖空卡字段（Alt+Z） */
+/** 挖空卡字段（Alt+Z）。W1 双轨：挖空 = item（带 ?，进主动复习流） */
 function buildCloze(wiki: any, parentTitle: string, block: string, selected: string): Record<string, any> | null {
 	const at = block.indexOf(selected);
 	if (at === -1) return null;
@@ -667,15 +675,15 @@ function makeDocResume(): WidgetCtor {
 			banner.appendChild(actions);
 			wrap.appendChild(banner);
 
-			// G7 子集复习：按本书强制复习（临时子集 deck → 复用 fsrs4tw 学习流）
-			const inQueueCount = wiki.filterTiddlers(
-				`[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`
-			).length;
+			// G7 子集复习：按本书强制复习 item（临时子集 deck → 复用 fsrs4tw 学习流）。
+			// W1 双轨：只测本书测试卡（cloze/qa/手动卡），节卡与摘录（topic）走阅读流。
+			const itemFilter = docItemFilter(wiki, docId);
+			const inQueueCount = wiki.filterTiddlers(itemFilter).length;
 			if (inQueueCount > 0) {
 				const subsetBtn = el(doc, "button", "tm-btn tm-btn--primary", "📖 复习本书");
-				subsetBtn.title = `子集复习：仅复习本书 ${inQueueCount} 张在队卡（临时牌组，复习完可删除）`;
+				subsetBtn.title = `子集复习：仅测本书 ${inQueueCount} 张测试卡（挖空/问答；临时牌组，复习完可删除）`;
 				subsetBtn.addEventListener("click", () => {
-					// 从任意现有 deck 复制调度字段，覆盖 card 为本书子集过滤器
+					// 从任意现有 deck 复制调度字段，覆盖 card 为本书 item 子集过滤器
 					const baseDeck = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]")[0];
 					const bf = (baseDeck && wiki.getTiddler(baseDeck)?.fields) || {};
 					const deckTitle = `$:/temp/tidme/subset/${docId}`;
@@ -684,8 +692,8 @@ function makeDocResume(): WidgetCtor {
 						title: deckTitle,
 						tags: ["$:/tags/TidmeDeck"],
 						caption: `复习：${title}`,
-						description: "临时子集牌组（复习本书）——复习完可删除",
-						card: `[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`,
+						description: "临时子集牌组（复习本书测试卡）——复习完可删除",
+						card: itemFilter,
 						"tidme.subset-doc": docId
 					});
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: deckTitle });

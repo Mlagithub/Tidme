@@ -73,16 +73,24 @@ test.before(async () => {
 	tw.boot.argv = [tmp];
 	tw.boot.boot();
 	wiki = tw.wiki;
-	// 造数据：一本书 + 2 节 + 1 摘录 + 自动 deck
+	// 造数据：一本书 + 2 节 + 1 摘录 + 1 挖空 + 自动 deck
 	const pipeline = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
 	const r = await pipeline.runSplit({ text: "# 书名甲\n\n第一章正文。\n\n## 小节乙\n\n第二节正文。", title: "书名甲", type: "text/markdown", minChars: 0 });
 	for (const t of r.tiddlers) wiki.addTiddler(t);
 	const section = r.tiddlers.find((x) => Array.isArray(x.tags) && x.tags.includes("?"));
 	wiki.addTiddler({
-		title: "书名甲 › 第一章 › 摘录", tags: ["?"], caption: "摘",
+		title: "书名甲 › 第一章 › 摘录", tags: ["."], caption: "摘",
 		text: "<blockquote>第一章的摘录</blockquote>",
 		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "extract",
 		"tidme.breadcrumb": `${section["tidme.path"]} › 摘录`, "tidme.source": "书名甲",
+		"tidme.format": "markdown", state: "0", due: "20261231000000000"
+	});
+	// W1 双轨：挖空卡（item）带 ? 进主动复习流；摘录卡（topic）带 . 不进
+	wiki.addTiddler({
+		title: "书名甲 › 第一章 › 挖空", tags: ["?"], caption: "首都",
+		text: "",
+		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "cloze",
+		"tidme.breadcrumb": `${section["tidme.path"]} › 挖空`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
 	cardBrowser = tw.modules.execute("$:/plugins/tidme/manager/widgets/card-browser.js");
@@ -170,11 +178,14 @@ test("card-manager: Done 语义（去 ? 和 . + tidme.done）与恢复", () => {
 	const done = cardManager.doneFields({ title: "节", tags: ["?", "."], state: "0" });
 	assert.equal(done.tags.length, 0, "Done 去掉 ? 和 .");
 	assert.equal(done["tidme.done"], "yes");
-	// 恢复：按 kind 补回标签
+	// 恢复：topic（section/extract）回阅读态补 .，item（cloze/qa/无 kind）补 ?
 	const resumed = cardManager.resumeFields({ ...done, "tidme.kind": "section" });
-	assert.ok(resumed.tags.includes("?"), "恢复补回 ?");
-	assert.ok(resumed.tags.includes("."), "section 恢复补回 .");
+	assert.ok(resumed.tags.includes("."), "section 恢复补回 .（阅读态）");
+	assert.ok(!resumed.tags.includes("?"), "section 恢复不补 ?（topic 不进复习流）");
 	assert.equal(resumed["tidme.done"], undefined, "恢复删除 tidme.done");
+	// item（挖空卡）恢复补回 ?
+	const resumeCloze = cardManager.resumeFields({ ...done, "tidme.kind": "cloze" });
+	assert.ok(resumeCloze.tags.includes("?"), "cloze 恢复补回 ?（item 进复习流）");
 });
 
 test("card-manager: 全部卡片可见（含已读卡与手动散卡）", () => {

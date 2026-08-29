@@ -132,6 +132,8 @@ test("split: 自动 deck 生成（按 tidme.doc 过滤）", async () => {
 	const deck = r.tiddlers.find((t) => t.title === "$:/Deck/read/自动牌组书");
 	assert.ok(deck, "应生成自动 deck");
 	assert.ok(deck.card.includes(`tidme.doc[${r.docId}]`), `deck.card 应按 docId 过滤: ${deck.card}`);
+	assert.ok(deck.card.includes("tag[.]"), "自动牌组只装 topic（阅读态 .，W1 双轨）: " + deck.card);
+	assert.ok(!deck.card.includes("tag[?]"), "自动牌组不含 item（? 卡走复习流）: " + deck.card);
 	assert.ok(deck.tags.includes("$:/tags/TidmeDeck"));
 	assert.ok(deck.p, "deck 应含 FSRS 参数");
 });
