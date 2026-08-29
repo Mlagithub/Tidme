@@ -446,6 +446,13 @@ test("workflow: $:/Decks 工作流中心（开始阅读/开始复习 + 阅读目
 	const text = collectText(root);
 	assert.ok(text.includes("开始阅读"), "开始阅读按钮");
 	assert.ok(text.includes("开始复习"), "开始复习按钮");
+	// 主色按钮 class 链 + SVG 图标（设计系统生效的 DOM 层验证）
+	const btns = collectButtons(root);
+	const readBtn = btns.find((b) => collectText(b).includes("开始阅读"));
+	assert.ok(readBtn, "找到开始阅读按钮");
+	assert.ok(String(readBtn.className).includes("tm-btn--primary"), "开始阅读是主色按钮（tm-btn--primary）");
+	const svg = readBtn.childNodes.find((n) => String(n.tagName) === "SVG");
+	assert.ok(svg, "开始阅读按钮含 SVG 图标");
 	// 开始阅读目标：无全局续读点 → 第一待读节卡
 	const target1 = wf.globalReadingTarget(wiki);
 	assert.ok(target1 && wiki.getTiddler(target1), "开始阅读跳到一张存在节卡");
