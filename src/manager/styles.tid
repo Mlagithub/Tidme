@@ -112,6 +112,11 @@ tags: [[$:/tags/Stylesheet]]
 }
 .tm-cm-search:focus { outline: 2px solid var(--tm-accent-soft); border-color: var(--tm-accent); }
 .tm-cm-clear { padding: 4px 10px; }
+/* 卡片主体：限高内滚动（大量卡片不撑长页面，工具栏 sticky 固定） */
+.tm-cm-body { max-height: 62vh; overflow-y: auto; }
+.tm-cm-body::-webkit-scrollbar { width: 8px; }
+.tm-cm-body::-webkit-scrollbar-thumb { background: var(--tm-border); border-radius: 999px; }
+.tm-cm-body::-webkit-scrollbar-thumb:hover { background: var(--tm-text-3); }
 .tm-cm-views {
 	display: flex;
 	gap: 0.5em;
