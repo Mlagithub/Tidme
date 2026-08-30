@@ -670,7 +670,8 @@ mark.tm-readpoint {
 .tm-rl-doc-head::-webkit-details-marker { display: none; }
 .tm-rl-doc-head::before { content: "▸"; color: var(--tm-text-3); transition: transform 0.2s; flex: none; font-size: 1.1em; }
 .tm-rl-doc[open] > .tm-rl-doc-head::before { transform: rotate(90deg); }
-.tm-rl-doc-head > .tc-tiddlylink { flex: 1; min-width: 0; }
+.tm-rl-doc-head > .tc-tiddlylink { flex: 1; min-width: 0; color: var(--tm-text-1); font-weight: 600; }
+.tm-rl-doc-head > .tc-tiddlylink:hover { color: var(--tm-accent); }
 .tm-rl-doc-count { font-size: 0.8em; color: var(--tm-text-2); white-space: nowrap; }
 .tm-rl-doc-name { font-weight: 700; color: var(--tm-text-1); font-size: 1.02em; }
 .tm-rl-doc-prog { font-size: 0.82em; color: var(--tm-text-2); white-space: nowrap; }
