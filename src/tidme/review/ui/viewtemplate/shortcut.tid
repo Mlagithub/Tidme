@@ -1,0 +1,94 @@
+title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/shortcut
+tags: $:/tags/ViewTemplate
+list-before: $:/core/ui/ViewTemplate/title
+code-body: yes
+
+\define foldaction()
+<$action-setfield
+    $tiddler={{{ [<studyTiddler>addprefix[$:/state/folded/]] }}}
+    text={{{ [<studyTiddler>addprefix[$:/state/folded/]get[text]match[hide]then[show]else[hide]] }}}
+/>
+\end
+
+\define ratingaction(rating)
+<$let
+    cards_json={{{ [<studyTiddler>fsrs<p>] }}}
+>
+    <$list
+        filter="$rating$"
+        variable="rating"
+    >
+        <$transclude
+        tiddler="$:/plugins/keepone/tidme/review/buttons/action/repeat"
+        mode="inline"
+        />
+    </$list>
+</$let>
+\end
+
+<$list
+    filter="[<studyTiddler>!is[blank]]"
+    variable="studyTiddler"
+>
+    <$list
+        filter="[<studyTiddler>has[caption]]"
+        variable="ignore"
+    >
+        <div class="tmc-title-hide"/>
+    </$list>
+    <$list
+        filter="[<studyTiddler>!has[caption]has:field[reverse]addprefix[$:/state/folded/]get[text]match[hide]]"
+        variable="ignore"
+    >
+        <div class="tmc-title-hide"/>
+    </$list>
+    <$wikify
+        name="deckCaption"
+        text={{{ [<deckTiddler>get[caption]] ~[<deckTiddler>split[/]last[]] }}}
+        mode="inline"
+        output="text"
+    >
+        <div class="tmc-hideinput">
+            <$fieldmangler>
+                <$list
+                    filter="[{$:/info/browser/is/mobile}!match[yes]]"
+                    variable="ignore"
+                >
+                    <$keyboard key="((tidme-fold))" actions=<<foldaction>> >
+                    <$keyboard key="((tidme-again))" actions=<<ratingaction Again>> >
+                    <$keyboard key="((tidme-hard))" actions=<<ratingaction Hard>> >
+                    <$keyboard key="((tidme-good))" actions=<<ratingaction Good>> >
+                    <$keyboard key="((tidme-easy))" actions=<<ratingaction Easy>> >
+                    <$keyboard key="((tidme-next))" actions=<<ratingaction Good>> >
+                    <$keyboard key="((tidme-exclude))" actions={{$:/plugins/keepone/tidme/review/buttons/action/exclude}}>
+                    <$keyboard key="((tidme-unfold))" actions={{$:/plugins/keepone/tidme/review/buttons/action/unfold}}>
+                    <$keyboard key="((tidme-stopstudy))" actions={{$:/plugins/keepone/tidme/review/buttons/action/stopstudy}}>
+                        <$edit-text
+                            tag="input"
+                            tiddler="$:/temp/tidme/study/input"
+                            field="shortcut"
+                            placeholder=<<deckCaption>>
+                            focus={{{ [<studyTiddler>subfilter{$:/config/Tidme/Filters/decklist}match<deckTiddler>then[yes]] }}}
+                        />
+                    </$keyboard>
+                    </$keyboard>
+                    </$keyboard>
+                    </$keyboard>
+                    </$keyboard>
+                    </$keyboard>
+                    </$keyboard>
+                    </$keyboard>
+                    </$keyboard>
+                </$list>
+                <$list
+                    filter="[{$:/info/browser/is/mobile}match[yes]]"
+                    variable="ignore"
+                >
+                    <div class="tmc-text-sg" style="text-align: center;">
+                        <<deckCaption>>
+                    </div>
+                </$list>
+            </$fieldmangler>
+        </div>
+    </$wikify>
+</$list>

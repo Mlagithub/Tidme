@@ -21,7 +21,7 @@ globalThis.Node = window.Node;
 const Module = await import("node:module");
 const origLoad = Module.default._load;
 Module.default._load = function (request, parent, isMain) {
-	if (request === "$:/plugins/tidme/import/jszip") return require_("jszip");
+	if (request === "$:/plugins/keepone/tidme/import/jszip") return require_("jszip");
 	return origLoad.call(this, request, parent, isMain);
 };
 

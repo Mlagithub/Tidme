@@ -1,0 +1,9 @@
+{
+	"title": "$:/plugins/keepone/tidme",
+	"name": "Tidme",
+	"author": "keepone",
+	"description": "Lifelong knowledge, deep in mind. Incremental reading & spaced repetition for TiddlyWiki.",
+	"plugin-type": "plugin",
+	"version": "1.18.0",
+	"list": "readme"
+}

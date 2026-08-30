@@ -1,0 +1,70 @@
+title: $:/Decks
+caption: 牌组库
+icon: $:/plugins/keepone/tidme/review/icon
+
+<div class="tm-decks">
+
+<div class="tm-decks-head">
+<div class="tm-decks-top"><div class="tm-decks-title">牌组库</div><$tidme-theme-toggle/></div>
+<div class="tm-decks-sub">阅读文章、摘录要点、挖空成卡片；在牌组里巩固挖空/问答卡。</div>
+<$tidme-workflow/>
+<$tidme-nav/>
+</div>
+
+<div class="tm-table-wrap">
+<div class="tmc-thead">
+    <div class="tmc-tr-deck">
+        {{$:/language/tidme/deck}}
+    </div>
+    <div class="tmc-tr-study">
+        {{$:/language/tidme/learn}}
+    </div>
+    <div class="tmc-tr-study">
+        {{$:/language/tidme/due}}
+    </div>
+    <div class="tmc-tr-study">
+        {{$:/language/tidme/new}}
+    </div>
+    <div class="tmc-tr-action">
+
+    </div>
+</div>
+
+<<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/ViewTemplate/tr" storyview:"classic" >>
+</div>
+
+<div class="tmc-decks-button-wrapper">
+    <$button
+        message="tm-modal"
+        param="$:/core/ui/ControlPanel/Modals/AddPlugins"
+        tooltip={{$:/language/ControlPanel/Plugins/Add/Hint}}
+        class="tm-btn"
+    >
+        {{$:/language/tidme/getshared}}
+    </$button>
+    <$button
+        class="tm-btn"
+        tooltip={{$:/language/tidme/createdecktip}}
+    >
+        <$action-createtiddler
+            $basetitle="$:/Deck/new"
+            $template="$:/Deck/default"
+            caption=""
+            description=""
+        />
+        {{$:/language/tidme/createdeck}}
+    </$button>
+    <$button
+        class="tm-btn"
+        tooltip={{$:/language/Buttons/Import/Hint}}
+    >
+        <div class="tmc-file-input-wrapper">
+            <$browse
+                tooltip={{$:/language/Buttons/Import/Hint}}
+            />
+            {{$:/language/tidme/importfile}}
+        </div>
+    </$button>
+</div>
+
+</div>

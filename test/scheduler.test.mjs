@@ -7,7 +7,7 @@ scheduler.test.mjs — core 调度体系单元测试（node:test）
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const sched = await import("../src/core/scheduler.ts");
+const sched = await import("../src/tidme/core/scheduler.ts");
 
 const T = (offsetHours) => {
 	const d = new Date(Date.now() + offsetHours * 3600000);

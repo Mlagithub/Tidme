@@ -7,7 +7,7 @@ align.test.mjs — 重切分对齐（G2）单元测试（node:test）
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const align = await import("../src/core/align.ts");
+const align = await import("../src/tidme/core/align.ts");
 
 const DOC = "对齐书";
 

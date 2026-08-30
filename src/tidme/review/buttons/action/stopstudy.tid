@@ -1,0 +1,15 @@
+title: $:/plugins/keepone/tidme/review/buttons/action/stopstudy
+tags: $:/tags/TidmeDeck/Study
+icon: $:/plugins/keepone/tidme/review/icons/stop
+caption: {{$:/language/tidme/stopstudy}}
+description: {{$:/language/tidme/stopstudy}}
+condition: [<deckTiddler>addsuffix[/study]has[title]]
+button-classes: tmc-button-show
+code-body: yes
+
+<$action-deletetiddler
+    $tiddler={{{ [<deckTiddler>addsuffix[/study]] }}}
+/>
+<$action-deletetiddler
+    $filter="[all[shadows+tiddlers]prefix[$:/temp/tidme/]]"
+/>

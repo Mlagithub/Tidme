@@ -1,7 +1,7 @@
 /*
 pipeline-headless.mjs — 浏览器管线无头验证
 
-esbuild 把 src/import/pipeline/main.ts 打成浏览器等价 CJS（tools/build-plugins.cjs 附带产物），
+esbuild 把 src/tidme/import/pipeline/main.ts 打成浏览器等价 CJS（tools/build-plugins.cjs 附带产物），
 用 jsdom 提供原生 DOMParser/XMLSerializer，对真实 EPUB 断言：
   1) 格式保留：卡片 HTML 含块级标签
   2) NCX 锚点切分：面包屑出现目录小节标题（而非只有尺寸兜底）
@@ -26,7 +26,7 @@ const Module = await import("module");
 const mod = Module.default;
 const origLoad = mod._load;
 mod._load = function (request, parent, isMain) {
-	if (request === "$:/plugins/tidme/import/jszip") return require_("jszip");
+	if (request === "$:/plugins/keepone/tidme/import/jszip") return require_("jszip");
 	return origLoad.call(this, request, parent, isMain);
 };
 

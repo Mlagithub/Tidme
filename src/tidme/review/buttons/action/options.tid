@@ -1,0 +1,11 @@
+title: $:/plugins/keepone/tidme/review/buttons/action/options
+tags: $:/tags/TidmeDeck/Action
+list-before:
+icon: $:/core/images/options-button
+modal: $:/plugins/keepone/tidme/review/buttons/action/modal/options
+description: {{$:/language/tidme/options}}
+condition: [<deckTiddler>!is[blank]!match[$:/Deck/default]]
+button-classes: tmc-button-hide
+code-body: yes
+
+<$action-createtiddler $basetitle="$:/temp/tidme/options" $template=<<deckTiddler>> $overwrite="yes"/>

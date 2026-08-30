@@ -1,0 +1,18 @@
+caption: {{$:/language/tidme/select}}
+condition: [<targetTiddler>]
+description: {{$:/language/tidme/selecttip}}
+icon: $:/plugins/keepone/tidme/review/icons/select
+list-after: $:/plugins/keepone/tidme/review/buttons/editortoolbar/cloze
+shortcuts: ((tidme-select))
+tags: $:/tags/EditorToolbar
+title: $:/plugins/keepone/tidme/review/buttons/editortoolbar/select
+list-after: $:/plugins/keepone/tidme/review/buttons/editortoolbar/cloze
+
+<$action-sendmessage
+    $message="tm-edit-text-operation"
+    $param="wrap-selection"
+    prefix='<<S """
+'
+    suffix='
+""">>'
+/>

@@ -1,0 +1,28 @@
+title: $:/plugins/keepone/tidme/review/buttons/action/exclude
+icon: $:/plugins/keepone/tidme/review/icons/exclude
+description: {{$:/language/tidme/exclude}}
+condition: [<deckTiddler>!is[blank]]
+button-classes: tmc-button-hide
+code-body: yes
+
+\define tv-action-refresh-policy() always
+
+
+<$action-sendmessage
+    $message="tm-add-tag"
+    $param="!"
+    $timestamp={{$:/config/TimestampDisable}}
+/>
+<$action-sendmessage
+    $message="tm-tidme-queue-changed"
+    $param=<<deckTiddler>>
+/>
+<$list
+    filter="[<studyTiddler>] :cascade[{$:/config/Tidme/Filters/decklist}] +[match<deckTiddler>]"
+    variable="ignore"
+>
+    {{$:/plugins/keepone/tidme/review/buttons/action/startstudy}}
+</$list>
+<$action-sendmessage
+    $message="tm-close-tiddler"
+/>

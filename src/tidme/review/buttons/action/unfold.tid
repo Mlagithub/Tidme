@@ -1,0 +1,15 @@
+title: $:/plugins/keepone/tidme/review/buttons/action/unfold
+icon: $:/plugins/keepone/tidme/review/icons/unfold
+description: {{$:/language/tidme/unfold}}
+condition: [<deckTiddler>!is[blank]]
+button-classes: tmc-button-hide
+code-body: yes
+
+\define tv-action-refresh-policy() always
+
+
+<$action-sendmessage
+    $message="tm-add-tag"
+    $param="."
+    $timestamp={{$:/config/TimestampDisable}}
+/>

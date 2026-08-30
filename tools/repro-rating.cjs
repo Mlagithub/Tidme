@@ -7,7 +7,7 @@ const pluginDir = path.resolve(__dirname, "../out-m2");
 function boot(withImport) {
 	const tw = TiddlyWiki.TiddlyWiki();
 	const loads = [];
-	for (const n of ["$__plugins_tidme_review", "$__plugins_tidme_import", "$__tidme_languages_zh-Hans"]) {
+	for (const n of ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]) {
 		const f = path.join(pluginDir, n + ".json");
 		if ((withImport || n.includes("review")) && fs.existsSync(f)) {
 			loads.push(JSON.parse(fs.readFileSync(f, "utf8")));

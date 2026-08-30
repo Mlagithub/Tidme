@@ -1,4 +1,4 @@
-﻿{
+{
     "name":  "tidme",
     "version":  "1.17.2",
     "description":  " Lifelong knowledge, deep in mind.",
@@ -12,10 +12,10 @@
                     "prepare":  "husky install",
                     "update":  "npm-check-updates -u",
                     "new":  "tiddlywiki-plugin-dev new",
-                    "dev/website/index":  "tiddlywiki-plugin-dev dev --wiki ./wiki/website/index --exclude [prefix[$:/plugins/tidme/]]",
-                    "dev/website/zh-Hans":  "tiddlywiki-plugin-dev dev --wiki ./wiki/website/zh-Hans --exclude [prefix[$:/plugins/tidme/]]",
-                    "dev/website/fr-FR":  "tiddlywiki-plugin-dev dev --wiki ./wiki/website/fr-FR --exclude [prefix[$:/plugins/tidme/]]",
-                    "dev/website/de-DE":  "tiddlywiki-plugin-dev dev --wiki ./wiki/website/de-DE --exclude [prefix[$:/plugins/tidme/]]",
+                    "dev/website/index":  "tiddlywiki-plugin-dev dev --wiki ./wiki/website/index --exclude [prefix[$:/plugins/keepone/tidme/]]",
+                    "dev/website/zh-Hans":  "tiddlywiki-plugin-dev dev --wiki ./wiki/website/zh-Hans --exclude [prefix[$:/plugins/keepone/tidme/]]",
+                    "dev/website/fr-FR":  "tiddlywiki-plugin-dev dev --wiki ./wiki/website/fr-FR --exclude [prefix[$:/plugins/keepone/tidme/]]",
+                    "dev/website/de-DE":  "tiddlywiki-plugin-dev dev --wiki ./wiki/website/de-DE --exclude [prefix[$:/plugins/keepone/tidme/]]",
                     "publish/website/index":  "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/website/index --html index.html",
                     "publish/website/zh-Hans":  "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/website/zh-Hans --html zh-Hans.html",
                     "publish/website/fr-FR":  "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/website/fr-FR --html fr-FR.html",

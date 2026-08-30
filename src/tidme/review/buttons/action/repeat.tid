@@ -1,0 +1,83 @@
+title: $:/plugins/keepone/tidme/review/buttons/action/repeat
+condition: [<studyTiddler>!is[blank]]
+button-classes: tc-tiddlylink
+code-body: yes
+
+\define tv-action-refresh-policy() always
+
+<$let
+    rating_origin=<<rating>>
+    rating={{{ [<rating>match[Again]then<rating>] ~[<rating>match[Hard]then<rating>] ~[<rating>match[Good]then<rating>] ~[[Easy]] }}}
+    color={{{ [<rating>match[Again]then[red]] ~[<rating>match[Hard]then[orange]] ~[<rating>match[Good]then[green]] ~[[dodgerblue]] }}}
+>
+    <$let
+        currentTiddler=<<studyTiddler>>
+        card={{{ [<cards_json>jsonget[Rating],<rating>] :map[<cards_json>jsonextract[Cards],<currentTiddler>,[card]] }}}
+        review_log={{{ [<cards_json>jsonget[Rating],<rating>] :map[<cards_json>jsonextract[Cards],<currentTiddler>,[review_log]] }}}
+        priority_again={{{ [{$:/config/Tidme/PriorityDynamics!!again}else[0]] }}}
+        priority_hard={{{ [{$:/config/Tidme/PriorityDynamics!!hard}else[0]] }}}
+        priority_good={{{ [{$:/config/Tidme/PriorityDynamics!!good}else[5]] }}}
+        priority_easy={{{ [{$:/config/Tidme/PriorityDynamics!!easy}else[10]] }}}
+        priority_mult={{{ [{$:/config/Tidme/PriorityDynamics!!enable}match[false]then[0]else[1]] }}}
+        priority_delta={{{ [<rating>match[Again]then<priority_again>] ~[<rating>match[Hard]then<priority_hard>] ~[<rating>match[Good]then<priority_good>] ~[<priority_easy>] +[multiply<priority_mult>] }}}
+    >
+        <$list
+            filter="[<card>jsonget[lapses]compare:number:gteq<leech_threshold>]"
+            variable="ignore"
+        >
+            <<leech_action>>
+            <$action-sendmessage
+                $message="tm-notify"
+                $param="$:/plugins/keepone/tidme/review/notify/leech"
+            />
+        </$list>
+        <$action-setmultiplefields
+            $fields="[<card>jsonindexes[]] =annotate-colour"
+            $values="[<card>jsonindexes[]] :map[<card>jsonget<currentTiddler>] =[<color>]"
+            $timestamp={{$:/config/TimestampDisable}}
+        />
+        <$action-setfield
+            $tiddler={{{ [<deckTiddler>addsuffix[/log/]addsuffix<now [UTC]YYYY0MM0DD>] }}}
+            $index={{{ [<now [UTC]0hh0mm0ssXXX>] }}}
+            $value={{{ [<review_log>] }}}
+            $timestamp={{$:/config/TimestampDisable}}
+        />
+        <$action-setfield
+            $tiddler=<<studyTiddler>>
+            $field="tidme.priority"
+            $value={{{ [<studyTiddler>get[tidme.priority]else[50]add<priority_delta>] +[min[100]] +[max[0]] }}}
+            $timestamp={{$:/config/TimestampDisable}}
+        />
+        <$action-sendmessage
+            $message="tm-close-tiddler"
+        />
+        <$action-sendmessage
+            $message="tm-tidme-queue-changed"
+            $param=<<deckTiddler>>
+        />
+        <$action-deletetiddler
+            $filter="[all[shadows+tiddlers]prefix[$:/temp/tidme/]]"
+        />
+        <div>
+            <div class=`tmc-btn-${ [<rating>lowercase[]] }$` style=`color:$(color)$;`>
+                <$text
+                    text={{{ [<rating_origin>lowercase[]addprefix[$:/language/tidme/]get[text]] }}}
+                />
+            </div>
+            <div class="tmc-text-sg">
+                <$text
+                    text={{{ [<card>jsonget[due]format:relativedate[]] }}}
+                />
+            </div>
+        </div>
+    </$let>
+</$let>
+<$list
+    filter="[<studyTiddler>] :cascade[{$:/config/Tidme/Filters/decklist}] +[match<deckTiddler>]"
+    variable="ignore"
+>
+    {{$:/plugins/keepone/tidme/review/buttons/action/startstudy}}
+    <div class="tmc-text-sg">
+        <$text text={{$:/language/tidme/next}}/>
+    </div>
+</$list>

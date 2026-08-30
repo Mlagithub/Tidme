@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require_ = createRequire(import.meta.url);
-const sem = require_("../src/core/server/semantic-split.js");
+const sem = require_("../src/tidme/core/server/semantic-split.js");
 
 test("isUnstructured: 区分无标题散文与有结构文本", () => {
 	assert.equal(sem.isUnstructured("第一段。\n\n第二段。\n\n第三段。"), true, "纯散文");

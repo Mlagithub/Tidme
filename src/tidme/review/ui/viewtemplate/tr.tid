@@ -1,0 +1,86 @@
+title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/tr
+code-body: yes
+
+<$let
+    deckTiddler=<<currentTiddler>>
+    filter_learn=`[subfilter{$(deckTiddler)$!!card}!subfilter{$(deckTiddler)$!!card_exclude}subfilter{$(deckTiddler)$!!state_learn}sort[due]]`
+    filter_due=`[subfilter{$(deckTiddler)$!!card}!subfilter{$(deckTiddler)$!!card_exclude}subfilter{$(deckTiddler)$!!state_due}subfilter{$(deckTiddler)$!!order_due}]`
+    filter_new=`[subfilter{$(deckTiddler)$!!card}!subfilter{$(deckTiddler)$!!card_exclude}subfilter{$(deckTiddler)$!!state_new}subfilter{$(deckTiddler)$!!order_new}]`
+    filter_unfold=`[subfilter{$(deckTiddler)$!!card_unfold}]`
+    filter_random=`[subfilter<filter_due>] [subfilter<filter_new>] +[sortrandom[]]`
+    due-new=`$(filter_learn)$ $(filter_due)$ $(filter_new)$`
+    new-due=`$(filter_learn)$ $(filter_new)$ $(filter_due)$`
+    random=`$(filter_learn)$ [subfilter<filter_random>]`
+    filter_queue=`${ [<deckTiddler>get[order]match[new-due]then<new-due>] [<deckTiddler>get[order]match[random]then<random>] ~[<due-new>] }$`
+>
+    <div class="tmc-tr">
+        <div class="tmc-tr-deck">
+            <$link
+                tooltip=<<deckTiddler>>
+            >
+                <$wikify
+                    name="deckCaption"
+                    text={{{ [<deckTiddler>get[caption]] ~[<deckTiddler>split[/]last[]] }}}
+                    mode="inline"
+                    output="text"
+                >
+                    <<deckCaption>>
+                </$wikify>
+            </$link>
+            <$let
+                custom-caption="yes"
+            >
+                <$list
+                    filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck/Study]!is[draft]]"
+                    template="$:/plugins/keepone/tidme/review/ui/ViewTemplate/button"
+                />
+            </$let>
+        </div>
+        <div class="tmc-tr-study">
+            <$let
+                filter_search=<<filter_learn>>
+            >
+                <$button
+                    actions={{$:/plugins/keepone/tidme/review/buttons/action/search}}
+                    class="tm-badge tm-badge-learn tc-btn-invisible tc-tiddlylink"
+                >
+                    <$count filter="[subfilter<filter_learn>]"/>
+                </$button>
+            </$let>
+        </div>
+        <div class="tmc-tr-study">
+            <$let
+                filter_search=<<filter_due>>
+            >
+                <$button
+                    actions={{$:/plugins/keepone/tidme/review/buttons/action/search}}
+                    class="tm-badge tm-badge-due tc-btn-invisible tc-tiddlylink"
+                >
+                    <$count filter="[subfilter<filter_due>]"/>
+                </$button>
+            </$let>
+        </div>
+        <div class="tmc-tr-study">
+            <$let
+                filter_search=<<filter_new>>
+            >
+                <$button
+                    actions={{$:/plugins/keepone/tidme/review/buttons/action/search}}
+                    class="tm-badge tm-badge-new tc-btn-invisible tc-tiddlylink"
+                >
+                    <$count filter="[subfilter<filter_new>]"/>
+                </$button>
+            </$let>
+        </div>
+        <div class="tmc-tr-action">
+            <$let
+                filter_search=`[[$(deckTiddler)$]] [[$(deckTiddler)$]shadowsource[]] [subfilter{$(deckTiddler)$!!card}is[tiddler]] [[$(deckTiddler)$]shadowsource[]plugintiddlers[]is[tiddler]] +[!prefix[$:/plugins/keepone/tidme/]]`
+            >
+                <$list
+                    filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck/Action]!is[draft]]"
+                    template="$:/plugins/keepone/tidme/review/ui/ViewTemplate/button"
+                />
+            </$let>
+        </div>
+    </div>
+</$let>

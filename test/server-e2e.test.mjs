@@ -24,7 +24,7 @@ globalThis.Node = window.Node;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginDir = path.resolve(here, "../out-m2");
-const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_review", "$__plugins_tidme_import", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
+const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
@@ -125,7 +125,7 @@ test("server E2E: 后台导入任务（pending → importer → 文档/卡）", 
 		bag: "default"
 	});
 	// 手动触发扫描（等价于 15s 定时器，立即处理）
-	const importer = tw.modules.execute("$:/plugins/tidme/core/server/importer");
+	const importer = tw.modules.execute("$:/plugins/keepone/tidme/core/server/importer");
 	assert.ok(typeof importer.scan === "function", "importer 暴露 scan 入口");
 	importer.scan();
 
@@ -159,7 +159,7 @@ test("server E2E: 导入失败标记 error（不挂起）", async () => {
 		text: "x",
 		bag: "default"
 	});
-	const importer = tw.modules.execute("$:/plugins/tidme/core/server/importer");
+	const importer = tw.modules.execute("$:/plugins/keepone/tidme/core/server/importer");
 	importer.scan();
 	await waitFor(() => tw.wiki.getTiddler("$:/temp/e2e/bad")?.fields["tidme.import-error"], 10000);
 	const t = tw.wiki.getTiddler("$:/temp/e2e/bad");

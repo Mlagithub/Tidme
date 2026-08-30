@@ -8,7 +8,7 @@ bridgeTidmeEvents（$tw.rootWidget 消息 → 进程内订阅）、bindComponent
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const events = await import("../src/core/events.ts");
+const events = await import("../src/tidme/core/events.ts");
 
 test("EVENTS: tm-tidme-* 命名空间常量", () => {
 	assert.equal(events.EVENTS.IMPORT_DONE, "tm-tidme-import-done");

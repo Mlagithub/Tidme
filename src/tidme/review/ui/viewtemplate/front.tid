@@ -1,0 +1,65 @@
+title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/front
+tags: $:/tags/ViewTemplate
+list-after: $:/core/ui/ViewTemplate/title
+code-body: yes
+
+\whitespace trim
+
+<$list
+    filter="[<studyTiddler>!is[blank]]"
+    variable="studyTiddler"
+>
+    <div class="tc-reveal">
+        <$reveal
+            tag="div"
+            type="nomatch"
+            stateTitle=<<folded-state>>
+            text="hide"
+            default="show"
+            animate="yes"
+        >
+            <$button
+                tooltip={{$:/language/Buttons/Fold/Hint}}
+                aria-label={{$:/language/Buttons/Fold/Caption}}
+                class="tc-fold-banner"
+            >
+                <$action-sendmessage
+                    $message="tm-fold-tiddler"
+                    $param=<<currentTiddler>>
+                    foldedState=<<folded-state>>
+                />
+                {{$:/core/images/chevron-up}}
+            </$button>
+        </$reveal>
+    </div>
+    <$list
+        filter="[<currentTiddler>has:field[reverse]]"
+        variable="ignore"
+    >
+        <$reveal
+                tag="div"
+                type="nomatch"
+                stateTitle=<<folded-state>>
+                text="hide"
+                default="show"
+        >
+            <$transclude mode="block" field="caption"/>
+        </$reveal>
+        <$reveal
+                tag="div"
+                type="match"
+                stateTitle=<<folded-state>>
+                text="hide"
+                default="show"
+                animate="yes"
+        >
+            <$transclude mode="block" field="text"/>
+        </$reveal>
+    </$list>
+    <$list
+        filter="[<currentTiddler>!has:field[reverse]]"
+        variable="ignore"
+    >
+        <$transclude mode="block" field="caption"/>
+    </$list>
+</$list>

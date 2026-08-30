@@ -1,0 +1,10 @@
+tags: $:/tags/ViewTemplate/Subtitle
+title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/subtitle/due
+list-after: $:/plugins/keepone/tidme/review/ui/ViewTemplate/subtitle/review
+code-body: yes
+
+<$list
+    filter="[<currentTiddler>has[due]]"
+>
+    {{$:/language/tidme/lastdue}}: <$view field="due" format="relativedate"/>
+</$list>

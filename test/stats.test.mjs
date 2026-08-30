@@ -4,7 +4,7 @@ stats.test.mjs — core 统计聚合单元测试（node:test）
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const stats = await import("../src/core/stats.ts");
+const stats = await import("../src/tidme/core/stats.ts");
 
 const T = (offsetHours) => {
 	const d = new Date(Date.now() + offsetHours * 3600000);

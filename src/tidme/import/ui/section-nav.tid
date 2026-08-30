@@ -1,0 +1,10 @@
+title: $:/plugins/keepone/tidme/import/ui/section-nav
+tags: $:/tags/ViewTemplate
+list-after: $:/core/ui/ViewTemplate/title
+code-body: yes
+
+\whitespace trim
+
+<$list filter="[<currentTiddler>has[tidme.doc]!tag[tidme-import-doc]]" variable="ignore">
+<$section-bar/>
+</$list>

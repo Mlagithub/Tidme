@@ -1,0 +1,62 @@
+title: $:/plugins/keepone/tidme/review/buttons/action/startstudy
+tags: $:/tags/TidmeDeck/Study
+icon: $:/plugins/keepone/tidme/review/icons/start
+custom-caption: yes
+caption: {{$:/language/tidme/startstudy}}
+description: {{$:/language/tidme/startstudy}}
+condition: [<deckTiddler>!is[blank]]
+button-classes: tmc-button-show
+code-body: yes
+
+<$let
+    nextTiddler={{{ [subfilter<filter_queue>first[]] }}}
+>
+    <$action-setfield
+        $tiddler={{{ [<deckTiddler>addsuffix[/study]] }}}
+        list={{{ [<nextTiddler>format:titlelist[]] }}}
+    />
+    <$reveal
+        default=<<nextTiddler>>
+        type="nomatch"
+        text=""
+    >
+        <$action-setfield
+            $tiddler={{{ [<nextTiddler>addprefix[$:/state/folded/]] }}}
+            text={{{ [subfilter<filter_unfold>match<nextTiddler>then[show]else[hide]] }}}
+        />
+        <$action-navigate
+            $to=<<nextTiddler>>
+            $scroll="yes"
+        />
+        <$action-sendmessage
+            $message="tm-focus-selector"
+            $param=`[data-tiddler-title="$(nextTiddler)$"] .tmc-hideinput input`
+            preventScroll="true"
+        />
+    </$reveal>
+    <$reveal
+        default=<<nextTiddler>>
+        type="match"
+        text=""
+    >
+        <$action-sendmessage
+            $message="tm-confetti-launch"
+        />
+        <$action-sendmessage
+            $message="tm-confetti-launch"
+            originY=0.6
+            spread=70
+            delay=300
+        />
+        <$action-sendmessage
+            $message="tm-confetti-launch"
+            originY=0.55
+            spread=30
+            delay=600
+        />
+        <$action-sendmessage
+            $message="tm-notify"
+            $param="$:/plugins/keepone/tidme/review/notify/congratulation"
+        />
+    </$reveal>
+</$let>

@@ -1,0 +1,80 @@
+title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/deck
+tags: $:/tags/ViewTemplate
+list-before: $:/core/ui/ViewTemplate/body
+code-body: yes
+
+<$list
+    filter="[<currentTiddler>tag[$:/tags/TidmeDeck]]"
+    variable="deckTiddler"
+>
+    <$reveal
+        type="nomatch"
+        stateTitle=<<folded-state>>
+        text="hide"
+        default="show"
+        animate="yes"
+    >
+        <div style="text-align: center;">
+            <div>
+                <h2>
+                    <$wikify
+                        name="deckCaption"
+                        text={{{ [<deckTiddler>get[caption]] ~[<deckTiddler>split[/]last[]] }}}
+                        mode="inline"
+                        output="text"
+                    >
+                        <<deckCaption>>
+                    </$wikify>
+                </h2>
+            </div>
+            <div>
+                <$text
+                    text={{{ [<deckTiddler>get[card]] }}}
+                />
+            </div>
+            <div>
+                <$let
+                    filter_search=`[[$(deckTiddler)$]] [[$(deckTiddler)$]shadowsource[]] [subfilter{$(deckTiddler)$!!card}is[tiddler]] [[$(deckTiddler)$]shadowsource[]plugintiddlers[]is[tiddler]] +[!prefix[$:/plugins/keepone/tidme/]]`
+                >
+                    <$list
+                        filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck/Action]!is[draft]]"
+                        template="$:/plugins/keepone/tidme/review/ui/ViewTemplate/button"
+                    />
+                </$let>
+            </div>
+        </div>
+
+        <br>{{!!description}}<br>
+        <$let
+            filter_learn=`[subfilter{$(deckTiddler)$!!card}!subfilter{$(deckTiddler)$!!card_exclude}subfilter{$(deckTiddler)$!!state_learn}sort[due]]`
+            filter_due=`[subfilter{$(deckTiddler)$!!card}!subfilter{$(deckTiddler)$!!card_exclude}subfilter{$(deckTiddler)$!!state_due}subfilter{$(deckTiddler)$!!order_due}]`
+            filter_new=`[subfilter{$(deckTiddler)$!!card}!subfilter{$(deckTiddler)$!!card_exclude}subfilter{$(deckTiddler)$!!state_new}subfilter{$(deckTiddler)$!!order_new}]`
+            filter_unfold=`[subfilter{$(deckTiddler)$!!card_unfold}]`
+            filter_random=`[subfilter<filter_due>] [subfilter<filter_new>] +[sortrandom[]]`
+            due-new=`$(filter_learn)$ $(filter_due)$ $(filter_new)$`
+            new-due=`$(filter_learn)$ $(filter_new)$ $(filter_due)$`
+            random=`$(filter_learn)$ [subfilter<filter_random>]`
+            filter_queue=`${ [<deckTiddler>get[order]match[new-due]then<new-due>] [<deckTiddler>get[order]match[random]then<random>] ~[<due-new>] }$`
+        >
+            <div class="tm-deck-details">
+                <div class="tm-deck-counts">
+                    <span class="tm-badge tm-badge-learn">
+                        <$text text={{$:/language/tidme/learn}}/>: <$count filter="[subfilter<filter_learn>]"/>
+                    </span>
+                    <span class="tm-badge tm-badge-due">
+                        <$text text={{$:/language/tidme/due}}/>: <$count filter="[subfilter<filter_due>]"/>
+                    </span>
+                    <span class="tm-badge tm-badge-new">
+                        <$text text={{$:/language/tidme/new}}/>: <$count filter="[subfilter<filter_new>]"/>
+                    </span>
+                </div>
+                <div class="tm-deck-study-actions">
+                    <$list
+                        filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck/Study]!is[draft]]"
+                        template="$:/plugins/keepone/tidme/review/ui/ViewTemplate/button"
+                    />
+                </div>
+            </div>
+        </$let>
+    </$reveal>
+</$list>

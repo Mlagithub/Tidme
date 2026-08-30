@@ -42,24 +42,24 @@ function tiddlerFileName(title) {
 	}
 
 	// 附带：导入管线 bundle（pipeline-headless 的输入）——用 esbuild JS API，避免 npx 子进程残留
-	// $:/plugins/tidme/core/* 通过 onResolve 内联进 bundle（无头测试不依赖 TW 运行时）；import/* 保持外部（jszip）
+	// $:/plugins/keepone/tidme/core/* 通过 onResolve 内联进 bundle（无头测试不依赖 TW 运行时）；import/* 保持外部（jszip）
 	const esbuild = require("esbuild");
 	const coreResolvePlugin = {
 		name: "tidme-core-alias",
 		setup(build) {
-			build.onResolve({ filter: /^\$:\/plugins\/tidme\/core\// }, (args) => {
-				const name = args.path.replace(/^\$:\/plugins\/tidme\/core\//, "");
-				return { path: path.join(root, "src/core", name + ".ts"), namespace: "file" };
+			build.onResolve({ filter: /^\$:\/plugins\/keepone\/tidme\/core\// }, (args) => {
+				const name = args.path.replace(/^\$:\/plugins\/keepone\/tidme\/core\//, "");
+				return { path: path.join(root, "src/tidme/core", name + ".ts"), namespace: "file" };
 			});
 		}
 	};
 	await esbuild.build({
-		entryPoints: [path.join(root, "src/import/pipeline/main.ts")],
+		entryPoints: [path.join(root, "src/tidme/import/pipeline/main.ts")],
 		bundle: true,
 		format: "cjs",
 		platform: "browser",
 		plugins: [coreResolvePlugin],
-		external: ["$:/plugins/tidme/import/*"],
+		external: ["$:/plugins/keepone/tidme/import/*"],
 		outfile: path.join(out, "pipeline.cjs"),
 		logLevel: "info"
 	});

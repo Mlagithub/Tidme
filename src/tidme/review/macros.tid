@@ -1,0 +1,127 @@
+title: $:/plugins/keepone/tidme/review/macros
+tags: $:/tags/Global
+
+\whitespace trim
+
+\widget $fsrs4tw.repeat(ratings:'')
+<div class={{{ [subfilter<ratings>count[]compare:number:gt[1]then[tmc-repeat-wrapper]else[tmc-repeat-wrapper-1]] }}}>
+    <$let
+        cards_json={{{ [<studyTiddler>fsrs<p>] }}}
+    >
+        <$list
+            filter=<<ratings>>
+            variable="rating"
+        >
+            {{$:/plugins/keepone/tidme/review/buttons/action/repeat||$:/plugins/keepone/tidme/review/ui/ViewTemplate/button}}
+        </$list>
+    </$let>
+</div>
+\end
+
+\define C(hide,id:"default",show:"...")
+<$let
+    inputTiddler={{{ [[$:/temp/tidme/study/input/]addsuffix<currentTiddler>] }}}
+>
+    <% if [<folded-state>get[text]match[show]] %>
+    __$hide$__
+    <% else %>
+        <$button
+            class="tc-btn-invisible"
+        >
+            <$action-setfield
+                $tiddler=<<inputTiddler>>
+                $index=<<__id__>>
+                $value={{{ [<inputTiddler>getindex<__id__>match[show]then[]else[show]] }}}
+            />
+            <% if [<inputTiddler>getindex<__id__>match[show]] %>
+
+                __$hide$__
+            <% else %>
+                `[$show$]`
+            <% endif %>
+        </$button>
+    <% endif %>
+</$let>
+\end
+
+\define T(field:"text")
+<$let
+    inputTiddler={{{ [[$:/temp/tidme/study/input/]addsuffix<currentTiddler>] }}}
+>
+    <% if [<folded-state>get[text]match[hide]] %>
+        <$edit
+            tiddler=<<inputTiddler>>
+            placeholder={{$:/language/EditTemplate/Body/Placeholder}}
+            minHeight={{$:/themes/tiddlywiki/vanilla/metrics/fontsize}}
+            class="tc-edit-texteditor tc-edit-texteditor-body"
+        >
+        </$edit>
+    <% elseif [<folded-state>get[text]match[show]] %>
+        <% if [<inputTiddler>get[text]] %>
+            <$diff-text
+                source={{{ [<inputTiddler>get[text]] }}}
+                dest={{!!$field$}}
+            />
+        <% endif %>
+    <% endif %>
+</$let>
+\end
+
+\define S(option,answer:"")
+<$let
+    inputTiddler={{{ [[$:/temp/tidme/study/input/]addsuffix<currentTiddler>] }}}
+>
+    <$list
+        filter="[<__option__>trim[]splitregexp[\n]]"
+        variable="optioncontent"
+        counter="optionid"
+    >
+        <br/>
+        <$let
+            selectid={{{ [<__answer__>split[]count[]match[1]then[id]else<optionid>] }}}
+        >
+            <% if [<folded-state>get[text]match[show]] %>
+                <$button
+                    disabled="yes"
+                    class="tc-btn-invisible"
+                >
+                    <% if [<__answer__>split[]search-replace[A],[1]search-replace[B],[2]search-replace[C],[3]search-replace[D],[4]search-replace[E],[5]search-replace[F],[6]search-replace[G],[7]search-replace[H],[8]search-replace[I],[9]match<optionid>] %>
+                        <% if [<inputTiddler>getindex<selectid>match<optionid>] %>
+                            {{$:/core/images/done-button}}
+                        <% else %>
+                            {{$:/core/images/warning}}
+                        <% endif %>
+                    <% else %>
+                        <% if [<inputTiddler>getindex<selectid>match<optionid>] %>
+                            {{$:/core/images/close-button}}
+                        <% else %>
+                            {{$:/core/images/blank}}
+                        <% endif %>
+                    <% endif %>
+                </$button> <<optioncontent>>
+            <% else %>
+                <% if [<__answer__>split[]count[]compare:number:lteq[1]] %>
+                    <$radio
+                        tiddler=<<inputTiddler>>
+                        index=<<selectid>>
+                        value=<<optionid>>
+                        default=""
+                    >
+                        <<optioncontent>>
+                    </$radio>
+                <% else %>
+                    <$checkbox
+                        tiddler=<<inputTiddler>>
+                        index=<<selectid>>
+                        checked=<<optionid>>
+                        unchecked=""
+                        default=""
+                    >
+                        <<optioncontent>>
+                    </$checkbox>
+                <% endif %>
+            <% endif %>
+        </$let>
+    </$list>
+</$let>
+\end

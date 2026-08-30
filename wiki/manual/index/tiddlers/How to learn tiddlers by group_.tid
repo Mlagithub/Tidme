@@ -15,7 +15,7 @@ tags: [[Advanced Tips]] ? !
 title: How to learn tiddlers by group?
 type: text/vnd.tiddlywiki
 
-Use the input box in {{$:/plugins/tidme/fsrs4tw/home}} The image is a "fishing rod".
+Use the input box in {{$:/plugins/keepone/tidme/fsrs4tw/home}} The image is a "fishing rod".
 
 * Enter [[Filter Expression|https://tiddlywiki.com/#Filter%20Expression]] in the input box. For example:
 **`newTiddler`, also written `[[newTiddler]]`: will learn `newTiddler`. It will automatically be added as it is learned with the `?`  tag. Depending on your actions, it will also add `.` or `!` tags. Where the `.` tag indicates that this tiddler (''Excerpt Tiddler'') does not need to be recalled when learning, and the `!` tag indicates that this tiddler (the discarded tiddler) is no longer learning.

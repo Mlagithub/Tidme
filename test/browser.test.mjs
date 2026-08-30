@@ -14,7 +14,7 @@ import TiddlyWiki from "tiddlywiki";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginDir = path.resolve(here, "../out-m2");
-const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_review", "$__plugins_tidme_import", "$__plugins_tidme_manager", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
+const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
@@ -74,7 +74,7 @@ test.before(async () => {
 	tw.boot.boot();
 	wiki = tw.wiki;
 	// 造数据：一本书 + 2 节 + 1 摘录 + 1 挖空 + 自动 deck
-	const pipeline = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	const r = await pipeline.runSplit({ text: "# 书名甲\n\n第一章正文。\n\n## 小节乙\n\n第二节正文。", title: "书名甲", type: "text/markdown", minChars: 0 });
 	for (const t of r.tiddlers) wiki.addTiddler(t);
 	const section = r.tiddlers.find((x) => Array.isArray(x.tags) && x.tags.includes("?"));
@@ -93,12 +93,12 @@ test.before(async () => {
 		"tidme.breadcrumb": `${section["tidme.path"]} › 挖空`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
-	cardBrowser = tw.modules.execute("$:/plugins/tidme/manager/widgets/card-browser.js");
-	queueOps = tw.modules.execute("$:/plugins/tidme/manager/widgets/queue-ops.js");
-	statsPanel = tw.modules.execute("$:/plugins/tidme/import/widgets/stats-panel.js");
-	cardManager = tw.modules.execute("$:/plugins/tidme/manager/widgets/card-manager.js");
-	sectionBar = tw.modules.execute("$:/plugins/tidme/import/widgets/section.js");
-	splitTool = tw.modules.execute("$:/plugins/tidme/import/widgets/split.js");
+	cardBrowser = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/card-browser.js");
+	queueOps = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/queue-ops.js");
+	statsPanel = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/stats-panel.js");
+	cardManager = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/card-manager.js");
+	sectionBar = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
+	splitTool = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/split.js");
 });
 
 function renderWidgetEx(mod, name, opts = {}) {
@@ -176,7 +176,7 @@ test("card-manager: 渲染视图过滤/树/批量工具条", () => {
 });
 
 test("scheduler: 优先级混合队列排序 sortPriorityMixedQueue", () => {
-	const sched = tw.modules.execute("$:/plugins/tidme/core/scheduler.js");
+	const sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
 	const c1 = { title: "高优先远到期", fields: { "tidme.priority": "10", due: "20260101000000000" } };
 	const c2 = { title: "低优先近逾期", fields: { "tidme.priority": "80", due: "20260105000000000" } };
 	const cards = [c2, c1];
@@ -192,7 +192,7 @@ test("scheduler: 优先级混合队列排序 sortPriorityMixedQueue", () => {
 });
 
 test("scheduler: 过载自动顺延 autoPostpone 门槛触发", () => {
-	const sched = tw.modules.execute("$:/plugins/tidme/core/scheduler.js");
+	const sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
 	const overdueCards = [
 		{ title: "卡1", fields: { due: "20200101000000000", tags: ["?"], "tidme.priority": "80" } },
 		{ title: "卡2", fields: { due: "20200101000000000", tags: ["?"], "tidme.priority": "70" } }
@@ -207,8 +207,8 @@ test("scheduler: 过载自动顺延 autoPostpone 门槛触发", () => {
 });
 
 test("pipeline: 大纲干预编辑器 applyOverrides（改短/删/增）", () => {
-	const pipeline = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
-	const chunker = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
+	const chunker = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	const rawSections = [
 		{ level: 1, title: "超级无敌非常长的一个原章节名称用于测试改短", trail: ["超级无敌非常长的一个原章节名称用于测试改短"], html: "<p>1</p>", text: "1", chars: 1, ordinal: 1 },
 		{ level: 1, title: "待删除噪音卡", trail: ["待删除噪音卡"], html: "<p>2</p>", text: "2", chars: 1, ordinal: 2 }
@@ -225,14 +225,14 @@ test("pipeline: 大纲干预编辑器 applyOverrides（改短/删/增）", () =>
 });
 
 test("pipeline: cleanTitle 剔除冗余副标题与括号说明", () => {
-	const pipeline = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	const rawTitle = "批判性思维与说服性写作：独立思考者的精进技巧（通过25种思维练习、30项写作训练，让你更具备思辨力和创造性, 实现独立思考和写作精进）";
 	const cleaned = pipeline.cleanTitle(rawTitle);
 	assert.equal(cleaned, "批判性思维与说服性写作", "成功剥离副标题与括号营销说明");
 });
 
 test("server: splitSectionText LLM 二次切片且 100% 保持字数完全相同", async () => {
-	const sem = tw.modules.execute("$:/plugins/tidme/core/server/semantic-split");
+	const sem = tw.modules.execute("$:/plugins/keepone/tidme/core/server/semantic-split");
 	const sampleText = "第一段正文内容用来测试字符偏移定位。\n\n第二段正文分析实验结果。\n\n第三段正文给出分析结论。";
 	const mockHttp = async () => ({
 		status: 200,
@@ -362,11 +362,11 @@ test("section-bar: 即时刷新（本文档卡变化 → 重建）", () => {
 });
 
 test("事件总线: 队列变化通知 → 监听组件重建（stats-panel 数字更新）", async () => {
-	const events = tw.modules.execute("$:/plugins/tidme/core/events.js");
+	const events = tw.modules.execute("$:/plugins/keepone/tidme/core/events.js");
 	// 先渲染统计面板（注册事件监听）
 	const root = renderWidget(statsPanel, "stats-panel");
 	// 新导入第二本书（直接写库，模拟切分/导入落库）
-	const pipeline2 = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const pipeline2 = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	const r = await pipeline2.runSplit({ text: "# 第二本书\n\n第二章正文。", title: "第二本书", type: "text/markdown", minChars: 0 });
 	for (const t of r.tiddlers) wiki.addTiddler(t);
 	// 直接进程内通知（等价于 tm-tidme-* 消息经 rootWidget 桥接到达）
@@ -407,15 +407,15 @@ test("doc-resume: 子集复习按钮（复习本书）", () => {
 
 test("import-file: 服务端后台处理选项（G10）", () => {
 	// 需要 importFile 模块
-	if (!importFile) importFile = tw.modules.execute("$:/plugins/tidme/import/widgets/import.js");
+	if (!importFile) importFile = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/import.js");
 	const root = renderWidget(importFile, "import-file");
 	const text = collectText(root);
 	assert.ok(text.includes("服务端后台处理"), "服务端处理选项（G10）");
 });
 
 test("align: 重复导入（A）——同内容再导入不覆盖 SRS 进度", async () => {
-	const pipeline2 = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
-	const align = tw.modules.execute("$:/plugins/tidme/core/align.js");
+	const pipeline2 = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
+	const align = tw.modules.execute("$:/plugins/keepone/tidme/core/align.js");
 	// 首次切分并写库（minChars=0 保持两节独立）
 	const r1 = await pipeline2.runSplit({ text: "# 重导书\n\n甲内容。\n\n## 乙\n\n乙内容。", title: "重导书", type: "text/markdown", minChars: 0 });
 	for (const t of r1.tiddlers) wiki.addTiddler(t);
@@ -499,7 +499,7 @@ test("W1 双轨: 默认牌组只装 item（含挖空，不含节卡/摘录）", 
 });
 
 test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅读）", () => {
-	const rl = tw.modules.execute("$:/plugins/tidme/import/widgets/reading-list.js");
+	const rl = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/reading-list.js");
 	// 纯函数：收集 + 分组（W2）
 	const cards = rl.collectTopicCards(wiki);
 	const groups = rl.groupByDoc(cards);
@@ -530,7 +530,7 @@ test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
 });
 
 test("workflow: $:/Decks 工作流中心（开始阅读/开始复习 + 阅读目标）", () => {
-	const wf = tw.modules.execute("$:/plugins/tidme/review/widgets/workflow.js");
+	const wf = tw.modules.execute("$:/plugins/keepone/tidme/review/widgets/workflow.js");
 	// 渲染：两个按钮
 	const root = renderWidget(wf, "tidme-workflow");
 	const text = collectText(root);
@@ -552,5 +552,5 @@ test("workflow: $:/Decks 工作流中心（开始阅读/开始复习 + 阅读目
 	assert.equal(target2, "书名甲 › 第一章 › 摘录", "有续读点则跳续读点卡");
 	// 全无 → 阅读列表页
 	const emptyWiki = { filterTiddlers: () => [], getTiddler: () => null };
-	assert.equal(wf.globalReadingTarget(emptyWiki), "$:/plugins/tidme/import/ui/reading-list", "全无跳阅读列表");
+	assert.equal(wf.globalReadingTarget(emptyWiki), "$:/plugins/keepone/tidme/import/ui/reading-list", "全无跳阅读列表");
 });

@@ -1,0 +1,38 @@
+title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/study
+tags: $:/tags/ViewTemplate
+list-after:
+code-body: yes
+
+\whitespace trim
+
+\define foldaction()
+<$action-setfield
+    $tiddler={{{ [<studyTiddler>addprefix[$:/state/folded/]] }}}
+    text={{{ [<studyTiddler>addprefix[$:/state/folded/]get[text]match[hide]then[show]else[hide]] }}}
+/>
+\end
+
+<$list
+    filter="[<studyTiddler>!is[blank]]"
+    variable="studyTiddler"
+>
+    <div class="tmc-study-bar">
+        <div class="tmc-study-count">
+            <span class={{{ [subfilter<filter_learn>match<studyTiddler>then[tm-badge tm-badge-learn tm-badge-active]else[tm-badge tm-badge-learn]] }}}><$count filter="[subfilter<filter_learn>]"/></span>
+            <span class={{{ [subfilter<filter_due>match<studyTiddler>then[tm-badge tm-badge-due tm-badge-active]else[tm-badge tm-badge-due]] }}}><$count filter="[subfilter<filter_due>]"/></span>
+            <span class={{{ [subfilter<filter_new>match<studyTiddler>then[tm-badge tm-badge-new tm-badge-active]else[tm-badge tm-badge-new]] }}}><$count filter="[subfilter<filter_new>]"/></span>
+        </div>
+    <$reveal
+        tag="div"
+        type="nomatch"
+        stateTitle=<<folded-state>>
+        text="hide"
+        default="show"
+        animate="yes"
+    >
+        <$fieldmangler>
+                <$fsrs4tw.repeat ratings="Again Hard Good Easy">
+        </$fieldmangler>
+    </$reveal>
+    </div>
+</$list>

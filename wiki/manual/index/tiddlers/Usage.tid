@@ -6,7 +6,7 @@ tags: [[Tidme Manual]] ?
 title: Usage
 type: text/vnd.tiddlywiki
 
-# Click {{$:/plugins/tidme/fsrs4tw/home}} on the sidebar to select a deck.
+# Click {{$:/plugins/keepone/tidme/fsrs4tw/home}} on the sidebar to select a deck.
 
 #* [[Default Deck|$:/Deck/default]] contains tiddlers that have added the `? ` tagged card, which can be customised by ''{{$:/language/tidme/createdeck}}''.
 

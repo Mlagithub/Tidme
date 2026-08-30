@@ -1,0 +1,19 @@
+title: $:/plugins/keepone/tidme/import/readme
+type: text/vnd.tiddlywiki
+
+! Tidme Import（M2）
+
+应用内导入与切分：把 EPUB / Markdown / Wikitext / HTML / TXT 切分为「Section tiddlers」并直接进入渐进阅读体系。
+
+* 渠道：本地文件选择 + 拖放 / 粘贴 / 剪藏收件箱（`tidme-inbox` 标签，配合 TW-WebClipper）
+* EPUB：解析 OPF/spine/NCX（EPUB2）与 nav.xhtml（EPUB3）→ 大纲树切分；碎行自动语义合并
+* 通用切分器 `runSplit`：任意 markdown / wikitext / HTML / TXT tiddler 一键切分（工具栏「切分」按钮）
+  * markdown：ATX/setext 标题、围栏代码（原子块）、表格（原子块）、引用、列表
+  * wikitext：`!` 标题、转义 `<h1-h6>`；HTML：h1-h6 标签
+* 确定性 ID：同一 tiddler/文件重切分产物完全一致（为复习历史迁移奠基）
+* 溯源字段：tidme.doc / tidme.id / tidme.hash / tidme.order / tidme.path / tidme.source …
+* 自动牌组：每文档生成 `$:/Deck/read/<书名>`（card 按 tidme.doc 过滤）
+
+产物卡片自带 `?` 标签，进入默认牌堆即可开始 FSRS 复习。
+
+设计文档见仓库 `doc/research/import-stage-research-v2.md`（v2 愿景）与 `doc/research/data-model.md`（core 规格）。

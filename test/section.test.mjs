@@ -15,7 +15,7 @@ import TiddlyWiki from "tiddlywiki";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginDir = path.resolve(here, "../out-m2");
-const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_review", "$__plugins_tidme_import", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
+const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
@@ -30,7 +30,7 @@ test.before(() => {
 	tw.boot.argv = [tmp];
 	tw.boot.boot();
 	wiki = tw.wiki;
-	sectionMod = tw.modules.execute("$:/plugins/tidme/import/widgets/section.js");
+	sectionMod = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
 });
 
 test("buildExtract: parent 链 + anchor 记录", () => {

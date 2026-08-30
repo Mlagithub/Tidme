@@ -13,7 +13,7 @@ const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 
 const pluginDir = path.resolve(__dirname, "../out-m2");
-const plugins = ["$__plugins_tidme_core", "$__plugins_tidme_review", "$__plugins_tidme_import", "$__plugins_tidme_read", "$__tidme_languages_zh-Hans"]
+const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
@@ -83,7 +83,7 @@ function runActions(text, variables) {
 }
 
 function startstudy() {
-	// 复刻 core deck-engine（src/core/deck-engine.ts，composeDeckFilters）的过滤器组合。
+	// 复刻 core deck-engine（src/tidme/core/deck-engine.ts，composeDeckFilters）的过滤器组合。
 	// 无头环境不依赖 TW 运行时，故在测试内联等价逻辑；core 本体的组合由 test/core.test.mjs 覆盖。
 	const deckFields = wiki.getTiddler(DECK).fields;
 	const filter_learn = `[subfilter{${DECK}!!card}!subfilter{${DECK}!!card_exclude}subfilter{${DECK}!!state_learn}sort[due]]`;
@@ -96,7 +96,7 @@ function startstudy() {
 	const random = `${filter_learn} [subfilter<filter_random>]`;
 	const order = deckFields.order || "due-new";
 	const filter_queue = order === "new-due" ? newDue : order === "random" ? random : dueNew;
-	runActions(wiki.getTiddlerText("$:/plugins/tidme/review/buttons/action/startstudy"), {
+	runActions(wiki.getTiddlerText("$:/plugins/keepone/tidme/review/buttons/action/startstudy"), {
 		deckTiddler: DECK, currentTiddler: DECK, filter_queue, filter_unfold
 	});
 	return (wiki.getTiddler(DECK + "/study") || { fields: { list: [] } }).fields.list;
@@ -107,7 +107,7 @@ function grade(studyTiddler, rating) {
 	const varWidget = makeVarsWidget({ studyTiddler, p: deckFields.p });
 	const cardsJson = wiki.filterTiddlers("[<studyTiddler>fsrs<p>]", varWidget)[0];
 	if (!cardsJson) throw new Error(`fsrs 过滤器无输出: ${studyTiddler}`);
-	runActions(wiki.getTiddlerText("$:/plugins/tidme/review/buttons/action/repeat"), {
+	runActions(wiki.getTiddlerText("$:/plugins/keepone/tidme/review/buttons/action/repeat"), {
 		studyTiddler, rating, cards_json: cardsJson, deckTiddler: DECK,
 		leech_threshold: String(deckFields.leech_threshold || 8)
 	});

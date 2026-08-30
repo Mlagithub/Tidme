@@ -3,4 +3,4 @@ modified: 20220309070814696
 title: $:/config/DefaultSidebarTab
 type: text/vnd.tiddlywiki
 
-$:/plugins/tidme/stats/ui/SideBar/TidmeStats
+$:/plugins/keepone/tidme/stats/ui/SideBar/TidmeStats

@@ -1,0 +1,57 @@
+title: $:/language/tidme/
+
+tidme: Tidme
+tidmetip:  Lifelong knowledge, deep in mind
+default: Default
+defaulttip: <center>This is a non-customisable default deck, which can be customised with ''{{$:/language/tidme/createdeck}}''.</center>
+deck: Deck
+learn: Learn
+due: Due
+new: New
+options: Options
+caption: Caption
+cardfilter: Card [[filter|https://tiddlywiki.com/#Introduction%20to%20filter%20notation]]
+cardfiltertip: Filtering tiddlers as cards in this Deck.
+description: Description
+advanced: Advanced
+studyorder: Study Order
+cardstate: Card state
+displayorderfilter: Display Order Filter
+random: Rando
+cardtypefilter: Card Type Filter
+exclude: Exclude
+excludetip: Exclude this card and not study it again
+unfold: Unfold
+unfoldtip: Unfold this card when studying
+action: [[Action|https://tiddlywiki.com/#ActionWidgets]]
+leech: Leech
+leechthreshold: Threshold
+expert: Expert
+experttip: I have fully understood the implications of the following expert options and accept the potentially damaging consequences.
+cardstatefilter: Card [[State|https://github.com/open-spaced-repetition/fsrs.js#usage]] Filter
+param: Param
+fsrsparam: [[FSRS algorithm|https://github.com/open-spaced-repetition/fsrs.js#usage]]
+exportdelete: Export or delete
+getshared: Get Shared
+createdeck: Create Deck
+createdecktip: Creating a new deck using the default deck as a template
+importfile: Import File
+startstudy: Start Study
+next: Next
+again: Again
+hard: Hard
+good: Good
+easy: Easy
+stopstudy: Stop Study
+type: Type Question
+typetip: Insert edit of Type Question(see manual for usage)
+cloze: Cloze Question
+clozetip: Set the selected text as cloze of Cloze Question(see manual for usage)
+select: Select Question
+selecttip: Set the selected text as options of Select Question(see manual for usage)
+lastdue: Due
+lastreview: Review
+pluginlibrary: Tidme Plugin Library
+pluginlibrarytip: This plugin library can be used to install and update plugins related to Tidme.
+deckslibrary: Shared Decks Library
+deckslibrarytip: This plugin library can be used to install and update shared decks related to Tidme.

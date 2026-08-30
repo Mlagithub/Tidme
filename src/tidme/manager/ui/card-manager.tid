@@ -1,0 +1,15 @@
+title: $:/plugins/keepone/tidme/manager/ui/card-manager
+caption: 卡片管理器
+type: text/vnd.tiddlywiki
+
+! 卡片管理器
+
+<$tidme-nav/>
+
+浏览、组织与管理全部学习卡片（含已读、搁置与手动创建的散卡）。
+
+<$card-manager/>
+
+---
+
+[[← 导入中心|$:/plugins/keepone/tidme/import/ui/import-center]] · [[牌组批量操作|$:/plugins/keepone/tidme/manager/ui/deck-ops]] · [[统计|$:/plugins/keepone/tidme/import/ui/stats]]
