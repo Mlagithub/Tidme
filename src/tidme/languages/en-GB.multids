@@ -1,7 +1,7 @@
 title: $:/language/tidme/
 
 tidme: Tidme
-tidmetip:  Lifelong knowledge, deep in mind
+tidmetip: Lifelong knowledge, deep in mind
 default: Default
 defaulttip: <center>This is a non-customisable default deck, which can be customised with ''{{$:/language/tidme/createdeck}}''.</center>
 deck: Deck
@@ -48,10 +48,13 @@ typetip: Insert edit of Type Question(see manual for usage)
 cloze: Cloze Question
 clozetip: Set the selected text as cloze of Cloze Question(see manual for usage)
 select: Select Question
-selecttip: Set the selected text as options of Select Question(see manual for usage)
-lastdue: Due
-lastreview: Review
-pluginlibrary: Tidme Plugin Library
-pluginlibrarytip: This plugin library can be used to install and update plugins related to Tidme.
-deckslibrary: Shared Decks Library
-deckslibrarytip: This plugin library can be used to install and update shared decks related to Tidme.
+selecttip: Insert edit of Select Question(see manual for usage)
+search: Search Question
+searchtip: Search for tiddler title, select to edit
+optionsmodaltip: Review Options
+import/split: Split
+import/splittip: Split this tiddler into incremental reading sections
+read/read: Read
+stats/stats: Stats
+stats/focus: Focus
+stats/focustip: Knowledge Graph
