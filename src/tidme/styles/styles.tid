@@ -21,7 +21,7 @@ type: text/css
 	align-items: center;
 	gap: var(--tm-gap);
 	padding: 18px 8px;
-	color: <<colour muted-foreground>>;
+	color: var(--tm-text-2);
 	font-size: 0.9em;
 	text-align: center;
 }
@@ -31,13 +31,13 @@ type: text/css
 .tm-toast {
 	padding: 6px 12px;
 	border-radius: var(--tm-radius);
-	border: 1px solid <<colour muted-foreground>>;
-	background: <<colour background>>;
+	border: 1px solid var(--tm-text-2);
+	background: var(--tm-surface);
 	font-size: 0.9em;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 .tm-toast--ok { border-color: #22c55e; color: #15803d; }
-.tm-toast--err { border-color: <<colour danger>>; color: <<colour danger>>; }
+.tm-toast--err { border-color: var(--tm-danger); color: var(--tm-danger); }
 
 /* 统计面板（P1：指标卡 / 表格 / 进度条 / 漏斗横条） */
 .tm-stat-cards {
@@ -47,11 +47,11 @@ type: text/css
 	margin: 8px 0;
 }
 .tm-stat-card {
-	border: 1px solid <<colour muted-foreground>>;
+	border: 1px solid var(--tm-text-2);
 	border-radius: var(--tm-radius);
 	padding: 8px 10px;
 	text-align: center;
-	background: <<colour very-light-background>>;
+	background: var(--tm-surface-2);
 }
 .tm-stat-num {
 	font-size: 1.6em;
@@ -156,7 +156,7 @@ type: text/css
 .tm-import-file-badge {
 	font-size: 0.75em;
 	padding: 0 6px;
-	border: 1px solid <<colour muted-foreground>>;
+	border: 1px solid var(--tm-text-2);
 	border-radius: 3px;
 	opacity: 0.75;
 	text-transform: uppercase;
@@ -175,7 +175,7 @@ type: text/css
 	display: flex;
 	align-items: center;
 	gap: 0.4em;
-	border-left: 2px solid <<colour muted-foreground>>;
+	border-left: 2px solid var(--tm-text-2);
 	opacity: 0.85;
 	padding-left: 0.5em;
 	margin-left: 0.2em;
@@ -316,7 +316,7 @@ type: text/css
 	padding: 0.25em 0;
 }
 .tm-import-error {
-	color: <<colour danger>>;
+	color: var(--tm-danger);
 }
 .tm-import-muted {
 	opacity: 0.7;
@@ -339,14 +339,14 @@ type: text/css
 	position: sticky;
 	top: 0;
 	z-index: 60;
-	background: <<colour background>>;
+	background: var(--tm-surface);
 	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
 	padding: 2px 0;
 	margin-bottom: 4px;
-	border-bottom: 1px dotted <<colour muted-foreground>>;
+	border-bottom: 1px dotted var(--tm-text-2);
 	font-size: 0.92em;
 }
 .tm-section-row {
@@ -365,7 +365,7 @@ type: text/css
 	opacity: 0.75;
 }
 .tm-section-state {
-	color: <<colour primary>>;
+	color: var(--tm-accent);
 	opacity: 0.9;
 }
 /* 统一按钮风格：全部 tm-sec-btn 基类 + 语义修饰（沿用 core design token） */
@@ -423,20 +423,20 @@ type: text/css
 .tm-bar-sep {
 	width: 1px;
 	height: 1.2em;
-	background: <<colour muted-foreground>>;
+	background: var(--tm-text-2);
 	opacity: 0.4;
 	margin: 0 4px;
 	display: inline-block;
 }
 .tm-import-dup {
-	color: <<colour danger>>;
+	color: var(--tm-danger);
 	font-size: 0.9em;
 	margin: 2px 0;
 }
 .tm-import-summary {
 	margin-top: 6px;
 	padding-top: 4px;
-	border-top: 1px dotted <<colour muted-foreground>>;
+	border-top: 1px dotted var(--tm-text-2);
 }
 mark.tm-readpoint {
 	background: #fff3a0;
@@ -449,7 +449,7 @@ mark.tm-readpoint {
 	white-space: pre-wrap;
 	max-height: 12em;
 	overflow: auto;
-	background: <<colour very-light-background>>;
+	background: var(--tm-surface-2);
 	padding: 6px;
 	border-radius: 4px;
 }
@@ -458,7 +458,7 @@ mark.tm-readpoint {
 	margin: 4px 0;
 	max-height: 22em;
 	overflow: auto;
-	border: 1px dotted <<colour muted-foreground>>;
+	border: 1px dotted var(--tm-text-2);
 	border-radius: 4px;
 	padding: 4px 6px;
 }
@@ -469,7 +469,7 @@ mark.tm-readpoint {
 	padding: 2px 0;
 	flex-wrap: wrap;
 	font-size: 0.92em;
-	border-left: 2px solid <<colour muted-foreground>>;
+	border-left: 2px solid var(--tm-text-2);
 	opacity: 0.9;
 }
 .tm-split-row-merged {
@@ -480,7 +480,7 @@ mark.tm-readpoint {
 	border-left-color: #f59e0b;
 }
 .tm-split-row-tuned {
-	border-left-color: <<colour primary>>;
+	border-left-color: var(--tm-accent);
 	background: var(--tm-mark-split);
 }
 .tm-split-mark {
@@ -490,7 +490,7 @@ mark.tm-readpoint {
 }
 .tm-split-done {
 	font-size: 0.8em;
-	color: <<colour primary>>;
+	color: var(--tm-accent);
 }
 .tm-split-title {
 	opacity: 0.9;
@@ -498,7 +498,7 @@ mark.tm-readpoint {
 .tm-split-op {
 	font-size: 0.85em;
 	padding: 0 6px;
-	border: 1px solid <<colour muted-foreground>>;
+	border: 1px solid var(--tm-text-2);
 	border-radius: 3px;
 	opacity: 0.8;
 }
@@ -519,7 +519,7 @@ mark.tm-readpoint {
 	opacity: 1;
 }
 .tm-cm-del:hover {
-	color: <<colour danger>>;
+	color: var(--tm-danger);
 }
 
 /* 文档页已读区 / 聚合区（details 卡片） */
@@ -982,7 +982,7 @@ mark.tm-readpoint {
 	align-items: center;
 	gap: var(--tm-gap);
 	padding: 18px 8px;
-	color: <<colour muted-foreground>>;
+	color: var(--tm-text-2);
 	font-size: 0.9em;
 	text-align: center;
 }
@@ -992,13 +992,13 @@ mark.tm-readpoint {
 .tm-toast {
 	padding: 6px 12px;
 	border-radius: var(--tm-radius);
-	border: 1px solid <<colour muted-foreground>>;
-	background: <<colour background>>;
+	border: 1px solid var(--tm-text-2);
+	background: var(--tm-surface);
 	font-size: 0.9em;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 .tm-toast--ok { border-color: #22c55e; color: #15803d; }
-.tm-toast--err { border-color: <<colour danger>>; color: <<colour danger>>; }
+.tm-toast--err { border-color: var(--tm-danger); color: var(--tm-danger); }
 
 /* 卡片浏览（侧边栏树形） */
 .tm-card-browser details {
@@ -1013,7 +1013,7 @@ mark.tm-readpoint {
 .tm-cb-doc {
 	margin-left: 0.6em;
 	padding-left: 0.5em;
-	border-left: 2px solid <<colour muted-foreground>>;
+	border-left: 2px solid var(--tm-text-2);
 	opacity: 0.9;
 }
 .tm-cb-doc-title {
@@ -1216,7 +1216,7 @@ mark.tm-readpoint {
 	padding: 2px 0;
 }
 .tm-cm-head {
-	border-bottom: 1px dotted <<colour muted-foreground>>;
+	border-bottom: 1px dotted var(--tm-text-2);
 	margin-bottom: 2px;
 	font-size: 0.85em;
 	opacity: 0.8;
@@ -1231,11 +1231,11 @@ mark.tm-readpoint {
 	border: 1px solid transparent;
 }
 .tm-cm-sort:hover {
-	border-color: <<colour muted-foreground>>;
+	border-color: var(--tm-text-2);
 }
 .tm-cm-sort-active {
-	border-color: <<colour primary>>;
-	color: <<colour primary>>;
+	border-color: var(--tm-accent);
+	color: var(--tm-accent);
 }
 .tm-cm-listrow {
 	font-size: 0.9em;
@@ -1268,7 +1268,7 @@ mark.tm-readpoint {
 }
 .tm-cm-table th,
 .tm-cm-table td {
-	border-bottom: 1px solid <<colour muted-foreground>>;
+	border-bottom: 1px solid var(--tm-text-2);
 	padding: 2px 6px;
 	text-align: left;
 	vertical-align: middle;
@@ -1276,17 +1276,17 @@ mark.tm-readpoint {
 .tm-cm-table thead th {
 	position: sticky;
 	top: 0;
-	background: <<colour background>>;
+	background: var(--tm-surface);
 	opacity: 0.9;
 	font-weight: 500;
 	z-index: 1;
 	white-space: nowrap;
 }
 .tm-cm-table tbody tr:hover td {
-	background: <<colour very-light-background>>;
+	background: var(--tm-surface-2);
 }
 .tm-cm-table tbody tr.tm-cm-listrow-selected td {
-	background: <<colour very-light-background>>;
+	background: var(--tm-surface-2);
 }
 .tm-cm-cell-cb {
 	width: 2em;
@@ -1304,9 +1304,9 @@ mark.tm-readpoint {
 .tm-cm-preview {
 	margin: 6px 0 2px;
 	padding: 6px 8px;
-	border: 1px solid <<colour muted-foreground>>;
+	border: 1px solid var(--tm-text-2);
 	border-radius: 4px;
-	background: <<colour very-light-background>>;
+	background: var(--tm-surface-2);
 }
 .tm-cm-preview-head {
 	font-size: 0.85em;
@@ -1340,7 +1340,7 @@ mark.tm-readpoint {
 .tm-cm-edit {
 	margin: 4px 0 2px;
 	padding: 4px 8px;
-	border: 1px dashed <<colour muted-foreground>>;
+	border: 1px dashed var(--tm-text-2);
 	border-radius: 4px;
 	font-size: 0.9em;
 }
@@ -1357,11 +1357,11 @@ mark.tm-readpoint {
 }
 /* 牌组批量操作卡片（P2） */
 .tm-queue-card {
-	border: 1px solid <<colour muted-foreground>>;
+	border: 1px solid var(--tm-text-2);
 	border-radius: var(--tm-radius);
 	padding: 6px 10px;
 	margin: 6px 0;
-	background: <<colour background>>;
+	background: var(--tm-surface);
 }
 .tm-queue-card-head {
 	display: flex;
@@ -1488,7 +1488,7 @@ mark.tm-readpoint {
     justify-content: space-between;
     align-items:center;
     font-weight: bold;
-    border-bottom: 1px solid <<colour table-border>>;
+    border-bottom: 1px solid var(--tm-border);
     padding-bottom:10px;
 }
 
@@ -1511,7 +1511,7 @@ mark.tm-readpoint {
 }
 
 .tmc-tr:hover {
-    background-color: <<colour page-background>>;
+    background-color: var(--tm-surface-2);
 }
 
 .tmc-tr:hover .tmc-button-hide{
@@ -1540,21 +1540,21 @@ mark.tm-readpoint {
 
 
 .tmc-btn-primary {
-    background: <<colour primary>>;
-    color: <<colour background>>;
-    fill: <<colour background>>;
+    background: var(--tm-accent);
+    color: var(--tm-surface);
+    fill: var(--tm-surface);
 }
 
 .tmc-btn-dirty {
-    background: <<colour dirty-indicator>>;
-    color: <<colour background>>;
-    fill: <<colour background>>;
+    background: var(--tm-warn);
+    color: var(--tm-surface);
+    fill: var(--tm-surface);
 }
 
 .tmc-btn-dirty {
-    background: <<colour dirty-indicator>>;
-    color: <<colour background>>;
-    fill: <<colour background>>;
+    background: var(--tm-warn);
+    color: var(--tm-surface);
+    fill: var(--tm-surface);
 }
 
 /* 复习评分条：sticky 顶部固定，长卡片评分随手可点 */
