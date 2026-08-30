@@ -77,19 +77,19 @@ test.before(async () => {
 	const pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	const r = await pipeline.runSplit({ text: "# 书名甲\n\n第一章正文。\n\n## 小节乙\n\n第二节正文。", title: "书名甲", type: "text/markdown", minChars: 0 });
 	for (const t of r.tiddlers) wiki.addTiddler(t);
-	const section = r.tiddlers.find((x) => Array.isArray(x.tags) && x.tags.includes("?"));
+	const section = r.tiddlers.find((x) => x["tidme.kind"] === "topic");
 	wiki.addTiddler({
-		title: "书名甲 › 第一章 › 摘录", tags: ["."], caption: "摘",
+		title: "书名甲 › 第一章 › 摘录", caption: "摘",
 		text: "<blockquote>第一章的摘录</blockquote>",
-		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "extract",
+		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "topic", "tidme.subkind": "extract",
 		"tidme.breadcrumb": `${section["tidme.path"]} › 摘录`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
-	// W1 双轨：挖空卡（item）带 ? 进主动复习流；摘录卡（topic）带 . 不进
+	// 分类重构：摘录卡（topic）进阅读流；挖空卡（item）进复习流
 	wiki.addTiddler({
-		title: "书名甲 › 第一章 › 挖空", tags: ["?"], caption: "首都",
+		title: "书名甲 › 第一章 › 挖空", caption: "首都",
 		text: "",
-		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "cloze",
+		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "item", "tidme.subkind": "cloze",
 		"tidme.breadcrumb": `${section["tidme.path"]} › 挖空`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
@@ -137,21 +137,22 @@ function collectButtons(node, out = []) {
 	return out;
 }
 
-test("card-browser: 树形包含牌组/文档/卡片", () => {
+test("card-browser: 树形包含牌组/文档/卡片（只剩默认牌组 = item 复习流）", () => {
 	const root = renderWidget(cardBrowser, "card-browser");
 	const text = collectText(root);
-	assert.ok(text.includes("书名甲"), "应含文档名");
-	assert.ok(text.includes("小节乙"), "应含节标题");
-	assert.ok(text.includes("摘"), "应含摘录标记");
+	assert.ok(text.includes("书名甲"), "应含文档名（挖空卡归属）");
+	assert.ok(text.includes("挖空"), "应含挖空卡（item）");
+	assert.ok(!text.includes("小节乙"), "节卡（topic）不进牌组树");
 	assert.ok(text.includes("✕"), "应有删除按钮");
 });
 
-test("queue-ops: 每牌组渲染批量操作按钮", () => {
+test("queue-ops: 每牌组渲染批量操作按钮（只剩默认牌组）", () => {
+	const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]]");
+	assert.equal(decks.length, 1, "牌组库只剩默认牌组（topic 不进牌组）");
 	const root = renderWidget(queueOps, "queue-ops");
 	const text = collectText(root);
 	assert.ok(text.includes("顺延7d"), "应有顺延按钮");
 	assert.ok(text.includes("遗忘"), "应有遗忘按钮");
-	assert.ok(text.includes("书名甲"), "应含牌组 caption");
 	assert.ok(text.includes("立即顺延"), "应有手动 auto-postpone 按钮（G8）");
 });
 
@@ -194,8 +195,8 @@ test("scheduler: 优先级混合队列排序 sortPriorityMixedQueue", () => {
 test("scheduler: 过载自动顺延 autoPostpone 门槛触发", () => {
 	const sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
 	const overdueCards = [
-		{ title: "卡1", fields: { due: "20200101000000000", tags: ["?"], "tidme.priority": "80" } },
-		{ title: "卡2", fields: { due: "20200101000000000", tags: ["?"], "tidme.priority": "70" } }
+		{ title: "卡1", fields: { due: "20200101000000000", "tidme.kind": "item", "tidme.priority": "80" } },
+		{ title: "卡2", fields: { due: "20200101000000000", "tidme.kind": "item", "tidme.priority": "70" } }
 	];
 	// 当 maxOverdueThreshold = 5 时，未达到 5 张逾期，不触发顺延
 	const resUnder = sched.autoPostpone(overdueCards, { maxOverdueThreshold: 5 });
@@ -264,26 +265,28 @@ test("card-manager: 批量选择交互与全选", () => {
 
 
 
-test("card-manager: Done 语义（去 ? 和 . + tidme.done）与恢复", () => {
-	const done = cardManager.doneFields({ title: "节", tags: ["?", "."], state: "0" });
-	assert.equal(done.tags.length, 0, "Done 去掉 ? 和 .");
+test("card-manager: Done 语义（置 tidme.done，kind 决定归属）与恢复", () => {
+	const sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
+	const done = cardManager.doneFields({ title: "节", "tidme.kind": "topic", state: "0" });
 	assert.equal(done["tidme.done"], "yes");
-	// 恢复：topic（section/extract）回阅读态补 .，item（cloze/qa/无 kind）补 ?
-	const resumed = cardManager.resumeFields({ ...done, "tidme.kind": "section" });
-	assert.ok(resumed.tags.includes("."), "section 恢复补回 .（阅读态）");
-	assert.ok(!resumed.tags.includes("?"), "section 恢复不补 ?（topic 不进复习流）");
+	assert.equal(done["tidme.kind"], "topic", "kind 保留");
+	// 恢复：清除 done/ignored/suspended，kind 决定归属（无需补标签）
+	const resumed = cardManager.resumeFields({ ...done });
 	assert.equal(resumed["tidme.done"], undefined, "恢复删除 tidme.done");
-	// item（挖空卡）恢复补回 ?
-	const resumeCloze = cardManager.resumeFields({ ...done, "tidme.kind": "cloze" });
-	assert.ok(resumeCloze.tags.includes("?"), "cloze 恢复补回 ?（item 进复习流）");
+	assert.equal(resumed["tidme.kind"], "topic", "topic 保留（阅读流）");
+	assert.ok(!sched.isCardDone(resumed), "恢复后不在完成态");
+	// item 恢复同样只清标记
+	const resumeCloze = cardManager.resumeFields({ ...done, "tidme.kind": "item" });
+	assert.equal(resumeCloze["tidme.kind"], "item", "item 保留（复习流）");
+	assert.ok(!sched.isCardDone(resumeCloze));
 });
 
 test("card-manager: 全部卡片可见（含已读卡与手动散卡）", () => {
-	// 手动散卡：无 tidme.*，仅带 ? 学习标签（模拟用户手动建卡）
-	wiki.addTiddler({ title: "手动散卡甲", tags: ["?"], state: "0", due: "20261231000000000" });
+	// 手动散卡：无 kind，仅 FSRS 字段（模拟用户手动建卡，按 item 兜底）
+	wiki.addTiddler({ title: "手动散卡甲", state: "0", due: "20261231000000000", reps: "0", lapses: "0", stability: "0", difficulty: "0" });
 	// 已读一张节卡（模拟其他入口的 Done）
-	const secTitle = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[section]]")[0];
-	wiki.addTiddler({ ...wiki.getTiddler(secTitle).fields, tags: [], "tidme.done": "yes" });
+	const secTitle = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[topic]tidme.subkind[section]]")[0];
+	wiki.addTiddler({ ...wiki.getTiddler(secTitle).fields, "tidme.done": "yes" });
 
 	const root = renderWidget(cardManager, "card-manager"); // 默认按文档（全量）
 	const text = collectText(root);
@@ -328,7 +331,7 @@ test("card-manager: 信息标签（Element data 显示层）", () => {
 });
 
 test("section-bar: 两行布局 + 统一按钮风格", () => {
-	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[section]tag[?]]")[0];
+	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[topic]tidme.subkind[section]!has[tidme.done]]")[0];
 	const root = renderWidget(sectionBar, "section-bar", { variables: { currentTiddler: title } });
 	const bar = (root.children || [])[0];
 	assert.ok(bar && String(bar.className || "").includes("tm-section-bar"), "条栏根节点");
@@ -347,13 +350,13 @@ test("section-bar: 两行布局 + 统一按钮风格", () => {
 });
 
 test("section-bar: 即时刷新（本文档卡变化 → 重建）", () => {
-	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[section]tag[?]]")[0];
+	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[topic]tidme.subkind[section]!has[tidme.done]]")[0];
 	const { root, w } = renderWidgetEx(sectionBar, "section-bar", { variables: { currentTiddler: title } });
 	// 初始未读：有「✔ 已读」按钮，无「✓ 已读」状态
 	assert.ok(collectText(root).includes("✔ 已读"), "初始为未读状态");
 	// 外部把本卡标为已读（模拟文档页/管理器入口）
 	const f = wiki.getTiddler(title).fields;
-	wiki.addTiddler({ ...f, tags: [], "tidme.done": "yes" });
+	wiki.addTiddler({ ...f, "tidme.done": "yes" });
 	assert.equal(w.refresh({ [title]: { modified: true } }), true, "refresh 处理了变化");
 	const text2 = collectText(root);
 	assert.ok(text2.includes("✓ 已读"), "重建后显示已读状态");
@@ -420,15 +423,15 @@ test("align: 重复导入（A）——同内容再导入不覆盖 SRS 进度", a
 	const r1 = await pipeline2.runSplit({ text: "# 重导书\n\n甲内容。\n\n## 乙\n\n乙内容。", title: "重导书", type: "text/markdown", minChars: 0 });
 	for (const t of r1.tiddlers) wiki.addTiddler(t);
 	// 给「甲」节设 SRS 进度（第一节：面包屑 = 文档标题 › H1 标题）
-	const jia = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[section]tidme.breadcrumb[重导书 › 重导书]]`)[0]
-		|| wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[section]]`)[0];
+	const jia = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]tidme.breadcrumb[重导书 › 重导书]]`)[0]
+		|| wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]]`)[0];
 	assert.ok(jia, "找到甲节");
 	wiki.addTiddler({ ...wiki.getTiddler(jia).fields, state: "2", reps: "5", due: "20261231000000000" });
 	// 再次导入同一内容（模拟重复导入/剪藏更新）
 	const r2 = await pipeline2.runSplit({ text: "# 重导书\n\n甲内容。\n\n## 乙\n\n乙内容。", title: "重导书", type: "text/markdown", minChars: 0 });
-	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[section]!is[draft]]`)
+	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]!is[draft]]`)
 		.map((t) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
-	const sectionCards = r2.tiddlers.filter((x) => Array.isArray(x.tags) && x.tags.includes("?"));
+	const sectionCards = r2.tiddlers.filter((x) => x["tidme.kind"] === "topic");
 	const aligned = await align.alignCards(oldCards, "重导书", sectionCards.map((c) => ({ title: c.title, fields: c })));
 	// 内容全同 → 全部 unchanged，不新增/不更新/不归档
 	assert.equal(aligned.unchanged, 2, "两节全部未变");
@@ -449,11 +452,11 @@ test("doc-resume: 摘录收件箱聚合（G4/W3 加工标注）", () => {
 	assert.ok(text.includes("可挖空"), "无子挖空的摘录显示可挖空（W3）");
 	assert.ok(text.includes("回原文"), "回原文操作");
 	// 给摘录卡加一个子挖空 → 已挖空
-	const extractTitle = wiki.filterTiddlers("[tidme.kind[extract]]")[0];
+	const extractTitle = wiki.filterTiddlers("[tidme.subkind[extract]]")[0];
 	const extFields = wiki.getTiddler(extractTitle).fields;
 	wiki.addTiddler({
-		title: extractTitle + " › 挖空", tags: ["?"], state: "0",
-		"tidme.doc": extFields["tidme.doc"], "tidme.parent": extractTitle, "tidme.kind": "cloze",
+		title: extractTitle + " › 挖空", state: "0",
+		"tidme.doc": extFields["tidme.doc"], "tidme.parent": extractTitle, "tidme.kind": "item", "tidme.subkind": "cloze",
 		"tidme.breadcrumb": `${extFields["tidme.breadcrumb"]} › 挖空`
 	});
 	const root2 = renderWidget(sectionBar, "doc-resume", { variables: { currentTiddler: "书名甲" } });
@@ -461,7 +464,7 @@ test("doc-resume: 摘录收件箱聚合（G4/W3 加工标注）", () => {
 });
 
 test("section-bar: 摘录卡加工按钮（✂ 挖空）", () => {
-	const extractTitle = wiki.filterTiddlers("[tidme.kind[extract]]")[0];
+	const extractTitle = wiki.filterTiddlers("[tidme.subkind[extract]]")[0];
 	assert.ok(extractTitle, "测试数据应有摘录卡");
 	const root = renderWidget(sectionBar, "section-bar", { variables: { currentTiddler: extractTitle } });
 	const text = collectText(root);
@@ -470,37 +473,66 @@ test("section-bar: 摘录卡加工按钮（✂ 挖空）", () => {
 });
 
 test("section-bar: 忽略按钮（G3）", () => {
-	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[section]tag[?]]")[0];
+	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[topic]tidme.subkind[section]!has[tidme.done]]")[0];
 	const root = renderWidget(sectionBar, "section-bar", { variables: { currentTiddler: title } });
 	const text = collectText(root);
 	assert.ok(text.includes("忽略"), "未读节显示忽略按钮");
 });
 
-test("W1 双轨: 默认牌组只装 item（含挖空，不含节卡/摘录）", () => {
+test("双轨分类: 默认牌组只装 item（含挖空，不含节卡/摘录）；topic 不进任何牌组", () => {
 	const deck = wiki.getTiddler("$:/Deck/default");
 	assert.ok(deck, "默认牌组存在");
 	const queue = wiki.filterTiddlers(String(deck.fields.card));
 	assert.ok(queue.includes("书名甲 › 第一章 › 挖空"), "挖空卡（item）进复习流");
 	assert.ok(!queue.includes("书名甲 › 第一章 › 摘录"), "摘录卡（topic）不进复习流");
-	assert.ok(!queue.some((t) => wiki.getTiddler(t)?.fields?.["tidme.kind"] === "section"), "节卡（topic）不进复习流");
+	assert.ok(!queue.some((t) => wiki.getTiddler(t)?.fields?.["tidme.kind"] === "topic"), "节卡（topic）不进复习流");
 	assert.ok(queue.includes("手动散卡甲"), "无 kind 手动卡按 item 进复习流");
-	// 自动牌组 = 本书 topic 阅读牌组（tag[.]）
+	// topic（阅读材料）不进任何 TidmeDeck：不生成自动阅读牌组，也不出现在牌组库
 	const autoDeck = wiki.getTiddler("$:/Deck/read/书名甲");
-	assert.ok(autoDeck, "自动阅读牌组存在");
-	const readQueue = wiki.filterTiddlers(String(autoDeck.fields.card));
-	// 前面测试已把两节都标为已读，这里补一张未读节卡验证"未读节卡进阅读牌组"
+	assert.equal(autoDeck, undefined, "不生成自动阅读牌组（书只出现在阅读列表）");
+	const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]]");
+	assert.equal(decks.length, 1, "牌组库只剩默认牌组（item 复习流）");
+	assert.equal(decks[0], "$:/Deck/default");
+	// 补一张未读节卡：它只在阅读列表（kind[topic]），不进入任何牌组队列
 	const docId = wiki.getTiddler("书名甲 › 第一章 › 摘录").fields["tidme.doc"];
-	wiki.addTiddler({ title: "书名甲 › 新节", tags: ["?", "."], "tidme.doc": docId, "tidme.kind": "section", state: "0" });
-	const readQueue2 = wiki.filterTiddlers(String(autoDeck.fields.card));
-	assert.ok(readQueue2.includes("书名甲 › 新节"), "未读节卡在阅读牌组");
-	assert.ok(readQueue.includes("书名甲 › 第一章 › 摘录"), "摘录卡在阅读牌组");
-	assert.ok(!readQueue.includes("书名甲 › 第一章 › 挖空"), "挖空卡不在阅读牌组");
-	assert.ok(!readQueue.includes("书名甲 › 书名甲"), "已读节卡（done）不在阅读牌组");
+	wiki.addTiddler({ title: "书名甲 › 新节", "tidme.doc": docId, "tidme.kind": "topic", "tidme.subkind": "section", state: "0" });
+	const deckIds = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]]");
+	const anyDeckMatches = deckIds.some((d) => wiki.filterTiddlers(String(wiki.getTiddler(d).fields.card)).includes("书名甲 › 新节"));
+	assert.equal(anyDeckMatches, false, "未读节卡不在任何牌组");
+});
+
+test("视图互斥: 阅读条栏只显示 topic，复习帧只接管 item", () => {
+	// section-nav.tid（阅读条栏）只匹配 kind=topic
+	const secNav = wiki.getTiddler("$:/plugins/keepone/tidme/import/ui/section-nav").fields.text;
+	assert.ok(secNav.includes("tidme.kind[topic]"), "阅读条栏只显示 topic 卡");
+	assert.ok(!secNav.includes("has[tidme.doc]!tag[tidme-import-doc]"), "不再按 doc 判定（避免 item 卡混入）");
+	// card.tid（复习帧）排除 topic
+	const cardFilter = wiki.getTiddler("$:/config/Tidme/StoryTiddlerTemplateFilters/card").fields.text;
+	assert.ok(cardFilter.includes("!tidme.kind[topic]"), "复习帧不接管 topic 卡");
+	// 视图互斥效果：topic 卡不在默认牌组复习帧、item 卡无阅读条栏
+	const topic = wiki.filterTiddlers("[tidme.kind[topic]!has[tidme.done]]")[0];
+	const item = wiki.filterTiddlers("[tidme.kind[item]]")[0];
+	assert.ok(topic, "存在未读 topic 卡");
+	assert.ok(item, "存在 item 卡");
+});
+
+test("视图互斥: 复习帧故事级联对 topic 卡落回默认帧（阅读模式无评分条）", () => {
+	// 复刻 $:/core/ui/StoryTiddlerTemplate 的真实级联：topic 卡必须得到 $:/core/ui/ViewTemplate
+	//（否则复习帧接管 → study.tid 评分条出现在阅读模式）
+	const parent = wiki.makeWidget({ tree: [] }, { document: fakeDocument });
+	const topic = wiki.filterTiddlers("[tidme.kind[topic]tidme.subkind[section]]")[0];
+	assert.ok(topic, "存在节卡");
+	parent.setVariable("currentTiddler", topic);
+	const w = wiki.makeWidget({ tree: [] }, { parentWidget: parent, document: fakeDocument });
+	const cascade = "[<currentTiddler>] :cascade[all[shadows+tiddlers]tag[$:/tags/StoryTiddlerTemplateFilter]!is[draft]get[text]] :and[has[title]else[$:/core/ui/ViewTemplate]]";
+	const tpl = wiki.filterTiddlers(cascade, w);
+	assert.ok(Array.isArray(tpl) && tpl.length > 0, "级联应有结果");
+	assert.equal(tpl[0], "$:/core/ui/ViewTemplate", "topic 卡故事级联 = 默认帧（复习帧不接管）");
 });
 
 test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅读）", () => {
 	const rl = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/reading-list.js");
-	// 纯函数：收集 + 分组（W2）
+	// 纯函数：收集 + 分组
 	const cards = rl.collectTopicCards(wiki);
 	const groups = rl.groupByDoc(cards);
 	const jia = groups.find((g) => g.cards[0].breadcrumb.startsWith("书名甲"));
@@ -509,7 +541,7 @@ test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
 	assert.ok(!jia.cards.some((c) => c.kind === "cloze"), "挖空卡（item）不在阅读列表");
 	// 排序：高优先级在前
 	const docId2 = wiki.getTiddler("书名甲 › 第一章 › 摘录").fields["tidme.doc"];
-	wiki.addTiddler({ title: "书名甲 › 高优摘录", tags: ["."], "tidme.doc": docId2, "tidme.kind": "extract", "tidme.priority": "5", "tidme.breadcrumb": "书名甲 › 高优摘录", state: "0" });
+	wiki.addTiddler({ title: "书名甲 › 高优摘录", "tidme.doc": docId2, "tidme.kind": "topic", "tidme.subkind": "extract", "tidme.priority": "5", "tidme.breadcrumb": "书名甲 › 高优摘录", state: "0" });
 	const sorted = rl.sortTopicCards(rl.collectTopicCards(wiki).filter((c) => c.breadcrumb.startsWith("书名甲")));
 	assert.equal(sorted[0].title, "书名甲 › 高优摘录", "优先级 5 排在优先级 50 前");
 	// 渲染 widget
@@ -527,6 +559,77 @@ test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
 	assert.ok(ctext.includes("张待读"), "compact 计数");
 	assert.ok(!ctext.includes("去复习"), "compact 不含去复习按钮");
 	assert.ok(ctext.includes("书名甲"), "compact 文档名");
+});
+
+test("startstudy: 队列过滤器在按钮 transclude 上下文显式解析（$(deckTiddler)$）", () => {
+	// 回归：2658977 曾把视图模板的队列过滤器从显式 {$(deckTiddler)$!!card} 改成隐式 {!!card}，
+	// 导致「开始学习」按钮经 <$transclude> 渲染时 currentTiddler=按钮自身，{!!card} 取空 → 永远"无新卡"。
+	// 1) 视图模板必须使用显式 $(deckTiddler)$ 引用（不依赖 currentTiddler）
+	for (const t of ["deck", "tiddler", "tr"]) {
+		const text = wiki.getTiddler(`$:/plugins/keepone/tidme/review/ui/ViewTemplate/${t}`).fields.text;
+		assert.ok(text.includes("$(deckTiddler)$!!card"), `${t} 模板用显式 $(deckTiddler)$ 引用`);
+		assert.ok(!text.includes("[subfilter{!!card}]"), `${t} 模板不得用隐式 {!!card}`);
+	}
+	// 2) 模拟 tr 行 let + 按钮上下文：filter_queue 应解析出在队卡（而非空）
+	wiki.addTiddler({
+		title: "按钮队列测试卡", "tidme.kind": "item", "tidme.subkind": "cloze", caption: "B",
+		state: "0", due: "20261231000000000", reps: "0", lapses: "0", stability: "0",
+		difficulty: "0", elapsed_days: "0", scheduled_days: "0", last_review: "20261231000000000"
+	});
+	const sim = `<$let
+    deckTiddler="$:/Deck/default"
+    filter_learn=\`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]\`
+    filter_due=\`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_due}] +[subfilter{$(deckTiddler)$!!order_due}]\`
+    filter_new=\`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_new}] +[subfilter{$(deckTiddler)$!!order_new}]\`
+    filter_unfold=\`[subfilter{$(deckTiddler)$!!card_unfold}]\`
+    due-new=\`$(filter_learn)$ $(filter_due)$ $(filter_new)$\`
+    new-due=\`$(filter_learn)$ $(filter_new)$ $(filter_due)$\`
+    random=\`$(filter_learn)$ [subfilter<filter_random>]\`
+    filter_queue=\`\${ [<deckTiddler>get[order]match[new-due]then<new-due>] [<deckTiddler>get[order]match[random]then<random>] ~[<due-new>] }\$\`
+>
+NEXT: {{{ [subfilter<filter_queue>first[]] }}}
+</$let>`;
+	wiki.addTiddler({ title: "StartStudySim", text: sim });
+	const out = wiki.renderTiddler("text/html", "StartStudySim");
+	assert.ok(out.includes("按钮队列测试卡"), "nextTiddler 在按钮上下文能解析出在队卡");
+});
+
+test("study 视图: 评分条始终可见（不随 folded 隐藏）", () => {
+	// 回归：startstudy/开始复习对 cloze/qa 卡设 folded=hide（非 unfold），
+	// 若评分条被 text="hide" 的 reveal 包裹则评分条消失 → 复习无法评分。
+	const study = wiki.getTiddler("$:/plugins/keepone/tidme/review/ui/ViewTemplate/study").fields.text;
+	const barIdx = study.indexOf("tmc-study-bar");
+	const repeatIdx = study.indexOf("fsrs4tw.repeat");
+	assert.ok(barIdx !== -1 && repeatIdx > barIdx, "评分条在 sticky 条栏内");
+	assert.ok(!study.includes('text="hide"'), "评分条不再被 hide reveal 包裹（folded=hide 时也可见）");
+});
+
+test("workflow: 开始复习 startStudy 直达默认牌组第一张在队卡", () => {
+	const wf = tw.modules.execute("$:/plugins/keepone/tidme/review/widgets/workflow.js");
+	const deckEngine = tw.modules.execute("$:/plugins/keepone/tidme/core/deck-engine.js");
+	// 用与 startStudy 相同的队列组合器计算期望的第一张卡
+	const df = wiki.getTiddler("$:/Deck/default").fields;
+	const expected = wiki.filterTiddlers(deckEngine.composeDeckFilters("$:/Deck/default", df).queue)[0];
+	assert.ok(expected, "默认牌组应有在队卡");
+
+	const events = [];
+	const fakeWidget = { dispatchEvent: (e) => events.push(e) };
+	wf.startStudy(wiki, fakeWidget);
+
+	const studyList = wiki.getTiddler("$:/Deck/default/study");
+	assert.ok(studyList, "学习会话 tiddler 已写入");
+	assert.ok(String(studyList.fields.list || "").includes(expected), "study list = 队列第一张卡");
+	const nav = events.find((e) => e.type === "tm-navigate");
+	assert.ok(nav && nav.navigateTo === expected, "导航到队列第一张卡");
+	const folded = wiki.getTiddler("$:/state/folded/" + expected);
+	assert.ok(folded && ["show", "hide"].includes(folded.fields.text), "折叠态已设置（show/hide）");
+
+	// 无在队卡 → 恭喜分支（不导航、不写 study list）
+	const empty = { filterTiddlers: () => [], getTiddler: () => null };
+	const ev2 = [];
+	wf.startStudy(empty, { dispatchEvent: (e) => ev2.push(e) });
+	assert.ok(!ev2.some((e) => e.type === "tm-navigate"), "空队列不导航");
+	assert.ok(ev2.some((e) => e.type === "tm-notify"), "空队列弹恭喜");
 });
 
 test("workflow: $:/Decks 工作流中心（开始阅读/开始复习 + 阅读目标）", () => {

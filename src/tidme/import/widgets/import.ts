@@ -189,15 +189,15 @@ function buildRow(
 					title: `${r.bookTitle} › ${tVal}`,
 					caption: tVal,
 					text: cVal,
-					tags: ["?"],
 					"tidme.doc": r.docId,
-					"tidme.kind": "section",
+					"tidme.kind": "topic",
+					"tidme.subkind": "section",
 					"tidme.breadcrumb": `${r.bookTitle} › ${tVal}`
 				};
 				if (insertAfterIdx === -1) {
 					r.tiddlers.splice(1, 0, newTiddler);
 				} else {
-					const sectionCards = r.tiddlers.filter((t) => Array.isArray(t.tags) && t.tags.includes("?"));
+					const sectionCards = r.tiddlers.filter((t) => t["tidme.kind"] === "topic");
 					const targetCard = sectionCards[insertAfterIdx];
 					const realIdx = r.tiddlers.indexOf(targetCard);
 					if (realIdx >= 0) r.tiddlers.splice(realIdx + 1, 0, newTiddler);
@@ -218,11 +218,11 @@ function buildRow(
 
 	const renderTree = () => {
 		outlineBox.textContent = "";
-		const cardTiddlers = r.tiddlers.filter((t) => Array.isArray(t.tags) && t.tags.includes("?") && !t._deleted);
+		const cardTiddlers = r.tiddlers.filter((t) => t["tidme.kind"] === "topic" && !t._deleted);
 		r.sectionCount = cardTiddlers.length;
 		metaSpan.textContent = `${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? " · 标题去重 " + r.warnings.length : ""}`;
 
-		const allSections = r.tiddlers.filter((t) => Array.isArray(t.tags) && t.tags.includes("?"));
+		const allSections = r.tiddlers.filter((t) => t["tidme.kind"] === "topic");
 		summaryEl.textContent = `目录大纲（按目录分节共 ${allSections.length} 条 · 可二次切分偏长章节）`;
 
 		// 顶部工具栏：一键提炼短标题
@@ -437,10 +437,10 @@ function makeFileWidget(): WidgetCtor {
 			const commitResult = async (result: ImportResult): Promise<{ created: number; updated: number; archived: number }> => {
 				const validTiddlers = result.tiddlers.filter((x: any) => !x._deleted);
 				const [doc, ...cards] = validTiddlers;
-				const sectionCards = cards.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
+				const sectionCards = cards.filter((x: any) => x["tidme.kind"] === "topic");
 				const align = require("$:/plugins/keepone/tidme/core/align.js");
 				const docPage = this.wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${result.docId}]]`)[0] || "";
-				const oldCards = this.wiki.filterTiddlers(`[tidme.doc[${result.docId}]tidme.kind[section]!is[draft]]`)
+				const oldCards = this.wiki.filterTiddlers(`[tidme.doc[${result.docId}]tidme.kind[topic]!is[draft]]`)
 					.map((ot: string) => ({ title: ot, fields: this.wiki.getTiddler(ot)?.fields || {} }));
 
 				let aligned: any = null;
@@ -455,8 +455,7 @@ function makeFileWidget(): WidgetCtor {
 					for (const at of aligned.archives) {
 						const ex = this.wiki.getTiddler(at);
 						if (!ex) continue;
-						const tags = Array.isArray(ex.fields.tags) ? ex.fields.tags.filter((x: string) => x !== "?") : [];
-						this.wiki.addTiddler({ ...ex.fields, tags, "tidme.obsolete": "yes" });
+						this.wiki.addTiddler({ ...ex.fields, "tidme.obsolete": "yes", "tidme.done": "yes" });
 					}
 				}
 				// 文档页：复用旧标题（引用稳定），更新索引内容
@@ -467,9 +466,7 @@ function makeFileWidget(): WidgetCtor {
 				if (!aligned) {
 					for (const c of cards) this.wiki.addTiddler({ ...c });
 				}
-				// 自动 deck 更新（按 docId 过滤，覆盖字段无 SRS 影响）
-				const deck = result.tiddlers.find((x: any) => String(x.title).startsWith("$:/Deck/read/"));
-				if (deck) this.wiki.addTiddler({ ...deck });
+				// 无自动阅读牌组：topic 由阅读列表管理，item 进默认牌组
 				return aligned
 					? { created: aligned.keep.length, updated: aligned.patches.length, archived: aligned.archives.length }
 					: { created: cards.length, updated: 0, archived: 0 };

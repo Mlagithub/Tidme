@@ -52,12 +52,12 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 	});
 	const [doc, ...cards] = r.tiddlers;
 	if (!cards.length) throw new Error("未切分出任何节（内容过短或无可识别结构）");
-	const sectionCards = cards.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
+	const sectionCards = cards.filter((x: any) => x["tidme.kind"] === "topic");
 
 	// G2 对齐：重切分已有文档时增量修补
 	const align = require("$:/plugins/keepone/tidme/core/align.js");
 	const docPage = wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${r.docId}]]`)[0] || "";
-	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r.docId}]tidme.kind[section]!is[draft]]`)
+	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r.docId}]tidme.kind[topic]!is[draft]]`)
 		.map((ot: string) => ({ title: ot, fields: wiki.getTiddler(ot)?.fields || {} }));
 	let aligned: any = null;
 	if (oldCards.length) {
@@ -69,12 +69,11 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 			const existing = wiki.getTiddler(p.title);
 			if (existing) wiki.addTiddler({ ...existing.fields, ...p.fields });
 		}
-		// 归档：标记 obsolete + 出队（不硬删）
+		// 归档：标记 obsolete + done（出队，不硬删；分类重构后无 ? 标签，靠 done 出队）
 		for (const at of aligned.archives) {
 			const existing = wiki.getTiddler(at);
 			if (!existing) continue;
-			const tags = Array.isArray(existing.fields.tags) ? existing.fields.tags.filter((x: string) => x !== "?") : [];
-			wiki.addTiddler({ ...existing.fields, tags, "tidme.obsolete": "yes" });
+			wiki.addTiddler({ ...existing.fields, "tidme.obsolete": "yes", "tidme.done": "yes" });
 		}
 	}
 
@@ -102,8 +101,7 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 			if (!wiki.getTiddler(c.title)) wiki.addTiddler(c);
 		}
 	}
-	const deck = r.tiddlers.find((x: any) => String(x.title).startsWith("$:/Deck/read/"));
-	if (deck) wiki.addTiddler(deck);
+	// 无自动阅读牌组：topic 由阅读列表管理，item 进默认牌组
 	// 事件总线：切分完成（split-tool / paste-split / inbox-split 共用此出口）
 	events.dispatch(widget, events.EVENTS.IMPORT_DONE, { docId: r.docId, bookTitle: title });
 	return r;
@@ -228,7 +226,7 @@ function makeSplitTool(): WidgetCtor {
 						overrides: toOverrides()
 					});
 					const sections = parsed.sections || [];
-					const cards = parsed.tiddlers.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
+					const cards = parsed.tiddlers.filter((x: any) => x["tidme.kind"] === "topic");
 					const editCount = overrides.merge.size + overrides.split.size + overrides.delete.size + overrides.titles.size + overrides.customSections.length;
 					status.textContent = `${cards.length} 节 · 硬切 ${parsed.stats.hardSplitCount} 块` + semStats +
 						(editCount > 0 ? ` · 已应用 ${editCount} 项大纲修改` : "");
@@ -456,7 +454,7 @@ function makePasteSplit(): WidgetCtor {
 				status.textContent = "解析中…";
 				try {
 					const r = await pipeline.runSplit({ text, title: firstLine, bag: this.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default" });
-					if (!r.tiddlers.some((x: any) => Array.isArray(x.tags) && x.tags.includes("?"))) throw new Error("未切分出任何节");
+					if (!r.tiddlers.some((x: any) => x["tidme.kind"] === "topic")) throw new Error("未切分出任何节");
 					for (const tdl of r.tiddlers) this.wiki.addTiddler(tdl);
 					events.dispatch(this, events.EVENTS.IMPORT_DONE, { docId: r.docId, bookTitle: firstLine });
 					this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-done" });

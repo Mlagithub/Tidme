@@ -22,17 +22,8 @@ code-body: yes
             <span class={{{ [subfilter<filter_due>match<studyTiddler>then[tm-badge tm-badge-due tm-badge-active]else[tm-badge tm-badge-due]] }}}><$count filter="[subfilter<filter_due>]"/></span>
             <span class={{{ [subfilter<filter_new>match<studyTiddler>then[tm-badge tm-badge-new tm-badge-active]else[tm-badge tm-badge-new]] }}}><$count filter="[subfilter<filter_new>]"/></span>
         </div>
-    <$reveal
-        tag="div"
-        type="nomatch"
-        stateTitle=<<folded-state>>
-        text="hide"
-        default="show"
-        animate="yes"
-    >
         <$fieldmangler>
-                <$fsrs4tw.repeat ratings="Again Hard Good Easy">
+            <$fsrs4tw.repeat ratings="Again Hard Good Easy">
         </$fieldmangler>
-    </$reveal>
     </div>
 </$list>

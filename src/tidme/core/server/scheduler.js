@@ -24,7 +24,7 @@ Tidme 服务端调度器（仅 Node / TiddlyWeb）
 			if (!cfg.enable) return;
 
 			var sched = require("$:/plugins/keepone/tidme/core/scheduler");
-			var cards = $tw.wiki.filterTiddlers("[tag[?]has[due]]").map(function (title) {
+			var cards = $tw.wiki.filterTiddlers("[all[shadows+tiddlers]!is[draft]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]has[due]]").map(function (title) {
 				return { title: title, fields: $tw.wiki.getTiddler(title).fields };
 			});
 			var result = sched.autoPostpone(cards, cfg);

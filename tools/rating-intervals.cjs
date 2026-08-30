@@ -20,8 +20,8 @@ function fakeElement() {
 }
 const fakeDocument = { createElement: () => fakeElement(), body: fakeElement(), title: "fake" };
 
-// 全新的测试卡（与导入产物一致：只有 ? 标签，无任何调度字段）
-wiki.addTiddler({ title: "全新测试卡", tags: ["?"], text: "?" });
+// 全新的测试卡（kind=item，无调度字段按新卡处理）
+wiki.addTiddler({ title: "全新测试卡", "tidme.kind": "item", "tidme.subkind": "qa", caption: "?", text: "?" });
 
 const deckP = wiki.getTiddler("$:/Deck/default").fields.p;
 const varWidget = wiki.makeWidget("", { variables: { studyTiddler: "全新测试卡", p: deckP }, document: fakeDocument });

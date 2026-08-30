@@ -64,25 +64,28 @@ test("schema: missingFsrsFields 检出缺失", () => {
 test("schema: assertKind 严格校验", () => {
 	const good = {
 		"tidme.doc": "d12345678", "tidme.id": "s123456789012", "tidme.parent": "书",
-		"tidme.path": "书 › 章", "tidme.order": "000001", "tidme.kind": "section",
+		"tidme.path": "书 › 章", "tidme.order": "000001", "tidme.kind": "topic",
+		"tidme.subkind": "section",
 		"tidme.hash": "h1234567890123456", "tidme.format": "epub", caption: "章", text: "<p>x</p>",
-		tags: ["?"], ...schema.initialFsrsFields(new Date())
+		...schema.initialFsrsFields(new Date())
 	};
-	assert.doesNotThrow(() => schema.assertKind(good, "section"));
-	assert.throws(() => schema.assertKind({ ...good, caption: undefined }, "section"), /caption/);
-	assert.throws(() => schema.assertKind({ ...good, state: undefined }, "section"), /FSRS/);
+	assert.doesNotThrow(() => schema.assertKind(good, "topic"));
+	assert.throws(() => schema.assertKind({ ...good, caption: undefined }, "topic"), /caption/);
+	assert.throws(() => schema.assertKind({ ...good, state: undefined }, "topic"), /FSRS/);
 });
 
-test("schema: inferKind 宽容推断", () => {
-	assert.equal(schema.inferKind({ "tidme.kind": "extract" }), "extract");
-	assert.equal(schema.inferKind({ "tidme.order": "000001" }), "section");
+test("schema: inferKind 只认 topic/item 大类", () => {
+	assert.equal(schema.inferKind({ "tidme.kind": "topic" }), "topic");
+	assert.equal(schema.inferKind({ "tidme.kind": "item" }), "item");
+	assert.equal(schema.inferKind({ "tidme.kind": "extract" }), null, "旧子类型不算大类");
+	assert.equal(schema.inferKind({ "tidme.order": "000001" }), null, "无 kind 返回 null");
 	assert.equal(schema.inferKind({}), null);
 });
 
 test("deck-engine: 组合过滤器与队列顺序（due-new）", () => {
 	const fields = {
-		card: "[tag[?]]",
-		card_exclude: "[tag[!]]",
+		card: "[tidme.kind[item]]",
+		card_exclude: "[field:tidme.done[yes]]",
 		state_learn: "[state[1]]",
 		state_due: "[state[2]]",
 		state_new: "[state[0]]",
@@ -101,7 +104,7 @@ test("deck-engine: 组合过滤器与队列顺序（due-new）", () => {
 
 test("deck-engine: deckQueue 用自定义求值器", () => {
 	const fields = {
-		card: "[tag[?]]", card_exclude: "", state_learn: "", state_due: "",
+		card: "[tidme.kind[item]]", card_exclude: "", state_learn: "", state_due: "",
 		state_new: "", order: "due-new"
 	};
 	const queue = deckEngine.deckQueue("$:/Deck/default", () => ["卡A", "卡B"], fields);

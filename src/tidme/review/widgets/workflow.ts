@@ -74,8 +74,8 @@ function makeWorkflow(): any {
 			root.appendChild(readBtn);
 
 			const studyBtn = iconButton(doc, "tm-btn tm-workflow-btn", "study", "开始复习");
-			studyBtn.title = "进入默认牌组开始复习";
-			studyBtn.addEventListener("click", () => navigate(DEFAULT_DECK));
+			studyBtn.title = "从默认牌组的第一张待复习卡开始";
+			studyBtn.addEventListener("click", () => startStudy(wiki, this));
 			root.appendChild(studyBtn);
 
 			parent.insertBefore(root, nextSibling);
@@ -84,16 +84,42 @@ function makeWorkflow(): any {
 	return WorkflowWidget as any;
 }
 
-/** 开始阅读目标：全局续读点（最近读过的节卡）→ 第一张待读节卡 → 阅读列表页 */
+/** 开始阅读目标：全局续读点（最近读过的节卡）→ 第一张待读 topic 节卡 → 阅读列表页 */
 function globalReadingTarget(wiki: any): string {
 	const g = String(wiki.getTiddler(GLOBAL_READPOINT)?.fields?.text || "");
 	if (g && wiki.getTiddler(g)) return g;
 	const first = wiki.filterTiddlers(
-		"[all[shadows+tiddlers]tag[.]tidme.kind[section]!has[tidme.done]!has[tidme.suspended]sort[priority]first[]]"
+		"[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]sort[priority]first[]]"
 	)[0];
 	if (first) return first;
 	return READING_LIST;
 }
 
+/**
+ * 开始复习：直达默认牌组第一张待复习卡（复刻牌组内「开始学习」startstudy 的完整动作链）：
+ * 1. 按 deck 的 order 组合队列过滤器（composeDeckFilters）取第一张在队卡
+ * 2. 写入学习会话 $:/Deck/default/study 的 list（记录从这张卡开始的队列）
+ * 3. 按 card_unfold 设置该卡的折叠态（show 展开 / hide 折叠）
+ * 4. 导航到该卡（复习模式视图）；无在队卡时弹恭喜（与 startstudy 无卡分支一致）
+ */
+function startStudy(wiki: any, widget: any): void {
+	const deckEngine = require("$:/plugins/keepone/tidme/core/deck-engine.js");
+	const fields = wiki.getTiddler(DEFAULT_DECK)?.fields || {};
+	const f = deckEngine.composeDeckFilters(DEFAULT_DECK, fields);
+	const next = wiki.filterTiddlers(f.queue)[0];
+	if (!next) {
+		widget.dispatchEvent({ type: "tm-confetti-launch" });
+		widget.dispatchEvent({ type: "tm-confetti-launch", originY: 0.6, spread: 70, delay: 300 });
+		widget.dispatchEvent({ type: "tm-confetti-launch", originY: 0.55, spread: 30, delay: 600 });
+		widget.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/review/notify/congratulation" });
+		return;
+	}
+	wiki.addTiddler({ title: DEFAULT_DECK + "/study", list: [next] });
+	const unfolded = wiki.filterTiddlers(f.unfold);
+	wiki.addTiddler({ title: "$:/state/folded/" + next, text: unfolded.includes(next) ? "show" : "hide" });
+	widget.dispatchEvent({ type: "tm-navigate", navigateTo: next });
+}
+
 exports["tidme-workflow"] = makeWorkflow();
 exports.globalReadingTarget = globalReadingTarget;
+exports.startStudy = startStudy;

@@ -1,7 +1,7 @@
 /*
-widgets/reading-list.ts — W2 阅读列表（topic 队列，统一阅读入口）
+widgets/reading-list.ts — 阅读列表（topic 队列，统一阅读入口）
 
-- 全库未读 topic 卡（tag[.] = 阅读态：节卡 ?. / 摘录 .）按文档分组
+- 全库未读 topic 卡（kind=topic 阅读材料：节卡/摘录）按文档分组
 - 组内排序：优先级（0 最高）→ due → 阅读顺序（tidme.order）——"按 due 被动重读"
 - 每文档组：进度（已读/总数）+ 进度条 + 「▶ 继续」跳到第一未读节
 - 空态引导导入中心；事件总线即时刷新
@@ -22,15 +22,15 @@ function escapeHtml(s: string): string {
 	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** 阅读列表过滤（topic 队列）：全库 tag[.]（阅读态）卡，未搁置。
- * 忽略（去 .）与已读（去 ?. + tidme.done）自动出列；手动 ? 卡（item）不在此页。 */
+/** 阅读列表过滤（topic 队列）：全库 kind=topic 卡，未搁置/未完成。
+ * 忽略（tidme.ignored）与已读（tidme.done）自动出列；item 卡不在此页。 */
 function topicQueueFilter(): string {
-	return "[all[shadows+tiddlers]!is[draft]tag[.]!has[tidme.suspended]!field:tidme.done[yes]]";
+	return "[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!has[tidme.suspended]!has[tidme.done]!has[tidme.ignored]]";
 }
 
 interface TopicCard {
 	title: string;
-	kind: string;
+	kind: string; // subkind：section/extract
 	priority: number;
 	due: Date;
 	order: string;
@@ -45,7 +45,7 @@ function collectTopicCards(wiki: any): TopicCard[] {
 			const f = wiki.getTiddler(t)?.fields || {};
 			return {
 				title: t,
-				kind: String(f["tidme.kind"] || ""),
+				kind: String(f["tidme.subkind"] || ""),
 				priority: sched.normalizePriority(f["tidme.priority"]),
 				due: sched.parseTwDate(f.due, new Date(0)),
 				order: String(f["tidme.order"] || f["tidme.breadcrumb"] || t),
@@ -79,21 +79,21 @@ function groupByDoc(cards: TopicCard[]): { doc: string; cards: TopicCard[] }[] {
 		.sort((a, b) => String(a.doc).localeCompare(String(b.doc), "zh"));
 }
 
-/** 阅读态判定（W1 双轨：. = 阅读态；忽略去 . 视为完成） */
+/** 阅读态判定（分类：topic 卡 done/ignored 视为完成出队） */
 function isReadDone(f: any): boolean {
 	return sched.isCardDone(f);
 }
 
-/** 某文档全部节卡（阅读进度口径，与文档页一致） */
+/** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 中排除摘录） */
 function sectionsOfDoc(wiki: any, docId: string): string[] {
 	return wiki
 		.filterTiddlers("[has[tidme.doc]nsort[tidme.order]]")
 		.filter((t: string) => {
 			const f = wiki.getTiddler(t)?.fields;
 			if (!f) return false;
-			const kind = f["tidme.kind"];
 			return String(f["tidme.doc"]) === docId &&
-				(kind === "section" || (kind === undefined && f["tidme.order"] !== undefined));
+				f["tidme.kind"] === "topic" &&
+				String(f["tidme.subkind"] || "") !== "extract";
 		});
 }
 
@@ -273,8 +273,7 @@ function makeReadingList(): any {
 				if (title.startsWith("$:/state/tidme-import/readpoint/")) { need = true; break; }
 				const f = this.wiki.getTiddler(title)?.fields;
 				if (!f) continue;
-				const tags = f.tags;
-				if (f["tidme.kind"] || (Array.isArray(tags) && tags.includes("."))) { need = true; break; }
+				if (f["tidme.kind"]) { need = true; break; }
 			}
 			if (need) { this.build(); return true; }
 			return false;

@@ -21,9 +21,8 @@ function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElemen
 
 /** 卡片状态标记 */
 function badge(fields: Record<string, any>): string {
-	const tags = Array.isArray(fields.tags) ? fields.tags : [];
 	if (fields["tidme.suspended"] === "yes") return "⏸";
-	if (!tags.includes("?")) return "✓";
+	if (fields["tidme.done"] === "yes" || fields["tidme.ignored"] === "yes") return "✓";
 	const state = String(fields.state || "0");
 	if (state === "1" || state === "3") return "学";
 	if (state === "2") return "到";
@@ -31,10 +30,10 @@ function badge(fields: Record<string, any>): string {
 }
 
 function kindName(fields: Record<string, any>): string {
-	const kind = String(fields["tidme.kind"] || "");
-	if (kind === "extract") return "摘";
-	if (kind === "cloze") return "挖";
-	if (kind === "qa") return "问";
+	const sub = String(fields["tidme.subkind"] || "");
+	if (sub === "extract") return "摘";
+	if (sub === "cloze") return "挖";
+	if (sub === "qa") return "问";
 	return "";
 }
 
@@ -52,7 +51,7 @@ function makeCardBrowser(): WidgetCtor {
 				wrap.textContent = "";
 				wrap.appendChild(el(doc, "div", "tm-import-muted",
 					"状态：新 学=学习中 到=到期 ✓=已读 ⏸=搁置 · 摘/挖=摘录/挖空卡"));
-				const decks = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]");
+				const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]");
 				if (!decks.length) {
 					const empty = el(doc, "div", "tm-empty", "");
 					empty.appendChild(el(doc, "div", "tm-empty-icon", "🃏"));

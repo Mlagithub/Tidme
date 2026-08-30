@@ -48,7 +48,7 @@ function makeQueueOps(): WidgetCtor {
 			runAuto.addEventListener("click", () => {
 				let cfg: any = {};
 				try { cfg = JSON.parse(wiki.getTiddlerText("$:/config/Tidme/AutoPostpone", "{}") || "{}"); } catch { /* 忽略非法配置 */ }
-				const cards = wiki.filterTiddlers("[tag[?]has[due]]")
+				const cards = wiki.filterTiddlers("[all[shadows+tiddlers]!is[draft]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]has[due]]")
 					.map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
 				const result = sched.autoPostpone(cards, cfg);
 				for (const p of result.patches) {
@@ -69,7 +69,7 @@ function makeQueueOps(): WidgetCtor {
 
 			const renderList = () => {
 				list.textContent = "";
-				const decks = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]");
+				const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]");
 				if (!decks.length) {
 					const empty = el(doc, "div", "tm-empty", "");
 					empty.appendChild(el(doc, "div", "tm-empty-icon", "🃏"));

@@ -37,20 +37,20 @@ test("buildExtract: parent 链 + anchor 记录", () => {
 	wiki.addTiddler({ title: "书 › 第一章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章", "tidme.source": "书", "tidme.format": "epub", "tidme.priority": "30", text: "正文" });
 	const card = sectionMod.buildExtract(wiki, "书 › 第一章", "这是一段被选中的文字，用于摘录。");
 	assert.equal(card["tidme.parent"], "书 › 第一章");
-	assert.equal(card["tidme.kind"], "extract");
+	assert.equal(card["tidme.kind"], "topic", "摘录 = Topic（阅读材料）");
+	assert.equal(card["tidme.subkind"], "extract");
 	assert.equal(card["tidme.doc"], "d12345678");
 	assert.equal(card["tidme.priority"], "30", "G4 继承父卡优先级");
 	const anchor = sectionMod.parseAnchor(card["tidme.anchor"]);
 	assert.equal(anchor.section, "书 › 第一章");
 	assert.ok(anchor.snippet.includes("被选中"), "anchor 记录片段");
 	assert.ok(card.state === "0", "FSRS 初始字段");
-	// W1 双轨：摘录 = topic（阅读态 .，不带 ?，不进主动复习流）
-	assert.ok(card.tags.includes("."), "摘录卡带 .（阅读态）");
-	assert.ok(!card.tags.includes("?"), "摘录卡不带 ?（topic 不进复习流）");
+	// 分类重构后无 ?/. 标签：kind=topic 决定阅读队列归属
+	assert.equal(card.tags, undefined, "摘录卡不带学习标签");
 });
 
 test("buildExtract: 嵌套摘录（parent = 摘录卡）", () => {
-	wiki.addTiddler({ title: "书 › 第一章 › 摘录", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章 › 摘录", "tidme.parent": "书 › 第一章", "tidme.kind": "extract", text: "引文" });
+	wiki.addTiddler({ title: "书 › 第一章 › 摘录", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章 › 摘录", "tidme.parent": "书 › 第一章", "tidme.kind": "topic", "tidme.subkind": "extract", text: "引文" });
 	const card = sectionMod.buildExtract(wiki, "书 › 第一章 › 摘录", "更细的一层摘录。");
 	assert.equal(card["tidme.parent"], "书 › 第一章 › 摘录", "嵌套 parent");
 	assert.ok(card["tidme.breadcrumb"].endsWith("摘录 › 摘录"), "面包屑继续追加");
@@ -59,15 +59,15 @@ test("buildExtract: 嵌套摘录（parent = 摘录卡）", () => {
 test("buildCloze: anchor + parent", () => {
 	wiki.addTiddler({ title: "书 › 第一章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章", "tidme.priority": "70", text: "正文" });
 	const card = sectionMod.buildCloze(wiki, "书 › 第一章", "Sierra Leone 的首都是 Freetown。", "Freetown");
-	assert.equal(card["tidme.kind"], "cloze");
+	assert.equal(card["tidme.kind"], "item", "挖空 = Item（测试卡）");
+	assert.equal(card["tidme.subkind"], "cloze");
 	assert.equal(card["tidme.parent"], "书 › 第一章");
 	assert.equal(card["tidme.priority"], "70", "G4 继承父卡优先级");
 	assert.ok(card.caption.includes("<<C"), "挖空宏");
 	const anchor = sectionMod.parseAnchor(card["tidme.anchor"]);
 	assert.equal(anchor.snippet, "Freetown");
-	// W1 双轨：挖空 = item（带 ?，进主动复习流）
-	assert.ok(card.tags.includes("?"), "挖空卡带 ?（item 进复习流）");
-	assert.ok(!card.tags.includes("."), "挖空卡不带 .");
+	// 分类重构后无 ?/. 标签：kind=item 决定复习队列归属
+	assert.equal(card.tags, undefined, "挖空卡不带学习标签");
 });
 
 test("parseAnchor: 容错", () => {

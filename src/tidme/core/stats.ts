@@ -10,7 +10,7 @@ review log 行格式（fsrs4tw repeat 写入 $:/Deck/<deck>/log/YYYY0MMDD，inde
   { rating: 1-4, elapsed_days, scheduled_days, review, state }
 */
 
-import { parseTwDate, normalizePriority } from "./scheduler.ts";
+import { parseTwDate, normalizePriority, isCardDone } from "./scheduler.ts";
 
 export interface CardLike { title: string; fields: Record<string, any> }
 
@@ -26,7 +26,7 @@ export function deckLoad(cards: CardLike[], now = new Date()): DeckLoad {
 	const load: DeckLoad = { total: cards.length, learn: 0, due: 0, overdue: 0, newCount: 0 };
 	for (const c of cards) {
 		const f = c.fields;
-		if (Array.isArray(f.tags) && !f.tags.includes("?")) continue; // 已出队
+		if (isCardDone(f)) continue; // 已出队（done/ignored）
 		if (f["tidme.suspended"] === "yes") continue;
 		const state = String(f.state || "0");
 		if (state === "1" || state === "3") load.learn++;
@@ -40,10 +40,10 @@ export function deckLoad(cards: CardLike[], now = new Date()): DeckLoad {
 
 export interface DocProgress { total: number; done: number; left: number }
 
-/** 文档进度：done = 已移出队列（无 ? 标签） */
+/** 文档进度：done = 已移出队列（done/ignored） */
 export function docProgress(sections: CardLike[]): DocProgress {
 	const total = sections.length;
-	const done = sections.filter((c) => !(Array.isArray(c.fields.tags) && c.fields.tags.includes("?"))).length;
+	const done = sections.filter((c) => isCardDone(c.fields)).length;
 	return { total, done, left: total - done };
 }
 
@@ -68,14 +68,16 @@ export interface Funnel {
 	cards: number;
 }
 
-/** 漏斗：文档 / Section / 摘录 / 问答挖空卡（按 tidme.kind） */
+/** 漏斗：文档 / Topic 节 / 摘录 / 测试卡（按 kind 大类 + subkind 子类型） */
 export function funnelCounts(items: CardLike[]): Funnel {
 	const f: Funnel = { docs: 0, sections: 0, extracts: 0, cards: 0 };
 	for (const c of items) {
 		const kind = String(c.fields["tidme.kind"] || "");
-		if (kind === "extract") f.extracts++;
-		else if (kind === "qa" || kind === "cloze") f.cards++;
-		else if (kind === "section") f.sections++;
+		const sub = String(c.fields["tidme.subkind"] || "");
+		if (kind === "topic") {
+			if (sub === "extract") f.extracts++;
+			else f.sections++;
+		} else if (kind === "item") f.cards++;
 		else if (Array.isArray(c.fields.tags) && c.fields.tags.includes("tidme-import-doc")) f.docs++;
 	}
 	return f;

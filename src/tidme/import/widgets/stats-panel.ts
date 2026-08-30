@@ -40,7 +40,7 @@ function makeStatsPanel(): WidgetCtor {
 				const cardLikes = (filter: string) =>
 					wiki.filterTiddlers(filter).map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
 
-				const decks = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]");
+				const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]");
 				const docs = wiki.filterTiddlers("[tag[tidme-import-doc]]");
 				const all = cardLikes("[!is[system]]");
 				const funnel = stats.funnelCounts(all);
@@ -55,7 +55,7 @@ function makeStatsPanel(): WidgetCtor {
 					}
 				}
 				const ret = stats.retentionFromLogs(entries);
-				const buckets = stats.priorityBuckets(cardLikes("[tag[?]]"));
+				const buckets = stats.priorityBuckets(cardLikes("[tidme.kind[item]]"));
 				const rt = stats.getReadTimeStats ? stats.getReadTimeStats(wiki) : { totalSeconds: 0, todaySeconds: 0, docSeconds: {} };
 				const fmtDur = stats.formatDuration ? stats.formatDuration : (s: number) => `${s} 秒`;
 
@@ -139,7 +139,7 @@ function makeStatsPanel(): WidgetCtor {
 				for (const d of docs) {
 					const docId = wiki.getTiddler(d)?.fields["tidme.doc"];
 					if (!docId) continue;
-					const sections = cardLikes(`[tidme.doc[${docId}]tidme.kind[section]]`);
+					const sections = cardLikes(`[tidme.doc[${docId}]tidme.kind[topic]]`);
 					const p = stats.docProgress(sections);
 					const tr = el(doc, "tr", "");
 					tr.appendChild(el(doc, "td", "tm-stat-doc-name", d));

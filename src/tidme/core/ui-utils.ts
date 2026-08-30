@@ -30,10 +30,10 @@ export function badgeOf(fields: Record<string, any>): { text: string; cls: strin
 }
 
 export function kindMark(fields: Record<string, any>): string {
-	const kind = String(fields["tidme.kind"] || "");
-	if (kind === "extract") return "摘";
-	if (kind === "cloze") return "挖";
-	if (kind === "qa") return "问";
+	const sub = String(fields["tidme.subkind"] || "");
+	if (sub === "extract") return "摘";
+	if (sub === "cloze") return "挖";
+	if (sub === "qa") return "问";
 	return "";
 }
 
@@ -80,15 +80,15 @@ export function dateLabel(raw: any): string {
 	return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
 }
 
-/** 某文档全部节卡（阅读进度口径，与文档页一致） */
+/** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 卡中排除摘录） */
 export function sectionsOfDoc(wiki: any, docId: string): string[] {
 	return wiki
 		.filterTiddlers("[has[tidme.doc]nsort[tidme.order]]")
 		.filter((t: string) => {
 			const f = wiki.getTiddler(t)?.fields;
 			if (!f) return false;
-			const kind = f["tidme.kind"];
 			return String(f["tidme.doc"]) === docId &&
-				(kind === "section" || (kind === undefined && f["tidme.order"] !== undefined));
+				f["tidme.kind"] === "topic" &&
+				String(f["tidme.subkind"] || "") !== "extract";
 		});
 }

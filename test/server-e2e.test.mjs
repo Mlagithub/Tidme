@@ -68,10 +68,12 @@ test("server E2E: HTTP API 建卡 / 查询 / 队列过滤 / 评分写回", async
 	const base = `http://127.0.0.1:${httpServer.address().port}`;
 
 	try {
-		// 1) PUT 建一张学习卡（body 为 JSON；FSRS 字段齐）
+		// 1) PUT 建一张学习卡（body 为 JSON；kind=item + FSRS 字段齐）
 		const cardJson = JSON.stringify({
 			text: "卡片内容",
-			tags: ["?", "."],
+			"tidme.kind": "item",
+			"tidme.subkind": "qa",
+			caption: "问题",
 			type: "text/vnd.tiddlywiki",
 			state: "0",
 			due: "20261231000000000",
@@ -92,18 +94,17 @@ test("server E2E: HTTP API 建卡 / 查询 / 队列过滤 / 评分写回", async
 		const got = JSON.parse(await (await fetch(`${base}/recipes/default/tiddlers/${encodeURIComponent("E2E卡片")}`)).text());
 		assert.equal(got.text, "卡片内容", "GET 返回卡片内容");
 		assert.equal(got.fields && got.fields.state, "0", "GET 返回 FSRS 字段");
-		const tagsStr = Array.isArray(got.tags) ? got.tags.join(",") : String(got.tags || "");
-		assert.ok(tagsStr.includes("?"), "GET 返回标签");
+		assert.equal(got.fields && got.fields["tidme.kind"], "item", "GET 返回 kind");
 
 		// 3) 队列过滤（同进程 wiki 内存过滤 = 服务端数据源）
-		assert.ok(tw.wiki.filterTiddlers("[tag[?]]").includes("E2E卡片"), "默认牌组队列含新卡");
-		assert.ok(tw.wiki.filterTiddlers("[tag[?]state[0]]").includes("E2E卡片"), "state=0 属于新卡队列");
+		assert.ok(tw.wiki.filterTiddlers("[tidme.kind[item]]").includes("E2E卡片"), "默认牌组队列含新卡");
+		assert.ok(tw.wiki.filterTiddlers("[tidme.kind[item]state[0]]").includes("E2E卡片"), "state=0 属于新卡队列");
 
 		// 4) 评分写回（模拟评分动作的字段更新）→ 队列状态变化
 		const f = tw.wiki.getTiddler("E2E卡片").fields;
 		tw.wiki.addTiddler({ ...f, state: "1", reps: "1", due: "20261231000000001" });
-		assert.ok(tw.wiki.filterTiddlers("[tag[?]state[1]]").includes("E2E卡片"), "评分后进入学习中队列");
-		assert.ok(tw.wiki.filterTiddlers("[tag[?]state[1]]").length === 1, "学习队列计数正确");
+		assert.ok(tw.wiki.filterTiddlers("[tidme.kind[item]state[1]]").includes("E2E卡片"), "评分后进入学习中队列");
+		assert.ok(tw.wiki.filterTiddlers("[tidme.kind[item]state[1]]").length === 1, "学习队列计数正确");
 	} finally {
 		httpServer.close();
 	}
@@ -135,16 +136,17 @@ test("server E2E: 后台导入任务（pending → importer → 文档/卡）", 
 	assert.ok(doneT.fields["tidme.import-docId"], "记录 docId");
 	assert.equal(doneT.fields["tidme.pending"], undefined, "处理完成去掉 pending 标记");
 
-	// 断言文档页 + Section 卡生成（短内容默认合并 → 至少 1 节）
+	// 断言文档页 + 节卡生成（短内容默认合并 → 至少 1 节）
 	const doc = tw.wiki.filterTiddlers("[tag[tidme-import-doc]]")[0];
 	assert.ok(doc, "文档页生成");
-	const cards = tw.wiki.filterTiddlers(`[tidme.doc[${doneT.fields["tidme.import-docId"]}]tidme.kind[section]]`);
+	const cards = tw.wiki.filterTiddlers(`[tidme.doc[${doneT.fields["tidme.import-docId"]}]tidme.kind[topic]]`);
 	assert.ok(cards.length >= 1, `至少切出 1 节: ${cards.length}`);
 	const cardFields = tw.wiki.getTiddler(cards[0]).fields;
 	assert.ok(cardFields["tidme.breadcrumb"], "卡含面包屑");
 	assert.ok(cardFields.state !== undefined && cardFields.due !== undefined, "卡含 FSRS 字段");
-	const deck = tw.wiki.filterTiddlers(`[title[$:/Deck/read/E2E书]]`)[0];
-	assert.ok(deck, "自动 deck 生成");
+	assert.equal(cardFields["tidme.kind"], "topic", "节卡 = topic（阅读材料，不进牌组）");
+	// 注意：不能用 [title[X]] 判断存在（title filter 对不存在的标题返回自身）；用 tiddlerExists
+	assert.equal(tw.wiki.tiddlerExists("$:/Deck/read/E2E书"), false, "不生成自动阅读牌组（topic 走阅读列表）");
 });
 
 test("server E2E: 导入失败标记 error（不挂起）", async () => {

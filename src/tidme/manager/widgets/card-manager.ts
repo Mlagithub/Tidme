@@ -9,7 +9,7 @@ widgets/card-manager.ts — 统一卡片管理器 v2
 
 卡片 = 任何带 tidme.* 的 tiddler 或带 ?/. 学习标签的 tiddler（含手动建卡）。
 "全部"视图计数与实际显示一致：按文档树全量；按牌组树由各牌组分支 + 未入组分支兜底全量。
-Done 语义：移出队列 = 去 ? 和 . 标签 + tidme.done（默认/阅读/自动牌组均出队）。
+Done 语义：移出队列 = 置 tidme.done（kind 决定归属：item 出默认牌组，topic 出阅读列表）。
 */
 
 declare function require(module: string): any;
@@ -47,9 +47,8 @@ function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElemen
 }
 
 function badgeOf(fields: Record<string, any>): { text: string; cls: string } {
-	const tags = Array.isArray(fields.tags) ? fields.tags : [];
 	if (fields["tidme.suspended"] === "yes") return { text: "⏸", cls: "tm-badge-suspended" };
-	if (fields["tidme.done"] === "yes" || !tags.includes("?")) return { text: "✓", cls: "tm-badge-done" };
+	if (sched.isCardDone(fields)) return { text: "✓", cls: "tm-badge-done" };
 	const state = String(fields.state || "0");
 	if (state === "1" || state === "3") return { text: "学", cls: "tm-badge-learn" };
 	if (state === "2") {
@@ -60,10 +59,10 @@ function badgeOf(fields: Record<string, any>): { text: string; cls: string } {
 }
 
 function kindMark(fields: Record<string, any>): string {
-	const kind = String(fields["tidme.kind"] || "");
-	if (kind === "extract") return "摘";
-	if (kind === "cloze") return "挖";
-	if (kind === "qa") return "问";
+	const sub = String(fields["tidme.subkind"] || "");
+	if (sub === "extract") return "摘";
+	if (sub === "cloze") return "挖";
+	if (sub === "qa") return "问";
 	return "";
 }
 
@@ -107,15 +106,11 @@ function dateLabel(raw: any): string {
 	return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
 }
 
-/** 卡片收集：带 tidme.* 或 FSRS 字段的 tiddler + 带 ?/. 学习标签的 tiddler（含手动建卡）
- * 注意：空格分隔的 filter run 才是并集（`+` 前缀是交集）。
- * 排除文档汇总页（仅有 tidme.doc，无 kind/parent/?/. /state）。 */
+/** 卡片收集：带 tidme.kind 的 tiddler（topic/item）+ 无 kind 但有 FSRS 字段的手动卡。
+ * 排除文档汇总页（仅有 tidme.doc/tag，无 kind、无 FSRS 字段）。 */
 const CARD_FILTER =
 	"[all[shadows+tiddlers]!is[draft]has[tidme.kind]] " +
-	"[all[shadows+tiddlers]!is[draft]has[tidme.parent]] " +
-	"[all[shadows+tiddlers]!is[draft]tag[?]] " +
-	"[all[shadows+tiddlers]!is[draft]tag[.]] " +
-	"[all[shadows+tiddlers]!is[draft]has[state]has[due]]";
+	"[all[shadows+tiddlers]!is[draft]!has[tidme.kind]has[state]has[due]]";
 
 /** Done：移出队列（core scheduler 实现） */
 function doneFields(fields: Record<string, any>): Record<string, any> {
@@ -184,7 +179,7 @@ function makeCardManager(): WidgetCtor {
 				allCards = wiki.filterTiddlers(CARD_FILTER)
 					.filter((t: string, i: number, arr: string[]) => arr.indexOf(t) === i)
 					.map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
-				deckInfos = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]").map((deck: string) => {
+				deckInfos = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]").map((deck: string) => {
 					const f = wiki.getTiddler(deck)?.fields || {};
 					return {
 						title: deck,
@@ -196,7 +191,6 @@ function makeCardManager(): WidgetCtor {
 			};
 
 			const inView = (f: Record<string, any>, v: View): boolean => {
-				const tags = Array.isArray(f.tags) ? f.tags : [];
 				const suspended = f["tidme.suspended"] === "yes";
 				const done = sched.isCardDone(f);
 				if (v === "inqueue") return !done && !suspended;

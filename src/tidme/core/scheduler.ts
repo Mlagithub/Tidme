@@ -13,13 +13,12 @@ export const PRIORITY_DEFAULT = 50;
 export const PRIORITY_TIERS = { high: 10, medium: 50, low: 90 } as const;
 
 /**
- * 主动复习流（item 类）的 kind 过滤片段（W1 双轨分流，方案 A）。
- * topic（阅读流）：section 节卡 / extract 摘录卡 → 不进主动复习流；
- * item（复习流）：cloze 挖空 / qa 问答 / 无 kind 的历史与手动卡 → 进复习流。
- * 拼进 deck card / 子集过滤器，如 `[tag[?]] <ITEM_FILTER>`。
+ * 复习流（item 类）的 kind 过滤片段（分类对齐 SuperMemo：Topic=阅读 / Item=测试）。
+ * topic（阅读流）不进主动复习流；item（复习流）进默认牌组。
+ * 拼进 deck card / 子集过滤器，如 `[all[...]tidme.kind[item]] <ITEM_FILTER>`。
+ * 注：无 kind 的手动卡由默认牌组 card 过滤器的兜底分支收录（has[state]has[due]），不在此处。
  */
-export const ITEM_FILTER =
-	`[tidme.kind[cloze]] [tidme.kind[qa]] [!has[tidme.kind]]`;
+export const ITEM_FILTER = `[tidme.kind[item]]`;
 
 /** 归一化优先级：非法值回默认 50 */
 export function normalizePriority(v: unknown): number {
@@ -95,10 +94,6 @@ function twDate(d: Date): string {
 export interface CardLike { title: string; fields: Record<string, any> }
 export interface Patch { title: string; fields: Record<string, any> }
 
-function tagsOf(fields: Record<string, any>): string[] {
-	return Array.isArray(fields.tags) ? [...fields.tags] : [];
-}
-
 /** 顺延：due 推后 byDays 天（相对当前 due 或 now） */
 export function postponeCard(fields: Record<string, any>, byDays = 7): Record<string, any> {
 	const base = parseTwDate(fields.due);
@@ -112,12 +107,11 @@ export function advanceCard(): Record<string, any> {
 
 /**
  * 忽略：移出所属队列，保留内容（可经 restoreCard 恢复）。
- * W1 双轨：item 类（cloze/qa/无 kind）去 ?（出复习流）；topic 类（section/extract）去 .（出阅读流）。
+ * 分类对齐 SuperMemo Bury：kind 决定归属，忽略 = 置 tidme.ignored（出队标记），不依赖标签。
+ * 返回完整字段（调用方直接 addTiddler 覆盖写库）。
  */
 export function ignoreCard(fields: Record<string, any>): Record<string, any> {
-	const kind = String(fields["tidme.kind"] || "");
-	const drop = kind === "section" || kind === "extract" ? "." : "?";
-	return { tags: tagsOf(fields).filter((t) => t !== drop) };
+	return { ...fields, "tidme.ignored": "yes" };
 }
 
 /** 搁置：tidme.suspended=yes（配合 deck card_exclude 过滤器） */
@@ -138,42 +132,28 @@ export function forgetCard(): Record<string, any> {
 	};
 }
 
-/** 统一已读 / 完成判定 */
+/** 统一已读 / 完成判定：done（已读/完成）或 ignored（忽略）都视为已出队 */
 export function isCardDone(fields: Record<string, any>): boolean {
 	if (!fields) return false;
-	if (fields["tidme.done"] === "yes") return true;
-	const rawTags = fields.tags;
-	const tags = Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? String(rawTags).split(/\s+/) : [];
-	return !tags.includes(".") && !tags.includes("?");
+	return fields["tidme.done"] === "yes" || fields["tidme.ignored"] === "yes";
 }
 
 /**
- * Done（已读）：移出学习队列 = 去 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记。
- * 自动牌组按 tidme.doc + tag[?] 过滤，同样出队。完全可逆（resumeCard）。
+ * Done（已读/完成）：移出学习队列 = 置 tidme.done 标记（kind 决定队列归属，无需标签）。
+ * kind 决定队列归属，同样出队。完全可逆（restoreCard）。
  */
 export function doneCard(fields: Record<string, any>): Record<string, any> {
-	return {
-		...fields,
-		tags: tagsOf(fields).filter((t) => t !== "?" && t !== "."),
-		"tidme.done": "yes"
-	};
+	return { ...fields, "tidme.done": "yes" };
 }
 
 /**
- * 恢复队列（Done 的可逆反操作）：按 kind 补回标签/去 tidme.done 与搁置标记。
- * 双轨（W1）：item 类（cloze/qa/无 kind）恢复回 ?（进主动复习流）；
- * topic 类（section/extract）恢复回 .（阅读态，不进主动复习流）。
+ * 恢复队列（Done/Ignore 的可逆反操作）：清除 done/ignored/suspended 标记。
+ * 队列归属由 kind 决定（topic 回阅读流 / item 回复习流），无需补标签。
  */
 export function restoreCard(fields: Record<string, any>): Record<string, any> {
-	const kind = String(fields["tidme.kind"] || "");
-	const tags = tagsOf(fields).filter((t) => t !== "?" && t !== ".");
-	if (kind === "extract" || kind === "section") {
-		tags.push("."); // topic：回到阅读态
-	} else {
-		tags.push("?"); // item：回到复习流
-	}
-	const out: Record<string, any> = { ...fields, tags };
+	const out: Record<string, any> = { ...fields };
 	delete out["tidme.done"];
+	delete out["tidme.ignored"];
 	delete out["tidme.suspended"];
 	return out;
 }
@@ -250,7 +230,8 @@ export function autoPostpone(cards: CardLike[], opts: AutoPostponeOptions = {}):
 		.filter((c) => {
 			const f = c.fields;
 			if (f["tidme.suspended"] === "yes") return false;
-			if (Array.isArray(f.tags) && !f.tags.includes("?")) return false; // 已移出队列
+			if (isCardDone(f)) return false; // 已出队（done/ignored）
+			if (f["tidme.kind"] === "topic") return false; // 阅读流不参与复习顺延
 			return parseTwDate(f.due, new Date(0)).getTime() < now;
 		})
 		.sort((a, b) => {

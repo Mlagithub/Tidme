@@ -14,28 +14,30 @@ const T = (offsetHours) => {
 
 test("deckLoad: new/learn/due/overdue 分类", () => {
 	const cards = [
-		{ title: "新卡", fields: { tags: ["?"], state: "0", due: T(48) } },
-		{ title: "学习中", fields: { tags: ["?"], state: "1", due: T(-1) } },
-		{ title: "到期", fields: { tags: ["?"], state: "2", due: T(6) } },
-		{ title: "逾期", fields: { tags: ["?"], state: "2", due: T(-24) } },
-		{ title: "已出队", fields: { tags: ["."], state: "2", due: T(-24) } },
-		{ title: "搁置", fields: { tags: ["?"], state: "2", due: T(-24), "tidme.suspended": "yes" } }
+		{ title: "新卡", fields: { "tidme.kind": "item", state: "0", due: T(48) } },
+		{ title: "学习中", fields: { "tidme.kind": "item", state: "1", due: T(-1) } },
+		{ title: "到期", fields: { "tidme.kind": "item", state: "2", due: T(6) } },
+		{ title: "逾期", fields: { "tidme.kind": "item", state: "2", due: T(-24) } },
+		{ title: "已出队", fields: { "tidme.kind": "item", state: "2", due: T(-24), "tidme.done": "yes" } },
+		{ title: "已忽略", fields: { "tidme.kind": "item", state: "2", due: T(-24), "tidme.ignored": "yes" } },
+		{ title: "搁置", fields: { "tidme.kind": "item", state: "2", due: T(-24), "tidme.suspended": "yes" } }
 	];
 	const load = stats.deckLoad(cards);
-	assert.equal(load.total, 6);
+	assert.equal(load.total, 7);
 	assert.equal(load.newCount, 1);
 	assert.equal(load.learn, 1);
-	assert.equal(load.due, 2); // 到期+逾期（已出队/搁置排除）
+	assert.equal(load.due, 2); // 到期+逾期（已出队/已忽略/搁置排除）
 	assert.equal(load.overdue, 1);
 });
 
 test("docProgress: 已读/剩余", () => {
 	const sections = [
-		{ title: "A", fields: { tags: ["?", "."] } },
-		{ title: "B", fields: { tags: ["?"] } },
-		{ title: "C", fields: { tags: ["."] } } // 已读
+		{ title: "A", fields: { "tidme.kind": "topic" } },
+		{ title: "B", fields: { "tidme.kind": "topic" } },
+		{ title: "C", fields: { "tidme.kind": "topic", "tidme.done": "yes" } }, // 已读
+		{ title: "D", fields: { "tidme.kind": "topic", "tidme.ignored": "yes" } } // 忽略
 	];
-	assert.deepEqual(stats.docProgress(sections), { total: 3, done: 1, left: 2 });
+	assert.deepEqual(stats.docProgress(sections), { total: 4, done: 2, left: 2 });
 });
 
 test("retentionFromLogs: 保留率 ≈ 1 - Again 占比", () => {
@@ -45,13 +47,13 @@ test("retentionFromLogs: 保留率 ≈ 1 - Again 占比", () => {
 	assert.equal(stats.retentionFromLogs([]).retention, 1);
 });
 
-test("funnelCounts: 漏斗分层", () => {
+test("funnelCounts: 漏斗分层（topic/item 大类 + subkind）", () => {
 	const items = [
-		{ title: "文档", fields: { tags: ["tidme-import-doc"], "tidme.kind": undefined } },
-		{ title: "节", fields: { "tidme.kind": "section" } },
-		{ title: "节2", fields: { "tidme.kind": "section" } },
-		{ title: "摘录", fields: { "tidme.kind": "extract" } },
-		{ title: "挖空", fields: { "tidme.kind": "cloze" } }
+		{ title: "文档", fields: { tags: ["tidme-import-doc"] } },
+		{ title: "节", fields: { "tidme.kind": "topic", "tidme.subkind": "section" } },
+		{ title: "节2", fields: { "tidme.kind": "topic", "tidme.subkind": "section" } },
+		{ title: "摘录", fields: { "tidme.kind": "topic", "tidme.subkind": "extract" } },
+		{ title: "挖空", fields: { "tidme.kind": "item", "tidme.subkind": "cloze" } }
 	];
 	assert.deepEqual(stats.funnelCounts(items), { docs: 1, sections: 2, extracts: 1, cards: 1 });
 });

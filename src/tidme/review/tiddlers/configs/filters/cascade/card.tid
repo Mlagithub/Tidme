@@ -4,4 +4,4 @@ list-after: $:/config/StoryTiddlerTemplateFilters/draft
 tags: $:/tags/StoryTiddlerTemplateFilter
 title: $:/config/Tidme/StoryTiddlerTemplateFilters/card
 
-[subfilter{$:/config/Tidme/Filters/decktiddler}then[$:/plugins/keepone/tidme/review/ui/ViewTemplate/tiddler]]
+[<currentTiddler>!tidme.kind[topic]subfilter{$:/config/Tidme/Filters/decktiddler}then[$:/plugins/keepone/tidme/review/ui/ViewTemplate/tiddler]]

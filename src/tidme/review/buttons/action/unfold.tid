@@ -7,9 +7,4 @@ code-body: yes
 
 \define tv-action-refresh-policy() always
 
-
-<$action-sendmessage
-    $message="tm-add-tag"
-    $param="."
-    $timestamp={{$:/config/TimestampDisable}}
-/>
+<!-- 分类重构后无 ?/. 标签：unfold 不再添加标签；阅读材料（topic）在阅读视图展开，测试卡（item）由 startstudy 按 card_unfold 控制折叠态 -->

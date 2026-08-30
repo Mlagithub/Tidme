@@ -3,10 +3,10 @@ code-body: yes
 
 <$let
     deckTiddler=<<currentTiddler>>
-    filter_learn=`[subfilter{!!card}] -[subfilter{!!card_exclude}] +[subfilter{!!state_learn}] +[sort[due]]`
-    filter_due=`[subfilter{!!card}] -[subfilter{!!card_exclude}] +[subfilter{!!state_due}] +[subfilter{!!order_due}]`
-    filter_new=`[subfilter{!!card}] -[subfilter{!!card_exclude}] +[subfilter{!!state_new}] +[subfilter{!!order_new}]`
-    filter_unfold=`[subfilter{!!card_unfold}]`
+    filter_learn=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]`
+    filter_due=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_due}] +[subfilter{$(deckTiddler)$!!order_due}]`
+    filter_new=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_new}] +[subfilter{$(deckTiddler)$!!order_new}]`
+    filter_unfold=`[subfilter{$(deckTiddler)$!!card_unfold}]`
     filter_random=`[subfilter<filter_due>] [subfilter<filter_new>] +[sortrandom[]]`
     due-new=`$(filter_learn)$ $(filter_due)$ $(filter_new)$`
     new-due=`$(filter_learn)$ $(filter_new)$ $(filter_due)$`

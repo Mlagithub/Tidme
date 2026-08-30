@@ -54,7 +54,7 @@ function twDateString(d: Date): string {
 	return pipeline.twDateString(d);
 }
 
-/** 某文档的全部正文章节（排除摘录/挖空等衍生卡；兼容无 kind 的历史导入） */
+/** 某文档的全部正文章节（排除摘录等衍生卡；topic 大类 + 非摘录子类型） */
 function sectionsOfDoc(wiki: any, doc: string): string[] {
 	return wiki
 		.filterTiddlers("[has[tidme.doc]nsort[tidme.order]]")
@@ -62,12 +62,11 @@ function sectionsOfDoc(wiki: any, doc: string): string[] {
 			const f = wiki.getTiddler(t)?.fields;
 			if (!f) return false;
 			if (String(f["tidme.doc"]) !== String(doc)) return false; // 必须按文档过滤
-			const kind = f["tidme.kind"];
-			return kind === "section" || (kind === undefined && f["tidme.order"] !== undefined);
+			return f["tidme.kind"] === "topic" && String(f["tidme.subkind"] || "") !== "extract";
 		});
 }
 
-/** 已读判定（W1 双轨：. = 阅读态；读完/忽略都去 .，视为完成） */
+/** 已读判定（分类：topic/item 卡 done/ignored 视为完成出队） */
 function isDone(f: any): boolean {
 	return sched.isCardDone(f);
 }
@@ -191,15 +190,15 @@ function highlightSnippetLater(doc: Document, targetTitle: string, snippet: stri
 	setTimeout(tick, 150);
 }
 
-/** 本书 item 类（主动复习流）在队卡过滤器：本书 ? 卡 ∩ ITEM_FILTER（W1 双轨分流） */
+/** 本书 item 类（复习流）在队卡过滤器：本书 item 卡（分类对齐 SuperMemo：Item 进复习流） */
 function docItemFilter(wiki: any, docId: string): string {
-	const base = `[all[shadows+tiddlers]tidme.doc[${docId}]tag[?]!has[tidme.suspended]]`;
+	const base = `[all[shadows+tiddlers]tidme.doc[${docId}]tidme.kind[item]!has[tidme.suspended]]`;
 	return sched.ITEM_FILTER.split(/\s+/).map((run) => `${base}${run}`).join(" ");
 }
 
 /** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用）。
- * W1 双轨分流：摘录 = topic（阅读材料），tag "."（阅读态，阅读列表/文档页被动重读），
- * 不带 "?"，不进主动复习流。要成为测试卡：在摘录上挖空 → cloze item（带 ?）。 */
+ * 分类对齐 SuperMemo：摘录 = Topic（阅读材料），kind=topic/subkind=extract，
+ * 进阅读列表（阅读流）。要成为测试卡：在摘录上挖空 → item（cloze）。 */
 function buildExtract(wiki: any, parentTitle: string, selection: string): Record<string, any> {
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
@@ -212,7 +211,6 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 	return {
 		title,
 		type: "text/vnd.tiddlywiki",
-		tags: ["."],
 		caption: preview + (selection.length > preview.length ? "…" : ""),
 		text: `<blockquote>\n${escapeHtml(selection.trim())}\n</blockquote>\n\n<p class="tm-import-muted">—— 摘自 [[${parentTitle}]]</p>`,
 		...fsrs,
@@ -220,7 +218,8 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 		revision: "0",
 		"tidme.doc": pf["tidme.doc"] || "",
 		"tidme.parent": parentTitle,
-		"tidme.kind": "extract",
+		"tidme.kind": "topic",
+		"tidme.subkind": "extract",
 		"tidme.anchor": JSON.stringify({ section: parentTitle, snippet: selection.replace(/\s+/g, " ").trim().slice(0, 80) }),
 		"tidme.breadcrumb": `${crumbTail} › 摘录`,
 		"tidme.source": pf["tidme.source"] || "",
@@ -231,7 +230,7 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 	};
 }
 
-/** 挖空卡字段（Alt+Z）。W1 双轨：挖空 = item（带 ?，进主动复习流） */
+/** 挖空卡字段（Alt+Z）。分类对齐 SuperMemo：挖空 = Item（测试卡），kind=item/subkind=cloze */
 function buildCloze(wiki: any, parentTitle: string, block: string, selected: string): Record<string, any> | null {
 	const at = block.indexOf(selected);
 	if (at === -1) return null;
@@ -247,7 +246,6 @@ function buildCloze(wiki: any, parentTitle: string, block: string, selected: str
 	return {
 		title,
 		type: "text/vnd.tiddlywiki",
-		tags: ["?"],
 		caption: clozeLine,
 		text: "",
 		...fsrs,
@@ -255,7 +253,8 @@ function buildCloze(wiki: any, parentTitle: string, block: string, selected: str
 		revision: "0",
 		"tidme.doc": pf["tidme.doc"] || "",
 		"tidme.parent": parentTitle,
-		"tidme.kind": "cloze",
+		"tidme.kind": "item",
+		"tidme.subkind": "cloze",
 		"tidme.anchor": JSON.stringify({ section: parentTitle, snippet: selected.replace(/\s+/g, " ").trim().slice(0, 80) }),
 		"tidme.breadcrumb": `${crumbTail} › 挖空`,
 		"tidme.source": pf["tidme.source"] || "",
@@ -482,35 +481,21 @@ function makeSectionBar(): WidgetCtor {
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
 			};
 
+			/** 已读/稍后/忽略后的推进目标：当前卡之后的第一张未读（按阅读顺序 tidme.order）。
+			 * 读完最后一张则返回 null（关闭，不跳回开头）。 */
 			const getScheduledNext = () => {
-				const all = sectionsOfDoc(wiki, docId);
-				const unread = all.filter((x) => x !== title && !isDone(wiki.getTiddler(x)?.fields));
-				if (!unread.length) return null;
-				const topicCards = unread.map((t) => {
-					const f = wiki.getTiddler(t)?.fields || {};
-					return {
-						title: t,
-						kind: String(f["tidme.kind"] || ""),
-						priority: sched.normalizePriority(f["tidme.priority"]),
-						due: sched.parseTwDate(f.due, new Date(0)),
-						order: String(f["tidme.order"] || f["tidme.breadcrumb"] || t),
-						doc: String(f["tidme.doc"] || ""),
-						breadcrumb: String(f["tidme.breadcrumb"] || t),
-						fields: f
-					};
-				});
-				const sorted = [...topicCards].sort((a: any, b: any) =>
-					a.priority - b.priority ||
-					a.due.getTime() - b.due.getTime() ||
-					String(a.order).localeCompare(String(b.order))
-				);
-				return sorted[0]?.title || null;
+				const all = sectionsOfDoc(wiki, docId); // 已按 tidme.order 升序
+				const idx = all.indexOf(title);
+				for (let i = idx + 1; i < all.length; i++) {
+					if (!isDone(wiki.getTiddler(all[i])?.fields)) return all[i];
+				}
+				return null;
 			};
 
 			// 衍生卡（摘录/挖空）：信息行（来源）+ 按钮行（回原文/完成/删除）
-			const kind = fields["tidme.kind"];
-			if (kind === "extract" || kind === "cloze") {
-				const kindName = kind === "cloze" ? "挖空卡" : "摘录卡";
+			const subkind = fields["tidme.subkind"];
+			if (subkind === "extract" || subkind === "cloze") {
+				const kindName = subkind === "cloze" ? "挖空卡" : "摘录卡";
 				const span = el(doc, "span", "tm-import-muted");
 				span.appendChild(doc.createTextNode(`${kindName} · 源自 `));
 				const link = el(doc, "a", "tc-tiddlylink", String(fields["tidme.parent"] || ""));
@@ -533,7 +518,7 @@ function makeSectionBar(): WidgetCtor {
 					}));
 				}
 				// G4 加工路径：摘录 → 挖空（选中摘录卡内文字 Alt+Z 生成嵌套挖空卡）
-				if (kind === "extract") {
+				if (subkind === "extract") {
 					btnRow.appendChild(mkBtn("✂ 挖空", "cloze", "从摘录中挖空（先选中文字，Alt+Z）", false, () => actionCloze(win)));
 				}
 				btnRow.appendChild(mkBtn("✔ 完成", "done", "读完此卡：移出队列并关闭", false, () => {
@@ -612,7 +597,7 @@ function makeSectionBar(): WidgetCtor {
 			} else {
 				btnRow.appendChild(mkBtn("✔ 已读", "done", "Done！读完此节，移出学习队列", false, () => {
 					this._flushReadTime?.();
-					// Done 语义：出队 = 去 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记
+					// Done 语义：出队 = 置 tidme.done（kind 决定归属，无标签）
 					wiki.addTiddler(sched.doneCard(fields));
 					events.dispatch(this, events.EVENTS.SECTION_DONE, title);
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
@@ -711,7 +696,7 @@ function makeSectionBar(): WidgetCtor {
 				const docSec = rtStats.docSeconds[docId] || 0;
 
 				addStat("优先级", `p${String(priVal).padStart(2, "0")} (${priLevel})`);
-				addStat("卡片类型", String(fields["tidme.kind"] || "section"));
+				addStat("卡片类型", String(fields["tidme.kind"] || "item"));
 				addStat("FSRS 状态", stateText);
 				addStat("到期时间", fields.due ? sched.parseTwDate(fields.due).toLocaleString() : "未到期");
 				addStat("稳定性 (S)", fields.stability ? Number(fields.stability).toFixed(2) : "未设置");
@@ -808,7 +793,7 @@ function makeDocResume(): WidgetCtor {
 			wrap.appendChild(banner);
 
 			// G7 子集复习：按本书强制复习 item（临时子集 deck → 复用 fsrs4tw 学习流）。
-			// W1 双轨：只测本书测试卡（cloze/qa/手动卡），节卡与摘录（topic）走阅读流。
+			// 分类对齐 SuperMemo：只测本书测试卡（item），节卡与摘录（topic）走阅读流。
 			const itemFilter = docItemFilter(wiki, docId);
 			const inQueueCount = wiki.filterTiddlers(itemFilter).length;
 			if (inQueueCount > 0) {
@@ -816,7 +801,7 @@ function makeDocResume(): WidgetCtor {
 				subsetBtn.title = `子集复习：仅复习本书 ${inQueueCount} 张挖空/问答卡（临时牌组，复习完可删除）`;
 				subsetBtn.addEventListener("click", () => {
 					// 从任意现有 deck 复制调度字段，覆盖 card 为本书 item 子集过滤器
-					const baseDeck = wiki.filterTiddlers("[tag[$:/tags/TidmeDeck]!is[draft]]")[0];
+					const baseDeck = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]")[0];
 					const bf = (baseDeck && wiki.getTiddler(baseDeck)?.fields) || {};
 					const deckTitle = `$:/temp/tidme/subset/${docId}`;
 					wiki.addTiddler({
@@ -873,10 +858,10 @@ function makeDocResume(): WidgetCtor {
 			}
 
 			// G4 摘录收件箱：聚合本书全部摘录/挖空卡（加工路径：可回原文、挖空、删除）。
-			// W3 加工标注：摘录=阅读材料（待提炼/已加工）；挖空=测试卡（进复习流）
+			// 分类：subkind extract/cloze（摘录=阅读材料待加工；挖空=测试卡）
 			const derived = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${docId}]!is[draft]]`)
 				.map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }))
-				.filter((c: any) => c.fields["tidme.kind"] === "extract" || c.fields["tidme.kind"] === "cloze");
+				.filter((c: any) => c.fields["tidme.subkind"] === "extract" || c.fields["tidme.subkind"] === "cloze");
 			if (derived.length) {
 				const box = el(doc, "details", "tm-doc-derived");
 				const summary = el(doc, "summary", "tm-import-muted",
@@ -888,7 +873,7 @@ function makeDocResume(): WidgetCtor {
 					return pa < pb ? -1 : pa > pb ? 1 : 0;
 				});
 				const clozeChildrenOf = (title: string): number =>
-					wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, "")}]tidme.kind[cloze]]`).length;
+					wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, "")}]tidme.subkind[cloze]]`).length;
 				const table = el(doc, "table", "tm-doc-table tm-doc-derived-table");
 				const thead = el(doc, "thead", "");
 				const htr = el(doc, "tr", "");
@@ -899,13 +884,13 @@ function makeDocResume(): WidgetCtor {
 				for (const c of sorted) {
 					const tr = el(doc, "tr", "tm-doc-done-row");
 					const kindTd = el(doc, "td", "", "");
-					const kindMark = c.fields["tidme.kind"] === "cloze" ? "挖" : "摘";
+					const kindMark = c.fields["tidme.subkind"] === "cloze" ? "挖" : "摘";
 					kindTd.appendChild(el(doc, "span", "tm-cb-kind", kindMark));
 					tr.appendChild(kindTd);
 					tr.appendChild(el(doc, "td", "tm-cb-name", c.title));
 					// W3：摘录加工状态（可挖空/已挖空）
 					const stateTd = el(doc, "td", "", "");
-					if (c.fields["tidme.kind"] === "extract") {
+					if (c.fields["tidme.subkind"] === "extract") {
 						const hasCloze = clozeChildrenOf(c.title) > 0;
 						const state = el(doc, "span", hasCloze ? "tm-cb-state tm-cb-state-done" : "tm-cb-state",
 							hasCloze ? "已挖空" : "可挖空");

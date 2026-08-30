@@ -12,13 +12,13 @@ const DECK = "$:/Deck/default";
 
 // 卡1：模拟遗留卡（带完整 FSRS 字段）
 wiki.addTiddler({
-	title: "遗留卡", tags: ["?"], text: "?",
+	title: "遗留卡", "tidme.kind": "item", "tidme.subkind": "qa", caption: "?", text: "?",
 	due: "20220623073158410", state: "2", reps: "3", lapses: "1",
 	stability: "5.8", difficulty: "4.9", elapsed_days: "0",
 	last_review: "20220622073158410", scheduled_days: "6"
 });
-// 卡2：全新卡（与导入产物一致，只有 ? 标签）
-wiki.addTiddler({ title: "全新卡", tags: ["?"], text: "?" });
+// 卡2：全新卡（kind=item，无调度字段）
+wiki.addTiddler({ title: "全新卡", "tidme.kind": "item", "tidme.subkind": "qa", caption: "?", text: "?" });
 
 function fakeElement() {
 	return { style: {}, childNodes: [], setAttribute() {}, getAttribute() { return ""; }, appendChild(c) { this.childNodes.push(c); }, insertBefore(c) { this.childNodes.push(c); }, addEventListener() {}, dispatchEvent() {}, textContent: "", classList: { add() {}, remove() {} }, hasAttribute() { return false; }, ownerDocument: null };

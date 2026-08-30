@@ -43,7 +43,7 @@ const bytes = new Uint8Array(readFileSync(epubFile));
 const opts = {};
 const r1 = await pipeline.runImport(bytes, epubFile.split(/[\\/]/).pop(), opts);
 const r2 = await pipeline.runImport(bytes, epubFile.split(/[\\/]/).pop(), opts);
-const cards = r1.tiddlers.filter((t) => Array.isArray(t.tags) && t.tags.includes("?"));
+const cards = r1.tiddlers.filter((t) => t["tidme.kind"] === "topic");
 let fail = 0;
 const check = (name, ok, detail = "") => {
 	console.log((ok ? "✓" : "✘"), name, detail);

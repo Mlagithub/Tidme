@@ -62,11 +62,11 @@ test("postponeCard / advanceCard / ignoreCard / forgetCard", () => {
 	assert.ok(sched.parseTwDate(postponed.due).getTime() > Date.now(), "顺延 7 天后应在未来");
 	const advanced = sched.advanceCard();
 	assert.ok(sched.parseTwDate(advanced.due).getTime() <= Date.now() + 60000, "advance 到期时间≈现在");
-	assert.deepEqual(sched.ignoreCard({ tags: ["?", "."] }).tags, ["."], "无 kind 按 item：去 ?");
-	// W1 双轨：topic（section/extract）忽略去 .（出阅读流）；item（cloze）忽略去 ?（出复习流）
-	assert.deepEqual(sched.ignoreCard({ tags: ["?", "."], "tidme.kind": "section" }).tags, ["?"], "section 忽略去 .");
-	assert.deepEqual(sched.ignoreCard({ tags: ["."], "tidme.kind": "extract" }).tags, [], "extract 忽略去 .");
-	assert.deepEqual(sched.ignoreCard({ tags: ["?"], "tidme.kind": "cloze" }).tags, [], "cloze 忽略去 ?");
+	// 分类重构后：忽略 = 置 tidme.ignored（kind 决定归属，无标签）
+	const ignored = sched.ignoreCard({ title: "卡", "tidme.kind": "item", state: "0" });
+	assert.equal(ignored["tidme.ignored"], "yes", "忽略置 tidme.ignored");
+	assert.ok(sched.isCardDone(ignored), "忽略后 isCardDone 返回 true（出队）");
+	assert.equal(ignored["tidme.kind"], "item", "保留 kind");
 	const forgotten = sched.forgetCard();
 	assert.equal(forgotten.state, "0");
 	assert.equal(forgotten.reps, "0");
@@ -75,7 +75,7 @@ test("postponeCard / advanceCard / ignoreCard / forgetCard", () => {
 test("autoPostpone: 保留 top N 高优先级，顺延其余低优先级逾期卡", () => {
 	const mk = (title, priority, due) => ({
 		title,
-		fields: { "tidme.priority": String(priority), due, tags: ["?"], state: "2" }
+		fields: { "tidme.priority": String(priority), due, "tidme.kind": "item", state: "2" }
 	});
 	const cards = [
 		mk("高优A", 5, PAST()),
@@ -93,51 +93,45 @@ test("autoPostpone: 保留 top N 高优先级，顺延其余低优先级逾期�
 	}
 });
 
-test("autoPostpone: 搁置/已出队卡不处理", () => {
+test("autoPostpone: 搁置/已出队/topic 卡不处理", () => {
 	const cards = [
-		{ title: "搁置", fields: { "tidme.priority": "90", due: PAST(), tags: ["?"], "tidme.suspended": "yes" } },
-		{ title: "已读完", fields: { "tidme.priority": "90", due: PAST(), tags: ["."] } },
-		{ title: "可顺延", fields: { "tidme.priority": "90", due: PAST(), tags: ["?"] } }
+		{ title: "搁置", fields: { "tidme.priority": "90", due: PAST(), "tidme.kind": "item", "tidme.suspended": "yes" } },
+		{ title: "已读完", fields: { "tidme.priority": "90", due: PAST(), "tidme.kind": "item", "tidme.done": "yes" } },
+		{ title: "已忽略", fields: { "tidme.priority": "90", due: PAST(), "tidme.kind": "item", "tidme.ignored": "yes" } },
+		{ title: "阅读卡", fields: { "tidme.priority": "90", due: PAST(), "tidme.kind": "topic" } },
+		{ title: "可顺延", fields: { "tidme.priority": "90", due: PAST(), "tidme.kind": "item" } }
 	];
 	const r = sched.autoPostpone(cards, { maxPriority: 60, keepTop: 0 });
 	assert.deepEqual(r.patches.map((p) => p.title), ["可顺延"]);
 });
 
-test("doneCard/restoreCard: Done 语义与可逆恢复", () => {
-	const done = sched.doneCard({ title: "节", tags: ["?", "."], state: "0", "tidme.suspended": "yes" });
-	assert.equal(done.tags.length, 0, "Done 去掉 ? 和 .");
-	assert.equal(done["tidme.done"], "yes");
+test("doneCard/restoreCard: Done 语义与可逆恢复（kind 决定归属，无标签）", () => {
+	const done = sched.doneCard({ title: "节", "tidme.kind": "topic", state: "0", "tidme.suspended": "yes" });
+	assert.equal(done["tidme.done"], "yes", "Done 置 tidme.done");
+	assert.equal(done["tidme.kind"], "topic", "保留 kind");
 	assert.ok(sched.isCardDone(done), "doneCard 后 isCardDone 应返回 true");
-	// section 恢复 = topic 回到阅读态：补 . 不补 ?（W1 双轨，节卡不进主动复习流）
-	const resumed = sched.restoreCard({ ...done, "tidme.kind": "section" });
-	assert.ok(resumed.tags.includes("."), "section 恢复补回 .（阅读态）");
-	assert.ok(!resumed.tags.includes("?"), "section 恢复不补 ?（topic 不进复习流）");
-	assert.equal(resumed["tidme.done"], undefined);
-	assert.equal(resumed["tidme.suspended"], undefined);
+	// 恢复：清除 done/ignored/suspended，kind 决定归属（无需补标签）
+	const resumed = sched.restoreCard({ ...done });
+	assert.equal(resumed["tidme.done"], undefined, "恢复删除 tidme.done");
+	assert.equal(resumed["tidme.ignored"], undefined, "恢复删除 tidme.ignored");
+	assert.equal(resumed["tidme.suspended"], undefined, "恢复删除 tidme.suspended");
+	assert.equal(resumed["tidme.kind"], "topic", "kind 保留（topic 回阅读流）");
 	assert.ok(!sched.isCardDone(resumed), "restoreCard 后 isCardDone 应返回 false");
-	// 摘录卡恢复 = topic 回到阅读态：补 . 不补 ?（W1 双轨，摘录不进主动复习流）
-	const resumeExtract = sched.restoreCard({ ...done, "tidme.kind": "extract" });
-	assert.ok(resumeExtract.tags.includes("."), "extract 恢复补回 .（阅读态）");
-	assert.ok(!resumeExtract.tags.includes("?"), "extract 恢复不补 ?（topic 不进复习流）");
-	// item 类（cloze/qa/无 kind）恢复补回 ?，进复习流
-	const resumeCloze = sched.restoreCard({ ...done, "tidme.kind": "cloze" });
-	assert.ok(resumeCloze.tags.includes("?"), "cloze 恢复补回 ?（item 进复习流）");
-	assert.ok(!resumeCloze.tags.includes("."), "cloze 恢复不补 .");
-	const resumePlain = sched.restoreCard({ ...done });
-	assert.ok(resumePlain.tags.includes("?"), "无 kind 卡恢复补回 ?（按 item 处理）");
+	// item 恢复同样只清标记
+	const resumeCloze = sched.restoreCard({ ...done, "tidme.kind": "item" });
+	assert.equal(resumeCloze["tidme.kind"], "item", "item 保留（回复习流）");
+	assert.ok(!sched.isCardDone(resumeCloze));
 });
 
 test("ITEM_FILTER: 双轨分流（topic 出、item 进）", () => {
 	const f = sched.ITEM_FILTER;
-	assert.ok(f.includes("[tidme.kind[cloze]]"), "含 cloze");
-	assert.ok(f.includes("[tidme.kind[qa]]"), "含 qa");
-	assert.ok(f.includes("[!has[tidme.kind]]"), "含无 kind 手动卡");
-	assert.ok(!f.includes("section"), "不含 section（topic）");
-	assert.ok(!f.includes("extract"), "不含 extract（topic）");
+	assert.ok(f.includes("[tidme.kind[item]]"), "含 item 大类");
+	assert.ok(!f.includes("topic"), "不含 topic（阅读流）");
+	assert.ok(!f.includes("section") && !f.includes("extract") && !f.includes("cloze") && !f.includes("qa"), "不按子类型过滤");
 });
 
 test("subsetQueue / subsetByDoc / subsetByTag", () => {
-	const queue = sched.subsetQueue("[tag[?]]", sched.subsetByDoc("d123"), (f) => f);
+	const queue = sched.subsetQueue("[tidme.kind[item]]", sched.subsetByDoc("d123"), (f) => f);
 	assert.ok(queue.includes("tidme.doc[d123]"), "子集按 doc");
 	const byTag = sched.subsetByTag("数学");
 	assert.equal(byTag, "[tag[数学]]");

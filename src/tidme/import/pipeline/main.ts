@@ -4,7 +4,7 @@ main.ts — 导入管线入口（浏览器版）
 对外暴露：
   runImport(bytes, fileName, options)  文件字节 → tiddler JSON（EPUB 专用块路径；文本走 runSplit）
   runSplit(input)                      任意 markdown/wikitext/HTML/TXT 文本 → tiddler JSON（通用切分）
-产物即标准 TW 导入格式；卡片带 ? 标签。
+产物即标准 TW 导入格式；节卡带 kind=topic（阅读材料）。
 */
 
 import { makeDocId, contentFingerprint } from "$:/plugins/keepone/tidme/core/ids";

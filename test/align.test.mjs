@@ -24,7 +24,8 @@ function oldCard(title, text, extra = {}) {
 			state: "2",
 			reps: "5",
 			due: "20261231000000000",
-			tags: ["?", "."],
+			"tidme.kind": "topic",
+			"tidme.subkind": "section",
 			...extra
 		}
 	};
@@ -40,7 +41,8 @@ function newCard(title, text, order = "000001") {
 			"tidme.hash": "new-hash",
 			"tidme.chars": "10",
 			caption: title,
-			tags: ["?", "."]
+			"tidme.kind": "topic",
+			"tidme.subkind": "section"
 		}
 	};
 }

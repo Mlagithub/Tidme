@@ -40,12 +40,12 @@ function fakeDocumentFor(win) {
 
 const CARD = "书 › 第1章 › 第一节";
 const FIELDS = {
-	title: CARD, tags: ["?", "."], caption: "第一节", text: "<p>正文段落。</p>",
+	title: CARD, caption: "第一节", text: "<p>正文段落。</p>",
 	due: "20260823191859193", state: "0", reps: "0", lapses: "0",
 	stability: "0", difficulty: "0", elapsed_days: "0", scheduled_days: "0",
 	last_review: "20260823191859193", bag: "default", revision: "0",
 	"tidme.doc": "dTEST", "tidme.id": "sTEST1", "tidme.hash": "h1",
-	"tidme.order": "000001", "tidme.level": "2", "tidme.kind": "section",
+	"tidme.order": "000001", "tidme.level": "2", "tidme.kind": "topic", "tidme.subkind": "section",
 	"tidme.chars": "100", "tidme.breadcrumb": "书 › 第1章 › 第一节",
 	"tidme.source": "书", "tidme.author": "", "tidme.format": "epub", "tidme.file": "x.xhtml"
 };

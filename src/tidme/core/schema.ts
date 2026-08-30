@@ -9,8 +9,17 @@ schema.ts — 实体字段规范与校验（规格 doc/research/data-model.md §
 export const FORMATS = ["epub", "markdown", "html", "txt", "clip", "paste"] as const;
 export type Format = (typeof FORMATS)[number];
 
-export const KINDS = ["document", "section", "extract", "qa", "cloze"] as const;
+/**
+ * 大类（对齐 SuperMemo 元素分类）：决定视图与队列归属。
+ * - topic：阅读材料（阅读视图，阅读列表/文档页管理，不进牌组）
+ * - item：测试卡（复习视图，进默认牌组）
+ */
+export const KINDS = ["topic", "item"] as const;
 export type Kind = (typeof KINDS)[number];
+
+/** 子类型：驱动展示差异（徽章/加工路径/具体按钮），不决定学习模式 */
+export const SUBKINDS = ["section", "extract", "cloze", "qa"] as const;
+export type SubKind = (typeof SUBKINDS)[number];
 
 /** FSRS 字段族（卡实体必填，见 data-model §3） */
 export const FSRS_FIELDS = [
@@ -30,16 +39,17 @@ export interface SectionRequired {
 	"tidme.path": string;
 	"tidme.order": string;
 	"tidme.level": string;
-	"tidme.kind": "section";
+	"tidme.kind": "topic";
+	"tidme.subkind": "section";
 	"tidme.hash": string;
 	"tidme.format": string;
 	caption: string;
 	text: string;
-	tags: string[];
 }
 
 export interface CardRequired extends SectionRequired {
-	"tidme.kind": "extract" | "qa" | "cloze";
+	"tidme.kind": "item";
+	"tidme.subkind": "cloze" | "qa";
 }
 
 /** TW 日期字符串（UTC 语义，YYYY0MM0DD0hh0mm0ss0XXX，与 $tw.utils.stringifyDate 一致） */
@@ -73,22 +83,18 @@ export function missingFsrsFields(fields: Record<string, unknown>): string[] {
 	return FSRS_FIELDS.filter((f) => fields[f] === undefined || fields[f] === null || fields[f] === "");
 }
 
-/** kind 判断（宽容：缺 kind 的历史数据按 fields 特征推断） */
+/** kind 判断（宽容：缺 kind 的手动卡返回 null，由调用方按 item 兜底） */
 export function inferKind(fields: Record<string, unknown>): Kind | null {
 	const kind = fields["tidme.kind"];
 	if (typeof kind === "string" && (KINDS as readonly string[]).includes(kind)) return kind as Kind;
-	if (fields["tidme.order"] !== undefined) return "section";
-	if (fields["tidme.parent"] !== undefined && typeof fields.text === "string") return "extract";
 	return null;
 }
 
 /** 返回必填字段缺失清单（宽容模式：不抛错，由调用方补默认） */
 export function missingRequired(fields: Record<string, unknown>, kind: Kind): string[] {
 	const base = ["tidme.doc", "tidme.id", "tidme.parent", "tidme.path", "caption"];
-	const extra =
-		kind === "section" ? ["tidme.order", "tidme.kind", "text"]
-		: kind === "extract" || kind === "qa" || kind === "cloze" ? ["tidme.kind", "text"]
-		: [];
+	// topic 需正文；item（挖空/问答）正面在 caption，text 允许为空
+	const extra = kind === "topic" ? ["tidme.kind", "text"] : ["tidme.kind"];
 	return [...base, ...extra].filter((f) => fields[f] === undefined || fields[f] === null || fields[f] === "");
 }
 

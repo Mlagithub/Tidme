@@ -30,9 +30,10 @@ tw.boot.argv = [tmp];
 tw.boot.boot();
 const wiki = tw.wiki;
 
-// 合成测试卡（不依赖手册狗粮卡）
-wiki.addTiddler({ title: "测试卡A", tags: ["?"], text: "A?" });
-wiki.addTiddler({ title: "测试卡B", tags: ["?"], text: "B?" });
+// 合成测试卡（不依赖手册狗粮卡）；kind=item + FSRS 字段 → 默认牌组新卡队列
+const NOW_TW = "20260824000000000";
+wiki.addTiddler({ title: "测试卡A", "tidme.kind": "item", "tidme.subkind": "qa", caption: "A?", text: "A答案", state: "0", due: NOW_TW, reps: "0", lapses: "0", stability: "0", difficulty: "0", elapsed_days: "0", scheduled_days: "0", last_review: NOW_TW });
+wiki.addTiddler({ title: "测试卡B", "tidme.kind": "item", "tidme.subkind": "qa", caption: "B?", text: "B答案", state: "0", due: NOW_TW, reps: "0", lapses: "0", stability: "0", difficulty: "0", elapsed_days: "0", scheduled_days: "0", last_review: NOW_TW });
 
 const DECK = "$:/Deck/default";
 

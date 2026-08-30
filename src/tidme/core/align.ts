@@ -5,7 +5,7 @@ align.ts — 重切分对齐（G2 / roadmap S6）
 - 内容 + 路径未变的节 → 保留旧卡（SRS 进度不丢，仅同步阅读顺序 order）
 - 内容变化但路径未变的节 → 保留旧卡并更新内容字段（SRS 进度保留，"修改重挂接"）
 - 新出现的节 → 保留 runSplit 的新卡（created）
-- 旧卡在新结果中消失 → 归档（tidme.obsolete=yes + 去 ? 标签出队，不硬删）
+- 旧卡在新结果中消失 → 归档（tidme.obsolete=yes + tidme.done=yes 出队，不硬删）
 
 输入是 runSplit 的新卡 tiddler 列表 + 同 docId 的旧卡；匹配键 = breadcrumb 剥离文档前缀后的 trail。
 纯函数 + async（内容指纹），无 $tw 依赖，双端可用。

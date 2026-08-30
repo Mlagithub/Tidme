@@ -29,7 +29,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const pipeline = (await import(pathToFileURL(path.join(here, "../out-m2/pipeline.cjs")).href)).default;
 
 function cardsOf(r) {
-	return r.tiddlers.filter((t) => Array.isArray(t.tags) && t.tags.includes("?"));
+	return r.tiddlers.filter((t) => t["tidme.kind"] === "topic");
 }
 function docOf(r) {
 	return r.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes("tidme-import-doc"));
@@ -127,15 +127,14 @@ test("split: docId 由标题派生，同一标题+内容重切分稳定", async 
 	assert.deepEqual(ids1, ids2, "重切分卡片 ID 稳定");
 });
 
-test("split: 自动 deck 生成（按 tidme.doc 过滤）", async () => {
+test("split: 不再生成自动阅读牌组（topic 走阅读列表，不进牌组体系）", async () => {
 	const r = await pipeline.runSplit({ text: "# 书名\n\n内容。", title: "自动牌组书", type: "text/markdown" });
 	const deck = r.tiddlers.find((t) => t.title === "$:/Deck/read/自动牌组书");
-	assert.ok(deck, "应生成自动 deck");
-	assert.ok(deck.card.includes(`tidme.doc[${r.docId}]`), `deck.card 应按 docId 过滤: ${deck.card}`);
-	assert.ok(deck.card.includes("tag[.]"), "自动牌组只装 topic（阅读态 .，W1 双轨）: " + deck.card);
-	assert.ok(!deck.card.includes("tag[?]"), "自动牌组不含 item（? 卡走复习流）: " + deck.card);
-	assert.ok(deck.tags.includes("$:/tags/TidmeDeck"));
-	assert.ok(deck.p, "deck 应含 FSRS 参数");
+	assert.equal(deck, undefined, "不生成自动阅读牌组（topic 由阅读列表管理）");
+	// 节卡：kind=topic + subkind=section，无学习标签，无 deck 引用
+	const sec = r.tiddlers.find((t) => t["tidme.kind"] === "topic");
+	assert.equal(sec["tidme.subkind"], "section", "节卡 subkind=section");
+	assert.equal(sec.tags, undefined, "节卡无 ?/. 学习标签");
 });
 
 test("split: 溯源字段继承（url/author → Document）", async () => {
