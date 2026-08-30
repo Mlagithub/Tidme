@@ -664,7 +664,7 @@ mark.tm-readpoint {
 	transition: var(--tm-transition);
 }
 .tm-rl-doc-head:hover {
-	background: hsl(220, 14%, 93%);
+	background: var(--tm-surface-3);
 }
 .tm-rl-doc[open] > .tm-rl-doc-head { border-bottom: 1px solid var(--tm-border); }
 .tm-rl-doc-head::-webkit-details-marker { display: none; }
@@ -897,5 +897,65 @@ mark.tm-readpoint {
 	color: var(--tm-accent) !important;
 	border-bottom: 2px solid var(--tm-accent) !important;
 	font-weight: 700;
+}
+
+/* AI 切分配置面板与大纲编辑器 */
+.tm-ai-config-panel {
+	margin: 8px 0 12px;
+	border: 1px dashed var(--tm-accent);
+	border-radius: var(--tm-radius);
+	padding: 6px 12px;
+	background: var(--tm-surface-2);
+}
+.tm-ai-config-summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--tm-accent);
+}
+.tm-ai-config-body {
+	margin-top: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.tm-ai-inputs-row {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.tm-ai-inputs-row .tm-input {
+	flex: 1;
+	min-width: 140px;
+}
+.tm-split-row-renamed {
+	border-left: 3px solid var(--tm-accent) !important;
+}
+.tm-split-row-deleted {
+	opacity: 0.45;
+	text-decoration: line-through;
+	background: var(--tm-surface-2);
+}
+.tm-split-title-input {
+	font-size: 0.9em;
+	padding: 2px 6px;
+	border: 1px solid var(--tm-accent);
+	border-radius: 4px;
+	background: var(--tm-surface);
+	color: var(--tm-text-1);
+}
+.tm-split-add-form {
+	margin: 6px 0 6px 20px;
+	padding: 8px;
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius);
+	background: var(--tm-surface-2);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.tm-split-chars-warn {
+	background: #ffe8cc !important;
+	color: #d97706 !important;
+	font-weight: 600;
 }
 

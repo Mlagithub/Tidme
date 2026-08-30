@@ -260,33 +260,59 @@ type: text/css
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
-	color: var(--tm-text-3);
+	color: var(--tm-text-1);
 	margin-bottom: 12px;
 	border-bottom: 1px dashed var(--tm-border);
 	padding-bottom: 8px;
 }
 
 /* ============================================================
-   暗色模式：html 挂 data-tme-dark 时覆盖 token 与跨 TW 的关键容器。
-   切换：主题切换按钮（$:/Decks / 阅读列表顶部）设置该属性。
+   暗色模式：支持 OS prefers-color-scheme, [data-tme-dark] 及 TW5 暗色调色板
    ============================================================ */
-[data-tme-dark] {
+@media (prefers-color-scheme: dark) {
+	:root {
+		--tm-surface: #1e293b;
+		--tm-surface-2: #16233a;
+		--tm-surface-3: #0f172a;
+		--tm-border: #334155;
+		--tm-text-1: #f8fafc;
+		--tm-text-2: #cbd5e1;
+		--tm-text-3: #94a3b8;
+		--tm-accent: #818cf8;
+		--tm-accent-strong: #a5b4fc;
+		--tm-accent-soft: rgba(129, 140, 248, 0.2);
+		--tm-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+		--tm-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.4);
+		--tm-shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.6);
+		--tm-badge-new-bg: #1e3a5f;   --tm-badge-new-fg: #93c5fd;
+		--tm-badge-learn-bg: #5b3d0e; --tm-badge-learn-fg: #fcd34d;
+		--tm-badge-due-bg: #0f3d2e;   --tm-badge-due-fg: #6ee7b7;
+		--tm-badge-overdue-bg: #5c1a1a; --tm-badge-overdue-fg: #fca5a5;
+		--tm-badge-suspended-bg: #3b2f63; --tm-badge-suspended-fg: #c4b5fd;
+	}
+}
+
+[data-tme-dark],
+html.tc-dark-palette,
+body.tc-body-dark,
+[data-theme="dark"] {
 	/* 表面/边框 */
 	--tm-surface: #1e293b;
 	--tm-surface-2: #16233a;
-	--tm-surface-3: #101827;
+	--tm-surface-3: #0f172a;
 	--tm-border: #334155;
 	/* 文字 */
-	--tm-text-1: #f1f5f9;
+	--tm-text-1: #f8fafc;
 	--tm-text-2: #cbd5e1;
 	--tm-text-3: #94a3b8;
 	/* 主色（更亮，保证对比） */
 	--tm-accent: #818cf8;
 	--tm-accent-strong: #a5b4fc;
-	--tm-accent-soft: #37306e;
+	--tm-accent-soft: rgba(129, 140, 248, 0.2);
 	/* 阴影更重 */
 	--tm-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
 	--tm-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.4);
+	--tm-shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.6);
 	/* 徽章 pastel 深色 */
 	--tm-badge-new-bg: #1e3a5f;   --tm-badge-new-fg: #93c5fd;
 	--tm-badge-learn-bg: #5b3d0e; --tm-badge-learn-fg: #fcd34d;
@@ -295,7 +321,8 @@ type: text/css
 	--tm-badge-suspended-bg: #3b2f63; --tm-badge-suspended-fg: #c4b5fd;
 }
 /* 让 TW 页面主体随暗色切换（页面背景/文字/内容卡） */
-[data-tme-dark] body {
+[data-tme-dark] body,
+body.tc-body-dark {
 	background: #0f172a;
 	color: var(--tm-text-1);
 }

@@ -138,6 +138,15 @@ export function forgetCard(): Record<string, any> {
 	};
 }
 
+/** 统一已读 / 完成判定 */
+export function isCardDone(fields: Record<string, any>): boolean {
+	if (!fields) return false;
+	if (fields["tidme.done"] === "yes") return true;
+	const rawTags = fields.tags;
+	const tags = Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? String(rawTags).split(/\s+/) : [];
+	return !tags.includes(".") && !tags.includes("?");
+}
+
 /**
  * Done（已读）：移出学习队列 = 去 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记。
  * 自动牌组按 tidme.doc + tag[?] 过滤，同样出队。完全可逆（resumeCard）。
@@ -157,16 +166,56 @@ export function doneCard(fields: Record<string, any>): Record<string, any> {
  */
 export function restoreCard(fields: Record<string, any>): Record<string, any> {
 	const kind = String(fields["tidme.kind"] || "");
-	const tags = tagsOf(fields);
+	const tags = tagsOf(fields).filter((t) => t !== "?" && t !== ".");
 	if (kind === "extract" || kind === "section") {
-		if (!tags.includes(".")) tags.push("."); // topic：回到阅读态
+		tags.push("."); // topic：回到阅读态
 	} else {
-		if (!tags.includes("?")) tags.push("?"); // item：回到复习流
+		tags.push("?"); // item：回到复习流
 	}
 	const out: Record<string, any> = { ...fields, tags };
 	delete out["tidme.done"];
 	delete out["tidme.suspended"];
 	return out;
+}
+
+export type QueueSortMode = "priority-first" | "due-first" | "hybrid";
+
+/**
+ * 优先级混合队列排序：
+ * - priority-first（SM 优先级优先）：优先级数值小（高优先）在前面，相同时按 due 升序。
+ * - due-first（到期优先）：due 越早越在前面，相同时按优先级升序。
+ * - hybrid（混合加权得分）：score = priority - overdueDays * weight * 10（逾期越久加权越优先），综合排序。
+ */
+export function sortPriorityMixedQueue<T extends CardLike>(
+	cards: T[],
+	mode: QueueSortMode = "hybrid",
+	overdueWeight = 0.5
+): T[] {
+	const now = Date.now();
+	return [...cards].sort((a, b) => {
+		const pa = normalizePriority(a.fields["tidme.priority"]);
+		const pb = normalizePriority(b.fields["tidme.priority"]);
+		const da = parseTwDate(a.fields.due, new Date(0)).getTime();
+		const db = parseTwDate(b.fields.due, new Date(0)).getTime();
+
+		if (mode === "priority-first") {
+			if (pa !== pb) return pa - pb;
+			return da - db;
+		}
+
+		if (mode === "due-first") {
+			if (da !== db) return da - db;
+			return pa - pb;
+		}
+
+		// hybrid 模式：逾期天数抵扣 priority（使高逾期的低优先卡也能被调度，但不打破整体优先级框架）
+		const daysA = Math.max(0, (now - da) / 86400000);
+		const daysB = Math.max(0, (now - db) / 86400000);
+		const scoreA = pa - daysA * overdueWeight * 10;
+		const scoreB = pb - daysB * overdueWeight * 10;
+		if (Math.abs(scoreA - scoreB) > 0.001) return scoreA - scoreB;
+		return pa - pb || da - db;
+	});
 }
 
 export interface AutoPostponeOptions {
@@ -176,6 +225,8 @@ export interface AutoPostponeOptions {
 	postponeDays?: number;
 	/** 始终保留的高优先级卡数（按优先级升序取前 N） */
 	keepTop?: number;
+	/** 触发顺延的逾期阈值：只有逾期卡总数 > maxOverdueThreshold 时才触发过载顺延（默认 0 表示无门槛） */
+	maxOverdueThreshold?: number;
 }
 
 export interface AutoPostponeResult {
@@ -192,6 +243,7 @@ export function autoPostpone(cards: CardLike[], opts: AutoPostponeOptions = {}):
 	const maxPriority = opts.maxPriority ?? 60;
 	const postponeDays = opts.postponeDays ?? 7;
 	const keepTop = opts.keepTop ?? 10;
+	const maxOverdueThreshold = opts.maxOverdueThreshold ?? 0;
 	const now = Date.now();
 
 	const overdue = cards
@@ -207,6 +259,13 @@ export function autoPostpone(cards: CardLike[], opts: AutoPostponeOptions = {}):
 			if (pa !== pb) return pa - pb; // 0（高）在前
 			return parseTwDate(a.fields.due).getTime() - parseTwDate(b.fields.due).getTime();
 		});
+
+	if (overdue.length <= maxOverdueThreshold) {
+		return {
+			patches: [],
+			stats: { overdue: overdue.length, postponed: 0, kept: overdue.length }
+		};
+	}
 
 	const kept = overdue.slice(0, keepTop);
 	const postponable = overdue

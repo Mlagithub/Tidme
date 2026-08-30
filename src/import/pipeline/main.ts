@@ -15,7 +15,7 @@ import type { ChunkOptions } from "./chunker";
 import { decodeBytes, sniffFormat } from "./ingest-text";
 import { emitTiddlers, runSplit, twDateString, initialFsrsFields } from "./split";
 
-export { runSplit, twDateString, initialFsrsFields } from "./split";
+export { runSplit, twDateString, initialFsrsFields, applyOverrides, cleanTitle } from "./split";
 
 export interface ImportResult {
 	bookTitle: string;

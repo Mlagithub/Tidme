@@ -17,6 +17,10 @@ function cleanOptions(options: ChunkOptions = {}): ChunkOptions {
 	return out;
 }
 
+function escapeHtml(text: string) {
+	return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
 const charsOf = (blocks: Block[]) => blocks.reduce((n, b) => n + normalizeText(b.text).length, 0);
 
 function serializeChildren(el: any): string {
@@ -143,12 +147,24 @@ export interface RawSection {
 	parts?: SectionPart[];
 }
 
+export interface CustomSectionInput {
+	title: string;
+	text: string;
+	insertAfterKey?: string;
+}
+
 /** 干预指令（按 trail key = trail.join(" › ") 匹配，重切分后稳定不漂移） */
 export interface SplitOverrides {
 	/** 强制并入上一节的 trail key */
 	merge?: string[];
 	/** 强制拆分（容器内第一个带标题的并入子节拆为独立卡）的 trail key */
 	split?: string[];
+	/** 标题修改/改短（trailKey -> 自定义短标题） */
+	titles?: Record<string, string>;
+	/** 移除/删除节的 trailKey */
+	delete?: string[];
+	/** 手动新增节 */
+	customSections?: CustomSectionInput[];
 }
 
 export interface SectionPart { html: string; text: string; chars: number; title?: string }
@@ -172,11 +188,27 @@ export function applyOverrides(sections: RawSection[], overrides?: SplitOverride
 	const o = overrides || {};
 	const mergeKeys = new Set(o.merge || []);
 	const splitKeys = new Set(o.split || []);
+	const deleteKeys = new Set(o.delete || []);
+	const titleMap = o.titles || {};
+	const customList = o.customSections || [];
 	const keyOf = (s: RawSection) => s.trail.join(" › ");
+
+	// 0. 过滤删除节与修改标题/改短
+	const filtered: RawSection[] = [];
+	for (const s of sections) {
+		const k = keyOf(s);
+		if (deleteKeys.has(k)) continue;
+		const sec = { ...s, trail: [...s.trail] };
+		if (titleMap[k]) {
+			sec.title = titleMap[k];
+			if (sec.trail.length) sec.trail[sec.trail.length - 1] = titleMap[k];
+		}
+		filtered.push(sec);
+	}
 
 	// 第一遍：拆分（拆分增加节数，先处理；结果顺序保持）
 	const out: RawSection[] = [];
-	for (const sec of sections) {
+	for (const sec of filtered) {
 		out.push(sec);
 		if (splitKeys.has(keyOf(sec))) {
 			const parts = sec.parts || [];
@@ -215,6 +247,27 @@ export function applyOverrides(sections: RawSection[], overrides?: SplitOverride
 		result.push(sec);
 	}
 
+	// 第三遍：插入手动新增的自定义节
+	for (const cs of customList) {
+		if (!cs.title || !cs.text) continue;
+		const newSec: RawSection = {
+			level: 1,
+			title: cs.title,
+			trail: [cs.title],
+			html: `<p>${escapeHtml(cs.text)}</p>`,
+			text: cs.text,
+			chars: cs.text.length,
+			parts: [{ html: `<p>${escapeHtml(cs.text)}</p>`, text: cs.text, chars: cs.text.length }]
+		};
+		if (cs.insertAfterKey) {
+			const idx = result.findIndex((s) => keyOf(s) === cs.insertAfterKey);
+			if (idx >= 0) result.splice(idx + 1, 0, newSec);
+			else result.push(newSec);
+		} else {
+			result.push(newSec);
+		}
+	}
+
 	// 派生 html/text/chars + ordinal 重排
 	result.forEach((sec, i) => {
 		deriveSection(sec);
@@ -226,38 +279,19 @@ export function applyOverrides(sections: RawSection[], overrides?: SplitOverride
 function applySizeRules(leaves: Leaf[], cfg: { maxChars: number; minChars: number }, stats: { hardSplitCount: number }): RawSection[] {
 	const expanded: RawSection[] = [];
 	for (const leaf of leaves) {
-		const total = charsOf(leaf.node.blocks);
 		const title = leaf.trail[leaf.trail.length - 1] || "";
-		if (total <= cfg.maxChars) {
-			const blocks = leaf.node.blocks.filter((b) => normalizeText(b.text));
-			const html = blocks.map(blockHtml).join("\n\n");
-			const text = blocks.map((b) => normalizeText(b.text)).join("\n");
-			expanded.push({
-				level: leaf.node.level,
-				title,
-				trail: leaf.trail,
-				html,
-				text,
-				chars: total,
-				parts: [{ html, text, chars: total }]
-			});
-			continue;
-		}
-		const { parts, hardSplitCount } = partitionBlocks(leaf.node.blocks, cfg.maxChars);
-		stats.hardSplitCount += hardSplitCount;
-		parts.forEach((p, idx) => {
-			const html = p.htmlParts.join("\n\n");
-			const text = p.textParts.join("\n");
-			expanded.push({
-				level: leaf.node.level,
-				title: idx === 0 ? title : "",
-				trail: leaf.trail,
-				html,
-				text,
-				chars: p.chars,
-				isContinuation: idx > 0,
-				parts: [{ html, text, chars: p.chars }]
-			});
+		const blocks = leaf.node.blocks.filter((b) => normalizeText(b.text));
+		const html = blocks.map(blockHtml).join("\n\n");
+		const text = blocks.map((b) => normalizeText(b.text)).join("\n");
+		const total = charsOf(blocks);
+		expanded.push({
+			level: leaf.node.level,
+			title,
+			trail: leaf.trail,
+			html,
+			text,
+			chars: total,
+			parts: [{ html, text, chars: total }]
 		});
 	}
 

@@ -11,13 +11,11 @@ widgets/reading-list.ts — W2 阅读列表（topic 队列，统一阅读入口�
 declare function require(module: string): any;
 const sched = require("$:/plugins/tidme/core/scheduler.js");
 const events = require("$:/plugins/tidme/core/events.js");
+const uiUtils = require("$:/plugins/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
-	const e = doc.createElement(tag);
-	if (cls) e.className = cls;
-	if (text !== undefined) e.textContent = text;
-	return e;
+	return uiUtils.el(doc, tag, cls, text);
 }
 
 function escapeHtml(s: string): string {
@@ -27,7 +25,7 @@ function escapeHtml(s: string): string {
 /** 阅读列表过滤（topic 队列）：全库 tag[.]（阅读态）卡，未搁置。
  * 忽略（去 .）与已读（去 ?. + tidme.done）自动出列；手动 ? 卡（item）不在此页。 */
 function topicQueueFilter(): string {
-	return "[all[shadows+tiddlers]!is[draft]tag[.]!has[tidme.suspended]]";
+	return "[all[shadows+tiddlers]!is[draft]tag[.]!has[tidme.suspended]!field:tidme.done[yes]]";
 }
 
 interface TopicCard {
@@ -42,19 +40,21 @@ interface TopicCard {
 }
 
 function collectTopicCards(wiki: any): TopicCard[] {
-	return wiki.filterTiddlers(topicQueueFilter()).map((t: string) => {
-		const f = wiki.getTiddler(t)?.fields || {};
-		return {
-			title: t,
-			kind: String(f["tidme.kind"] || ""),
-			priority: sched.normalizePriority(f["tidme.priority"]),
-			due: sched.parseTwDate(f.due, new Date(0)),
-			order: String(f["tidme.order"] || f["tidme.breadcrumb"] || t),
-			doc: String(f["tidme.doc"] || ""),
-			breadcrumb: String(f["tidme.breadcrumb"] || t),
-			fields: f
-		};
-	});
+	return wiki.filterTiddlers(topicQueueFilter())
+		.map((t: string) => {
+			const f = wiki.getTiddler(t)?.fields || {};
+			return {
+				title: t,
+				kind: String(f["tidme.kind"] || ""),
+				priority: sched.normalizePriority(f["tidme.priority"]),
+				due: sched.parseTwDate(f.due, new Date(0)),
+				order: String(f["tidme.order"] || f["tidme.breadcrumb"] || t),
+				doc: String(f["tidme.doc"] || ""),
+				breadcrumb: String(f["tidme.breadcrumb"] || t),
+				fields: f
+			};
+		})
+		.filter((c: TopicCard) => !isReadDone(c.fields));
 }
 
 /** 组内排序：优先级（0 最高）→ due（早的在前，topic 被动重读）→ 阅读顺序 */
@@ -81,10 +81,7 @@ function groupByDoc(cards: TopicCard[]): { doc: string; cards: TopicCard[] }[] {
 
 /** 阅读态判定（W1 双轨：. = 阅读态；忽略去 . 视为完成） */
 function isReadDone(f: any): boolean {
-	if (!f) return false;
-	if (f["tidme.done"] === "yes") return true;
-	const tags = f?.tags;
-	return !tags || !tags.includes(".");
+	return sched.isCardDone(f);
 }
 
 /** 某文档全部节卡（阅读进度口径，与文档页一致） */

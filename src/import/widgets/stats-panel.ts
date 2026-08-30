@@ -56,6 +56,8 @@ function makeStatsPanel(): WidgetCtor {
 				}
 				const ret = stats.retentionFromLogs(entries);
 				const buckets = stats.priorityBuckets(cardLikes("[tag[?]]"));
+				const rt = stats.getReadTimeStats ? stats.getReadTimeStats(wiki) : { totalSeconds: 0, todaySeconds: 0, docSeconds: {} };
+				const fmtDur = stats.formatDuration ? stats.formatDuration : (s: number) => `${s} 秒`;
 
 				// 0) 指标卡
 				const cards = el(doc, "div", "tm-stat-cards");
@@ -70,6 +72,7 @@ function makeStatsPanel(): WidgetCtor {
 				cards.appendChild(statCard("文档", String(docs.length)));
 				cards.appendChild(statCard("在队卡", String(funnel.cards)));
 				cards.appendChild(statCard("复习", String(ret.reviews), ret.reviews ? `保留率 ${Math.round(ret.retention * 100)}%` : ""));
+				cards.appendChild(statCard("今日阅读", fmtDur(rt.todaySeconds), `累计 ${fmtDur(rt.totalSeconds)}`));
 				wrap.appendChild(cards);
 
 				// 创建分栏网格布局

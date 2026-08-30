@@ -107,12 +107,14 @@ test("doneCard/restoreCard: Done 语义与可逆恢复", () => {
 	const done = sched.doneCard({ title: "节", tags: ["?", "."], state: "0", "tidme.suspended": "yes" });
 	assert.equal(done.tags.length, 0, "Done 去掉 ? 和 .");
 	assert.equal(done["tidme.done"], "yes");
+	assert.ok(sched.isCardDone(done), "doneCard 后 isCardDone 应返回 true");
 	// section 恢复 = topic 回到阅读态：补 . 不补 ?（W1 双轨，节卡不进主动复习流）
 	const resumed = sched.restoreCard({ ...done, "tidme.kind": "section" });
 	assert.ok(resumed.tags.includes("."), "section 恢复补回 .（阅读态）");
 	assert.ok(!resumed.tags.includes("?"), "section 恢复不补 ?（topic 不进复习流）");
 	assert.equal(resumed["tidme.done"], undefined);
 	assert.equal(resumed["tidme.suspended"], undefined);
+	assert.ok(!sched.isCardDone(resumed), "restoreCard 后 isCardDone 应返回 false");
 	// 摘录卡恢复 = topic 回到阅读态：补 . 不补 ?（W1 双轨，摘录不进主动复习流）
 	const resumeExtract = sched.restoreCard({ ...done, "tidme.kind": "extract" });
 	assert.ok(resumeExtract.tags.includes("."), "extract 恢复补回 .（阅读态）");

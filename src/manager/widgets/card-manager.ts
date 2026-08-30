@@ -142,14 +142,36 @@ function makeCardManager(): WidgetCtor {
 			const orgAttr = this.getAttribute("org", "") as Org;
 			let view: View = VIEWS.some((v) => v.id === viewAttr) ? viewAttr : "all";
 			let org: Org = ORGS.some((o) => o.id === orgAttr) ? orgAttr : "doc";
-			let sortKey: "breadcrumb" | "priority" | "due" | "deck" = "breadcrumb";
+			let sortKey: "breadcrumb" | "priority" | "due" | "deck" | "mixed" = "breadcrumb";
 			let sortAsc = true;
 			let searchText = ""; // 查找：按标题/面包屑过滤当前视图
 			let previewTitle: string | null = null;
 			let editTitle: string | null = null; // 单卡参数编辑（对标 Element parameters）
 			const selected = new Set<string>();
+			let lastCheckedCardTitle: string | null = null;
+			let renderedCardTitles: string[] = [];
 			let allCards: Card[] = [];
 			let deckInfos: DeckInfo[] = [];
+			let bulkCb: HTMLInputElement | null = null;
+			let selLabel: HTMLElement | null = null;
+			let visibleCards: Card[] = [];
+			let groupCbUpdaters: (() => void)[] = [];
+			let cardCbUpdaters: (() => void)[] = [];
+
+			const updateSelectionUI = () => {
+				const visibleCount = visibleCards.length;
+				const selectedVisibleCount = visibleCards.filter((c) => selected.has(c.title)).length;
+
+				if (bulkCb) {
+					bulkCb.checked = visibleCount > 0 && selectedVisibleCount === visibleCount;
+					bulkCb.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleCount;
+				}
+				if (selLabel) {
+					selLabel.textContent = `已选 ${selected.size}/${visibleCount} 张`;
+				}
+				for (const u of groupCbUpdaters) u();
+				for (const u of cardCbUpdaters) u();
+			};
 
 			// P3 toast 反馈（面板内临时提示；写库动作后调用）
 			const toast = (msg: string, kind = "") => {
@@ -176,10 +198,7 @@ function makeCardManager(): WidgetCtor {
 			const inView = (f: Record<string, any>, v: View): boolean => {
 				const tags = Array.isArray(f.tags) ? f.tags : [];
 				const suspended = f["tidme.suspended"] === "yes";
-				// W1 双轨：? = 主动复习流（item 类/手动卡）；topic（section/extract）即使带 ? 也不在"在队"
-				const kind = String(f["tidme.kind"] || "");
-				const inReviewQueue = tags.includes("?") && kind !== "section" && kind !== "extract";
-				const done = f["tidme.done"] === "yes" || !inReviewQueue;
+				const done = sched.isCardDone(f);
 				if (v === "inqueue") return !done && !suspended;
 				if (v === "done") return done;
 				if (v === "suspended") return suspended;
@@ -191,6 +210,19 @@ function makeCardManager(): WidgetCtor {
 			const anyStrict = (c: Card): boolean => deckInfos.some((d) => d.strict.has(c.title));
 
 			const crumbOf = (c: Card): string => String(c.fields["tidme.breadcrumb"] || c.title);
+			const isDescendantOf = (child: Card, parent: Card): boolean => {
+				if (child.title === parent.title) return false;
+				const parentCrumb = crumbOf(parent);
+				const childCrumb = crumbOf(child);
+				if (childCrumb.startsWith(parentCrumb + " › ")) return true;
+				let p = String(child.fields["tidme.parent"] || "");
+				while (p) {
+					if (p === parent.title) return true;
+					const pt = wiki.getTiddler(p);
+					p = pt ? String(pt.fields["tidme.parent"] || "") : "";
+				}
+				return false;
+			};
 			const docNameOf = (c: Card): string => {
 				const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "");
 				if (!key) return "未分组";
@@ -214,8 +246,7 @@ function makeCardManager(): WidgetCtor {
 
 			/** 卡片行通用操作：读（移出队列）/ 回（恢复）+ 删除 */
 			const appendOps = (row: HTMLElement, c: Card) => {
-				const inQueue = (Array.isArray(c.fields.tags) && c.fields.tags.includes("?"))
-					&& c.fields["tidme.suspended"] !== "yes" && c.fields["tidme.done"] !== "yes";
+				const inQueue = !sched.isCardDone(c.fields) && c.fields["tidme.suspended"] !== "yes";
 				if (inQueue) {
 					const readBtn = el(doc, "button", "tm-cm-op", "读");
 					readBtn.title = "移出队列（已读）";
@@ -267,9 +298,47 @@ function makeCardManager(): WidgetCtor {
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
 				});
 				row.appendChild(link);
-				cb.addEventListener("change", () => {
-					if (cb.checked) selected.add(c.title); else selected.delete(c.title);
-					render();
+				const updateCardCb = () => {
+					const children = allCards.filter((child) => isDescendantOf(child, c));
+					if (children.length > 0) {
+						const selChildrenCount = children.filter((child) => selected.has(child.title)).length;
+						const selfSel = selected.has(c.title);
+						cb.checked = selfSel && selChildrenCount === children.length;
+						cb.indeterminate = (selfSel || selChildrenCount > 0) && !(selfSel && selChildrenCount === children.length);
+					} else {
+						cb.checked = selected.has(c.title);
+						cb.indeterminate = false;
+					}
+				};
+				cardCbUpdaters.push(updateCardCb);
+				cb.addEventListener("click", (e: MouseEvent) => {
+					if (e.shiftKey && lastCheckedCardTitle && renderedCardTitles.includes(lastCheckedCardTitle)) {
+						const idx1 = renderedCardTitles.indexOf(lastCheckedCardTitle);
+						const idx2 = renderedCardTitles.indexOf(c.title);
+						if (idx1 !== -1 && idx2 !== -1) {
+							const start = Math.min(idx1, idx2);
+							const end = Math.max(idx1, idx2);
+							const range = renderedCardTitles.slice(start, end + 1);
+							const checked = cb.checked;
+							for (const title of range) {
+								if (checked) selected.add(title); else selected.delete(title);
+							}
+						}
+					} else {
+						const checked = cb.checked;
+						if (checked) {
+							selected.add(c.title);
+						} else {
+							selected.delete(c.title);
+						}
+						for (const child of allCards) {
+							if (isDescendantOf(child, c)) {
+								if (checked) selected.add(child.title); else selected.delete(child.title);
+							}
+						}
+					}
+					lastCheckedCardTitle = c.title;
+					updateSelectionUI();
 				});
 			};
 
@@ -301,6 +370,31 @@ function makeCardManager(): WidgetCtor {
 				dd.open = isFoldOpen(foldState(view, key), true);
 				bindFold(dd, foldState(view, key));
 				const dsum = el(doc, "summary", "", "");
+
+				// Checkbox for doc group
+				const groupCb = doc.createElement("input");
+				groupCb.type = "checkbox";
+				groupCb.className = "tm-cm-group-cb";
+				const updateDocGroupCb = () => {
+					const docSelCount = docCards.filter((c) => selected.has(c.title)).length;
+					groupCb.checked = docCards.length > 0 && docSelCount === docCards.length;
+					groupCb.indeterminate = docSelCount > 0 && docSelCount < docCards.length;
+				};
+				updateDocGroupCb();
+				groupCbUpdaters.push(updateDocGroupCb);
+				groupCb.addEventListener("click", (e) => {
+					e.stopPropagation(); // Prevent toggling the details
+				});
+				groupCb.addEventListener("change", () => {
+					if (groupCb.checked) {
+						for (const c of docCards) selected.add(c.title);
+					} else {
+						for (const c of docCards) selected.delete(c.title);
+					}
+					updateSelectionUI();
+				});
+				dsum.appendChild(groupCb);
+
 				dsum.appendChild(el(doc, "span", "tm-cm-doc-title",
 					`${docNameOf(docCards[0])}（${docCards.length}）`));
 				dd.appendChild(dsum);
@@ -336,7 +430,32 @@ function makeCardManager(): WidgetCtor {
 					details.open = isFoldOpen(deckFold, deckCards.length > 0);
 					bindFold(details, deckFold);
 					const ds = el(doc, "summary", "", "");
-					ds.appendChild(el(doc, "strong", "", `${d.caption}（${deckCards.length}）`));
+
+					// Deck checkbox
+					const deckCb = doc.createElement("input");
+					deckCb.type = "checkbox";
+					deckCb.className = "tm-cm-group-cb";
+					const updateDeckCb = () => {
+						const deckSelCount = deckCards.filter((c) => selected.has(c.title)).length;
+						deckCb.checked = deckCards.length > 0 && deckSelCount === deckCards.length;
+						deckCb.indeterminate = deckSelCount > 0 && deckSelCount < deckCards.length;
+					};
+					updateDeckCb();
+					groupCbUpdaters.push(updateDeckCb);
+					deckCb.addEventListener("click", (e) => {
+						e.stopPropagation();
+					});
+					deckCb.addEventListener("change", () => {
+						if (deckCb.checked) {
+							for (const c of deckCards) selected.add(c.title);
+						} else {
+							for (const c of deckCards) selected.delete(c.title);
+						}
+						updateSelectionUI();
+					});
+					ds.appendChild(deckCb);
+
+					ds.appendChild(el(doc, "strong", "", ` ${d.caption}（${deckCards.length}）`));
 					details.appendChild(ds);
 					if (deckCards.length) {
 						const groups = docGroupsOf(deckCards);
@@ -353,7 +472,32 @@ function makeCardManager(): WidgetCtor {
 				ob.open = isFoldOpen(orphanFold, orphans.length > 0);
 				bindFold(ob, orphanFold);
 				const os = el(doc, "summary", "", "");
-				os.appendChild(el(doc, "strong", "", `未入组（${orphans.length}）`));
+
+				// Orphans checkbox
+				const orphanCb = doc.createElement("input");
+				orphanCb.type = "checkbox";
+				orphanCb.className = "tm-cm-group-cb";
+				const updateOrphanCb = () => {
+					const orphanSelCount = orphans.filter((c) => selected.has(c.title)).length;
+					orphanCb.checked = orphans.length > 0 && orphanSelCount === orphans.length;
+					orphanCb.indeterminate = orphanSelCount > 0 && orphanSelCount < orphans.length;
+				};
+				updateOrphanCb();
+				groupCbUpdaters.push(updateOrphanCb);
+				orphanCb.addEventListener("click", (e) => {
+					e.stopPropagation();
+				});
+				orphanCb.addEventListener("change", () => {
+					if (orphanCb.checked) {
+						for (const c of orphans) selected.add(c.title);
+					} else {
+						for (const c of orphans) selected.delete(c.title);
+					}
+					updateSelectionUI();
+				});
+				os.appendChild(orphanCb);
+
+				os.appendChild(el(doc, "strong", "", ` 未入组（${orphans.length}）`));
 				os.title = "不属于任何牌组队列的卡片：已读、搁置或手动创建的散卡";
 				ob.appendChild(os);
 				if (orphans.length) {
@@ -367,6 +511,7 @@ function makeCardManager(): WidgetCtor {
 
 			/** 树行：复选框 + 徽章 + 标题 + 操作（缩进按 breadcrumb 深度） */
 			const renderCardRow = (parentEl: HTMLElement, c: Card) => {
+				renderedCardTitles.push(c.title);
 				const row = el(doc, "div", "tm-cm-card");
 				const depth = Math.max(0, crumbOf(c).split(" › ").length - 1);
 				row.style.paddingLeft = `${depth * 0.9}em`;
@@ -381,6 +526,7 @@ function makeCardManager(): WidgetCtor {
 
 			/** 列表行（Browser 式表格行，P2）：勾选 + 状态 + 类型 + 优先 + 标题 + 牌组 + 到期 + 间隔/重复/难度 + 操作 */
 			const renderListRow = (tbody: HTMLElement, c: Card) => {
+				renderedCardTitles.push(c.title);
 				const tr = el(doc, "tr", "tm-cm-listrow");
 				const cbTd = el(doc, "td", "tm-cm-cell-cb");
 				const cb = doc.createElement("input");
@@ -419,7 +565,10 @@ function makeCardManager(): WidgetCtor {
 			/** 列表排序比较 */
 			const cmpCards = (a: Card, b: Card): number => {
 				let r = 0;
-				if (sortKey === "priority") {
+				if (sortKey === "mixed") {
+					const sorted = sched.sortPriorityMixedQueue([a, b], "hybrid");
+					r = sorted[0] === a ? -1 : 1;
+				} else if (sortKey === "priority") {
 					const pa = Number(a.fields["tidme.priority"] ?? 99);
 					const pb = Number(b.fields["tidme.priority"] ?? 99);
 					r = pa - pb;
@@ -444,20 +593,10 @@ function makeCardManager(): WidgetCtor {
 				const thead = el(doc, "thead", "");
 				const trh = el(doc, "tr", "");
 				const allTd = el(doc, "th", "tm-cm-cell-cb", "");
-				const all = doc.createElement("input");
-				all.type = "checkbox";
-				all.checked = cards.length > 0 && cards.every((c) => selected.has(c.title));
-				all.title = "全选/清空当前列表";
-				all.addEventListener("change", () => {
-					for (const c of cards) { if (all.checked) selected.add(c.title); else selected.delete(c.title); }
-					render();
-				});
-				allTd.appendChild(all);
 				trh.appendChild(allTd);
 				trh.appendChild(el(doc, "th", "", "状态"));
 				trh.appendChild(el(doc, "th", "", "类型"));
-				trh.appendChild(el(doc, "th", "", "优先"));
-				const th = (label: string, key?: "breadcrumb" | "priority" | "due" | "deck") => {
+				const th = (label: string, key?: "breadcrumb" | "priority" | "due" | "deck" | "mixed") => {
 					const t = el(doc, "th", "");
 					if (key) {
 						const b = el(doc, "button", "tm-cm-sort" + (sortKey === key ? " tm-cm-sort-active" : ""),
@@ -473,6 +612,8 @@ function makeCardManager(): WidgetCtor {
 					}
 					return t;
 				};
+				trh.appendChild(th("优先", "priority"));
+				trh.appendChild(th("混合", "mixed"));
 				trh.appendChild(th("标题", "breadcrumb"));
 				trh.appendChild(th("牌组", "deck"));
 				trh.appendChild(th("到期", "due"));
@@ -595,14 +736,21 @@ function makeCardManager(): WidgetCtor {
 
 			/** 重新渲染整个面板 */
 			const render = () => {
+				const oldBody = wrap.querySelector(".tm-cm-body") as HTMLElement | null;
+				const savedScrollTop = oldBody ? oldBody.scrollTop : 0;
+
 				wrap.textContent = "";
 				collectAll();
+				renderedCardTitles = [];
+				groupCbUpdaters = [];
+				cardCbUpdaters = [];
 				// 查找：按标题/面包屑包含过滤
 				const matches = (c: Card) => {
 					if (!searchText.trim()) return true;
 					const hay = String(c.title + " " + (c.fields["tidme.breadcrumb"] || "")).toLowerCase();
 					return hay.includes(searchText.trim().toLowerCase());
 				};
+				visibleCards = allCards.filter((c) => inView(c.fields, view) && matches(c));
 
 				// 工具栏（sticky：查找/视图/组织/批量操作固定在顶部）
 				const toolbar = el(doc, "div", "tm-cm-toolbar");
@@ -653,11 +801,30 @@ function makeCardManager(): WidgetCtor {
 				const bar = el(doc, "div", "tm-cm-bar");
 				const row = el(doc, "div", "tm-cm-bar-row", "");
 
-				if (selected.size > 0) {
-					const selLabel = el(doc, "span", "tm-badge tm-badge-learn", `已选 ${selected.size} 张`);
-					selLabel.style.marginRight = "6px";
-					row.appendChild(selLabel);
-				}
+				// Top-level bulk select checkbox
+				const visibleCount = visibleCards.length;
+				const selectedVisibleCount = visibleCards.filter((c) => selected.has(c.title)).length;
+
+				const bulkCbGroup = el(doc, "span", "tm-cm-bar-group", "");
+				bulkCb = doc.createElement("input") as HTMLInputElement;
+				bulkCb.type = "checkbox";
+				bulkCb.className = "tm-cm-group-cb";
+				bulkCb.title = "全选/清空所有当前可见卡片";
+				bulkCb.checked = visibleCount > 0 && selectedVisibleCount === visibleCount;
+				bulkCb.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleCount;
+				bulkCb.addEventListener("change", () => {
+					if (bulkCb?.checked) {
+						for (const c of visibleCards) selected.add(c.title);
+					} else {
+						for (const c of visibleCards) selected.delete(c.title);
+					}
+					updateSelectionUI();
+				});
+				bulkCbGroup.appendChild(bulkCb);
+
+				selLabel = el(doc, "span", "tm-cm-sel-info", `已选 ${selected.size}/${visibleCount} 张`);
+				bulkCbGroup.appendChild(selLabel);
+				row.appendChild(bulkCbGroup);
 
 				const schedGroup = el(doc, "span", "tm-cm-bar-group", "");
 				const priGroup = el(doc, "span", "tm-cm-bar-group", "");
@@ -690,6 +857,25 @@ function makeCardManager(): WidgetCtor {
 				schedGroup.appendChild(batch("顺延7d", (f) => sched.postponeCard(f, 7)));
 				schedGroup.appendChild(batch("提前", () => sched.advanceCard()));
 				schedGroup.appendChild(batch("遗忘", () => sched.forgetCard()));
+				const autoBtn = el(doc, "button", "tm-cm-btn", "⚡ 顺延过载");
+				autoBtn.title = "自动按优先级顺延低优先级的逾期卡片（保留高优先级卡片）";
+				autoBtn.addEventListener("click", () => {
+					let cfg: any = {};
+					try { cfg = JSON.parse(wiki.getTiddlerText("$:/config/Tidme/AutoPostpone", "{}") || "{}"); } catch { /* 默认配置 */ }
+					const res = sched.autoPostpone(visibleCards, cfg);
+					if (res.patches.length === 0) {
+						toast(`无需顺延（逾期 ${res.stats.overdue} 张，保留 Top ${res.stats.kept}）`, "ok");
+						return;
+					}
+					for (const p of res.patches) {
+						const tiddler = wiki.getTiddler(p.title);
+						if (tiddler) wiki.addTiddler({ ...tiddler.fields, ...p.fields });
+					}
+					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+					render();
+					toast(`已顺延 ${res.stats.postponed} 张低优先逾期卡（保留 Top ${res.stats.kept}）`, "ok");
+				});
+				schedGroup.appendChild(autoBtn);
 				row.appendChild(schedGroup);
 
 				stateGroup.appendChild(batch("移出队列", (f) => doneFields(f)));
@@ -715,10 +901,10 @@ function makeCardManager(): WidgetCtor {
 
 				// 主体：按组织方式渲染
 				const body = el(doc, "div", "tm-cm-body");
-				const visible = allCards.filter((c) => inView(c.fields, view) && matches(c));
-				if (org === "deck") renderDeckTree(body, visible);
-				else if (org === "list") renderList(body, visible);
-				else renderDocTree(body, visible);
+				if (org === "deck") renderDeckTree(body, visibleCards);
+				else if (org === "list") renderList(body, visibleCards);
+				else renderDocTree(body, visibleCards);
+				body.scrollTop = savedScrollTop;
 				wrap.appendChild(body);
 			};
 

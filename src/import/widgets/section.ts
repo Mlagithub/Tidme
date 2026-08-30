@@ -13,6 +13,7 @@ widgets/section.ts — M3 阅读闭环组件 v3.2（Phase B）
 declare function require(module: string): any;
 const pipeline = require("$:/plugins/tidme/import/pipeline.js");
 const sched = require("$:/plugins/tidme/core/scheduler.js");
+const stats = require("$:/plugins/tidme/core/stats.js");
 const events = require("$:/plugins/tidme/core/events.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
@@ -68,10 +69,7 @@ function sectionsOfDoc(wiki: any, doc: string): string[] {
 
 /** 已读判定（W1 双轨：. = 阅读态；读完/忽略都去 .，视为完成） */
 function isDone(f: any): boolean {
-	if (!f) return false;
-	if (f["tidme.done"] === "yes") return true;
-	const tags = f?.tags;
-	return !tags || !tags.includes(".");
+	return sched.isCardDone(f);
 }
 
 function parseReadPoint(wiki: any, doc: string): ReadPoint | null {
@@ -368,6 +366,10 @@ type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
 function makeSectionBar(): WidgetCtor {
 	class SectionBarWidget extends Widget {
+		_startTime: number = 0;
+		_flushReadTime: () => void = () => {};
+		_showStats: boolean = false;
+
 		render(parent: any, nextSibling: any) {
 			this.parentDomNode = parent;
 			this.computeAttributes();
@@ -380,6 +382,17 @@ function makeSectionBar(): WidgetCtor {
 			CTX.widget = this;
 			const docId = String(t.fields["tidme.doc"]);
 			CTX.lastDoc = docId;
+
+			this._startTime = Date.now();
+			this._flushReadTime = () => {
+				if (this._startTime && this.wiki && this._docId) {
+					const elapsedSec = (Date.now() - this._startTime) / 1000;
+					this._startTime = Date.now();
+					if (elapsedSec >= 1 && elapsedSec <= 7200) {
+						stats.recordReadTime(this.wiki, this._docId, elapsedSec);
+					}
+				}
+			};
 
 			// 响应式：保存身份与根节点，refresh 时按需重建（信息即时更新）
 			this._title = title;
@@ -396,8 +409,11 @@ function makeSectionBar(): WidgetCtor {
 			if (!this._selBound) {
 				this._selBound = true;
 				const win = (doc as any).defaultView || globalThis;
-				if (win && typeof win.addEventListener === "function") {
-					win.addEventListener("selectionchange", () => this._syncPick_());
+				const d = doc || win?.document;
+				if (d && typeof d.addEventListener === "function") {
+					d.addEventListener("selectionchange", () => this._syncPick_());
+					d.addEventListener("mouseup", () => this._syncPick_());
+					d.addEventListener("keyup", () => this._syncPick_());
 				}
 				this._syncPick_();
 			}
@@ -410,16 +426,20 @@ function makeSectionBar(): WidgetCtor {
 			const win = (this.document as any).defaultView || globalThis;
 			const sel = win?.getSelection?.();
 			let hasSel = false;
-			if (sel && !sel.isCollapsed && sel.anchorNode) {
-				let n: any = sel.anchorNode;
-				while (n) {
-					if (n.getAttribute && n.getAttribute("data-tiddler-title") === this._title) { hasSel = true; break; }
-					n = n.parentNode;
+			if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) {
+				const selectedTitle = frameTitleOfSelection(win);
+				if (!selectedTitle || selectedTitle === this._title) {
+					hasSel = true;
 				}
 			}
 			for (const b of btns) {
-				if (hasSel) b.removeAttribute("disabled");
-				else b.setAttribute("disabled", "true");
+				if (hasSel) {
+					b.removeAttribute("disabled");
+					(b as any).disabled = false;
+				} else {
+					b.setAttribute("disabled", "true");
+					(b as any).disabled = true;
+				}
 			}
 		}
 
@@ -456,9 +476,35 @@ function makeSectionBar(): WidgetCtor {
 			const btnRow = el(doc, "div", "tm-section-row tm-section-btns");
 			const sep = () => btnRow.appendChild(el(doc, "span", "tm-bar-sep"));
 			const gotoSection = (target: string) => {
+				this._flushReadTime?.();
 				saveReadPoint(wiki, docId, { t: target, s: "" });
-				this.dispatchEvent({ type: "tm-close-tiddler" }); // 关闭当前卡，避免故事流堆积
+				this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title }); // 关闭当前卡，避免故事流堆积
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
+			};
+
+			const getScheduledNext = () => {
+				const all = sectionsOfDoc(wiki, docId);
+				const unread = all.filter((x) => x !== title && !isDone(wiki.getTiddler(x)?.fields));
+				if (!unread.length) return null;
+				const topicCards = unread.map((t) => {
+					const f = wiki.getTiddler(t)?.fields || {};
+					return {
+						title: t,
+						kind: String(f["tidme.kind"] || ""),
+						priority: sched.normalizePriority(f["tidme.priority"]),
+						due: sched.parseTwDate(f.due, new Date(0)),
+						order: String(f["tidme.order"] || f["tidme.breadcrumb"] || t),
+						doc: String(f["tidme.doc"] || ""),
+						breadcrumb: String(f["tidme.breadcrumb"] || t),
+						fields: f
+					};
+				});
+				const sorted = [...topicCards].sort((a: any, b: any) =>
+					a.priority - b.priority ||
+					a.due.getTime() - b.due.getTime() ||
+					String(a.order).localeCompare(String(b.order))
+				);
+				return sorted[0]?.title || null;
 			};
 
 			// 衍生卡（摘录/挖空）：信息行（来源）+ 按钮行（回原文/完成/删除）
@@ -471,7 +517,7 @@ function makeSectionBar(): WidgetCtor {
 				link.href = "#";
 				link.addEventListener("click", (e: Event) => {
 					e.preventDefault();
-					this.dispatchEvent({ type: "tm-close-tiddler" });
+					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: String(fields["tidme.parent"]) });
 				});
 				span.appendChild(link);
@@ -481,7 +527,7 @@ function makeSectionBar(): WidgetCtor {
 				const anchor = parseAnchor(fields["tidme.anchor"]);
 				if (anchor) {
 					btnRow.appendChild(mkBtn("↩ 回原文", "rp", "跳回原文并高亮此片段", false, () => {
-						this.dispatchEvent({ type: "tm-close-tiddler" });
+						this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 						this.dispatchEvent({ type: "tm-navigate", navigateTo: anchor.section });
 						highlightSnippetLater(doc, anchor.section, anchor.snippet);
 					}));
@@ -491,20 +537,22 @@ function makeSectionBar(): WidgetCtor {
 					btnRow.appendChild(mkBtn("✂ 挖空", "cloze", "从摘录中挖空（先选中文字，Alt+Z）", false, () => actionCloze(win)));
 				}
 				btnRow.appendChild(mkBtn("✔ 完成", "done", "读完此卡：移出队列并关闭", false, () => {
+					this._flushReadTime?.();
 					wiki.addTiddler(sched.doneCard(fields));
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					// 读完自动关闭本卡，跳回来源（无来源则关闭即可）——阅读流不堆积
 					const backTo = fields["tidme.parent"] || "";
-					this.dispatchEvent({ type: "tm-close-tiddler" });
+					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 					if (backTo) this.dispatchEvent({ type: "tm-navigate", navigateTo: backTo });
 					notify("done");
 				}));
 				btnRow.appendChild(mkBtn("🗑 删除", "del", "彻底删除此卡", false, () => {
+					this._flushReadTime?.();
 					wiki.deleteTiddler(title);
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
 					// 删除后本卡不存在：关闭并跳回来源（无来源则关闭）——不留空卡
 					const backTo = fields["tidme.parent"] || "";
-					this.dispatchEvent({ type: "tm-close-tiddler" });
+					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 					if (backTo) this.dispatchEvent({ type: "tm-navigate", navigateTo: backTo });
 				}));
 				root.appendChild(btnRow);
@@ -519,20 +567,20 @@ function makeSectionBar(): WidgetCtor {
 			// 全局续读点：记录最近阅读位置（「开始阅读」一键跳回；不设空则清）
 			wiki.addTiddler({ title: GLOBAL_READPOINT, text: title });
 
-			// 第一行：面包屑 · 位置 · 本书剩余 · 已读状态
+			// 第一行：面包屑 · 位置 · 本书剩余 · 优先级 · 已读状态
 			const crumb = el(doc, "span", "tm-section-crumb tm-import-muted", String(fields["tidme.breadcrumb"] || ""));
 			crumb.title = "点击打开本书汇总页";
 			crumb.addEventListener("click", () => {
-				this.dispatchEvent({ type: "tm-close-tiddler" });
+				this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: String(fields["tidme.breadcrumb"] || "").split(" › ")[0] });
 			});
 			infoRow.appendChild(crumb);
 			infoRow.appendChild(el(doc, "span", "tm-section-pos tm-import-muted", `　${index + 1} / ${list.length}`));
 			infoRow.appendChild(el(doc, "span", "tm-section-load tm-import-muted", `· 本书剩 ${left} 张待学`));
-			const priVal = fields["tidme.priority"];
-			if (priVal !== undefined) {
-				infoRow.appendChild(el(doc, "span", "tm-section-pri tm-import-muted", `p${String(priVal).padStart(2, "0")}`));
-			}
+
+			const priVal = sched.normalizePriority(fields["tidme.priority"]);
+			infoRow.appendChild(el(doc, "span", "tm-section-pri tm-import-muted", `p${String(priVal).padStart(2, "0")}`));
+
 			if (isDone(fields)) {
 				infoRow.appendChild(el(doc, "span", "tm-section-state", "✓ 已读"));
 			}
@@ -550,7 +598,7 @@ function makeSectionBar(): WidgetCtor {
 				if (rp.t !== title) {
 					btnRow.appendChild(mkBtn("⏮ " + (rp.s ? "「" + rp.s.slice(0, 10) + "…」" : rp.t.slice(0, 14)), "rp", "转到续读点 (Alt+F7)", false, () => actionGotoReadPoint(win)));
 				}
-				btnRow.appendChild(mkBtn("", "rpclear", "清除续读点 (Ctrl+Shift+F7)", false, () => actionClearReadPoint(win), "close-button"));
+				btnRow.appendChild(mkBtn("✕ 清除", "rpclear", "清除续读点 (Ctrl+Shift+F7)", false, () => actionClearReadPoint(win)));
 			}
 
 			sep();
@@ -563,6 +611,7 @@ function makeSectionBar(): WidgetCtor {
 				}));
 			} else {
 				btnRow.appendChild(mkBtn("✔ 已读", "done", "Done！读完此节，移出学习队列", false, () => {
+					this._flushReadTime?.();
 					// Done 语义：出队 = 去 ?（默认牌组）与 .（阅读牌组）+ tidme.done 标记
 					wiki.addTiddler(sched.doneCard(fields));
 					events.dispatch(this, events.EVENTS.SECTION_DONE, title);
@@ -575,34 +624,36 @@ function makeSectionBar(): WidgetCtor {
 					});
 					btnRow.insertBefore(undo, btnRow.querySelector(".tm-bar-sep"));
 					setTimeout(() => { undo.parentNode?.removeChild(undo); }, 8000);
-					const nxt = list.find((x) => x !== title && !isDone(wiki.getTiddler(x)?.fields));
+					const nxt = getScheduledNext();
+					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 					if (nxt) {
 						saveReadPoint(wiki, docId, { t: nxt, s: "" });
-						this.dispatchEvent({ type: "tm-close-tiddler" });
 						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
 					}
 					notify("done");
 				}));
 				btnRow.appendChild(mkBtn("⏩", "later", "稍后再看：明确顺延 333 天（不是拖延，是排程）", false, () => {
+					this._flushReadTime?.();
 					const due = twDateString(new Date(Date.now() + 333 * 86400000));
 					wiki.addTiddler({ ...fields, due });
 					events.dispatch(this, events.EVENTS.SECTION_LATER, title);
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					const nxt = list.find((x) => x !== title && !isDone(wiki.getTiddler(x)?.fields));
+					const nxt = getScheduledNext();
+					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 					if (nxt) {
-						this.dispatchEvent({ type: "tm-close-tiddler" });
 						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
 					}
 					notify("later");
 				}));
 				// G3 忽略：移出阅读队列（去 .，topic 出阅读流；内容保留，可经管理器「回」恢复）
 				btnRow.appendChild(mkBtn("忽略", "ignore", "标记不重要：移出阅读队列（内容保留，可恢复）", false, () => {
+					this._flushReadTime?.();
 					wiki.addTiddler(sched.ignoreCard(fields));
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					const nxt = list.find((x) => x !== title && !isDone(wiki.getTiddler(x)?.fields));
+					const nxt = getScheduledNext();
+					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 					if (nxt) {
 						saveReadPoint(wiki, docId, { t: nxt, s: "" });
-						this.dispatchEvent({ type: "tm-close-tiddler" });
 						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
 					}
 					notify("done");
@@ -619,18 +670,22 @@ function makeSectionBar(): WidgetCtor {
 			btnRow.appendChild(clozeBtn);
 
 			// G2 优先级快速调整（对标 SM Alt+P / Shift+Ctrl+↑↓）：数值减小 = 升优先
-			if (priVal !== undefined) {
-				btnRow.appendChild(mkBtn("优先↑", "pri", "提高优先级（更早复习）", false, () => {
-					wiki.addTiddler({ ...fields, "tidme.priority": sched.shiftPriority(priVal, -5) });
-					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					this.build();
-				}));
-				btnRow.appendChild(mkBtn("优先↓", "pri", "降低优先级（延后复习）", false, () => {
-					wiki.addTiddler({ ...fields, "tidme.priority": sched.shiftPriority(priVal, 5) });
-					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					this.build();
-				}));
-			}
+			btnRow.appendChild(mkBtn("优先↑", "pri", `提高优先级（当前 p${String(priVal).padStart(2, "0")}，提升 5）`, false, () => {
+				wiki.addTiddler({ ...fields, "tidme.priority": sched.shiftPriority(priVal, -5) });
+				events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+				this.build();
+			}));
+			btnRow.appendChild(mkBtn("优先↓", "pri", `降低优先级（当前 p${String(priVal).padStart(2, "0")}，降低 5）`, false, () => {
+				wiki.addTiddler({ ...fields, "tidme.priority": sched.shiftPriority(priVal, 5) });
+				events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+				this.build();
+			}));
+
+			// 学习数据展开/收起按钮
+			btnRow.appendChild(mkBtn("📊 学习数据", "stats", "展开/收起本卡与学习相关的数据", false, () => {
+				this._showStats = !this._showStats;
+				this.build();
+			}));
 
 			// 帮助
 			btnRow.appendChild(mkBtn("", "help", "快捷键与用法帮助", false, () => {
@@ -638,6 +693,36 @@ function makeSectionBar(): WidgetCtor {
 			}, "info-button"));
 
 			root.appendChild(btnRow);
+
+			if (this._showStats) {
+				const statsBox = el(doc, "div", "tm-section-stats-box");
+				statsBox.style.cssText = "margin-top:8px;padding:8px 12px;background:var(--tm-surface-2);color:var(--tm-text-1);border-radius:6px;font-size:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px 12px;border:1px solid var(--tm-border);";
+				const addStat = (lbl: string, val: string) => {
+					const item = el(doc, "div", "tm-stat-item");
+					item.appendChild(el(doc, "strong", "", `${lbl}: `));
+					item.appendChild(doc.createTextNode(val));
+					statsBox.appendChild(item);
+				};
+
+				const stateMap: Record<string, string> = { "0": "新卡 (New)", "1": "学习中 (Learning)", "2": "复习中 (Review)", "3": "重学中 (Relearning)" };
+				const stateText = stateMap[String(fields.state || "0")] || "新卡";
+				const priLevel = priVal <= 33 ? "高" : priVal <= 66 ? "中" : "低";
+				const rtStats = stats.getReadTimeStats(wiki);
+				const docSec = rtStats.docSeconds[docId] || 0;
+
+				addStat("优先级", `p${String(priVal).padStart(2, "0")} (${priLevel})`);
+				addStat("卡片类型", String(fields["tidme.kind"] || "section"));
+				addStat("FSRS 状态", stateText);
+				addStat("到期时间", fields.due ? sched.parseTwDate(fields.due).toLocaleString() : "未到期");
+				addStat("稳定性 (S)", fields.stability ? Number(fields.stability).toFixed(2) : "未设置");
+				addStat("难度 (D)", fields.difficulty ? Number(fields.difficulty).toFixed(2) : "未设置");
+				addStat("复习次数", String(fields.reps || 0));
+				addStat("遗忘次数", String(fields.lapses || 0));
+				addStat("本书阅读耗时", stats.formatDuration(docSec));
+				addStat("今日总阅读", stats.formatDuration(rtStats.todaySeconds));
+
+				root.appendChild(statsBox);
+			}
 		}
 
 		refresh(changedTiddlers: Record<string, any>) {

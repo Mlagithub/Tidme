@@ -214,8 +214,22 @@ tags: [[$:/tags/Stylesheet]]
 .tm-cm-tree details {
 	margin-left: 0.4em;
 }
-.tm-cm-tree summary {
+.tm-cm-tree summary,
+.tm-cm-body summary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	cursor: pointer;
+}
+.tm-cm-group-cb {
+	margin: 0 4px 0 0;
+	cursor: pointer;
+}
+.tm-cm-sel-info {
+	font-size: 0.82em;
+	color: var(--tm-text-2);
+	font-weight: 550;
+	vertical-align: middle;
 }
 .tm-cm-deck {
 	margin-top: 0.4em;

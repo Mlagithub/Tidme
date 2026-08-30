@@ -69,3 +69,29 @@ test("priorityBuckets: 分桶", () => {
 	assert.equal(b.low, 1);
 	assert.equal(b.none, 1);
 });
+
+test("formatDuration: 格式化时间", () => {
+	assert.equal(stats.formatDuration(15), "15 秒");
+	assert.equal(stats.formatDuration(120), "2 分钟");
+	assert.equal(stats.formatDuration(330), "5 分 30 秒");
+	assert.equal(stats.formatDuration(3600), "1 小时");
+	assert.equal(stats.formatDuration(3720), "1 小时 2 分");
+});
+
+test("recordReadTime and getReadTimeStats: 记录与获取阅读时长", () => {
+	const store = new Map();
+	const mockWiki = {
+		getTiddlerText: (title) => store.get(title) || "",
+		addTiddler: (t) => store.set(t.title, t.text)
+	};
+
+	stats.recordReadTime(mockWiki, "doc-1", 120);
+	stats.recordReadTime(mockWiki, "doc-1", 60);
+	stats.recordReadTime(mockWiki, "doc-2", 300);
+
+	const res = stats.getReadTimeStats(mockWiki);
+	assert.equal(res.totalSeconds, 480);
+	assert.equal(res.todaySeconds, 480);
+	assert.equal(res.docSeconds["doc-1"], 180);
+	assert.equal(res.docSeconds["doc-2"], 300);
+});

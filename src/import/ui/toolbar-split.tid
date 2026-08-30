@@ -1,6 +1,5 @@
 caption: {{$:/language/tidme/split}}
 description: {{$:/language/tidme/splittip}}
-tags: $:/tags/ViewToolbar
 title: $:/plugins/tidme/import/ui/toolbar/split
 
 \whitespace trim

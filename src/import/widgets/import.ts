@@ -31,16 +31,22 @@ function cacheResult(result: ImportResult): string {
 }
 const RESULT_TTL_MS = 30 * 60 * 1000;
 
-function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: string } {
+function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: string; semanticSplitCfg?: any } {
 	const num = (t: string) => {
 		const v = parseInt(wiki.getTiddlerText(t, "").trim(), 10);
 		return Number.isFinite(v) && v > 0 ? v : undefined;
 	};
 	const bag = (wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "").trim();
+	let semanticSplitCfg: any = null;
+	try {
+		const raw = wiki.getTiddlerText("$:/config/Tidme/SemanticSplit", "");
+		if (raw) semanticSplitCfg = JSON.parse(raw);
+	} catch {}
 	return {
 		maxChars: num("$:/temp/tidme-import/max"),
 		minChars: num("$:/temp/tidme-import/min"),
-		bag: bag || "default" // TiddlyWeb server 版同步目标桶
+		bag: bag || "default", // TiddlyWeb server 版同步目标桶
+		semanticSplitCfg
 	};
 }
 
@@ -62,8 +68,72 @@ function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElemen
 	return e;
 }
 
-/** 单本书的预览卡片（P1）：标题行 + 状态 + 树形目录大纲 */
-function buildRow(doc: Document, token: string, resultOrErr: { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean }): HTMLElement {
+function getSemanticSplitConfig(wiki: any): any {
+	const t = wiki.getTiddler("$:/config/Tidme/SemanticSplit");
+	if (!t) return {};
+	let cfg: any = {};
+	if (t.fields.text) {
+		try { cfg = JSON.parse(t.fields.text); } catch {}
+	}
+	if (t.fields.apiKey) cfg.apiKey = String(t.fields.apiKey).trim();
+	if (t.fields.baseUrl) cfg.baseUrl = String(t.fields.baseUrl).trim();
+	if (t.fields.model) cfg.model = String(t.fields.model).trim();
+	return cfg;
+}
+
+/** 纯 LLM 语义二次切分：严格基于原文字符偏移切割，确保 100% 字数完整性 */
+async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any): Promise<boolean> {
+	const aiCfg = getSemanticSplitConfig(wiki);
+	if (!aiCfg.apiKey) {
+		alert("请先在【控制面板 ➔ Tidme Import ➔ 配置】中输入并保存 API Key，然后再执行二次切分！");
+		return false;
+	}
+
+	const sem = require("$:/plugins/tidme/core/server/semantic-split");
+	const origText = String(tiddler.text || "").trim();
+	const subChunks: Array<{ title: string; text: string; chars: number }> = await sem.splitSectionText(origText, aiCfg);
+	if (!subChunks || subChunks.length <= 1) return false;
+
+	// 100% 字数与原文完整性校验
+	const sumChars = subChunks.reduce((n, c) => n + c.text.length, 0);
+	const ratio = sumChars / (origText.length || 1);
+	if (ratio < 0.95 || ratio > 1.05) {
+		alert(`[二次切分校验失败] 切分后字数 (${sumChars}) 与原文 (${origText.length}) 偏差过大，已自动拦截以保护原文完整性。`);
+		return false;
+	}
+
+	const path = String(tiddler["tidme.breadcrumb"] || tiddler.caption || tiddler.title || "");
+	const parts = path.split(" › ");
+	const rawShort = (parts.pop() || path).replace(/ \(\d+\)$/, "");
+	const baseBreadcrumb = parts.length ? parts.join(" › ") : r.bookTitle;
+
+	const newTiddlers = subChunks.map((chunk, idx) => {
+		const subCap = `${rawShort} (${chunk.title || (idx + 1)})`;
+		const subTitle = `${r.bookTitle} › ${subCap}`;
+		return {
+			...tiddler,
+			title: subTitle,
+			caption: subCap,
+			text: chunk.text,
+			"tidme.breadcrumb": `${baseBreadcrumb} › ${subCap}`,
+			_renamed: true
+		};
+	});
+
+	const realIdx = r.tiddlers.indexOf(tiddler);
+	if (realIdx >= 0) {
+		r.tiddlers.splice(realIdx, 1, ...newTiddlers);
+	}
+	return true;
+}
+
+/** 单本书的预览卡片（P1）：标题行 + 状态 + 可在线微调大纲（改短/删/增） */
+function buildRow(
+	doc: Document,
+	token: string,
+	resultOrErr: { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean },
+	wiki: any
+): HTMLElement {
 	const card = el(doc, "div", "tm-import-file-card");
 	const err = resultOrErr.error;
 	if (err) {
@@ -74,42 +144,206 @@ function buildRow(doc: Document, token: string, resultOrErr: { result?: ImportRe
 		return card;
 	}
 	const r = resultOrErr.result!;
+
 	// 标题行：书名 + 格式徽章 + 统计
 	const head = el(doc, "div", "tm-import-file-head");
 	const title = el(doc, "span", "tm-import-file-title", r.bookTitle);
 	head.appendChild(title);
 	head.appendChild(el(doc, "span", "tm-import-file-badge", r.format));
-	head.appendChild(el(doc, "span", "tm-import-file-meta",
-		`${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? " · 标题去重 " + r.warnings.length : ""}`));
+	const metaSpan = el(doc, "span", "tm-import-file-meta",
+		`${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? " · 标题去重 " + r.warnings.length : ""}`);
+	head.appendChild(metaSpan);
 	card.appendChild(head);
 
 	if (resultOrErr.duplicate) {
 		card.appendChild(el(doc, "div", "tm-import-dup", "⚠ 本书已在库中 —— 再次导入将走对齐（未变节保留 SRS 进度）"));
 	}
 
-	// 树形目录大纲（P1：缩进引导线替代 <pre>）
-	const crumbs = r.tiddlers
-		.filter((t) => Array.isArray(t.tags) && t.tags.includes("?"))
-		.map((t) => ({
-			path: String(t["tidme.breadcrumb"] || ""),
-			merged: t["tidme.merged"] === "yes",
-			level: Math.max(0, String(t["tidme.breadcrumb"] || "").split(" › ").length - 2)
-		}));
-	if (crumbs.length) {
-		const details = el(doc, "details", "tm-import-outline");
-		details.appendChild(el(doc, "summary", "tm-import-muted",
-			`目录大纲（共 ${crumbs.length} 条）`));
+	// 树形目录大纲（全套在线增、删、改、改短）
+	const details = el(doc, "details", "tm-import-outline");
+	const summaryEl = el(doc, "summary", "tm-import-muted", `目录大纲（共 ${r.sectionCount} 条）`);
+	details.appendChild(summaryEl);
+
+	const outlineBox = el(doc, "div", "tm-import-tree-box", "");
+	details.appendChild(outlineBox);
+	card.appendChild(details);
+
+	let activeEditTitleIndex: number | null = null;
+	let activeAddIndex: number | null = null;
+
+	const makeAddForm = (insertAfterIdx: number) => {
+		const form = el(doc, "div", "tm-split-add-form");
+		const titleIn = doc.createElement("input");
+		titleIn.className = "tm-input";
+		titleIn.placeholder = "新节标题（如：01 前言 / 短标题）";
+		const textIn = doc.createElement("textarea");
+		textIn.className = "tm-input";
+		textIn.placeholder = "内容...";
+		textIn.rows = 2;
+		const confirmBtn = el(doc, "button", "tm-btn tm-btn-primary tm-btn-sm", "确认插入");
+		confirmBtn.onclick = () => {
+			const tVal = titleIn.value.trim();
+			const cVal = textIn.value.trim();
+			if (tVal && cVal) {
+				const newTiddler = {
+					title: `${r.bookTitle} › ${tVal}`,
+					caption: tVal,
+					text: cVal,
+					tags: ["?"],
+					"tidme.doc": r.docId,
+					"tidme.kind": "section",
+					"tidme.breadcrumb": `${r.bookTitle} › ${tVal}`
+				};
+				if (insertAfterIdx === -1) {
+					r.tiddlers.splice(1, 0, newTiddler);
+				} else {
+					const sectionCards = r.tiddlers.filter((t) => Array.isArray(t.tags) && t.tags.includes("?"));
+					const targetCard = sectionCards[insertAfterIdx];
+					const realIdx = r.tiddlers.indexOf(targetCard);
+					if (realIdx >= 0) r.tiddlers.splice(realIdx + 1, 0, newTiddler);
+					else r.tiddlers.push(newTiddler);
+				}
+				activeAddIndex = null;
+				renderTree();
+			}
+		};
+		const cancelBtn = el(doc, "button", "tm-btn tm-btn-sm", "取消");
+		cancelBtn.onclick = () => { activeAddIndex = null; renderTree(); };
+		form.appendChild(titleIn);
+		form.appendChild(textIn);
+		form.appendChild(confirmBtn);
+		form.appendChild(cancelBtn);
+		return form;
+	};
+
+	const renderTree = () => {
+		outlineBox.textContent = "";
+		const cardTiddlers = r.tiddlers.filter((t) => Array.isArray(t.tags) && t.tags.includes("?") && !t._deleted);
+		r.sectionCount = cardTiddlers.length;
+		metaSpan.textContent = `${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? " · 标题去重 " + r.warnings.length : ""}`;
+
+		const allSections = r.tiddlers.filter((t) => Array.isArray(t.tags) && t.tags.includes("?"));
+		summaryEl.textContent = `目录大纲（按目录分节共 ${allSections.length} 条 · 可二次切分偏长章节）`;
+
+		// 顶部工具栏：一键提炼短标题
+		const toolRow = el(doc, "div", "tm-import-actions", "");
+		const cleanBtn = el(doc, "button", "tm-btn tm-btn-sm", "✨ 一键提炼短标题");
+		cleanBtn.title = "自动剔除副标题（冒号/破折号后）与括号内营销/描述说明";
+		cleanBtn.onclick = () => {
+			const cleanTitleFn = pipeline.cleanTitle || ((x: string) => x);
+			for (const t of allSections) {
+				const path = String(t["tidme.breadcrumb"] || t.caption || t.title || "");
+				const parts = path.split(" › ");
+				const rawShort = parts.pop() || path;
+				const cleaned = cleanTitleFn(rawShort);
+				if (cleaned && cleaned !== rawShort) {
+					parts.push(cleaned);
+					t["tidme.breadcrumb"] = parts.join(" › ");
+					t.caption = cleaned;
+					t.title = (parts[0] || r.bookTitle) + " › " + cleaned;
+					t._renamed = true;
+				}
+			}
+			renderTree();
+		};
+		toolRow.appendChild(cleanBtn);
+		outlineBox.appendChild(toolRow);
+
 		const tree = el(doc, "div", "tm-import-tree", "");
-		for (const c of crumbs) {
-			const line = el(doc, "div", "tm-import-tree-row" + (c.merged ? " tm-import-tree-merged" : ""));
-			line.style.paddingLeft = `${c.level * 1.1}em`;
-			line.appendChild(el(doc, "span", "tm-import-tree-text", c.path.split(" › ").pop() || c.path));
-			if (c.merged) line.appendChild(el(doc, "span", "tm-import-tree-mark", "⟵ 已并入"));
+		allSections.forEach((t, idx) => {
+			const path = String(t["tidme.breadcrumb"] || t.caption || t.title || "");
+			const parts = path.split(" › ");
+			const shortTitle = parts.pop() || path;
+			const level = Math.max(0, parts.length - 1);
+			const isMerged = t["tidme.merged"] === "yes";
+			const isDeleted = !!t._deleted;
+			const isRenamed = !!t._renamed;
+			const charCount = String(t.text || "").length;
+			const isOverlong = charCount >= 10000;
+
+			const rowCls = "tm-import-tree-row"
+				+ (isMerged ? " tm-import-tree-merged" : "")
+				+ (isDeleted ? " tm-split-row-deleted" : "")
+				+ (isRenamed ? " tm-split-row-renamed" : "");
+			const line = el(doc, "div", rowCls);
+			line.style.paddingLeft = `${level * 1.1}em`;
+
+			// 状态与字数标记（字数 >= 10,000 字呈现偏长预警）
+			if (isMerged) line.appendChild(el(doc, "span", "tm-import-tree-mark", "⟵ 已并入"));
+			if (isRenamed) line.appendChild(el(doc, "span", "tm-split-done", "✏️ 短标题"));
+			const charBadgeCls = "tm-import-tree-mark" + (isOverlong ? " tm-split-chars-warn" : "");
+			line.appendChild(el(doc, "span", charBadgeCls, `${charCount} 字${isOverlong ? " ⚠️偏长" : ""}`));
+
+			// 标题编辑/显示
+			if (activeEditTitleIndex === idx) {
+				const editIn = doc.createElement("input");
+				editIn.className = "tm-split-title-input";
+				editIn.value = shortTitle;
+				const confirmBtn = el(doc, "button", "tm-btn tm-btn-sm", "✔ 保存");
+				confirmBtn.onclick = () => {
+					const newShort = editIn.value.trim();
+					if (newShort && newShort !== shortTitle) {
+						parts.push(newShort);
+						const newPath = parts.join(" › ");
+						t["tidme.breadcrumb"] = newPath;
+						t.caption = newShort;
+						t.title = (parts[0] || r.bookTitle) + " › " + newShort;
+						t._renamed = true;
+					}
+					activeEditTitleIndex = null;
+					renderTree();
+				};
+				line.appendChild(editIn);
+				line.appendChild(confirmBtn);
+			} else {
+				const textSpan = el(doc, "span", "tm-import-tree-text", shortTitle);
+				textSpan.title = "双击可编辑标题";
+				textSpan.ondblclick = () => { activeEditTitleIndex = idx; renderTree(); };
+				line.appendChild(textSpan);
+			}
+
+			// 核心操作：针对偏长章节（>= 1万字）的“✂️ 二次切分”
+			if (isOverlong || charCount >= 10000) {
+				const subSplitBtn = el(doc, "button", "tm-btn tm-btn-sm tm-btn-primary", "✂️ 二次切分");
+				subSplitBtn.title = "使用 LLM 语义分析将本偏长章节切分为带主题的子切片";
+				subSplitBtn.onclick = async () => {
+					subSplitBtn.textContent = "🤖 LLM 切片中...";
+					subSplitBtn.setAttribute("disabled", "true");
+					try {
+						const ok = await subSplitTiddlerWithLLM(t, r, wiki);
+						if (ok) renderTree();
+						else {
+							subSplitBtn.textContent = "✂️ 二次切分";
+							subSplitBtn.removeAttribute("disabled");
+						}
+					} catch (e: any) {
+						alert("LLM 二次切分失败: " + (e && e.message || e));
+						subSplitBtn.textContent = "✂️ 二次切分";
+						subSplitBtn.removeAttribute("disabled");
+					}
+				};
+				line.appendChild(subSplitBtn);
+			}
+
+			// 辅助操作：移除 / 恢复
+			if (isDeleted) {
+				const restoreBtn = el(doc, "button", "tm-btn tm-btn-icon", "↩ 恢复");
+				restoreBtn.onclick = () => { delete t._deleted; renderTree(); };
+				line.appendChild(restoreBtn);
+			} else {
+				const delBtn = el(doc, "button", "tm-btn tm-btn-icon", "🗑 移除");
+				delBtn.onclick = () => { t._deleted = true; renderTree(); };
+				line.appendChild(delBtn);
+			}
+
 			tree.appendChild(line);
-		}
-		details.appendChild(tree);
-		card.appendChild(details);
-	}
+		});
+
+		outlineBox.appendChild(tree);
+	};
+
+	renderTree();
+
 	card.dataset.token = token;
 	return card;
 }
@@ -125,7 +359,7 @@ function makeFileWidget(): WidgetCtor {
 			const wrap = el(doc, "div", "tm-import-widget");
 
 			// 选择文件上传按钮与说明
-			const btnSelect = el(doc, "button", "tm-btn tm-btn-primary tm-import-select-btn", "选择文件上传 (.epub / .md / .txt)");
+			const btnSelect = el(doc, "button", "tm-btn tm-btn--primary tm-import-select-btn", "选择文件上传 (.epub / .md / .txt)");
 			const input = doc.createElement("input");
 			input.type = "file";
 			input.multiple = true;
@@ -201,7 +435,8 @@ function makeFileWidget(): WidgetCtor {
 			// A：落库单个解析结果。同 docId 已有旧卡 → alignCards 增量（未变保 SRS 进度 /
 			// 修改重挂接 / 新增建卡 / 删除归档），否则全量写库。返回 { created, updated, archived }。
 			const commitResult = async (result: ImportResult): Promise<{ created: number; updated: number; archived: number }> => {
-				const [doc, ...cards] = result.tiddlers;
+				const validTiddlers = result.tiddlers.filter((x: any) => !x._deleted);
+				const [doc, ...cards] = validTiddlers;
 				const sectionCards = cards.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
 				const align = require("$:/plugins/tidme/core/align.js");
 				const docPage = this.wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${result.docId}]]`)[0] || "";
@@ -250,7 +485,7 @@ function makeFileWidget(): WidgetCtor {
 				}
 				// 重绘预览区
 				rowsBox.textContent = "";
-				for (const [token, item] of pending) rowsBox.appendChild(buildRow(doc, token, item));
+				for (const [token, item] of pending) rowsBox.appendChild(buildRow(doc, token, item, this.wiki));
 				refreshActions();
 				this.wiki.addTiddler({ title: "$:/temp/tidme-import/last-created", text: String(created) });
 				events.dispatch(this, events.EVENTS.IMPORT_DONE, { token: "", docId: "", bookTitle: "" });
@@ -294,10 +529,10 @@ function makeFileWidget(): WidgetCtor {
 						const token = cacheResult(result);
 						totalSections += result.sectionCount;
 						pending.set(token, { result, fileName: file.name, duplicate: existing > 0 });
-						rowsBox.appendChild(buildRow(doc, token, { result, fileName: file.name, duplicate: existing > 0 }));
+						rowsBox.appendChild(buildRow(doc, token, { result, fileName: file.name, duplicate: existing > 0 }, this.wiki));
 					} catch (err: any) {
 						console.error("[tidme-import] 解析失败:", file.name, err);
-						rowsBox.appendChild(buildRow(doc, "e" + Date.now().toString(36), { error: String(err.message || err), fileName: file.name }));
+						rowsBox.appendChild(buildRow(doc, "e" + Date.now().toString(36), { error: String(err.message || err), fileName: file.name }, this.wiki));
 					}
 				}
 				// 漏斗摘要（P1 措辞：已安全存档，随时可学）

@@ -131,18 +131,30 @@ function makeSplitTool(): WidgetCtor {
 			let parsed: any = null;
 			let busy = false;
 			let priorityTier: "high" | "medium" | "low" = "medium";
-			// G1 干预指令（trail key 集合；重切分后 key 稳定不漂移）
-			const overrides = { merge: new Set<string>(), split: new Set<string>() };
+			let activeEditKey: string | null = null;
+			let activeAddAfterKey: string | null = null;
+
+			// G1 干预与大纲编辑器指令
+			const overrides = {
+				merge: new Set<string>(),
+				split: new Set<string>(),
+				delete: new Set<string>(),
+				titles: new Map<string, string>(),
+				customSections: [] as Array<{ title: string; text: string; insertAfterKey?: string }>
+			};
+
 			const status = el(doc, "div", "tm-import-muted", "解析中…");
 			const previewBox = el(doc, "div", "tm-split-preview", "");
 			const actions = el(doc, "div", "tm-import-actions", "");
 
-			// 优先级三档（M4）：高/中/低 → tierRandom 区间随机分散
+
+
+			// 优先级三档（M4）与大纲重置控制
 			const prioRow = el(doc, "div", "tm-import-actions", "");
 			prioRow.appendChild(el(doc, "span", "tm-import-muted", "优先级："));
 			const prioSel = doc.createElement("select");
 			prioSel.className = "tm-priority-select";
-			for (const [label, value] of [["高", "high"], ["中", "medium"], ["低", "low"]] as const) {
+			for (const [label, value] of [["高", "high"], ["medium", "medium"], ["低", "low"]] as const) {
 				const opt = doc.createElement("option");
 				opt.value = value;
 				opt.textContent = label;
@@ -154,19 +166,61 @@ function makeSplitTool(): WidgetCtor {
 				renderPreview();
 			});
 			prioRow.appendChild(prioSel);
+
+			const addTopBtn = el(doc, "button", "tm-btn tm-btn-sm", "➕ 顶部插入新节");
+			addTopBtn.addEventListener("click", () => {
+				activeAddAfterKey = "";
+				renderPreview();
+			});
+			prioRow.appendChild(addTopBtn);
+
+			const resetEditBtn = el(doc, "button", "tm-btn tm-btn-sm", "🔄 重置所有大纲修改");
+			resetEditBtn.addEventListener("click", () => {
+				overrides.merge.clear();
+				overrides.split.clear();
+				overrides.delete.clear();
+				overrides.titles.clear();
+				overrides.customSections = [];
+				activeEditKey = null;
+				activeAddAfterKey = null;
+				renderPreview();
+			});
+			prioRow.appendChild(resetEditBtn);
 			wrap.appendChild(prioRow);
 
 			const toOverrides = () => ({
 				merge: [...overrides.merge],
-				split: [...overrides.split]
+				split: [...overrides.split],
+				delete: [...overrides.delete],
+				titles: Object.fromEntries(overrides.titles),
+				customSections: overrides.customSections
 			});
 			const keyOf = (s: any) => String((s.trail || []).join(" › "));
 
 			const renderPreview = async () => {
 				try {
 					const sched = require("$:/plugins/tidme/core/scheduler.js");
+					let rawText = String(t.fields.text || "");
+					let semStats = "";
+
+					// 若开启 AI 智能切分配置，调用 semantic-split 服务预处理
+					let currAiCfg: any = {};
+					try { currAiCfg = JSON.parse(wiki.getTiddlerText("$:/config/Tidme/SemanticSplit", "{}") || "{}"); } catch {}
+					if (currAiCfg.enable && currAiCfg.apiKey) {
+						try {
+							const sem = require("$:/plugins/tidme/core/server/semantic-split.js");
+							const semRes = await sem.prepareText(rawText, currAiCfg);
+							if (semRes.virtual > 0) {
+								rawText = semRes.text;
+								semStats = ` · AI 插入 ${semRes.virtual} 个段落标题`;
+							}
+						} catch (e: any) {
+							semStats = ` · AI 切分未触发 (${e.message || e})`;
+						}
+					}
+
 					parsed = await pipeline.runSplit({
-						text: String(t.fields.text || ""),
+						text: rawText,
 						title,
 						type: t.fields.type,
 						sourceFields: provenanceOf(wiki, title),
@@ -175,35 +229,103 @@ function makeSplitTool(): WidgetCtor {
 					});
 					const sections = parsed.sections || [];
 					const cards = parsed.tiddlers.filter((x: any) => Array.isArray(x.tags) && x.tags.includes("?"));
-					status.textContent = `${cards.length} 节 · 硬切 ${parsed.stats.hardSplitCount} 块 · 文档 ID ${parsed.docId}` +
-						(overrides.merge.size || overrides.split.size ? " · 已应用干预" : "");
+					const editCount = overrides.merge.size + overrides.split.size + overrides.delete.size + overrides.titles.size + overrides.customSections.length;
+					status.textContent = `${cards.length} 节 · 硬切 ${parsed.stats.hardSplitCount} 块` + semStats +
+						(editCount > 0 ? ` · 已应用 ${editCount} 项大纲修改` : "");
 					previewBox.textContent = "";
 
-					// 逐节可操作预览（G1）
 					const listBox = el(doc, "div", "tm-split-list", "");
+
+					// 顶部新增节表单
+					if (activeAddAfterKey === "") {
+						const addForm = el(doc, "div", "tm-split-add-form");
+						const titleIn = doc.createElement("input");
+						titleIn.className = "tm-input";
+						titleIn.placeholder = "新节标题（如：01 前言）";
+						const textIn = doc.createElement("textarea");
+						textIn.className = "tm-input";
+						textIn.placeholder = "新节内容...";
+						textIn.rows = 2;
+						const confirmBtn = el(doc, "button", "tm-btn tm-btn-primary tm-btn-sm", "确认插入");
+						confirmBtn.addEventListener("click", () => {
+							if (titleIn.value.trim() && textIn.value.trim()) {
+								overrides.customSections.push({ title: titleIn.value.trim(), text: textIn.value.trim() });
+								activeAddAfterKey = null;
+								renderPreview();
+							}
+						});
+						const cancelBtn = el(doc, "button", "tm-btn tm-btn-sm", "取消");
+						cancelBtn.addEventListener("click", () => { activeAddAfterKey = null; renderPreview(); });
+						addForm.appendChild(titleIn);
+						addForm.appendChild(textIn);
+						addForm.appendChild(confirmBtn);
+						addForm.appendChild(cancelBtn);
+						listBox.appendChild(addForm);
+					}
+
+					// 逐节预览与增删改改短大纲编辑器
 					sections.forEach((s: any, idx: number) => {
 						const key = keyOf(s);
 						const parts: any[] = s.parts || [];
 						const isContainer = s.merged === true && parts.length > 1;
 						const splittable = parts.findIndex((p, i) => i > 0 && p.title) > 0;
-						// 状态类（P1：合并灰 / 续段橙 / 干预蓝）
+						const isDeleted = overrides.delete.has(key);
+						const isRenamed = overrides.titles.has(key);
+
 						const cls = "tm-split-row"
 							+ (isContainer ? " tm-split-row-merged" : "")
 							+ (s.isContinuation ? " tm-split-row-cont" : "")
-							+ (overrides.merge.has(key) || overrides.split.has(key) ? " tm-split-row-tuned" : "");
+							+ (isRenamed ? " tm-split-row-renamed" : "")
+							+ (isDeleted ? " tm-split-row-deleted" : "");
 						const row = el(doc, "div", cls);
 						const depth = Math.max(0, (s.trail || []).length - 1);
 						row.style.paddingLeft = `${depth * 1.1}em`;
+
 						// 状态徽章
 						const mark = isContainer ? "⟵ 并入" : s.isContinuation ? "续" : "新";
 						row.appendChild(el(doc, "span", "tm-split-mark", mark));
+
 						// 干预状态
 						if (overrides.merge.has(key)) row.appendChild(el(doc, "span", "tm-split-done", "⇈ 已并入"));
 						if (overrides.split.has(key)) row.appendChild(el(doc, "span", "tm-split-done", "⇊ 已拆分"));
-						// 标题
-						row.appendChild(el(doc, "span", "tm-split-title",
-							String(s.title || (s.trail || []).slice(-1)[0] || "") + (s.chars ? `（${s.chars} 字）` : "")));
-						// 干预按钮
+						if (isRenamed) row.appendChild(el(doc, "span", "tm-split-done", "✏️ 已改短"));
+
+						// 标题栏：可内联编辑/改短
+						if (activeEditKey === key) {
+							const editInput = doc.createElement("input");
+							editInput.className = "tm-split-title-input";
+							editInput.value = s.title || "";
+							const saveTitleBtn = el(doc, "button", "tm-btn tm-btn-sm", "✔");
+							saveTitleBtn.addEventListener("click", () => {
+								const val = editInput.value.trim();
+								if (val && val !== s.title) {
+									overrides.titles.set(key, val);
+								} else if (!val) {
+									overrides.titles.delete(key);
+								}
+								activeEditKey = null;
+								renderPreview();
+							});
+							row.appendChild(editInput);
+							row.appendChild(saveTitleBtn);
+						} else {
+							const titleSpan = el(doc, "span", "tm-split-title",
+								String(s.title || (s.trail || []).slice(-1)[0] || "") + (s.chars ? `（${s.chars} 字）` : ""));
+							titleSpan.title = "双击改短/重命名标题";
+							titleSpan.addEventListener("dblclick", () => {
+								activeEditKey = key;
+								renderPreview();
+							});
+							row.appendChild(titleSpan);
+
+							// 改短/重命名按钮
+							row.appendChild(opBtn("✏️ 改短", () => {
+								activeEditKey = key;
+								renderPreview();
+							}));
+						}
+
+						// 干预按钮：合并/拆分
 						if (idx > 0) {
 							if (overrides.merge.has(key)) {
 								row.appendChild(opBtn("↩ 撤销合并", () => { overrides.merge.delete(key); renderPreview(); }));
@@ -218,8 +340,49 @@ function makeSplitTool(): WidgetCtor {
 								row.appendChild(opBtn("⇊ 从此拆分", () => { overrides.split.add(key); renderPreview(); }));
 							}
 						}
+
+						// 删除与新增按钮
+						if (isDeleted) {
+							row.appendChild(opBtn("↩ 恢复此节", () => { overrides.delete.delete(key); renderPreview(); }));
+						} else {
+							row.appendChild(opBtn("🗑 移除", () => { overrides.delete.add(key); renderPreview(); }));
+						}
+
+						row.appendChild(opBtn("➕ 插入新节", () => {
+							activeAddAfterKey = activeAddAfterKey === key ? null : key;
+							renderPreview();
+						}));
+
 						listBox.appendChild(row);
+
+						// 插入新节内联表单
+						if (activeAddAfterKey === key) {
+							const addForm = el(doc, "div", "tm-split-add-form");
+							const titleIn = doc.createElement("input");
+							titleIn.className = "tm-input";
+							titleIn.placeholder = "插入节标题...";
+							const textIn = doc.createElement("textarea");
+							textIn.className = "tm-input";
+							textIn.placeholder = "内容...";
+							textIn.rows = 2;
+							const confirmBtn = el(doc, "button", "tm-btn tm-btn-primary tm-btn-sm", "确认插入");
+							confirmBtn.addEventListener("click", () => {
+								if (titleIn.value.trim() && textIn.value.trim()) {
+									overrides.customSections.push({ title: titleIn.value.trim(), text: textIn.value.trim(), insertAfterKey: key });
+									activeAddAfterKey = null;
+									renderPreview();
+								}
+							});
+							const cancelBtn = el(doc, "button", "tm-btn tm-btn-sm", "取消");
+							cancelBtn.addEventListener("click", () => { activeAddAfterKey = null; renderPreview(); });
+							addForm.appendChild(titleIn);
+							addForm.appendChild(textIn);
+							addForm.appendChild(confirmBtn);
+							addForm.appendChild(cancelBtn);
+							listBox.appendChild(addForm);
+						}
 					});
+
 					previewBox.appendChild(listBox);
 					for (const w of parsed.warnings) {
 						previewBox.appendChild(el(doc, "div", "tm-import-muted", "⚠ " + w));

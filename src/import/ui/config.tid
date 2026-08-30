@@ -1,0 +1,16 @@
+title: $:/plugins/tidme/import/config
+caption: 配置
+
+!! 🤖 AI 智能语义切分设置
+
+针对无标题散文/文档及长章节【✂️ 二次切分】，配置 OpenAI / OpenRouter / DeepSeek 兼容的 LLM 模型服务：
+
+<$edit-text tiddler="$:/config/Tidme/SemanticSplit" field="apiKey" tag="input" type="password" class="tm-input" placeholder="API Key (sk-...)" style="width:100%;margin-bottom:8px;"/>
+
+<$edit-text tiddler="$:/config/Tidme/SemanticSplit" field="baseUrl" tag="input" type="text" class="tm-input" placeholder="Base URL (默认: https://api.openai.com/v1)" style="width:100%;margin-bottom:8px;"/>
+
+<$edit-text tiddler="$:/config/Tidme/SemanticSplit" field="model" tag="input" type="text" class="tm-input" placeholder="Model (默认: gpt-4o-mini / deepseek-chat)" style="width:100%;margin-bottom:8px;"/>
+
+<div class="tm-import-muted" style="margin-top:8px;">
+提示：在控制面板或插件设置页保存的参数将实时生效，供【导入中心】与【✂️ 二次切分】按钮自动调用。
+</div>

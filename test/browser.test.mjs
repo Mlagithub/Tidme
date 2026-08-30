@@ -169,10 +169,100 @@ test("card-manager: 渲染视图过滤/树/批量工具条", () => {
 	const text = collectText(root);
 	assert.ok(text.includes("全部"), "应有视图过滤");
 	assert.ok(text.includes("顺延7d"), "应有批量操作");
+	assert.ok(text.includes("顺延过载"), "应有顺延过载按钮");
 	assert.ok(text.includes("优先↑") && text.includes("设高"), "G3 批量优先级操作");
 	assert.ok(text.includes("书名甲"), "应含文档");
 	assert.ok(text.includes("小节乙"), "应含节");
 });
+
+test("scheduler: 优先级混合队列排序 sortPriorityMixedQueue", () => {
+	const sched = tw.modules.execute("$:/plugins/tidme/core/scheduler.js");
+	const c1 = { title: "高优先远到期", fields: { "tidme.priority": "10", due: "20260101000000000" } };
+	const c2 = { title: "低优先近逾期", fields: { "tidme.priority": "80", due: "20260105000000000" } };
+	const cards = [c2, c1];
+
+	const pf = sched.sortPriorityMixedQueue(cards, "priority-first");
+	assert.equal(pf[0].title, "高优先远到期", "priority-first 应先按优先级");
+
+	const df = sched.sortPriorityMixedQueue(cards, "due-first");
+	assert.equal(df[0].title, "高优先远到期", "due-first 按到期时间");
+
+	const hb = sched.sortPriorityMixedQueue(cards, "hybrid");
+	assert.ok(hb.length === 2, "hybrid 模式正常排序");
+});
+
+test("scheduler: 过载自动顺延 autoPostpone 门槛触发", () => {
+	const sched = tw.modules.execute("$:/plugins/tidme/core/scheduler.js");
+	const overdueCards = [
+		{ title: "卡1", fields: { due: "20200101000000000", tags: ["?"], "tidme.priority": "80" } },
+		{ title: "卡2", fields: { due: "20200101000000000", tags: ["?"], "tidme.priority": "70" } }
+	];
+	// 当 maxOverdueThreshold = 5 时，未达到 5 张逾期，不触发顺延
+	const resUnder = sched.autoPostpone(overdueCards, { maxOverdueThreshold: 5 });
+	assert.equal(resUnder.patches.length, 0, "未超阈值不发生顺延");
+
+	// 当 maxOverdueThreshold = 1 时，超过阈值，触发顺延
+	const resOver = sched.autoPostpone(overdueCards, { maxOverdueThreshold: 1, keepTop: 1, maxPriority: 60 });
+	assert.equal(resOver.patches.length, 1, "超阈值顺延 1 张卡");
+});
+
+test("pipeline: 大纲干预编辑器 applyOverrides（改短/删/增）", () => {
+	const pipeline = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const chunker = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const rawSections = [
+		{ level: 1, title: "超级无敌非常长的一个原章节名称用于测试改短", trail: ["超级无敌非常长的一个原章节名称用于测试改短"], html: "<p>1</p>", text: "1", chars: 1, ordinal: 1 },
+		{ level: 1, title: "待删除噪音卡", trail: ["待删除噪音卡"], html: "<p>2</p>", text: "2", chars: 1, ordinal: 2 }
+	];
+	const overrides = {
+		titles: { "超级无敌非常长的一个原章节名称用于测试改短": "短标题甲" },
+		delete: ["待删除噪音卡"],
+		customSections: [{ title: "手动新增卡", text: "手动内容", insertAfterKey: "短标题甲" }]
+	};
+	const res = pipeline.applyOverrides(rawSections, overrides);
+	assert.equal(res.length, 2, "删除1节+新增1节后总节数不变");
+	assert.equal(res[0].title, "短标题甲", "标题被成功改短");
+	assert.equal(res[1].title, "手动新增卡", "成功插入手动新增卡");
+});
+
+test("pipeline: cleanTitle 剔除冗余副标题与括号说明", () => {
+	const pipeline = tw.modules.execute("$:/plugins/tidme/import/pipeline.js");
+	const rawTitle = "批判性思维与说服性写作：独立思考者的精进技巧（通过25种思维练习、30项写作训练，让你更具备思辨力和创造性, 实现独立思考和写作精进）";
+	const cleaned = pipeline.cleanTitle(rawTitle);
+	assert.equal(cleaned, "批判性思维与说服性写作", "成功剥离副标题与括号营销说明");
+});
+
+test("server: splitSectionText LLM 二次切片且 100% 保持字数完全相同", async () => {
+	const sem = tw.modules.execute("$:/plugins/tidme/core/server/semantic-split");
+	const sampleText = "第一段正文内容用来测试字符偏移定位。\n\n第二段正文分析实验结果。\n\n第三段正文给出分析结论。";
+	const mockHttp = async () => ({
+		status: 200,
+		data: JSON.stringify({
+			choices: [{ message: { content: '[{"breakIndex": 0, "title": "概论"}, {"breakIndex": 1, "title": "实验"}, {"breakIndex": 2, "title": "结论"}]' } }]
+		})
+	});
+	const chunks = await sem.splitSectionText(sampleText, { enable: true, apiKey: "test" }, mockHttp);
+	assert.equal(chunks.length, 3, "成功切分为 3 个带语义标题子卡");
+	const sumChars = chunks.reduce((n, c) => n + c.text.length, 0);
+	assert.equal(sumChars, sampleText.length, "切分前后字数 100% 完全一致（0 字损耗）");
+});
+
+function collectElementsByClass(node, className, out = []) {
+	if (!node) return out;
+	if (node.className && String(node.className).includes(className)) out.push(node);
+	for (const c of node.childNodes || []) collectElementsByClass(c, className, out);
+	return out;
+}
+
+test("card-manager: 批量选择交互与全选", () => {
+	const root = renderWidget(cardManager, "card-manager");
+	const groupCbs = collectElementsByClass(root, "tm-cm-group-cb");
+	assert.ok(groupCbs.length > 0, "应渲染分组/全选复选框");
+
+	const text = collectText(root);
+	assert.ok(text.includes("已选"), "已选信息应在工具条展示");
+});
+
+
 
 test("card-manager: Done 语义（去 ? 和 . + tidme.done）与恢复", () => {
 	const done = cardManager.doneFields({ title: "节", tags: ["?", "."], state: "0" });
