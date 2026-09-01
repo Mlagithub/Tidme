@@ -123,10 +123,10 @@ for (let round = 1; round <= 6; round++) {
 	const list = startstudy();
 	const card = Array.isArray(list) ? list[0] : list;
 	if (!card) { console.log(`第${round}轮 队列已空 ✅`); break; }
-	seen.push(String(card));
 	try {
 		const r = grade(card, "Good");
 		const ok = r.state !== undefined && r.state !== "0";
+		seen.push({ title: String(card), state: r.state });
 		console.log(`第${round}轮 → ${String(card).slice(0, 40)} | state=${r.state} due=${r.due} ${ok ? "✅" : "❌ 评分未写入"}`);
 		if (!ok) fail++;
 	} catch (e) {
@@ -134,10 +134,16 @@ for (let round = 1; round <= 6; round++) {
 		fail++;
 	}
 }
-const uniq = new Set(seen);
-const advanced = seen.length > 1 && uniq.size === seen.length;
-console.log("出现过的卡片:", JSON.stringify(seen));
-console.log(advanced ? "✅ 每轮都是不同卡片（队列推进）" : "⚠ 存在重复出现的卡片（队列未推进）");
+// FSRS 学习中（state 1/3）的卡会在学习步复现一次（新卡 Good → Learning → Review）；
+// 正确的不变量：进入复习（state 2）后的卡不应再次出现。
+const byTitle = {};
+let advanced = true;
+for (const e of seen) {
+	if (byTitle[e.title] === "2") { advanced = false; break; }
+	byTitle[e.title] = e.state;
+}
+console.log("出现过的卡片:", JSON.stringify(seen.map((e) => e.title)));
+console.log(advanced ? "✅ 队列推进正常（学习中卡可复现，复习卡不再重复）" : "⚠ 已进入复习的卡重复出现（队列未推进）");
 if (!advanced) fail++;
 
 fs.rmSync(tmp, { recursive: true, force: true });

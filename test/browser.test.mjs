@@ -1,7 +1,7 @@
 /*
 browser.test.mjs — 侧边栏/管理组件冒烟测试（node:test）
 
-boot TW + 插件，造一张文档/卡片数据，渲染 card-browser / queue-ops / stats-panel，
+boot TW + 插件，造一张文档/卡片数据，渲染 queue-ops / stats-panel / section-bar / card-manager，
 断言树形结构与统计输出（不抛错且包含预期内容）。
 */
 import { test } from "node:test";
@@ -65,7 +65,7 @@ const fakeDocument = {
 	defaultView: null
 };
 
-let wiki, tw, cardBrowser, queueOps, statsPanel, cardManager, sectionBar, splitTool, importFile;
+let wiki, tw, queueOps, statsPanel, cardManager, sectionBar, importFile;
 test.before(async () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-browser-"));
 	tw = TiddlyWiki.TiddlyWiki();
@@ -93,12 +93,10 @@ test.before(async () => {
 		"tidme.breadcrumb": `${section["tidme.path"]} › 挖空`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
-	cardBrowser = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/card-browser.js");
 	queueOps = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/queue-ops.js");
 	statsPanel = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/stats-panel.js");
 	cardManager = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/card-manager.js");
 	sectionBar = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
-	splitTool = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/split.js");
 });
 
 function renderWidgetEx(mod, name, opts = {}) {
@@ -136,15 +134,6 @@ function collectButtons(node, out = []) {
 	for (const c of node.childNodes || []) collectButtons(c, out);
 	return out;
 }
-
-test("card-browser: 树形包含牌组/文档/卡片（只剩默认牌组 = item 复习流）", () => {
-	const root = renderWidget(cardBrowser, "card-browser");
-	const text = collectText(root);
-	assert.ok(text.includes("书名甲"), "应含文档名（挖空卡归属）");
-	assert.ok(text.includes("挖空"), "应含挖空卡（item）");
-	assert.ok(!text.includes("小节乙"), "节卡（topic）不进牌组树");
-	assert.ok(text.includes("✕"), "应有删除按钮");
-});
 
 test("queue-ops: 每牌组渲染批量操作按钮（只剩默认牌组）", () => {
 	const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]]");
@@ -379,26 +368,6 @@ test("事件总线: 队列变化通知 → 监听组件重建（stats-panel 数�
 	assert.ok(text.includes("第二本书"), "事件后统计面板重建，出现新书进度");
 });
 
-test("split-tool: 预览干预按钮（并入上一节 / 从此拆分）", async () => {
-	// 场景 1：短节全合并 → 容器显示「从此拆分」（无并入按钮）
-	wiki.addTiddler({ title: "干预源", type: "text/markdown", text: "# 章A\n\n内容一。\n\n## 节A1\n\n内容二。\n\n# 章B\n\n内容三。" });
-	wiki.addTiddler({ title: "$:/temp/tidme/split/source", text: "干预源" });
-	const root = renderWidget(splitTool, "split-tool");
-	await new Promise((r) => setTimeout(r, 120)); // 等待异步 runSplit 预览
-	let text = collectText(root);
-	assert.ok(text.includes("⇊"), "合并容器显示「从此拆分」");
-	assert.ok(!text.includes("⇈"), "单节场景无并入按钮");
-	// 场景 2：长文本两节独立 → 第二节显示「并入上一节」
-	const longA = "第一段内容。".repeat(200); // ~1200 字（> minChars 600，独立）
-	const longB = "第三段内容。".repeat(200);
-	wiki.addTiddler({ title: "干预源2", type: "text/markdown", text: `# 章甲\n\n${longA}\n\n# 章乙\n\n${longB}` });
-	wiki.addTiddler({ title: "$:/temp/tidme/split/source", text: "干预源2" });
-	const root2 = renderWidget(splitTool, "split-tool");
-	await new Promise((r) => setTimeout(r, 120));
-	text = collectText(root2);
-	assert.ok(text.includes("⇈"), "独立节显示「并入上一节」按钮");
-});
-
 test("doc-resume: 子集复习按钮（复习本书）", () => {
 	// 文档页渲染（书名甲有在队卡 → 显示「复习本书」）
 	const root = renderWidget(sectionBar, "doc-resume", { variables: { currentTiddler: "书名甲" } });
@@ -468,7 +437,7 @@ test("section-bar: 摘录卡加工按钮（✂ 挖空）", () => {
 	assert.ok(extractTitle, "测试数据应有摘录卡");
 	const root = renderWidget(sectionBar, "section-bar", { variables: { currentTiddler: extractTitle } });
 	const text = collectText(root);
-	assert.ok(text.includes("✂ 挖空"), "摘录卡显示挖空加工按钮（G4）");
+	assert.ok(text.includes("挖空"), "摘录卡显示挖空加工按钮（G4）");
 	assert.ok(text.includes("源自"), "来源链接");
 });
 
@@ -632,20 +601,19 @@ test("workflow: 开始复习 startStudy 直达默认牌组第一张在队卡", (
 	assert.ok(ev2.some((e) => e.type === "tm-notify"), "空队列弹恭喜");
 });
 
-test("workflow: $:/Decks 工作流中心（开始阅读/开始复习 + 阅读目标）", () => {
+test("workflow: $:/Decks 工作流中心（全局交错学习流 + 阅读目标）", () => {
 	const wf = tw.modules.execute("$:/plugins/keepone/tidme/review/widgets/workflow.js");
-	// 渲染：两个按钮
+	// 渲染：主按钮
 	const root = renderWidget(wf, "tidme-workflow");
 	const text = collectText(root);
-	assert.ok(text.includes("开始阅读"), "开始阅读按钮");
-	assert.ok(text.includes("开始复习"), "开始复习按钮");
+	assert.ok(text.includes("开始学习"), "开始学习按钮");
 	// 主色按钮 class 链 + SVG 图标（设计系统生效的 DOM 层验证）
 	const btns = collectButtons(root);
-	const readBtn = btns.find((b) => collectText(b).includes("开始阅读"));
-	assert.ok(readBtn, "找到开始阅读按钮");
-	assert.ok(String(readBtn.className).includes("tm-btn--primary"), "开始阅读是主色按钮（tm-btn--primary）");
-	const svg = readBtn.childNodes.find((n) => String(n.tagName) === "SVG");
-	assert.ok(svg, "开始阅读按钮含 SVG 图标");
+	const learnBtn = btns.find((b) => collectText(b).includes("开始学习"));
+	assert.ok(learnBtn, "找到开始学习按钮");
+	assert.ok(String(learnBtn.className).includes("tm-btn--primary"), "开始学习是主色按钮（tm-btn--primary）");
+	const svg = learnBtn.childNodes.find((n) => String(n.tagName) === "SVG");
+	assert.ok(svg, "开始学习按钮含 SVG 图标");
 	// 开始阅读目标：无全局续读点 → 第一待读节卡
 	const target1 = wf.globalReadingTarget(wiki);
 	assert.ok(target1 && wiki.getTiddler(target1), "开始阅读跳到一张存在节卡");

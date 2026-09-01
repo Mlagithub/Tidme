@@ -13,7 +13,7 @@ export function el(doc: Document, tag: string, cls?: string, text?: string): HTM
 }
 
 export function escapeHtml(s: string): string {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 export function badgeOf(fields: Record<string, any>): { text: string; cls: string } {

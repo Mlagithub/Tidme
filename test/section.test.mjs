@@ -77,3 +77,33 @@ test("parseAnchor: 容错", () => {
 	assert.equal(a.section, "甲");
 	assert.equal(a.snippet, "乙");
 });
+
+test("processedSnippets: 收集本卡全部衍生卡 anchor 片段", () => {
+	wiki.addTiddler({ title: "书 › 第二章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第二章", "tidme.kind": "topic", "tidme.subkind": "section", text: "<p>地球平均表面温度可达 14 摄氏度。</p>" });
+	wiki.addTiddler({ title: "书 › 第二章 › 摘录", "tidme.parent": "书 › 第二章", "tidme.kind": "topic", "tidme.subkind": "extract", "tidme.anchor": JSON.stringify({ section: "书 › 第二章", snippet: "地球平均表面温度" }) });
+	wiki.addTiddler({ title: "书 › 第二章 › 挖空", "tidme.parent": "书 › 第二章", "tidme.kind": "item", "tidme.subkind": "cloze", "tidme.anchor": JSON.stringify({ section: "书 › 第二章", snippet: "14 摄氏度" }) });
+	wiki.addTiddler({ title: "无关卡", "tidme.kind": "topic" });
+	const snips = sectionMod.processedSnippets(wiki, "书 › 第二章");
+	assert.deepEqual([...snips].sort(), ["14 摄氏度", "地球平均表面温度"]);
+});
+
+test("cleanProcessedText: 删除已提取片段、保留其余、幂等", () => {
+	wiki.addTiddler({ title: "书 › 第三章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第三章", "tidme.kind": "topic", "tidme.subkind": "section", text: "<p>这句话包含 一个被摘录 的片段，后面还有内容。</p>" });
+	wiki.addTiddler({ title: "书 › 第三章 › 摘录", "tidme.parent": "书 › 第三章", "tidme.kind": "topic", "tidme.subkind": "extract", "tidme.anchor": JSON.stringify({ section: "书 › 第三章", snippet: "一个被摘录" }) });
+	const n = sectionMod.cleanProcessedText(wiki, "书 › 第三章");
+	assert.equal(n, 1);
+	const text = wiki.getTiddler("书 › 第三章").fields.text;
+	assert.ok(!text.includes("一个被摘录"), "片段已从原文删除");
+	assert.ok(text.includes("这句话包含") && text.includes("后面还有内容"), "其余内容保留");
+	// 幂等：片段已不在原文，再次执行不再删除
+	assert.equal(sectionMod.cleanProcessedText(wiki, "书 › 第三章"), 0);
+});
+
+test("cleanProcessedText: 整段被摘录后清理遗留空 <p>", () => {
+	wiki.addTiddler({ title: "书 › 第四章", "tidme.doc": "d12345678", "tidme.kind": "topic", "tidme.subkind": "section", text: "<p>整段被摘录的内容。</p>\n<p>保留段。</p>" });
+	wiki.addTiddler({ title: "书 › 第四章 › 摘录", "tidme.parent": "书 › 第四章", "tidme.kind": "topic", "tidme.subkind": "extract", "tidme.anchor": JSON.stringify({ section: "书 › 第四章", snippet: "整段被摘录的内容。" }) });
+	sectionMod.cleanProcessedText(wiki, "书 › 第四章");
+	const text = wiki.getTiddler("书 › 第四章").fields.text;
+	assert.ok(!text.includes("<p></p>") && !text.includes("整段被摘录"), "空 <p> 与片段均已清理");
+	assert.ok(text.includes("保留段"), "保留段不受影响");
+});

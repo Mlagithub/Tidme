@@ -247,3 +247,16 @@ test("G1: 干预 trail key 稳定（重切分不漂移）", async () => {
 	const c2 = cardsOf(r2).map((c) => c["tidme.path"]);
 	assert.deepEqual(c1, c2, "干预产物稳定");
 });
+
+test("SM A-Factor: 节卡按篇幅启发式携带 tidme.afactor（短文 2.0 / 长文 1.3）", async () => {
+	const short = await pipeline.runSplit({ text: "# 短文\n\n" + "短文内容。".repeat(40), title: "短文A", type: "text/markdown" });
+	const shortCards = cardsOf(short);
+	assert.ok(shortCards.length >= 1, "短文应成卡");
+	assert.equal(Number(shortCards[0]["tidme.afactor"]), 2.0, "短文 A-Factor 2.0（快速展期）");
+
+	const long = await pipeline.runSplit({ text: "# 长文\n\n" + "长文内容段落。".repeat(700), title: "长文B", type: "text/markdown" });
+	const longCards = cardsOf(long);
+	const first = longCards[0];
+	assert.ok(first["tidme.afactor"], "长文节卡应带 A-Factor");
+	assert.ok(Number(first["tidme.afactor"]) <= 1.6, `长文 A-Factor 应 ≤1.6，实际 ${first["tidme.afactor"]}`);
+});

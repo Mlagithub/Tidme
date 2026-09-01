@@ -1209,47 +1209,6 @@ mark.tm-readpoint {
 	font-weight: 600;
 }
 
-
-/* ----- From manager\styles.tid ----- */
-/* Tidme Manager：卡片浏览 / 管理器 / 牌组批量操作样式 */
-
-/* 设计 token / tm-btn 基类统一由 $:/plugins/keepone/tidme/core/styles/tokens 提供 */
-/* ===== 按钮：tm-btn 基类与变体统一由 core/styles/tokens 提供；此处仅图标尺寸 ===== */
-.tm-btn-icon { padding: 2px 6px; }
-.tm-btn-icon img, .tm-btn-icon svg { width: 1em; height: 1em; vertical-align: -0.15em; }
-
-/* ===== 空状态（tm-empty：图标 + 说明 + 可选主操作） ===== */
-.tm-empty {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: var(--tm-gap);
-	padding: 18px 8px;
-	color: var(--tm-text-2);
-	font-size: 0.9em;
-	text-align: center;
-}
-.tm-empty-icon { font-size: 1.8em; opacity: 0.45; line-height: 1; }
-
-/* ===== Toast 反馈（P3 接入写库动作；tm-notify 通知模板的自定义样式） ===== */
-.tm-toast {
-	padding: 6px 12px;
-	border-radius: var(--tm-radius);
-	border: 1px solid var(--tm-text-2);
-	background: var(--tm-surface);
-	font-size: 0.9em;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-.tm-toast--ok { border-color: #22c55e; color: #15803d; }
-.tm-toast--err { border-color: var(--tm-danger); color: var(--tm-danger); }
-
-/* 卡片浏览（侧边栏树形） */
-.tm-card-browser details {
-	margin-left: 0.4em;
-}
-.tm-card-browser summary {
-	cursor: pointer;
-}
 .tm-cb-deck {
 	margin-top: 0.4em;
 }
@@ -1784,12 +1743,6 @@ mark.tm-readpoint {
 
 .tmc-btn-primary {
     background: var(--tm-accent);
-    color: var(--tm-surface);
-    fill: var(--tm-surface);
-}
-
-.tmc-btn-dirty {
-    background: var(--tm-warn);
     color: var(--tm-surface);
     fill: var(--tm-surface);
 }

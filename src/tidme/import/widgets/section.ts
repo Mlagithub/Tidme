@@ -15,6 +15,7 @@ const pipeline = require("$:/plugins/keepone/tidme/import/pipeline.js");
 const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
 const stats = require("$:/plugins/keepone/tidme/core/stats.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
+const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
@@ -28,16 +29,12 @@ import { cleanContaminatedHtmlToWikiText } from "../../editor/wikitext-parser";
 // 跨渲染共享的上下文（模块作用域，勿挂 global）
 const CTX: { widget: any; lastDoc: string; sectionWidget: any; bodyWidget: any } = { widget: null, lastDoc: "", sectionWidget: null, bodyWidget: null };
 
-function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
-	const e = doc.createElement(tag);
-	if (cls) e.className = cls;
-	if (text !== undefined) e.textContent = text;
-	return e;
-}
+// 共享 DOM/转义/文档节查询（实现收敛于 core/ui-utils）
+const el = uiUtils.el;
+const escapeHtml = uiUtils.escapeHtml;
 
-function escapeHtml(s: string): string {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+/** 某文档的全部正文章节（排除摘录等衍生卡） */
+const sectionsOfDoc = uiUtils.sectionsOfDoc;
 
 /**
  * 取 TW 内置图标 SVG（$:/core/images/*）。
@@ -55,18 +52,6 @@ function iconSvgOf(wiki: any, name: string): string {
 
 function twDateString(d: Date): string {
 	return pipeline.twDateString(d);
-}
-
-/** 某文档的全部正文章节（排除摘录等衍生卡） */
-function sectionsOfDoc(wiki: any, doc: string): string[] {
-	return wiki
-		.filterTiddlers("[has[tidme.doc]nsort[tidme.order]]")
-		.filter((t: string) => {
-			const f = wiki.getTiddler(t)?.fields;
-			if (!f) return false;
-			if (String(f["tidme.doc"]) !== String(doc)) return false; // 必须按文档过滤
-			return f["tidme.kind"] === "topic" && String(f["tidme.subkind"] || "") !== "extract";
-		});
 }
 
 /** 某文档的全部阅读 Topic（包含正文章节及摘录卡，统一纳入阅读队列与 ◀/▶ 导航调度） */
@@ -305,6 +290,53 @@ function docItemFilter(wiki: any, docId: string): string {
 	return sched.ITEM_FILTER.split(/\s+/).map((run) => `${base}${run}`).join(" ");
 }
 
+/**
+ * 收集本卡全部衍生卡（摘录/挖空/问答）的 anchor 片段（SM 'Delete processed text' 的清理对象）。
+ * 对应官方帮助：Delete processed text - delete all texts that have already been extracted or ignored。
+ */
+function processedSnippets(wiki: any, title: string): string[] {
+	const childTitles = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, "")}]]`);
+	const out: string[] = [];
+	for (const c of childTitles) {
+		const f = wiki.getTiddler(c)?.fields;
+		if (!f) continue;
+		const anchor = parseAnchor(f["tidme.anchor"]);
+		if (anchor?.snippet) out.push(anchor.snippet);
+	}
+	return out;
+}
+
+/**
+ * SM 对齐 'Delete processed text'：从本卡原文中删除已被摘录/挖空/问答的文本片段。
+ * 衍生卡不受影响（SM：Done! 删正文但保留 extracted material）；snippet 不在原文中时跳过，幂等。
+ * @returns 实际删除的片段数
+ */
+function cleanProcessedText(wiki: any, title: string): number {
+	const t = wiki.getTiddler(title);
+	if (!t) return 0;
+	let out = String(t.fields.text || "");
+	const snippets = processedSnippets(wiki, title);
+	let removed = 0;
+	for (const s of snippets) {
+		let at = out.indexOf(s);
+		if (at === -1) continue;
+		let end = at + s.length;
+		// 顺带吸收邻接的单个空白，避免删除后两段文字粘连
+		if (at > 0 && /\s/.test(out[at - 1])) at--;
+		if (end < out.length && /\s/.test(out[end])) end++;
+		out = out.slice(0, at) + out.slice(end);
+		removed++;
+	}
+	if (removed) {
+		out = out
+			.replace(/<p>\s*<\/p>/g, "")   // 清理整段被删后遗留的空 <p>
+			.replace(/\n{3,}/g, "\n\n")
+			.trim();
+		wiki.addTiddler({ ...t.fields, text: out });
+	}
+	return removed;
+}
+
 /** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用）。
  * 分类对齐 SuperMemo：摘录 = Topic（阅读材料），kind=topic/subkind=extract，
  * 进阅读列表（阅读流）。要成为测试卡：在摘录上挖空 → item（cloze）。 */
@@ -335,7 +367,9 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 		"tidme.author": pf["tidme.author"] || "",
 		"tidme.format": pf["tidme.format"] || "",
 		// G4：派生卡继承父卡优先级（SM 摘录/挖空继承文章优先）
-		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {})
+		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {}),
+		// SM 对齐：派生卡继承父卡 A-Factor（摘录/挖空作为独立材料沿用父文章的展期节奏）
+		...(pf["tidme.afactor"] !== undefined ? { "tidme.afactor": String(pf["tidme.afactor"]) } : {})
 	};
 }
 
@@ -370,7 +404,9 @@ function buildCloze(wiki: any, parentTitle: string, block: string, selected: str
 		"tidme.author": pf["tidme.author"] || "",
 		"tidme.format": pf["tidme.format"] || "",
 		// G4：派生卡继承父卡优先级（SM 摘录/挖空继承文章优先）
-		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {})
+		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {}),
+		// SM 对齐：派生卡继承父卡 A-Factor（摘录/挖空作为独立材料沿用父文章的展期节奏）
+		...(pf["tidme.afactor"] !== undefined ? { "tidme.afactor": String(pf["tidme.afactor"]) } : {})
 	};
 }
 
@@ -400,7 +436,9 @@ function buildQA(wiki: any, parentTitle: string, question: string, answer: strin
 		"tidme.source": pf["tidme.source"] || "",
 		"tidme.author": pf["tidme.author"] || "",
 		"tidme.format": pf["tidme.format"] || "",
-		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {})
+		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {}),
+		// SM 对齐：派生卡继承父卡 A-Factor
+		...(pf["tidme.afactor"] !== undefined ? { "tidme.afactor": String(pf["tidme.afactor"]) } : {})
 	};
 }
 
@@ -477,6 +515,9 @@ function actionExtract(win: any) {
 	const { selected } = getSelectionInfo(win);
 	if (selected.length < 2) { notify("select-first"); return; }
 	CTX.widget.wiki.addTiddler(buildExtract(CTX.widget.wiki, tt, selected));
+	// SM 对齐：extract/cloze 操作会自动设置续读点（官方帮助：all extract and cloze operations will automatically set the read-point）
+	const docId = currentDocId(win);
+	if (docId) saveReadPoint(CTX.widget.wiki, docId, { t: tt, s: selected.replace(/\s+/g, " ").trim().slice(0, 200) });
 	try { win?.getSelection?.()?.removeAllRanges(); } catch { /* ignore */ }
 	events.dispatch(CTX.widget, events.EVENTS.CARD_CREATED, tt + " › 摘录");
 	navigate(tt);
@@ -495,6 +536,9 @@ function actionCloze(win: any) {
 	openCardModal(win.document || document, "cloze", String(fields.caption || ""), (res) => {
 		fields.caption = res.answerOrCloze;
 		CTX.widget.wiki.addTiddler(fields);
+		// SM 对齐：extract/cloze 操作自动设置续读点
+		const docId = currentDocId(win);
+		if (docId) saveReadPoint(CTX.widget.wiki, docId, { t: tt, s: selected.replace(/\s+/g, " ").trim().slice(0, 200) });
 		try { win?.getSelection?.()?.removeAllRanges(); } catch { /* ignore */ }
 		events.dispatch(CTX.widget, events.EVENTS.CARD_CREATED, tt + " › 挖空");
 		navigate(tt);
@@ -510,6 +554,9 @@ function actionQA(win: any) {
 	openCardModal(win.document || document, "qa", selected, (res) => {
 		const fields = buildQA(CTX.widget.wiki, tt, res.question, res.answerOrCloze);
 		CTX.widget.wiki.addTiddler(fields);
+		// SM 对齐：extract/cloze 操作自动设置续读点
+		const docId = currentDocId(win);
+		if (docId) saveReadPoint(CTX.widget.wiki, docId, { t: tt, s: selected.replace(/\s+/g, " ").trim().slice(0, 200) });
 		try { win?.getSelection?.()?.removeAllRanges(); } catch { /* ignore */ }
 		events.dispatch(CTX.widget, events.EVENTS.CARD_CREATED, tt + " › 问答");
 		navigate(tt);
@@ -1014,6 +1061,43 @@ function makeSectionBar(): WidgetCtor {
 				this.build();
 			}));
 
+			// SM 对齐：A-Factor 可手动修改（Topics：下一次间隔 = 当前间隔 × A-Factor）
+			const afVal = sched.normalizeAFactor(fields["tidme.afactor"], sched.afactorForText(Number(fields["tidme.chars"])));
+			btnRow.appendChild(mkBtn("A×↓", "pri", `降低 A-Factor（当前 ${afVal.toFixed(1)}：间隔增长更平缓，适合长文/书）`, false, () => {
+				this._flushSave();
+				const next = Math.max(1.1, Math.round((afVal - 0.1) * 10) / 10);
+				wiki.addTiddler({ ...fields, "tidme.afactor": String(next) });
+				events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+				this.build();
+			}));
+			btnRow.appendChild(mkBtn(`A×${afVal.toFixed(1)}`, "pri", `当前 A-Factor（点击重置为按篇幅启发式：短文 2.0 / 长文 1.3）`, false, () => {
+				this._flushSave();
+				const fresh = sched.afactorForText(Number(fields["tidme.chars"]));
+				wiki.addTiddler({ ...fields, "tidme.afactor": String(fresh) });
+				events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+				this.build();
+			}));
+			btnRow.appendChild(mkBtn("A×↑", "pri", `提高 A-Factor（当前 ${afVal.toFixed(1)}：间隔增长更快，适合短文快速消化）`, false, () => {
+				this._flushSave();
+				const next = Math.min(3.0, Math.round((afVal + 0.1) * 10) / 10);
+				wiki.addTiddler({ ...fields, "tidme.afactor": String(next) });
+				events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+				this.build();
+			}));
+
+			// SM 对齐 'Delete processed text'：删除已提取/已挖空/已问答的文本片段（衍生卡保留）
+			const snips = processedSnippets(wiki, title);
+			if (snips.length) {
+				btnRow.appendChild(mkBtn("✂ 清提取", "clean", `从本卡原文删除 ${snips.length} 段已被摘录/挖空的文本（对齐 SuperMemo 'Delete processed text'）`, false, () => {
+					this._flushSave();
+					if (confirm(`从本卡原文中删除 ${snips.length} 段已被摘录/挖空的文本？\n\n（摘录/挖空/问答卡本身不受影响）`)) {
+						const n = cleanProcessedText(wiki, title);
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+						this.build();
+					}
+				}));
+			}
+
 			if (subkind === "extract") {
 				btnRow.appendChild(mkBtn("🗑 删除", "del", "彻底删除此摘录卡", false, () => {
 					this._flushSave();
@@ -1054,6 +1138,7 @@ function makeSectionBar(): WidgetCtor {
 				const docSec = rtStats.docSeconds[docId] || 0;
 
 				addStat("优先级", `p${String(priVal).padStart(2, "0")} (${priLevel})`);
+				addStat("A-Factor", `${sched.normalizeAFactor(fields["tidme.afactor"], sched.afactorForText(Number(fields["tidme.chars"]))).toFixed(2)}（间隔 ×A-Factor）`);
 				addStat("卡片类型", String(fields["tidme.kind"] || "item"));
 				addStat("FSRS 状态", stateText);
 				addStat("到期时间", fields.due ? sched.parseTwDate(fields.due).toLocaleString() : "未到期");
@@ -1413,3 +1498,5 @@ exports["doc-resume"] = makeDocResume();
 exports.buildExtract = buildExtract;
 exports.buildCloze = buildCloze;
 exports.parseAnchor = parseAnchor;
+exports.processedSnippets = processedSnippets;
+exports.cleanProcessedText = cleanProcessedText;

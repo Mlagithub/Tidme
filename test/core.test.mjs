@@ -101,12 +101,3 @@ test("deck-engine: 组合过滤器与队列顺序（due-new）", () => {
 	const f2 = deckEngine.composeDeckFilters("$:/Deck/default", { ...fields, order: "new-due" });
 	assert.ok(f2.queue.startsWith(f2.learn + " " + f2.newly), "new-due: learn+new 在前");
 });
-
-test("deck-engine: deckQueue 用自定义求值器", () => {
-	const fields = {
-		card: "[tidme.kind[item]]", card_exclude: "", state_learn: "", state_due: "",
-		state_new: "", order: "due-new"
-	};
-	const queue = deckEngine.deckQueue("$:/Deck/default", () => ["卡A", "卡B"], fields);
-	assert.deepEqual(queue, ["卡A", "卡B"]);
-});

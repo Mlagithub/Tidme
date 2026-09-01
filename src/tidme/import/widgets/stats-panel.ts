@@ -11,14 +11,11 @@ widgets/stats-panel.ts — 统计面板（M5-T4，P1 UI：指标卡 + 表格 + �
 declare function require(module: string): any;
 const stats = require("$:/plugins/keepone/tidme/core/stats.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
+const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
-function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
-	const e = doc.createElement(tag);
-	if (cls) e.className = cls;
-	if (text !== undefined) e.textContent = text;
-	return e;
-}
+// 共享 DOM 工具（实现收敛于 core/ui-utils）
+const el = uiUtils.el;
 
 function sectionTitle(doc: Document, label: string): HTMLElement {
 	return el(doc, "div", "tm-section-title", label);

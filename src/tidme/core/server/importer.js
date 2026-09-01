@@ -78,7 +78,10 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 					if (lower.endsWith(".epub") || /\.(md|markdown|txt|html?)$/.test(lower)) {
 						// 落库执行器（runImport → 写库 → 标记 done/error）
 						var doImport = function (importBytes) {
-							pipeline.runImport(importBytes, fileName, { bag: $tw.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default" })
+							var opts = { bag: $tw.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default" };
+							var pri = t.fields["tidme.priority"];
+							if (pri !== undefined && pri !== "") opts.priority = Number(pri);
+							pipeline.runImport(importBytes, fileName, opts)
 								.then(function (r) {
 									for (var i = 0; i < r.tiddlers.length; i++) $tw.wiki.addTiddler(r.tiddlers[i]);
 									$tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {

@@ -8,7 +8,9 @@ widgets/import.ts — 自包含导入组件
 
 declare function require(module: string): any;
 const pipeline = require("$:/plugins/keepone/tidme/import/pipeline.js");
+const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
+const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 interface ImportResult {
@@ -61,12 +63,8 @@ function bytesToBase64(bytes: Uint8Array): string {
 	return bin; // 兜底（无 btoa 环境由服务端容错）
 }
 
-function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
-	const e = doc.createElement(tag);
-	if (cls) e.className = cls;
-	if (text !== undefined) e.textContent = text;
-	return e;
-}
+// 共享 DOM 工具（实现收敛于 core/ui-utils）
+const el = uiUtils.el;
 
 function getSemanticSplitConfig(wiki: any): any {
 	const t = wiki.getTiddler("$:/config/Tidme/SemanticSplit");
@@ -388,6 +386,21 @@ function makeFileWidget(): WidgetCtor {
 				"上传到服务端后台处理（适合大文件，解析不阻塞页面；需要 TiddlyWeb 服务端）"));
 			const serverStatus = el(doc, "div", "tm-import-muted", "");
 
+			// SM 对齐：导入时批量设定优先级（0 最高；高=10±8 / 中=50±8 / 低=90±8，同批分散避免挤队）
+			const prioRow = el(doc, "div", "tm-import-actions", "");
+			prioRow.appendChild(el(doc, "span", "tm-import-muted", "导入优先级："));
+			const prioSel = doc.createElement("select");
+			prioSel.className = "tm-priority-select";
+			for (const [label, value] of [["高", "high"], ["中", "medium"], ["低", "low"]] as const) {
+				const opt = doc.createElement("option");
+				opt.value = value;
+				opt.textContent = label;
+				prioSel.appendChild(opt);
+			}
+			prioSel.value = "medium";
+			prioSel.title = "0=最高优先级；本次导入的全部节卡按所选档位分散设定优先级";
+			prioRow.appendChild(prioSel);
+			prioRow.appendChild(el(doc, "span", "tm-import-muted", "（0 最高 · 同批随机分散 ±8）"));
 			const pending = new Map<string, { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean }>();
 
 			// G10 服务端上传：建 pending tiddler（server importer 契约）→ 轮询状态
@@ -405,6 +418,7 @@ function makeFileWidget(): WidgetCtor {
 						tags: ["tidme-pending-import"],
 						"tidme.file-name": file.name,
 						"tidme.pending": "yes",
+						"tidme.priority": String(sched.tierRandom(prioSel.value as any)), // SM：导入时批量设优先级（服务端沿用）
 						text: b64,
 						bag: getOptions(this.wiki).bag
 					});
@@ -516,7 +530,11 @@ function makeFileWidget(): WidgetCtor {
 					try {
 						const bytes = new Uint8Array(await file.arrayBuffer());
 						console.log("[tidme-import] 开始解析:", file.name, bytes.length, "bytes");
-						const result = await pipeline.runImport(bytes, file.name, getOptions(this.wiki)) as ImportResult;
+						// SM 对齐：导入时按所选档位批量设定优先级（同批随机分散 ±8）
+						const result = await pipeline.runImport(bytes, file.name, {
+							...getOptions(this.wiki),
+							priority: sched.tierRandom(prioSel.value as any)
+						}) as ImportResult;
 						console.log("[tidme-import] 解析成功:", result.bookTitle, result.sectionCount, "节");
 						// 重复导入检测：同 docId 已在库中
 						const docId = result.docId;
@@ -576,6 +594,7 @@ function makeFileWidget(): WidgetCtor {
 			uploaderCard.appendChild(btnSelect);
 			uploaderCard.appendChild(input);
 			uploaderCard.appendChild(hint);
+			uploaderCard.appendChild(prioRow);
 			uploaderCard.appendChild(serverRow);
 			uploaderCard.appendChild(serverStatus);
 			wrap.appendChild(uploaderCard);

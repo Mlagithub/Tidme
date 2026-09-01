@@ -80,3 +80,15 @@ test("确定性 ID：同一面包屑与序号派生稳定", async () => {
 	assert.deepEqual(id1, id2);
 	assert.ok(id1.every((x) => typeof x === "string" && x.startsWith("s")));
 });
+
+test("SM 优先级：runImport/runSplit 透传 priority（导入时批量设优先级）", async () => {
+	const r = await pipeline.runImport(bytes, "demo.epub", { priority: 8 });
+	const cards = r.tiddlers.filter((t) => t["tidme.kind"] === "topic");
+	assert.ok(cards.length >= 1, "应有节卡");
+	for (const c of cards) assert.equal(c["tidme.priority"], "8", "EPUB 导入优先级透传");
+
+	const rs = await pipeline.runSplit({ text: "# 短文\n\n内容。", title: "优先测试", type: "text/markdown", priority: 92 });
+	const scards = rs.tiddlers.filter((t) => t["tidme.kind"] === "topic");
+	assert.ok(scards.length >= 1, "应有节卡");
+	for (const c of scards) assert.equal(c["tidme.priority"], "92", "文本切分优先级透传");
+});

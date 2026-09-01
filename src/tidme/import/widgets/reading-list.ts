@@ -14,13 +14,9 @@ const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
-function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
-	return uiUtils.el(doc, tag, cls, text);
-}
-
-function escapeHtml(s: string): string {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+// 共享 DOM/转义/文档节查询（实现收敛于 core/ui-utils）
+const el = uiUtils.el;
+const escapeHtml = uiUtils.escapeHtml;
 
 /** 阅读列表过滤（topic 队列）：全库 kind=topic 卡，未搁置/未完成。
  * 忽略（tidme.ignored）与已读（tidme.done）自动出列；item 卡不在此页。 */
@@ -85,17 +81,7 @@ function isReadDone(f: any): boolean {
 }
 
 /** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 中排除摘录） */
-function sectionsOfDoc(wiki: any, docId: string): string[] {
-	return wiki
-		.filterTiddlers("[has[tidme.doc]nsort[tidme.order]]")
-		.filter((t: string) => {
-			const f = wiki.getTiddler(t)?.fields;
-			if (!f) return false;
-			return String(f["tidme.doc"]) === docId &&
-				f["tidme.kind"] === "topic" &&
-				String(f["tidme.subkind"] || "") !== "extract";
-		});
-}
+const sectionsOfDoc = uiUtils.sectionsOfDoc;
 
 function makeReadingList(): any {
 	class ReadingListWidget extends Widget {

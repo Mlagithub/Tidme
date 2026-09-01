@@ -16,6 +16,7 @@ declare function require(module: string): any;
 const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
 const stats = require("$:/plugins/keepone/tidme/core/stats.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
+const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 type View = "all" | "inqueue" | "done" | "suspended" | "overdue";
@@ -39,72 +40,17 @@ interface Card { title: string; fields: Record<string, any> }
 
 interface DeckInfo { title: string; caption: string; strict: Set<string>; loose: Set<string> }
 
-function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
-	const e = doc.createElement(tag);
-	if (cls) e.className = cls;
-	if (text !== undefined) e.textContent = text;
-	return e;
-}
-
-function badgeOf(fields: Record<string, any>): { text: string; cls: string } {
-	if (fields["tidme.suspended"] === "yes") return { text: "⏸", cls: "tm-badge-suspended" };
-	if (sched.isCardDone(fields)) return { text: "✓", cls: "tm-badge-done" };
-	const state = String(fields.state || "0");
-	if (state === "1" || state === "3") return { text: "学", cls: "tm-badge-learn" };
-	if (state === "2") {
-		const overdue = sched.parseTwDate(fields.due).getTime() < Date.now();
-		return overdue ? { text: "逾", cls: "tm-badge-overdue" } : { text: "到", cls: "tm-badge-due" };
-	}
-	return { text: "新", cls: "tm-badge-new" };
-}
-
-function kindMark(fields: Record<string, any>): string {
-	const sub = String(fields["tidme.subkind"] || "");
-	if (sub === "extract") return "摘";
-	if (sub === "cloze") return "挖";
-	if (sub === "qa") return "问";
-	return "";
-}
-
-function stateLabel(fields: Record<string, any>): string {
-	const b = badgeOf(fields);
-	const state = String(fields.state || "0");
-	if (state === "1" || state === "3") return "学习中";
-	if (state === "2") {
-		const overdue = sched.parseTwDate(fields.due).getTime() < Date.now();
-		return overdue ? "已逾期" : "到期";
-	}
-	if (b.text === "✓") return "已读";
-	if (b.text === "⏸") return "搁置";
-	return "新卡";
-}
-
-function dueLabel(fields: Record<string, any>): string {
-	if (String(fields.state || "0") !== "2") return "—";
-	const d = sched.parseTwDate(fields.due);
-	return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
-}
-
-/** 信息列（对标 SuperMemo Element data） */
-function intervalLabel(fields: Record<string, any>): string {
-	const s = Number(fields.scheduled_days);
-	return Number.isFinite(s) && s > 0 ? `${Math.round(s)}天` : "—";
-}
-function repsLabel(fields: Record<string, any>): string {
-	return fields.reps !== undefined && fields.reps !== "" ? String(fields.reps) : "—";
-}
-function lapsesLabel(fields: Record<string, any>): string {
-	return fields.lapses !== undefined && fields.lapses !== "" ? String(fields.lapses) : "—";
-}
-function diffLabel(fields: Record<string, any>): string {
-	const d = Number(fields.difficulty);
-	return Number.isFinite(d) && d > 0 ? `${Math.round(d * 100)}%` : "—";
-}
-function dateLabel(raw: any): string {
-	if (raw === undefined || raw === null || raw === "") return "—";
-	const d = sched.parseTwDate(raw);
-	return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
-}
+// 共享 DOM/徽章/标签工具（实现收敛于 core/ui-utils）
+const el = uiUtils.el;
+const badgeOf = uiUtils.badgeOf;
+const kindMark = uiUtils.kindMark;
+const stateLabel = uiUtils.stateLabel;
+const dueLabel = uiUtils.dueLabel;
+const intervalLabel = uiUtils.intervalLabel;
+const repsLabel = uiUtils.repsLabel;
+const lapsesLabel = uiUtils.lapsesLabel;
+const diffLabel = uiUtils.diffLabel;
+const dateLabel = uiUtils.dateLabel;
 
 /** 卡片收集：带 tidme.kind 的 tiddler（topic/item）+ 无 kind 但有 FSRS 字段的手动卡。
  * 排除文档汇总页（仅有 tidme.doc/tag，无 kind、无 FSRS 字段）。 */

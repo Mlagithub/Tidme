@@ -1,0 +1,9 @@
+title: $:/config/Tidme/AutoPostpone
+type: application/json
+
+{
+    "enable": false,
+    "maxPriority": 60,
+    "postponeDays": 7,
+    "keepTop": 10
+}

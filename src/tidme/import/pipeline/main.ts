@@ -28,7 +28,7 @@ export interface ImportResult {
 	warnings: string[];
 }
 
-export interface ImportOptions extends ChunkOptions { bag?: string }
+export interface ImportOptions extends ChunkOptions { bag?: string; priority?: number }
 
 /** EPUB 主流程 */
 async function importEpubBytes(bytes: Uint8Array, fileName: string, options: ImportOptions): Promise<ImportResult> {
@@ -86,7 +86,7 @@ async function importEpubBytes(bytes: Uint8Array, fileName: string, options: Imp
 	};
 	const docId = await makeDocId(book.meta);
 	const bookTitle = (meta.title || fileName.replace(/.*\//, "") || "未命名导入").trim();
-	const { tiddlers, warnings } = await emitTiddlers(docId, meta, bookTitle, sections, options.bag || "default");
+	const { tiddlers, warnings } = await emitTiddlers(docId, meta, bookTitle, sections, options.bag || "default", true, options.priority);
 	return {
 		bookTitle,
 		docId,
@@ -113,6 +113,7 @@ async function importTextBytes(bytes: Uint8Array, fileName: string, options: Imp
 		title: base,
 		type,
 		bag: options.bag || "default",
+		priority: options.priority,
 		maxChars: options.maxChars,
 		minChars: options.minChars
 	});

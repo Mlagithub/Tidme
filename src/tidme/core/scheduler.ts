@@ -4,7 +4,6 @@ scheduler.ts — 调度体系（M4，对标 SuperMemo 优先级）
 - 优先级：tidme.priority 0–100（0 最高）；normalizePriority 归一化
 - 批量操作：postpone / advance / ignore / suspend / resume / forget（返回字段补丁）
 - autoPostpone：按优先级顺延低优先级逾期卡（保留 top N 高优先级）
-- 子集队列：subsetQueue 组合"deck 过滤 + 子集过滤器"
 
 所有函数纯字段操作（无 $tw 依赖），返回 { title, fields } 补丁由调用方写入。
 */
@@ -63,32 +62,12 @@ export function shiftPriority(priority: unknown, step = 5): string {
 	return adjustPriority(priority, step);
 }
 
-/**
- * TW 日期串（YYYY0MM0DD0hh0mm0ss0XXX，UTC 语义，与 $tw.utils.parseDate 一致）→ Date。
- * 注意：TW 的日期字符串是 UTC 编码（stringifyDate 用 getUTC*），此前按本地时区解析
- * 会造成 8 小时（=时区偏移）的系统性偏差（如评分间隔显示"8 hours from now"）。
- */
-export function parseTwDate(v: unknown, fallback = new Date()): Date {
-	const s = String(v || "");
-	if (/^\d{17}$/.test(s)) {
-		const d = new Date(Date.UTC(
-			Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8)),
-			Number(s.slice(8, 10)), Number(s.slice(10, 12)), Number(s.slice(12, 14)), Number(s.slice(14, 17))
-		));
-		return Number.isNaN(d.getTime()) ? fallback : d;
-	}
-	const p = Date.parse(s);
-	return Number.isNaN(p) ? fallback : new Date(p);
-}
+// 日期序列化/解析收敛于 core/schema（唯一实现），此处转发保 API 兼容
+import { twDateString, parseTwDate } from "./schema.ts";
+export { parseTwDate };
 
 function addDays(d: Date, days: number): Date {
 	return new Date(d.getTime() + days * 86400000);
-}
-
-/** Date → TW 日期串（UTC 语义，与 $tw.utils.stringifyDate 一致） */
-function twDate(d: Date): string {
-	const p = (n: number, l: number) => String(n).padStart(l, "0");
-	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}${p(d.getUTCSeconds(), 2)}${p(d.getUTCMilliseconds(), 3)}`;
 }
 
 export interface CardLike { title: string; fields: Record<string, any> }
@@ -97,12 +76,12 @@ export interface Patch { title: string; fields: Record<string, any> }
 /** 顺延：due 推后 byDays 天（相对当前 due 或 now） */
 export function postponeCard(fields: Record<string, any>, byDays = 7): Record<string, any> {
 	const base = parseTwDate(fields.due);
-	return { due: twDate(addDays(base, byDays)) };
+	return { due: twDateString(addDays(base, byDays)) };
 }
 
 /** 提前：due = 今天（强制复习） */
 export function advanceCard(): Record<string, any> {
-	return { due: twDate(new Date()) };
+	return { due: twDateString(new Date()) };
 }
 
 /**
@@ -125,7 +104,7 @@ export function resumeCard(): Record<string, any> {
 
 /** 遗忘：回到新卡（state=0，清空调度） */
 export function forgetCard(): Record<string, any> {
-	const t = twDate(new Date());
+	const t = twDateString(new Date());
 	return {
 		state: "0", reps: "0", lapses: "0", stability: "0", difficulty: "0",
 		elapsed_days: "0", scheduled_days: "0", due: t, last_review: t
@@ -199,24 +178,61 @@ export function sortPriorityMixedQueue<T extends CardLike>(
 }
 
 /**
+ * A-Factor 归一化：非法/越界回默认 1.5；允许 1.0–10（UI 调节范围 1.1–3.0，字段可更大）。
+ */
+export function normalizeAFactor(v: unknown, fallback = 1.5): number {
+	let n: number;
+	if (typeof v === "number") n = v;
+	else {
+		const s = String(v ?? "").trim();
+		if (s === "") return fallback;
+		n = parseFloat(s);
+	}
+	if (Number.isFinite(n) && n >= 1.0 && n <= 10) return Math.round(n * 100) / 100;
+	return fallback;
+}
+
+/**
+ * 按文本长度启发式设定 A-Factor（SM：A-Factor 由系统根据文章长度与处理行为启发式设定）。
+ * 短材料（网页短文）A-Factor 大 → 间隔快速拉长、快速榨干归档；长材料（书）A-Factor 小 → 间隔平缓、长尾消化。
+ */
+export function afactorForText(chars: number): number {
+	const c = Number(chars) || 0;
+	if (c <= 0) return 1.5;
+	if (c < 800) return 2.0;     // 短文：快速展期
+	if (c < 3000) return 1.6;
+	if (c < 10000) return 1.4;
+	return 1.3;                  // 长文/书：平缓
+}
+
+/** 读取卡片的 A-Factor：字段（tidme.afactor）优先，其次按字符数启发式，最后默认 1.5 */
+export function afactorOf(fields: Record<string, any>, fallback = 1.5): number {
+	const raw = fields?.["tidme.afactor"];
+	if (raw !== undefined && raw !== null && String(raw).trim() !== "") return normalizeAFactor(raw, fallback);
+	return afactorForText(Number(fields?.chars ?? fields?.["tidme.chars"]) || 0);
+}
+
+/**
  * Topic 专属 A-Factor 展期函数（对标 SuperMemo 优先级漏斗调度）：
- * 下一次间隔 = 当前间隔 * A-Factor（默认 1.5，最小 3 天），顺延后将低优先阅读材料自动推后，释放队列空间给更高优先内容。
+ * 下一次间隔 = 当前间隔 * A-Factor（最小 3 天），顺延后将低优先阅读材料自动推后，释放队列空间给更高优先内容。
+ * A-Factor 读取卡片 tidme.afactor（无则按字符数启发式，再回默认 1.5）。
  */
 export function postponeTopicByAFactor(
 	fields: Record<string, any>,
-	aFactor = 1.5,
+	aFactor?: number,
 	minDays = 3
 ): Record<string, any> {
+	const factor = aFactor !== undefined ? normalizeAFactor(aFactor) : afactorOf(fields);
 	const lastDate = parseTwDate(fields.last_review || fields.due, new Date());
 	const now = new Date();
 	const elapsedDays = Math.max(1, Math.round((now.getTime() - lastDate.getTime()) / 86400000));
 	const currentInterval = Number(fields.scheduled_days) || elapsedDays;
-	const newInterval = Math.max(minDays, Math.round(currentInterval * aFactor));
-	const due = twDate(addDays(now, newInterval));
+	const newInterval = Math.max(minDays, Math.round(currentInterval * factor));
+	const due = twDateString(addDays(now, newInterval));
 	return {
 		due,
 		scheduled_days: String(newInterval),
-		last_review: twDate(now)
+		last_review: twDateString(now)
 	};
 }
 
@@ -285,61 +301,4 @@ export function autoPostpone(cards: CardLike[], opts: AutoPostponeOptions = {}):
 		})),
 		stats: { overdue: overdue.length, postponed: postponable.length, kept: kept.length }
 	};
-}
-
-/**
- * 子集队列：deck 过滤 + 子集过滤（按书/标签）→ 学习队列（供子集复习）。
- * @param deckQueueFilter deck 的 queue 过滤器（core deck-engine 产出）
- * @param subsetFilter 子集过滤器，如 [tag[书]]
- * @param evaluate 过滤器求值函数
- */
-export function subsetQueue(
-	deckQueueFilter: string,
-	subsetFilter: string,
-	evaluate: (filter: string) => string[]
-): string[] {
-	return evaluate(`${deckQueueFilter} +[subfilter<subset>]`.replace("<subset>", subsetFilter));
-}
-
-/** 子集过滤器构造：按 doc 或标签 */
-export function subsetByDoc(docId: string): string {
-	return `[tidme.doc[${docId}]]`;
-}
-export function subsetByTag(tag: string): string {
-	return `[tag[${tag}]]`;
-}
-
-export interface InterleaveOptions {
-	/** 每连续出队 itemRatio 个 Item 测试卡后，穿插出队 topicRatio 个 Topic 阅读卡（默认 4:1） */
-	itemRatio?: number;
-	topicRatio?: number;
-}
-
-/**
- * 动态交错混合函数（SuperMemo Interleaving）：
- * 将 Item 队列（记忆复习卡）与 Topic 队列（渐进阅读材料）按指定比例交错编排为一个统一队列。
- */
-export function interleaveQueues<T>(items: T[], topics: T[], opts: InterleaveOptions = {}): T[] {
-	const itemRatio = Math.max(1, opts.itemRatio ?? 4);
-	const topicRatio = Math.max(1, opts.topicRatio ?? 1);
-	const result: T[] = [];
-
-	let i = 0;
-	let t = 0;
-
-	while (i < items.length || t < topics.length) {
-		// 1. 连续出队 itemRatio 个 Item
-		let count = 0;
-		while (i < items.length && count < itemRatio) {
-			result.push(items[i++]);
-			count++;
-		}
-		// 2. 连续出队 topicRatio 个 Topic
-		count = 0;
-		while (t < topics.length && count < topicRatio) {
-			result.push(topics[t++]);
-			count++;
-		}
-	}
-	return result;
 }

@@ -59,6 +59,24 @@ export function twDateString(d: Date): string {
 }
 
 /**
+ * TW 日期串（YYYY0MM0DD0hh0mm0ss0XXX，UTC 语义，与 $tw.utils.parseDate 一致）→ Date。
+ * 注意：TW 的日期字符串是 UTC 编码（stringifyDate 用 getUTC*），按本地时区解析
+ * 会造成系统性的时区偏差（如评分间隔显示"8 hours from now"）。
+ */
+export function parseTwDate(v: unknown, fallback = new Date()): Date {
+	const s = String(v || "");
+	if (/^\d{17}$/.test(s)) {
+		const d = new Date(Date.UTC(
+			Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8)),
+			Number(s.slice(8, 10)), Number(s.slice(10, 12)), Number(s.slice(12, 14)), Number(s.slice(14, 17))
+		));
+		return Number.isNaN(d.getTime()) ? fallback : d;
+	}
+	const p = Date.parse(s);
+	return Number.isNaN(p) ? fallback : new Date(p);
+}
+
+/**
  * FSRS 初始字段集。
  * 关键修复：fsrs4tw 的过滤器要求卡片已含全部 FSRS 字段才走评分写入路径；
  * 缺字段的卡评分静默失败 → 队列首位永不变（表现为"无法切换下一张"）。

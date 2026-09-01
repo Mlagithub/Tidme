@@ -52,9 +52,4 @@ selecttip: Insert edit of Select Question(see manual for usage)
 search: Search Question
 searchtip: Search for tiddler title, select to edit
 optionsmodaltip: Review Options
-import/split: Split
-import/splittip: Split this tiddler into incremental reading sections
 read/read: Read
-stats/stats: Stats
-stats/focus: Focus
-stats/focustip: Knowledge Graph

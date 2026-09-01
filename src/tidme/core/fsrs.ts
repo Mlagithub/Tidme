@@ -8,39 +8,27 @@ fsrs.ts — FSRS 复习服务（提取自 fsrs4tw filters/fsrs.js，行为一致
 
 declare function require(module: string): any;
 
+// 日期序列化/解析收敛于 core/schema（唯一实现）
+const schema = require("$:/plugins/keepone/tidme/core/schema.js");
+const parseTwDate = schema.parseTwDate;
+const twDateString = schema.twDateString;
+
 let _lib: any = null;
 function lib(): any {
 	if (!_lib) _lib = require("$:/plugins/keepone/tidme/core/fsrs/fsrs.js");
 	return _lib;
 }
 
-/** TW 日期串 → Date（UTC 语义，与 $tw.utils.parseDate 一致）；非 17 位串交给 Date 构造 */
-function parseTwDateStr(s: string): Date {
-	if (/^\d{17}$/.test(s)) {
-		return new Date(Date.UTC(
-			Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8)),
-			Number(s.slice(8, 10)) || 0, Number(s.slice(10, 12)) || 0, Number(s.slice(12, 14)) || 0, Number(s.slice(14, 17)) || 0
-		));
-	}
-	return new Date(s);
-}
-
 /** TW 字段 → FSRS 日期（due/last_review/review 转 Date；递归处理 review_log 等嵌套对象） */
 function tw2fsrsDate(obj: Record<string, any>): Record<string, any> {
 	for (const key of Object.keys(obj)) {
 		if (key === "due" || key === "last_review" || key === "review") {
-			obj[key] = parseTwDateStr(String(obj[key]));
+			obj[key] = parseTwDate(String(obj[key]));
 		} else if (typeof obj[key] === "object" && obj[key] !== null) {
 			tw2fsrsDate(obj[key]);
 		}
 	}
 	return obj;
-}
-
-/** TW 日期字符串（UTC 语义，YYYY0MM0DD0hh0mm0ss0XXX）——与 $tw.utils.stringifyDate 一致 */
-function twDateString(d: Date): string {
-	const p = (n: number, l: number) => String(n).padStart(l, "0");
-	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}${p(d.getUTCSeconds(), 2)}${p(d.getUTCMilliseconds(), 3)}`;
 }
 
 /** FSRS 日期 → TW 日期字符串 */

@@ -7,6 +7,7 @@ widgets/nav.ts — 页面间导航条（Tidme 主页面切换 + 分隔线 + 当�
 */
 
 declare function require(module: string): any;
+const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const NAV: [string, string][] = [
@@ -17,12 +18,8 @@ const NAV: [string, string][] = [
 	["$:/plugins/keepone/tidme/import/ui/stats", "统计"]
 ];
 
-function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
-	const e = doc.createElement(tag);
-	if (cls) e.className = cls;
-	if (text !== undefined) e.textContent = text;
-	return e;
-}
+// 共享 DOM 工具（实现收敛于 core/ui-utils）
+const el = uiUtils.el;
 
 function makeNav(): any {
 	class NavWidget extends Widget {

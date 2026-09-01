@@ -72,6 +72,37 @@ test("postponeCard / advanceCard / ignoreCard / forgetCard", () => {
 	assert.equal(forgotten.reps, "0");
 });
 
+test("A-Factor: afactorForText 启发式（短文快速、长文平缓）", () => {
+	assert.equal(sched.afactorForText(100), 2.0);
+	assert.equal(sched.afactorForText(799), 2.0);
+	assert.equal(sched.afactorForText(1500), 1.6);
+	assert.equal(sched.afactorForText(5000), 1.4);
+	assert.equal(sched.afactorForText(50000), 1.3);
+	assert.equal(sched.afactorForText(0), 1.5);
+	assert.equal(sched.normalizeAFactor("2.5"), 2.5);
+	assert.equal(sched.normalizeAFactor("abc"), 1.5);
+	assert.equal(sched.normalizeAFactor(undefined), 1.5);
+	assert.equal(sched.normalizeAFactor(99), 1.5, "越界回默认");
+	assert.equal(sched.normalizeAFactor("1.0"), 1.0, "下限 1.0 允许");
+});
+
+test("postponeTopicByAFactor: 读取卡片 tidme.afactor（字段优先 → 篇幅启发式 → 默认 1.5）", () => {
+	const f1 = { due: PAST(), "tidme.afactor": "2", scheduled_days: "10" };
+	assert.equal(Number(sched.postponeTopicByAFactor(f1).scheduled_days), 20, "10 × 2 = 20");
+	const f2 = { due: PAST(), "tidme.afactor": "3", scheduled_days: "10" };
+	assert.equal(Number(sched.postponeTopicByAFactor(f2).scheduled_days), 30, "10 × 3 = 30");
+	const f3 = { due: PAST(), "tidme.chars": "100", scheduled_days: "10" };
+	assert.equal(Number(sched.postponeTopicByAFactor(f3).scheduled_days), 20, "短文启发式 2.0");
+	const f4 = { due: PAST(), scheduled_days: "10" };
+	assert.equal(Number(sched.postponeTopicByAFactor(f4).scheduled_days), 15, "无字段默认 1.5");
+	// 显式 aFactor 覆盖字段
+	const f5 = { due: PAST(), "tidme.afactor": "2", scheduled_days: "10" };
+	assert.equal(Number(sched.postponeTopicByAFactor(f5, 1.5).scheduled_days), 15, "显式参数优先");
+	// minDays 兜底
+	const f6 = { due: PAST(), "tidme.afactor": "1.1", scheduled_days: "1" };
+	assert.equal(Number(sched.postponeTopicByAFactor(f6).scheduled_days), 3, "最小 3 天");
+});
+
 test("autoPostpone: 保留 top N 高优先级，顺延其余低优先级逾期卡", () => {
 	const mk = (title, priority, due) => ({
 		title,
@@ -93,7 +124,7 @@ test("autoPostpone: 保留 top N 高优先级，顺延其余低优先级逾期�
 	}
 });
 
-test("autoPostpone: 搁置/已出队/topic 卡不处理", () => {
+test("autoPostpone: 搁置/已出队不处理；topic 阅读卡按 A-Factor 顺延（SM: auto-postpone 主要作用于 Topics）", () => {
 	const cards = [
 		{ title: "搁置", fields: { "tidme.priority": "90", due: PAST(), "tidme.kind": "item", "tidme.suspended": "yes" } },
 		{ title: "已读完", fields: { "tidme.priority": "90", due: PAST(), "tidme.kind": "item", "tidme.done": "yes" } },
@@ -102,7 +133,12 @@ test("autoPostpone: 搁置/已出队/topic 卡不处理", () => {
 		{ title: "可顺延", fields: { "tidme.priority": "90", due: PAST(), "tidme.kind": "item" } }
 	];
 	const r = sched.autoPostpone(cards, { maxPriority: 60, keepTop: 0 });
-	assert.deepEqual(r.patches.map((p) => p.title), ["可顺延"]);
+	assert.deepEqual(r.patches.map((p) => p.title), ["可顺延", "阅读卡"], "item 加权 -15 排前，topic 阅读卡同样顺延");
+	for (const p of r.patches) {
+		assert.ok(sched.parseTwDate(p.fields.due).getTime() > Date.now(), `${p.title} 被顺延到未来`);
+	}
+	const topicPatch = r.patches.find((p) => p.title === "阅读卡");
+	assert.ok(topicPatch.fields.scheduled_days, "topic 走 A-Factor 展期（写 scheduled_days）");
 });
 
 test("doneCard/restoreCard: Done 语义与可逆恢复（kind 决定归属，无标签）", () => {
@@ -128,13 +164,6 @@ test("ITEM_FILTER: 双轨分流（topic 出、item 进）", () => {
 	assert.ok(f.includes("[tidme.kind[item]]"), "含 item 大类");
 	assert.ok(!f.includes("topic"), "不含 topic（阅读流）");
 	assert.ok(!f.includes("section") && !f.includes("extract") && !f.includes("cloze") && !f.includes("qa"), "不按子类型过滤");
-});
-
-test("subsetQueue / subsetByDoc / subsetByTag", () => {
-	const queue = sched.subsetQueue("[tidme.kind[item]]", sched.subsetByDoc("d123"), (f) => f);
-	assert.ok(queue.includes("tidme.doc[d123]"), "子集按 doc");
-	const byTag = sched.subsetByTag("数学");
-	assert.equal(byTag, "[tag[数学]]");
 });
 
 test("parseTwDate: 17 位 TW 日期串（UTC 语义，与 $tw.utils.parseDate 一致）", () => {

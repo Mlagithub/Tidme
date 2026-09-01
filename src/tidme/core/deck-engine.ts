@@ -47,36 +47,50 @@ export function composeDeckFilters(deckTitle: string, fields: DeckFields = {}): 
 	return { learn, due, newly, unfold, random, dueNew, newDue, randomCombo, queue };
 }
 
-/**
- * 计算 deck 学习队列（按 order 组合 learn/due/new）。
- * @param deckTitle deck tiddler 标题
- * @param filterTiddlers 求值函数（TW wiki.filterTiddlers 的绑定版；无头测试可传自定义求值器）
- * @param getFields 取 deck 字段（默认经 filterTiddlers 内建；无头测试可传）
- */
-export function deckQueue(
-	deckTitle: string,
-	evaluate: (filter: string) => string[],
-	fields?: DeckFields
-): string[] {
-	const f = composeDeckFilters(deckTitle, fields);
-	return evaluate(f.queue);
+export interface GlobalQueueOptions {
+	itemRatio?: number;
+	topicRatio?: number;
+	/** strict = 宏观三段式（到期 Items → 到期 Topics → 新 Pending）；interleaved = item:topic 交错（默认，SM 交错学习精神） */
+	mode?: "interleaved" | "strict";
+}
+
+const TOPIC_BASE = "[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]";
+
+/** 到期/逾期 Topic（has[due] 且 due ≤ 今天；含逾期积压，按优先级升序） */
+function topicDueFilter(): string {
+	return `${TOPIC_BASE}has[due]days:due[0]] ` +
+		`${TOPIC_BASE}has[due]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MMDD0hh0mm0ss0XXX>] ` +
+		`+[nsort[priority]]`;
+}
+
+/** 未排期 Topic（无 due = 从未进入调度，Pending 语义，按优先级升序） */
+function topicPendingFilter(): string {
+	return `${TOPIC_BASE}!has[due]] +[nsort[priority]]`;
 }
 
 /**
- * SuperMemo 风格全量动态混合学习队列生成器：
- * 提取全局到期 Item (复习卡) 与全局活跃 Topic (阅读/摘录卡)，按 Priority + 交错比例合并生成单轨队列。
+ * SuperMemo 风格全局动态学习队列生成器：
+ * - interleaved（默认）：到期/待读 Topic（Priority 升序）与 Item 队列按 itemRatio:topicRatio 交错为单轨队列。
+ * - strict：宏观三段式 —— 当天到期 Items → 当天到期/逾期 Topics → 新导入 Pending（新 item + 无 due topic）。
  */
 export function composeGlobalLearningQueue(
 	evaluate: (filter: string) => string[],
-	opts: { itemRatio?: number; topicRatio?: number } = {}
+	opts: GlobalQueueOptions = {}
 ): string[] {
 	const defaultDeckFilters = composeDeckFilters("$:/Deck/default");
-	const rawItems = evaluate(defaultDeckFilters.queue);
+	const mode = opts.mode || "interleaved";
 
-	// 2. 提取今日到期（或新导入无 due）的 Topic 阅读材料，按 Priority 升序排序
-	const rawTopics = evaluate(
-		"[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]!has[due]] [all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]days:due[0]] +[nsort[priority]]"
-	);
+	if (mode === "strict") {
+		const dueItems = evaluate(`${defaultDeckFilters.learn} ${defaultDeckFilters.due}`);
+		const dueTopics = evaluate(topicDueFilter());
+		const newItems = evaluate(defaultDeckFilters.newly);
+		const pendingTopics = evaluate(topicPendingFilter());
+		return [...dueItems, ...dueTopics, ...newItems, ...pendingTopics];
+	}
+
+	// interleaved（默认）：item 队列与 topic 阅读流按比例交错
+	const rawItems = evaluate(defaultDeckFilters.queue);
+	const rawTopics = evaluate(`${topicDueFilter()} ${topicPendingFilter()}`);
 
 	const itemRatio = opts.itemRatio ?? 4;
 	const topicRatio = opts.topicRatio ?? 1;
