@@ -368,6 +368,257 @@ type: text/css
 	color: var(--tm-accent);
 	opacity: 0.9;
 }
+/* ===== CodeMirror 6 Obsidian 风格 Live Preview 动态内联渲染样式 ===== */
+.cm-live-heading {
+	font-weight: 700 !important;
+	color: var(--tm-text-1, inherit) !important;
+	margin-top: 0.8em;
+	margin-bottom: 0.4em;
+	display: inline-block;
+}
+.cm-live-heading-1 { font-size: 1.8em !important; line-height: 1.3 !important; }
+.cm-live-heading-2 { font-size: 1.5em !important; line-height: 1.35 !important; }
+.cm-live-heading-3 { font-size: 1.25em !important; line-height: 1.4 !important; }
+.cm-live-heading-4 { font-size: 1.1em !important; }
+.cm-live-heading-5 { font-size: 1em !important; }
+.cm-live-heading-6 { font-size: 0.9em !important; opacity: 0.85 !important; }
+
+.cm-live-bold { font-weight: bold !important; }
+.cm-live-italic { font-style: italic !important; }
+.cm-live-underline { text-decoration: underline !important; text-underline-offset: 3px !important; }
+.cm-live-strikethrough { text-decoration: line-through !important; opacity: 0.8 !important; }
+.cm-live-highlight {
+	background-color: var(--tm-highlight-bg, rgba(254, 240, 138, 0.75)) !important;
+	color: var(--tm-highlight-text, #854d0e) !important;
+	border-radius: 3px !important;
+	padding: 1px 4px !important;
+}
+.cm-live-superscript { vertical-align: super !important; font-size: 0.75em !important; }
+.cm-live-subscript { vertical-align: sub !important; font-size: 0.75em !important; }
+
+.cm-live-inline-code {
+	background: var(--tm-surface-2, rgba(0, 0, 0, 0.06)) !important;
+	border: 1px solid var(--tm-border, rgba(0, 0, 0, 0.1)) !important;
+	border-radius: 4px !important;
+	padding: 1px 5px !important;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+	font-size: 0.88em !important;
+}
+
+.cm-live-wikilink {
+	color: var(--tm-primary, #2563eb) !important;
+	font-weight: 500 !important;
+	text-decoration: underline !important;
+	text-decoration-color: rgba(37, 99, 235, 0.4) !important;
+	cursor: pointer !important;
+}
+.cm-live-wikilink:hover {
+	text-decoration-color: var(--tm-primary, #2563eb) !important;
+}
+
+.cm-live-transclusion {
+	color: var(--tm-accent, #8b5cf6) !important;
+	background: rgba(139, 92, 246, 0.08) !important;
+	border-radius: 4px !important;
+	padding: 1px 6px !important;
+	font-size: 0.92em !important;
+}
+
+.cm-live-blockquote {
+	border-left: 3px solid var(--tm-primary, #2563eb) !important;
+	padding-left: 8px !important;
+	color: var(--tm-text-2, rgba(0, 0, 0, 0.7)) !important;
+	font-style: italic !important;
+}
+
+.cm-live-list-prefix {
+	color: var(--tm-primary, #2563eb) !important;
+	font-weight: bold !important;
+	user-select: none;
+	display: inline-block;
+}
+.cm-live-list-bullet { font-size: 1.1em !important; }
+.cm-live-list-number { font-weight: 600 !important; }
+.cm-live-list-term { color: var(--tm-accent, #8b5cf6) !important; }
+.cm-live-list-def { color: var(--tm-text-3, #6b7280) !important; }
+
+.cm-live-hr {
+	display: block !important;
+	border-bottom: 2px dashed var(--tm-border, rgba(0, 0, 0, 0.15)) !important;
+	margin: 8px 0 !important;
+}
+.tm-save-indicator {
+	font-size: 0.8em;
+	color: var(--tm-text-3);
+	margin-left: 8px;
+	transition: opacity 0.2s ease;
+}
+.tm-save-indicator--saving {
+	color: var(--tm-accent);
+}
+.tm-save-indicator--saved {
+	color: #10b981;
+}
+
+/* ===== 划词浮动气泡菜单 (Selection Popover) ===== */
+.tm-selection-bubble {
+	position: absolute;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+	background: var(--tm-surface);
+	color: var(--tm-text-1);
+	border: 1px solid var(--tm-border);
+	border-radius: 999px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+	backdrop-filter: blur(8px);
+	transition: opacity 0.15s ease, transform 0.15s ease;
+	transform: translate(-50%, -100%) translateY(-8px);
+	pointer-events: auto;
+}
+.tm-selection-bubble-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-size: 0.82em;
+	font-weight: 500;
+	padding: 3px 9px;
+	border-radius: 999px;
+	border: none;
+	background: transparent;
+	color: var(--tm-text-1);
+	cursor: pointer;
+	white-space: nowrap;
+	transition: background 0.12s ease, color 0.12s ease;
+}
+.tm-selection-bubble-btn:hover {
+	background: var(--tm-surface-3);
+	color: var(--tm-accent-strong);
+}
+
+/* ===== 卡片建卡/修改弹窗 (Card Edit Modal) ===== */
+/* ===== 卡片建卡/修改弹窗 (Card Edit Modal) ===== */
+.tm-card-modal-overlay {
+	position: fixed !important;
+	top: 0 !important;
+	left: 0 !important;
+	right: 0 !important;
+	bottom: 0 !important;
+	z-index: 99999 !important;
+	background: rgba(15, 23, 42, 0.65) !important;
+	backdrop-filter: blur(8px) !important;
+	display: flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+}
+.tm-card-modal {
+	background: var(--tm-surface, #ffffff) !important;
+	border: 1px solid var(--tm-border, rgba(0, 0, 0, 0.12)) !important;
+	border-radius: 14px !important;
+	box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.2) inset !important;
+	width: 90% !important;
+	max-width: 520px !important;
+	padding: 24px !important;
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 16px !important;
+	color: var(--tm-text-1, #0f172a) !important;
+}
+.tm-card-modal-title {
+	font-size: 1.15em !important;
+	font-weight: 700 !important;
+	color: var(--tm-text-1, #0f172a) !important;
+	display: flex !important;
+	align-items: center !important;
+	gap: 8px !important;
+	margin-bottom: 2px !important;
+}
+.tm-card-modal-field {
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 6px !important;
+}
+.tm-card-modal-field label {
+	font-size: 0.88em !important;
+	font-weight: 600 !important;
+	color: var(--tm-text-1, #334155) !important;
+}
+.tm-card-modal-input, .tm-card-modal-textarea {
+	width: 100% !important;
+	padding: 10px 12px !important;
+	font-size: 0.95em !important;
+	line-height: 1.6 !important;
+	border: 1px solid var(--tm-border, #cbd5e1) !important;
+	border-radius: 8px !important;
+	background: var(--tm-surface-2, #f8fafc) !important;
+	color: var(--tm-text-1, #0f172a) !important;
+	box-sizing: border-box !important;
+	font-family: inherit !important;
+}
+.tm-card-modal-textarea {
+	min-height: 80px !important;
+	resize: vertical !important;
+}
+.tm-card-modal-input:focus, .tm-card-modal-textarea:focus {
+	outline: none !important;
+	border-color: var(--tm-primary, #2563eb) !important;
+	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
+	background: #ffffff !important;
+}
+.tm-card-modal-actions {
+	display: flex !important;
+	justify-content: flex-end !important;
+	gap: 10px !important;
+	margin-top: 8px !important;
+}
+.tm-card-modal-btn {
+	padding: 9px 18px !important;
+	font-size: 0.92em !important;
+	font-weight: 600 !important;
+	border-radius: 8px !important;
+	cursor: pointer !important;
+	transition: all 0.15s ease !important;
+}
+.tm-card-modal-cancel {
+	background: var(--tm-surface-2, #f1f5f9) !important;
+	color: var(--tm-text-1, #475569) !important;
+	border: 1px solid var(--tm-border, #cbd5e1) !important;
+}
+.tm-card-modal-cancel:hover {
+	background: #e2e8f0 !important;
+	color: #0f172a !important;
+}
+.tm-card-modal-submit {
+	background: var(--tm-primary, #2563eb) !important;
+	color: #ffffff !important;
+	border: none !important;
+	box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+}
+.tm-card-modal-submit:hover {
+	background: #1d4ed8 !important;
+	box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4) !important;
+}
+
+/* ===== 正文已制卡片段高亮 ===== */
+mark.tm-card-highlight {
+	background: rgba(99, 102, 241, 0.12);
+	color: inherit;
+	border-bottom: 2px solid var(--tm-accent);
+	padding: 0 2px;
+	border-radius: 2px;
+	cursor: pointer;
+}
+mark.tm-card-highlight--cloze {
+	background: rgba(245, 158, 11, 0.15);
+	border-bottom-color: #f59e0b;
+}
+mark.tm-card-highlight--qa {
+	background: rgba(16, 185, 129, 0.15);
+	border-bottom-color: #10b981;
+}
+
 /* 统一按钮风格：全部 tm-sec-btn 基类 + 语义修饰（沿用 core design token） */
 .tm-sec-btn {
 	display: inline-flex;
@@ -598,17 +849,9 @@ mark.tm-readpoint {
 .tm-doc-done-row:hover, .tm-doc-derived .tm-doc-done-row:hover { background: var(--tm-surface-2); }
 
 /* M3 阅读态排版：Section 卡展开正文（与 section-bar 同帧时生效） */
+/* topic 类型 tiddler 正文由 <$section-body/> 独占渲染，隐藏 TiddlyWiki 默认 body 防止重复 */
 .tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body {
-	max-width: 42em;
-	line-height: 1.8;
-}
-.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body p {
-	margin: 0.7em 0;
-}
-.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body h1,
-.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body h2,
-.tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body h3 {
-	margin-top: 1.2em;
+	display: none !important;
 }
 
 /* 嵌套摘录 / 回看锚点高亮 */
@@ -1668,6 +1911,25 @@ mark.tm-readpoint {
 .tm-theme-toggle .tm-btn { font-size: 0.8em; padding: 4px 12px; }
 .tm-decks-actions { display: flex; gap: 10px; margin: 14px 0 8px; }
 .tm-workflow-btn { font-size: 0.92em; padding: 8px 18px; border-radius: var(--tm-radius-sm); }
+.tm-workflow-btn-hero {
+	font-size: 1.05em !important;
+	font-weight: 700 !important;
+	padding: 12px 28px !important;
+	border-radius: 10px !important;
+	background: var(--tm-primary, #2563eb) !important;
+	color: #ffffff !important;
+	box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+	transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.tm-workflow-btn-hero:hover {
+	background: #1d4ed8 !important;
+	transform: translateY(-1px) scale(1.02) !important;
+	box-shadow: 0 8px 22px rgba(37, 99, 235, 0.45) !important;
+}
+.tm-workflow-btn-hero .tm-btn-icon {
+	width: 1.25em !important;
+	height: 1.25em !important;
+}
 .tm-workflow-btn .tm-btn-icon { width: 1.1em; height: 1.1em; }
 .tm-decks-sub { font-size: 0.86em; color: var(--tm-text-2); margin-top: 2px; }
 .tm-decks-nav { font-size: 0.86em; margin-top: 6px; color: var(--tm-text-2); }

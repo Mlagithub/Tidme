@@ -61,3 +61,40 @@ export function deckQueue(
 	const f = composeDeckFilters(deckTitle, fields);
 	return evaluate(f.queue);
 }
+
+/**
+ * SuperMemo 风格全量动态混合学习队列生成器：
+ * 提取全局到期 Item (复习卡) 与全局活跃 Topic (阅读/摘录卡)，按 Priority + 交错比例合并生成单轨队列。
+ */
+export function composeGlobalLearningQueue(
+	evaluate: (filter: string) => string[],
+	opts: { itemRatio?: number; topicRatio?: number } = {}
+): string[] {
+	const defaultDeckFilters = composeDeckFilters("$:/Deck/default");
+	const rawItems = evaluate(defaultDeckFilters.queue);
+
+	// 2. 提取今日到期（或新导入无 due）的 Topic 阅读材料，按 Priority 升序排序
+	const rawTopics = evaluate(
+		"[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]!has[due]] [all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]days:due[0]] +[nsort[priority]]"
+	);
+
+	const itemRatio = opts.itemRatio ?? 4;
+	const topicRatio = opts.topicRatio ?? 1;
+	const result: string[] = [];
+
+	let i = 0;
+	let t = 0;
+	while (i < rawItems.length || t < rawTopics.length) {
+		let count = 0;
+		while (i < rawItems.length && count < itemRatio) {
+			result.push(rawItems[i++]);
+			count++;
+		}
+		count = 0;
+		while (t < rawTopics.length && count < topicRatio) {
+			result.push(rawTopics[t++]);
+			count++;
+		}
+	}
+	return result;
+}

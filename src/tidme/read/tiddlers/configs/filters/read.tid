@@ -2,4 +2,4 @@ tags: $:/tags/ViewTemplateBodyFilter
 title: $:/config/Tidme/ViewTemplateBodyFilters/read
 list-before:
 
-[all[shadows+tiddlers]removesuffix[/study]tag[$:/tags/TidmeDeck]] :filter[subfilter{!!card}!subfilter{!!card_exclude}match<..currentTiddler>] +[!is[draft]!is[blank]then[$:/plugins/keepone/tidme/read/ui/ViewTemplate/body]]
+[<..currentTiddler>tidme.kind[topic]!tag[tidme-import-doc]] [<..currentTiddler>has[tidme.doc]] [all[shadows+tiddlers]removesuffix[/study]tag[$:/tags/TidmeDeck]] :filter[subfilter{!!card}!subfilter{!!card_exclude}match<..currentTiddler>] +[!is[draft]!is[blank]then[$:/plugins/keepone/tidme/read/ui/ViewTemplate/body]]

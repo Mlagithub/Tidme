@@ -7,4 +7,5 @@ code-body: yes
 
 <$list filter="[<currentTiddler>tidme.kind[topic]!tag[tidme-import-doc]]" variable="ignore">
 <$section-bar/>
+<$section-body/>
 </$list>

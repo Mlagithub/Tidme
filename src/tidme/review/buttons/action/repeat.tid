@@ -48,6 +48,17 @@ code-body: yes
             $value={{{ [<studyTiddler>get[tidme.priority]else[50]add<priority_delta>] +[min[100]] +[max[0]] }}}
             $timestamp={{$:/config/TimestampDisable}}
         />
+        <$let
+            rem_list={{{ [[$:/state/tidme/learning-session]get[list]enlist-input[]!match<studyTiddler>format:titlelist[]join[ ]] }}}
+            again_list={{{ [[$:/state/tidme/learning-session]get[list]enlist-input[]!match<studyTiddler>] [<studyTiddler>] +[format:titlelist[]join[ ]] }}}
+            new_session_list={{{ [<rating>match[Again]then<again_list>else<rem_list>] }}}
+        >
+            <$action-setfield
+                $tiddler="$:/state/tidme/learning-session"
+                list=<<new_session_list>>
+                $timestamp={{$:/config/TimestampDisable}}
+            />
+        </$let>
         <$action-sendmessage
             $message="tm-close-tiddler"
         />

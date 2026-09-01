@@ -198,14 +198,36 @@ export function sortPriorityMixedQueue<T extends CardLike>(
 	});
 }
 
+/**
+ * Topic 专属 A-Factor 展期函数（对标 SuperMemo 优先级漏斗调度）：
+ * 下一次间隔 = 当前间隔 * A-Factor（默认 1.5，最小 3 天），顺延后将低优先阅读材料自动推后，释放队列空间给更高优先内容。
+ */
+export function postponeTopicByAFactor(
+	fields: Record<string, any>,
+	aFactor = 1.5,
+	minDays = 3
+): Record<string, any> {
+	const lastDate = parseTwDate(fields.last_review || fields.due, new Date());
+	const now = new Date();
+	const elapsedDays = Math.max(1, Math.round((now.getTime() - lastDate.getTime()) / 86400000));
+	const currentInterval = Number(fields.scheduled_days) || elapsedDays;
+	const newInterval = Math.max(minDays, Math.round(currentInterval * aFactor));
+	const due = twDate(addDays(now, newInterval));
+	return {
+		due,
+		scheduled_days: String(newInterval),
+		last_review: twDate(now)
+	};
+}
+
 export interface AutoPostponeOptions {
 	/** 逾期卡中超过该优先级（数值更大=更低优先）的才顺延 */
 	maxPriority?: number;
 	/** 顺延天数 */
 	postponeDays?: number;
-	/** 始终保留的高优先级卡数（按优先级升序取前 N） */
+	/** 始终保留的高优先级卡数（按优先级升序取前 N，严密保护记忆卡复习） */
 	keepTop?: number;
-	/** 触发顺延的逾期阈值：只有逾期卡总数 > maxOverdueThreshold 时才触发过载顺延（默认 0 表示无门槛） */
+	/** 触发顺延的逾期阈值：只有逾期任务总数 > maxOverdueThreshold 时才触发过载顺延（默认 0 表示无门槛） */
 	maxOverdueThreshold?: number;
 }
 
@@ -215,14 +237,15 @@ export interface AutoPostponeResult {
 }
 
 /**
- * auto-postpone：对逾期卡按优先级排序，保留 top N 高优先级，其余低优先级顺延。
- * 对应 SM auto-postpone（低优先级积压自动顺延，高优先级不受影响）。
- * @param cards 候选卡（fields 含 due / tidme.priority / tidme.suspended）
+ * auto-postpone（“弃车保帅”过载保护）：
+ * 优先推迟低优先级的 Topic 阅读材料与低优先级 Item 记忆卡，
+ * 严密保护高优先级 Item 记忆卡的 FSRS 复习间隔不受破坏。
+ * @param cards 候选卡（fields 含 due / tidme.priority / tidme.suspended / tidme.kind）
  */
 export function autoPostpone(cards: CardLike[], opts: AutoPostponeOptions = {}): AutoPostponeResult {
-	const maxPriority = opts.maxPriority ?? 60;
+	const maxPriority = opts.maxPriority ?? 40;
 	const postponeDays = opts.postponeDays ?? 7;
-	const keepTop = opts.keepTop ?? 10;
+	const keepTop = opts.keepTop ?? 15;
 	const maxOverdueThreshold = opts.maxOverdueThreshold ?? 0;
 	const now = Date.now();
 
@@ -231,13 +254,13 @@ export function autoPostpone(cards: CardLike[], opts: AutoPostponeOptions = {}):
 			const f = c.fields;
 			if (f["tidme.suspended"] === "yes") return false;
 			if (isCardDone(f)) return false; // 已出队（done/ignored）
-			if (f["tidme.kind"] === "topic") return false; // 阅读流不参与复习顺延
 			return parseTwDate(f.due, new Date(0)).getTime() < now;
 		})
 		.sort((a, b) => {
-			const pa = normalizePriority(a.fields["tidme.priority"]);
-			const pb = normalizePriority(b.fields["tidme.priority"]);
-			if (pa !== pb) return pa - pb; // 0（高）在前
+			// Item 记忆卡相比 Topic 在过载顺延时享受防护加权
+			const pa = normalizePriority(a.fields["tidme.priority"]) + (a.fields["tidme.kind"] === "item" ? -15 : 0);
+			const pb = normalizePriority(b.fields["tidme.priority"]) + (b.fields["tidme.kind"] === "item" ? -15 : 0);
+			if (pa !== pb) return pa - pb; // 数值小（高优先）在前面保护
 			return parseTwDate(a.fields.due).getTime() - parseTwDate(b.fields.due).getTime();
 		});
 
@@ -254,7 +277,12 @@ export function autoPostpone(cards: CardLike[], opts: AutoPostponeOptions = {}):
 		.filter((c) => normalizePriority(c.fields["tidme.priority"]) >= maxPriority);
 
 	return {
-		patches: postponable.map((c) => ({ title: c.title, fields: postponeCard(c.fields, postponeDays) })),
+		patches: postponable.map((c) => ({
+			title: c.title,
+			fields: c.fields["tidme.kind"] === "topic"
+				? postponeTopicByAFactor(c.fields)
+				: postponeCard(c.fields, postponeDays)
+		})),
 		stats: { overdue: overdue.length, postponed: postponable.length, kept: kept.length }
 	};
 }
@@ -279,4 +307,39 @@ export function subsetByDoc(docId: string): string {
 }
 export function subsetByTag(tag: string): string {
 	return `[tag[${tag}]]`;
+}
+
+export interface InterleaveOptions {
+	/** 每连续出队 itemRatio 个 Item 测试卡后，穿插出队 topicRatio 个 Topic 阅读卡（默认 4:1） */
+	itemRatio?: number;
+	topicRatio?: number;
+}
+
+/**
+ * 动态交错混合函数（SuperMemo Interleaving）：
+ * 将 Item 队列（记忆复习卡）与 Topic 队列（渐进阅读材料）按指定比例交错编排为一个统一队列。
+ */
+export function interleaveQueues<T>(items: T[], topics: T[], opts: InterleaveOptions = {}): T[] {
+	const itemRatio = Math.max(1, opts.itemRatio ?? 4);
+	const topicRatio = Math.max(1, opts.topicRatio ?? 1);
+	const result: T[] = [];
+
+	let i = 0;
+	let t = 0;
+
+	while (i < items.length || t < topics.length) {
+		// 1. 连续出队 itemRatio 个 Item
+		let count = 0;
+		while (i < items.length && count < itemRatio) {
+			result.push(items[i++]);
+			count++;
+		}
+		// 2. 连续出队 topicRatio 个 Topic
+		count = 0;
+		while (t < topics.length && count < topicRatio) {
+			result.push(topics[t++]);
+			count++;
+		}
+	}
+	return result;
 }

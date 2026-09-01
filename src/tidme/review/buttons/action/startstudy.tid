@@ -9,7 +9,9 @@ button-classes: tmc-button-show
 code-body: yes
 
 <$let
-    nextTiddler={{{ [subfilter<filter_queue>first[]] }}}
+    session_next={{{ [[$:/state/tidme/learning-session]get[list]enlist-input[]!match<studyTiddler>!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]first[]] }}}
+    deck_next={{{ [subfilter<filter_queue>first[]] }}}
+    nextTiddler={{{ [<session_next>!is[blank]then<session_next>else<deck_next>] }}}
 >
     <$action-setfield
         $tiddler={{{ [<deckTiddler>addsuffix[/study]] }}}

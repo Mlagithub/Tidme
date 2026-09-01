@@ -6,7 +6,7 @@ icon: $:/plugins/keepone/tidme/review/icon
 
 <div class="tm-decks-head">
 <div class="tm-decks-top"><div class="tm-decks-title">牌组库</div><$tidme-theme-toggle/></div>
-<div class="tm-decks-sub">阅读文章、摘录要点、挖空成卡片；在牌组里巩固挖空/问答卡。</div>
+<div class="tm-decks-sub">SuperMemo 动态交错学习：自动交错复习到期记忆卡与阅读优先文章/摘录；亦可在下方牌组或阅读列表中独立聚焦学习。</div>
 <$tidme-workflow/>
 <$tidme-nav/>
 </div>
