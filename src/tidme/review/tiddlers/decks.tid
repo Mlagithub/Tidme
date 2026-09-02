@@ -1,12 +1,12 @@
 title: $:/Decks
-caption: 牌组库
+caption: 学习中心
 icon: $:/plugins/keepone/tidme/review/icon
 
 <div class="tm-decks">
 
 <div class="tm-decks-head">
-<div class="tm-decks-top"><div class="tm-decks-title">牌组库</div><$tidme-theme-toggle/></div>
-<div class="tm-decks-sub">SuperMemo 动态交错学习：自动交错复习到期记忆卡与阅读优先文章/摘录；亦可在下方牌组或阅读列表中独立聚焦学习。</div>
+<div class="tm-decks-top"><div class="tm-decks-title">学习中心</div><$tidme-theme-toggle/></div>
+<div class="tm-decks-sub">开始学习 = SuperMemo 动态交错学习：自动交错复习到期知识卡与优先的阅读材料；下方复习牌组集中管理知识卡（默认牌组自动收录全部挖空/问答），也可在阅读列表独立聚焦阅读。</div>
 <$tidme-workflow/>
 <$tidme-nav/>
 </div>
@@ -30,7 +30,7 @@ icon: $:/plugins/keepone/tidme/review/icon
     </div>
 </div>
 
-<<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/ViewTemplate/tr" storyview:"classic" >>
+<<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/ViewTemplate/tr" storyview:"classic" >>
 </div>
 
 </div>

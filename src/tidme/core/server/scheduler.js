@@ -4,7 +4,7 @@ Tidme 自动顺延调度器（浏览器 / Node / TiddlyWeb 通用）
 启动时执行一次 + 每小时检查，对低优先级逾期卡执行 auto-postpone（防队列爆炸）。
 配置 tiddler：$:/config/Tidme/AutoPostpone
   {"enable": true, "maxPriority": 60, "postponeDays": 7, "keepTop": 10}
-默认 enable=false（不自动改数据）；用户在牌组批量操作面板勾选"每日自动顺延"开启。
+默认 enable=false（不自动改数据）；用户在卡片管理器页的批量操作区勾选"每日自动顺延"开启。
 \*/
 
 (function () {

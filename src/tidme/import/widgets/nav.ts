@@ -1,7 +1,7 @@
 /*
 widgets/nav.ts — 页面间导航条（Tidme 主页面切换 + 分隔线 + 当前页高亮）
 
-渲染：牌组库 · 阅读列表 · 导入中心 · 卡片管理器 · 统计
+渲染：学习中心 · 阅读列表 · 导入中心 · 卡片管理器 · 统计
 点击 tm-navigate 切换；当前 tiddler 高亮（主色）。
 放各主页面顶部，替换散落的底部链接。
 */
@@ -11,7 +11,7 @@ const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const NAV: [string, string][] = [
-	["$:/Decks", "牌组库"],
+	["$:/Decks", "学习中心"],
 	["$:/plugins/keepone/tidme/import/ui/reading-list", "阅读列表"],
 	["$:/plugins/keepone/tidme/import/ui/import-center", "导入中心"],
 	["$:/plugins/keepone/tidme/manager/ui/card-manager", "卡片管理器"],

@@ -502,10 +502,15 @@ function makeFileWidget(): WidgetCtor {
 
 			btnImport.addEventListener("click", async () => {
 				let created = 0, updated = 0, archived = 0;
+				let firstDocTitle = "";
 				for (const [token, item] of pending) {
 					if (!item.result) continue;
 					const r = await commitResult(item.result);
 					created += r.created; updated += r.updated; archived += r.archived;
+					if (!firstDocTitle) {
+						firstDocTitle = this.wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${item.result.docId}]]`)[0]
+							|| item.result.tiddlers[0]?.title || "";
+					}
 					pending.delete(token);
 				}
 				// 重绘预览区
@@ -518,6 +523,10 @@ function makeFileWidget(): WidgetCtor {
 				if (updated || archived) {
 					rowsBox.appendChild(el(doc, "div", "tm-import-summary tm-import-muted",
 						`—— 对齐：新增 ${created} · 更新 ${updated} · 归档 ${archived}（SRS 进度保留）`));
+				}
+				// 落点：导入完成跳到本书文档汇总页（从那里决定读哪张/继续提炼），而非停在空白队列
+				if (created > 0 && firstDocTitle) {
+					this.dispatchEvent({ type: "tm-navigate", navigateTo: firstDocTitle });
 				}
 			});
 			btnClear.addEventListener("click", () => {
@@ -611,8 +620,14 @@ function makeFileWidget(): WidgetCtor {
 			uploaderCard.appendChild(input);
 			uploaderCard.appendChild(hint);
 			uploaderCard.appendChild(prioRow);
-			uploaderCard.appendChild(serverRow);
-			uploaderCard.appendChild(serverStatus);
+			// 服务端处理属高级选项：默认折叠（本地导入为主路径，避免普通用户被 TiddlyWeb 选项打扰）
+			const adv = el(doc, "details", "tm-import-advanced");
+			const advSum = el(doc, "summary", "tm-import-muted", "高级：上传到服务端后台处理（TiddlyWeb）");
+			advSum.title = "适合大文件：解析在服务端后台执行，不阻塞页面；需要 TiddlyWeb 服务端";
+			adv.appendChild(advSum);
+			adv.appendChild(serverRow);
+			adv.appendChild(serverStatus);
+			uploaderCard.appendChild(adv);
 			wrap.appendChild(uploaderCard);
 			wrap.appendChild(overlay);
 

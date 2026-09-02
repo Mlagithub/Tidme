@@ -7,7 +7,3 @@ type: text/vnd.tiddlywiki
 <$tidme-nav/>
 
 <$stats-panel/>
-
----
-
-[[← 导入中心|$:/plugins/keepone/tidme/import/ui/import-center]] · [[牌组批量操作|$:/plugins/keepone/tidme/manager/ui/deck-ops]]

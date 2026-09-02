@@ -71,7 +71,7 @@ function makeWorkflow(): any {
 			this.domNodes.push(root);
 
 			const learnBtn = iconButton(doc, "tm-btn tm-btn--primary tm-workflow-btn-hero", "study", "🚀 开始学习");
-			learnBtn.title = "进入 SuperMemo 全局动态学习流（自动交错复习到期卡片与阅读优先文章/摘录）";
+			learnBtn.title = "全局学习流：自动交错复习到期的知识卡（挖空/问答）与优先的阅读材料（节/摘录）；勾选「严格队列」则按 到期知识卡 → 到期阅读 → 新导入 的顺序";
 			learnBtn.addEventListener("click", () => startGlobalLearning(wiki, this));
 			root.appendChild(learnBtn);
 
@@ -80,7 +80,7 @@ function makeWorkflow(): any {
 			const modeCheck = doc.createElement("input");
 			modeCheck.type = "checkbox";
 			modeCheck.checked = queueMode(wiki) === "strict";
-			modeCheck.title = "严格队列：到期卡片 → 到期阅读 → 新导入（宏观三段式）；默认 4:1 交错学习";
+			modeCheck.title = "严格队列：到期知识卡 → 到期阅读 → 新导入（宏观三段式）；默认 4:1 交错学习";
 			modeRow.appendChild(modeCheck);
 			const modeLabel = el(doc, "span", "tm-import-muted",
 				"严格队列（到期卡片 → 到期阅读 → 新导入）；默认交错学习");
