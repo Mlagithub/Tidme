@@ -17,7 +17,7 @@ import { emitTiddlers, runSplit, twDateString, initialFsrsFields } from "./split
 
 export { runSplit, twDateString, initialFsrsFields, applyOverrides, cleanTitle } from "./split";
 export { makeExtractId, makeCardId, makeSectionId, makeDocId, contentFingerprint } from "$:/plugins/keepone/tidme/core/ids";
-export { bookRoot, bookCardsRoot, sectionPath, extractPath, cardPath, deckSubsetPath, insertedSectionTitle, leafIdOf, slugify } from "$:/plugins/keepone/tidme/core/paths";
+export { bookRoot, bookCardsRoot, sectionPath, sectionLeaf, extractPath, cardPath, deckSubsetPath, insertedSectionTitle, leafIdOf, slugify } from "$:/plugins/keepone/tidme/core/paths";
 
 export interface ImportResult {
 	bookTitle: string;

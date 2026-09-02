@@ -11,7 +11,7 @@ G1 干预：runSplit 接受 overrides（按 trail key 强制合并/拆分），�
 
 import { makeDocId, makeSectionId, contentFingerprint, normalizeText } from "$:/plugins/keepone/tidme/core/ids";
 import type { BookMeta } from "$:/plugins/keepone/tidme/core/ids";
-import { bookRoot, joinPath } from "$:/plugins/keepone/tidme/core/paths";
+import { bookRoot, joinPath, sectionLeaf } from "$:/plugins/keepone/tidme/core/paths";
 import { initialFsrsFields, twDateString } from "$:/plugins/keepone/tidme/core/schema";
 import { normalizePriority, PRIORITY_DEFAULT, afactorForText } from "$:/plugins/keepone/tidme/core/scheduler";
 import { chunkBook, applyOverrides } from "./chunker";
@@ -136,11 +136,13 @@ export async function emitTiddlers(
 		const id = await makeSectionId(docId, trail, s.ordinal as number);
 		const hash = await contentFingerprint(s.text);
 		const joined = trail.join(" › ");
-		const title = joinPath(docRoot, id); // 拍平在 docRoot 下；章层次靠 breadcrumb 字段
+		// 叶段 = 可读 caption slug + "-" + 稳定 id（A2：搜索/最近/反向链接可读；唯一性由 id 保证）
+		const capText = s.title || trail[trail.length - 1] || "";
+		const title = joinPath(docRoot, sectionLeaf(capText, id));
 		cards.push({
 			title,
 			type: "text/vnd.tiddlywiki",
-			caption: s.title || trail[trail.length - 1] || "", // 卡片正面：学习模式折叠态只渲染 caption
+			caption: capText, // 卡片正面：学习模式折叠态只渲染 caption
 			text: s.html,
 			...nowFields,
 			...syncFields,

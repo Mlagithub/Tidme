@@ -55,12 +55,15 @@ test("paths: slugify 处理各种书名", () => {
 	assert.equal(paths.slugify(""), "");
 });
 
-test("paths: bookRoot + sectionPath 产出符合命名空间（拍平到书目录）", () => {
+test("paths: bookRoot + sectionPath 产出符合命名空间（可读叶段 + 稳定 id）", () => {
 	const root = paths.bookRoot("批评性思维", "d12345678");
 	assert.equal(root, "Tidme/Books/批评性思维");
-	// sectionPath 拍平：章层次靠 breadcrumb 字段，title 只到 sectionId
-	const sec = paths.sectionPath("批评性思维", "d12345678", ["批评性思维", "第一章", "1.1 思维"], "s1234567890ab");
-	assert.equal(sec, "Tidme/Books/批评性思维/s1234567890ab");
+	// sectionLeaf（A2）：可读 caption slug + "-" + id；唯一性由 id 保证
+	assert.equal(paths.sectionLeaf("第一章", "s1234567890ab"), "第一章-s1234567890ab");
+	assert.equal(paths.sectionLeaf("", "s1234567890ab"), "s1234567890ab", "caption 空退化为纯 id");
+	// sectionPath 拍平到书目录
+	const sec = paths.sectionPath("批评性思维", "第一章 1.1 思维", "s1234567890ab");
+	assert.equal(sec, "Tidme/Books/批评性思维/第一章-1-1-思维-s1234567890ab");
 });
 
 test("paths: 摘录留在书目录、知识卡进 decks/（拍平+命名空间分流）", () => {
@@ -106,8 +109,8 @@ test("runSplit: 节卡 title 拍平到书目录（章层次在 breadcrumb 字段
 		minChars: 0
 	});
 	const section = r.tiddlers.find((t) => t["tidme.kind"] === "topic");
-	// 拍平：节卡 title = Tidme/Books/<书>/<sectionId>（不再嵌章 slug）
-	assert.match(section.title, /^Tidme\/Books\/测试书2\/s[a-f0-9]+$/);
+	// 拍平：节卡 title = Tidme/Books/<书>/<可读 caption>-<sectionId>（A2）
+	assert.match(section.title, /^Tidme\/Books\/测试书2\/章一-s[a-f0-9]+$/);
 	assert.ok(section["tidme.id"].startsWith("s"), "tidme.id 以 s 开头");
 	// breadcrumb 仍可读（章层次保留在这里）
 	assert.equal(section["tidme.breadcrumb"], "测试书2 › 章一", "breadcrumb 保留可读章名（不被 path 污染）");
@@ -174,6 +177,17 @@ test("runSplit: 中文长书名 + 特殊字符全部安全 slug", async () => {
 	});
 	const doc2 = r2.tiddlers.find((t) => t["tidme.kind"] === undefined);
 	assert.equal(doc2.title, "Tidme/Books/批判性思维", "cleanTitle 后 doc title 精确");
+});
+
+test("runSplit: 节卡叶段 = 可读 caption slug + 稳定 id（A2；同 caption 仍唯一）", async () => {
+	const r = await pipeline.runSplit({ text: "# 第一章\n\n内容甲。\n\n# 第一章\n\n内容乙。", title: "叶段书", type: "text/markdown", minChars: 0 });
+	const secs = r.tiddlers.filter((t) => t["tidme.kind"] === "topic");
+	assert.ok(secs.length >= 2, `应有 ≥2 节（同 caption 两节），实际 ${secs.length}`);
+	const leaves = secs.map((s) => String(s.title).split("/").pop());
+	for (const lf of leaves) assert.ok(lf.startsWith("第一章-s"), `叶段可读且含 id: ${lf}`);
+	assert.notEqual(leaves[0], leaves[1], "同 caption 不同 id → title 唯一");
+	const tailId = String(leaves[0]).slice(String(leaves[0]).lastIndexOf("-") + 1);
+	assert.equal(tailId, secs[0]["tidme.id"], "叶段尾 = tidme.id");
 });
 
 // === 集成：buildExtract / buildCloze / buildQA ===
@@ -345,15 +359,15 @@ test("FSP: 注入普通 tiddler 后保留 Tidme 目录结构（filesystem 适配
 	// 调 filesystem 文件信息生成器
 	const bookTitle = "导航测试书";
 	const docId = "dnav1234";
-	const sectionTitle = paths.sectionPath(bookTitle, docId, [bookTitle, "第一章"], "s1234567890ab");
+	const sectionTitle = paths.sectionPath(bookTitle, "第一章", "s1234567890ab");
 	wiki.addTiddler({ title: sectionTitle, type: "text/vnd.tiddlywiki", text: "x", "tidme.doc": docId, "tidme.kind": "topic", "tidme.subkind": "section", "tidme.breadcrumb": `${bookTitle} › 第一章` });
 
-	// 用 generateTiddlerFileInfo 验证路径（拍平：节卡直接落书目录，不再嵌章 slug）
+	// 用 generateTiddlerFileInfo 验证路径（拍平：节卡直接落书目录，叶段=可读+id）
 	const tiddler = wiki.getTiddler(sectionTitle);
 	const filters = wiki.getTiddlerText("$:/config/FileSystemPaths", "").split("\n").filter(s => s.trim());
 	const fi = tw.utils.generateTiddlerFileInfo(tiddler, { pathFilters: filters, wiki });
-	assert.match(fi.filepath, /Tidme[\\\/]Books[\\\/]导航测试书[\\\/]s1234567890ab\.tid$/,
-		`filepath 拍平到书目录: ${fi.filepath}`);
+	assert.match(fi.filepath, /Tidme[\\\/]Books[\\\/]导航测试书[\\\/]第一章-s1234567890ab\.tid$/,
+		`filepath 拍平到书目录（可读叶段）: ${fi.filepath}`);
 });
 
 // === 集成：reading-list 导航修复（用真实 doc title）===

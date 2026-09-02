@@ -5,7 +5,7 @@ paths.ts — tiddler 命名空间路径生成（M3 章节隔离）
 - 每本书放进独立目录（TW 原生 title 路径语义）
 - 一本书的目录内不再分子目录：文档页/节卡/摘录都拍平（章层次靠 breadcrumb 字段）
 - 知识型卡片（挖空/问答）单独走 Tidme/Decks/<书>/ 命名空间（避免污染阅读材料目录）
-- title 唯一稳定（用 tidme.id 短哈希作叶段）
+- title 唯一稳定：叶段 = 可读 caption slug + "-" + tidme.id（A2，核心 UI 可读）
 - 显示用 caption / tidme.breadcrumb 保持可读（不动 UI）
 - 现有过滤器全部基于字段（tidme.doc / tidme.parent / tags），零依赖 title 路径
 
@@ -78,10 +78,16 @@ export function deckSubsetPath(bookTitle: string, docId: string, purpose = "复�
 	return joinPath(root, slugify(purpose));
 }
 
-/** 节卡路径：Tidme/Books/<bookSlug>/<sectionId>（拍平；章层次靠 breadcrumb 字段表达） */
-export function sectionPath(bookTitle: string, docId: string, _breadcrumb: string[], sectionId: string): string {
-	const root = bookRoot(bookTitle, docId);
-	return joinPath(root, sectionId);
+/** 节卡叶段（A2：核心 UI 可读）：可读 caption slug + "-" + 稳定 id；caption 空时退化为纯 id。
+ * 唯一性由 id 保证，可读性由 caption 提供；标题一经创建即稳定。 */
+export function sectionLeaf(caption: string, sectionId: string): string {
+	const slug = slugify(caption);
+	return (slug ? slug + "-" : "") + sectionId;
+}
+
+/** 节卡路径（纯形式）：Tidme/Books/<bookSlug>/<sectionLeaf(caption, sectionId)>。 */
+export function sectionPath(bookTitle: string, caption: string, sectionId: string): string {
+	return joinPath(bookRoot(bookTitle), sectionLeaf(caption, sectionId));
 }
 
 /** 摘录路径：Tidme/Books/<bookSlug>/<sectionId>--extract（拍平；-- 分隔避免冲突）
