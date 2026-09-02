@@ -252,7 +252,13 @@ function buildRow(
 					parts.push(cleaned);
 					t["tidme.breadcrumb"] = parts.join(" › ");
 					t.caption = cleaned;
-					t.title = (parts[0] || r.bookTitle) + " › " + cleaned;
+					// 重建 namespace title：用 docRoot + paths.sectionLeaf(caption, id)
+					// 保留稳定 id 避免覆盖/重切分时撞名；docRoot 已在 emitTiddlers 时写入 t["tidme.docpage"]
+					const id = String(t["tidme.id"] || "");
+					const docRoot = String(t["tidme.docpage"] || doc.title || r.bookTitle);
+					if (id && pipeline.sectionLeaf && pipeline.joinPath) {
+						t.title = pipeline.joinPath(docRoot, pipeline.sectionLeaf(cleaned, id));
+					}
 					t._renamed = true;
 				}
 			}
@@ -299,7 +305,12 @@ function buildRow(
 						const newPath = parts.join(" › ");
 						t["tidme.breadcrumb"] = newPath;
 						t.caption = newShort;
-						t.title = (parts[0] || r.bookTitle) + " › " + newShort;
+						// 重建 namespace title：docRoot + sectionLeaf(caption, id) —— 稳定 id 保证唯一
+						const id = String(t["tidme.id"] || "");
+						const docRoot = String(t["tidme.docpage"] || doc.title || r.bookTitle);
+						if (id && pipeline.sectionLeaf && pipeline.joinPath) {
+							t.title = pipeline.joinPath(docRoot, pipeline.sectionLeaf(newShort, id));
+						}
 						t._renamed = true;
 					}
 					activeEditTitleIndex = null;
@@ -468,7 +479,8 @@ function makeFileWidget(): WidgetCtor {
 				const sectionCards = cards.filter((x: any) => x["tidme.kind"] === "topic");
 				const align = require("$:/plugins/keepone/tidme/core/align.js");
 				const docPage = this.wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${result.docId}]]`)[0] || "";
-				const oldCards = this.wiki.filterTiddlers(`[tidme.doc[${result.docId}]tidme.kind[topic]!is[draft]]`)
+				// 仅对齐 section（普通阅读节）：摘录/挖空/问答/手动卡由用户决定，不在重切分时归档
+				const oldCards = this.wiki.filterTiddlers(`[tidme.doc[${result.docId}]tidme.kind[topic]!tidme.subkind[extract]!is[draft]]`)
 					.map((ot: string) => ({ title: ot, fields: this.wiki.getTiddler(ot)?.fields || {} }));
 
 				let aligned: any = null;

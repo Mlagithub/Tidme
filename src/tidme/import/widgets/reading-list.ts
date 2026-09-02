@@ -51,7 +51,7 @@ function collectTopicCards(wiki: any): TopicCard[] {
 				fields: f
 			};
 		})
-		.filter((c: TopicCard) => !isReadDone(c.fields));
+		.filter((c: TopicCard) => !sched.isCardDone(c.fields));
 }
 
 /** 组内排序：优先级（0 最高）→ due（早的在前，topic 被动重读）→ 阅读顺序 */
@@ -74,11 +74,6 @@ function groupByDoc(cards: TopicCard[]): { doc: string; cards: TopicCard[] }[] {
 	return [...m.entries()]
 		.map(([doc, cs]) => ({ doc, cards: sortTopicCards(cs) }))
 		.sort((a, b) => String(a.doc).localeCompare(String(b.doc), "zh"));
-}
-
-/** 阅读态判定（分类：topic 卡 done/ignored 视为完成出队） */
-function isReadDone(f: any): boolean {
-	return sched.isCardDone(f);
 }
 
 /** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 中排除摘录） */
@@ -157,7 +152,7 @@ function makeReadingList(): any {
 				const det = el(doc, "details", "tm-rl-doc");
 				// 文档组默认折叠（两本书也不占长页面）；summary = 名 + 进度 + 继续阅读
 				const docAll = sectionsOfDoc(wiki, g.doc);
-				const docDone = docAll.filter((t) => isReadDone(wiki.getTiddler(t)?.fields)).length;
+				const docDone = docAll.filter((t) => sched.isCardDone(wiki.getTiddler(t)?.fields)).length;
 				// 真实 doc tiddler title（命名空间路径，folder 冲突时含 ~docId 后缀）：
 				// 按 docId 查真实文档页（B1），不再由书名+docId 重算（slug 规则一变即失配）
 				const bookTitle = g.cards[0].breadcrumb.split(" › ")[0] || "";
@@ -306,4 +301,3 @@ exports.topicQueueFilter = topicQueueFilter;
 exports.collectTopicCards = collectTopicCards;
 exports.sortTopicCards = sortTopicCards;
 exports.groupByDoc = groupByDoc;
-exports.isReadDone = isReadDone;

@@ -1,19 +1,16 @@
 /*
-widgets/workflow.ts — $:/Decks 工作流中心：开始阅读 / 开始复习 双按钮
+widgets/workflow.ts — $:/Decks 工作流中心：开始学习按钮
 
-双轨一键直达：
-- 开始阅读：跳到全局续读点（最近读过的节卡）→ 无则第一张待读节卡 → 无则阅读列表页
-- 开始复习：进入默认牌组（测试卡复习流）
-按钮用 Tidme tm-btn 风格，点击触发 tm-navigate（与 section-bar 一致的导航约定）。
+- 开始学习：调起 startGlobalLearning 走 core/deck-engine.composeGlobalLearningQueue，
+  写到 $:/state/tidme/learning-session 并跳到首张。
+- 严格队列（strict）vs 交错（interleaved）切换写 $:/config/Tidme/QueueMode。
 */
 
 declare function require(module: string): any;
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
-const GLOBAL_READPOINT = "$:/state/tidme-import/readpoint/global";
 const DEFAULT_DECK = "$:/Deck/default";
-const READING_LIST = "$:/plugins/keepone/tidme/import/ui/reading-list";
 
 // 共享 DOM 工具（实现收敛于 core/ui-utils）
 const el = uiUtils.el;
@@ -132,17 +129,19 @@ function startGlobalLearning(wiki: any, widget: any): void {
 	widget.dispatchEvent({ type: "tm-navigate", navigateTo: first });
 }
 
-/** 开始阅读目标（旧版兼容接口） */
+/** 开始阅读目标（开始学习按钮外的"开始阅读"语义）：
+ *  全局续读点（最近读过）→ 第一张待读 topic → 阅读列表页 */
 function globalReadingTarget(wiki: any): string {
-	const g = String(wiki.getTiddler(GLOBAL_READPOINT)?.fields?.text || "");
+	const g = String(wiki.getTiddler("$:/state/tidme-import/readpoint/global")?.fields?.text || "");
 	if (g && wiki.getTiddler(g)) return g;
 	const first = wiki.filterTiddlers(
 		"[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]sort[priority]first[]]"
 	)[0];
 	if (first) return first;
-	return READING_LIST;
+	return "$:/plugins/keepone/tidme/import/ui/reading-list";
 }
 
+/** 开始复习：startGlobalLearning 的别名（与"开始学习"同义；历史 API 兼容） */
 function startStudy(wiki: any, widget: any): void {
 	startGlobalLearning(wiki, widget);
 }

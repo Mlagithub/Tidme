@@ -47,7 +47,8 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 	// G2 对齐：重切分已有文档时增量修补
 	const align = require("$:/plugins/keepone/tidme/core/align.js");
 	const docPage = wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${r.docId}]]`)[0] || "";
-	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r.docId}]tidme.kind[topic]!is[draft]]`)
+	// 仅对齐 section（普通阅读节）：摘录/挖空/问答/手动卡由用户决定，不在重切分时归档
+	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r.docId}]tidme.kind[topic]!tidme.subkind[extract]!is[draft]]`)
 		.map((ot: string) => ({ title: ot, fields: wiki.getTiddler(ot)?.fields || {} }));
 	let aligned: any = null;
 	if (oldCards.length) {
@@ -80,15 +81,30 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 		...(srcFields["tidme.date"] ? { "tidme.date": srcFields["tidme.date"] } : {})
 	};
 	wiki.addTiddler(mergedDoc);
+	// 卡片的 tidme.docpage 需指向合并后真实存在的文档页 title（源 tiddler title 优先于 emitTiddlers 默认 docRoot）
+	const realDocTitle = title;
+	const fixDocPage = (c: Record<string, any>) => {
+		if (c["tidme.docpage"] && c["tidme.docpage"] !== realDocTitle) c["tidme.docpage"] = realDocTitle;
+	};
 	if (!aligned) {
 		// 首次切分：全量写库
-		for (const c of cards) wiki.addTiddler(c);
+		for (const c of cards) { fixDocPage(c); wiki.addTiddler(c); }
 	} else {
 		// 对齐模式：非新增卡不重复写（keep 已写；同 key 旧卡已在库）
+		for (const k of aligned.keep) { fixDocPage(k.fields); wiki.addTiddler({ ...k.fields }); }
+		for (const p of aligned.patches) {
+			const existing = wiki.getTiddler(p.title);
+			if (existing) {
+				const merged = { ...existing.fields, ...p.fields };
+				fixDocPage(merged);
+				wiki.addTiddler(merged);
+			}
+		}
+		// 其它防御性写
 		for (const c of cards) {
 			if (aligned.keep.some((k: any) => k.title === c.title)) continue;
-			// 该新卡与旧卡同 key 被丢弃（保留旧卡）；仅当其标题不在库中时才写（防御）
-			if (!wiki.getTiddler(c.title)) wiki.addTiddler(c);
+			if (aligned.patches.some((p: any) => p.title === c.title)) continue;
+			if (!wiki.getTiddler(c.title)) { fixDocPage(c); wiki.addTiddler(c); }
 		}
 	}
 	// 无自动阅读牌组：topic 由阅读列表管理，item 进默认牌组

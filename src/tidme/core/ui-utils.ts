@@ -39,14 +39,15 @@ export function kindMark(fields: Record<string, any>): string {
 
 export function stateLabel(fields: Record<string, any>): string {
 	const b = badgeOf(fields);
+	// 出队语义优先（done/ignored/suspended）—— 否则 done 卡仍显示 "到期/已逾期" 误导
+	if (b.text === "✓") return "已读";
+	if (b.text === "⏸") return "搁置";
 	const state = String(fields.state || "0");
 	if (state === "1" || state === "3") return "学习中";
 	if (state === "2") {
 		const overdue = sched.parseTwDate(fields.due).getTime() < Date.now();
 		return overdue ? "已逾期" : "到期";
 	}
-	if (b.text === "✓") return "已读";
-	if (b.text === "⏸") return "搁置";
 	return "新卡";
 }
 

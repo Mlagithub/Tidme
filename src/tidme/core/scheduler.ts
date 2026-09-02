@@ -181,8 +181,10 @@ export function sortPriorityMixedQueue<T extends CardLike>(
 		}
 
 		// hybrid 模式：逾期天数抵扣 priority（使高逾期的低优先卡也能被调度，但不打破整体优先级框架）
-		const daysA = Math.max(0, (now - da) / 86400000);
-		const daysB = Math.max(0, (now - db) / 86400000);
+		// 无 due = 视为 now（score 0）—— 不应伪装成"逾期多年"排到队首
+		const overMs = (d: number) => (d === 0 ? 0 : Math.max(0, (now - d) / 86400000));
+		const daysA = overMs(da);
+		const daysB = overMs(db);
 		const scoreA = pa - daysA * overdueWeight * 10;
 		const scoreB = pb - daysB * overdueWeight * 10;
 		if (Math.abs(scoreA - scoreB) > 0.001) return scoreA - scoreB;

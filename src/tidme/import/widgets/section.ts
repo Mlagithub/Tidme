@@ -67,10 +67,7 @@ function topicsOfDoc(wiki: any, doc: string): string[] {
 		});
 }
 
-/** 已读判定（分类：topic/item 卡 done/ignored 视为完成出队） */
-function isDone(f: any): boolean {
-	return sched.isCardDone(f);
-}
+/** 已读判定（分类：topic/item 卡 done/ignored 视为完成出队）—— 直接调 sched.isCardDone，无包装 */
 
 function parseReadPoint(wiki: any, doc: string): ReadPoint | null {
 	const raw = wiki.getTiddlerText(READPOINT_PREFIX + doc, "").trim();
@@ -922,11 +919,11 @@ function makeSectionBar(): WidgetCtor {
 			// 2. 阅读主体 (Topic：普通阅读节 + 摘录卡 Extract)
 			const fullList = topicsOfDoc(wiki, docId);
 			// 过滤出在待读队列中的 Topic（或当前打开卡），使 ◀ / ▶ 导航自动跳过已完成已读的卡片
-			const queueList = fullList.filter((x) => !isDone(wiki.getTiddler(x)?.fields) || x === title);
+			const queueList = fullList.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields) || x === title);
 			const { prev, next } = pipeline.neighborsOf(queueList, title);
 			const index = fullList.indexOf(title);
 			const rp = parseReadPoint(wiki, docId);
-			const left = fullList.filter((x) => !isDone(wiki.getTiddler(x)?.fields)).length;
+			const left = fullList.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields)).length;
 			wiki.addTiddler({ title: GLOBAL_READPOINT, text: title });
 
 			// 第一行：摘录源提示（若为摘录卡）· 面包屑 · 位置 · 本书剩余 · 优先级 · 已读状态 · 自动保存指示
@@ -969,7 +966,7 @@ function makeSectionBar(): WidgetCtor {
 			const priVal = sched.normalizePriority(fields["tidme.priority"]);
 			infoRow.appendChild(el(doc, "span", "tm-section-pri tm-import-muted", `p${String(priVal).padStart(2, "0")}`));
 
-			if (isDone(fields)) {
+			if (sched.isCardDone(fields)) {
 				infoRow.appendChild(el(doc, "span", "tm-section-state", "✓ 已读"));
 			}
 
@@ -1004,7 +1001,7 @@ function makeSectionBar(): WidgetCtor {
 
 			sep();
 
-			if (isDone(fields)) {
+			if (sched.isCardDone(fields)) {
 				btnRow.appendChild(mkBtn("↩ 重新加入", "undo", "恢复到学习队列", false, () => {
 					this._flushSave();
 					wiki.addTiddler(sched.restoreCard(fields));
@@ -1017,13 +1014,7 @@ function makeSectionBar(): WidgetCtor {
 					wiki.addTiddler(sched.doneCard(fields));
 					events.dispatch(this, events.EVENTS.SECTION_DONE, title);
 					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					const undo = mkBtn("↩ 撤销已读", "undo", "恢复到学习队列", false, () => {
-						wiki.addTiddler(sched.restoreCard(fields));
-						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-						undo.parentNode?.removeChild(undo);
-					});
-					btnRow.insertBefore(undo, btnRow.querySelector(".tm-bar-sep"));
-					setTimeout(() => { undo.parentNode?.removeChild(undo); }, 8000);
+					// 撤销已读：通过文档页"已读卡"面板的"重新加入"按钮（section-bar 已随 tm-close-tiddler 关闭，按钮放此处拿不到点击）
 					const nxt = getScheduledNext();
 					removeTitleFromSession(title);
 					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
@@ -1240,7 +1231,7 @@ function makeDocResume(): WidgetCtor {
 
 			// 进度横幅（P1 卡片化）：大数字 + 进度条 + 主按钮
 			const all = sectionsOfDoc(wiki, docId);
-			const done = all.filter((x) => isDone(wiki.getTiddler(x)?.fields)).length;
+			const done = all.filter((x) => sched.isCardDone(wiki.getTiddler(x)?.fields)).length;
 			const left = all.length - done;
 			const banner = el(doc, "div", "tm-doc-banner");
 			// 左侧：进度数字 + 进度条
@@ -1261,7 +1252,7 @@ function makeDocResume(): WidgetCtor {
 			const btn = el(doc, "button", "tc-btn-primary", "▶ 继续阅读");
 			btn.addEventListener("click", () => {
 				const rp = parseReadPoint(wiki, docId);
-				const list = all.filter((x) => !isDone(wiki.getTiddler(x)?.fields));
+				const list = all.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields));
 				// D3：优先跳到续读点（须当前可读），否则第一张 due≤now 的卡；全未来排期退回 list[0]
 				const readable = list.filter((x) => sched.isDueNow(wiki.getTiddler(x)?.fields));
 				const target = (rp && readable.includes(rp.t) ? rp.t : null) || readable[0] || list[0];
@@ -1326,7 +1317,7 @@ function makeDocResume(): WidgetCtor {
 			}
 
 			// 已读区：列出已读节，可"重新加入"队列（恢复可逆性，替代 8 秒撤销窗口）
-			const doneTitles = all.filter((x) => isDone(wiki.getTiddler(x)?.fields));
+			const doneTitles = all.filter((x) => sched.isCardDone(wiki.getTiddler(x)?.fields));
 			if (doneTitles.length) {
 				const doneBox = el(doc, "details", "tm-doc-done");
 				const summary = el(doc, "summary", "tm-import-muted", `已读卡（${doneTitles.length}）—— 可重新加入`);

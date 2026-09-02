@@ -20,7 +20,7 @@ const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 if (!plugins.length) throw new Error("缺少 out-m2 产物，先运行 node tools/build-plugins.cjs");
 
-let wiki, tw, pipeline, paths, sectionMod;
+let wiki, tw, pipeline, paths, sectionMod, uiUtils, align, sched;
 test.before(() => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-ns-"));
 	tw = TiddlyWiki.TiddlyWiki();
@@ -31,6 +31,9 @@ test.before(() => {
 	pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	paths = tw.modules.execute("$:/plugins/keepone/tidme/core/paths.js");
 	sectionMod = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
+	uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
+	align = tw.modules.execute("$:/plugins/keepone/tidme/core/align.js");
+	sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
 });
 
 function twDate(d = new Date()) {
@@ -526,4 +529,62 @@ test("deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
 	assert.ok(wiki.getTiddler(secB.title), "B 不受影响");
 	// 幂等
 	assert.equal(uiUtils.deleteDocContent(wiki, rA.docId), 0, "重复删除幂等");
+});
+
+/* 回归测试：重切分时保留摘录 —— alignCards 旧卡查询必须排除 subkind=extract，否则摘录被批量归档 done */
+test("re-split 保留已有摘录（不被归档为 obsolete/done）", async () => {
+	const text = "# 章节 1\n\n第一段内容。\n\n## 子节 A\n\n子节 A 内容。";
+	const r1 = await pipeline.runSplit({ text, title: "重切分测试书", folderOccupied: () => null });
+	const [doc, ...cards1] = r1.tiddlers;
+	const sec1 = cards1.find((c) => c["tidme.kind"] === "topic");
+	for (const t of r1.tiddlers) wiki.addTiddler({ ...t });
+	// 模拟用户做的摘录（手动建，挂在第一张节卡下）
+	const ext = {
+		title: `${doc.title}/ext-keepme`,
+		type: "text/vnd.tiddlywiki",
+		caption: "用户摘录",
+		text: "<blockquote>用户自己的笔记</blockquote>",
+		"tidme.doc": r1.docId,
+		"tidme.kind": "topic",
+		"tidme.subkind": "extract",
+		"tidme.parent": sec1.title,
+		"tidme.breadcrumb": `${sec1["tidme.breadcrumb"]} › 摘录`
+	};
+	wiki.addTiddler(ext);
+	// 重切分：标题更短、文末新加一节
+	const text2 = "# 1\n\n第一段新内容。\n\n## 子节 A\n\n子节 A 改后内容。\n\n## 新增子节 B\n\nB 内容。";
+	const r2 = await pipeline.runSplit({ text: text2, title: "重切分测试书", folderOccupied: (base) => uiUtils.docFolderOwner(wiki, base) });
+	const [doc2, ...cards2] = r2.tiddlers;
+	const sectionCards2 = cards2.filter((c) => c["tidme.kind"] === "topic");
+	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]!tidme.subkind[extract]!is[draft]]`)
+		.map((ot) => ({ title: ot, fields: wiki.getTiddler(ot).fields }));
+	const aligned = await align.alignCards(oldCards, doc.title, sectionCards2.map((c) => ({ title: c.title, fields: c })));
+	// 写入对齐结果
+	for (const k of aligned.keep) wiki.addTiddler({ ...k.fields });
+	for (const p of aligned.patches) {
+		const ex = wiki.getTiddler(p.title);
+		if (ex) wiki.addTiddler({ ...ex.fields, ...p.fields });
+	}
+	for (const at of aligned.archives) {
+		const ex = wiki.getTiddler(at);
+		if (!ex) continue;
+		wiki.addTiddler({ ...ex.fields, "tidme.obsolete": "yes", "tidme.done": "yes" });
+	}
+	// 验证：摘录仍存在且未被打 done/obsolete
+	const extAfter = wiki.getTiddler(ext.title);
+	assert.ok(extAfter, "摘录仍存在");
+	assert.notEqual(extAfter.fields["tidme.done"], "yes", "摘录未被打 done");
+	assert.notEqual(extAfter.fields["tidme.obsolete"], "yes", "摘录未被归档");
+});
+
+/* 回归测试：card-manager 写 17 位 due 串（YYYYMMDD + 9 位 0）能被 parseTwDate 正确解析到所选日期 */
+test("parseTwDate 接受 card-manager 的 17 位 due 串", () => {
+	const due = "20261231000000000";
+	const d = sched.parseTwDate(due);
+	assert.equal(d.getUTCFullYear(), 2026);
+	assert.equal(d.getUTCMonth(), 11);
+	assert.equal(d.getUTCDate(), 31);
+	// 旧 buggy 19 位版本会被 fallback 到 now —— 回归保险
+	const oldBuggy = sched.parseTwDate("2026123100000000000");
+	assert.equal(Number.isNaN(oldBuggy.getTime()) || oldBuggy.getUTCFullYear() !== 1970, true, "19 位非合法日期");
 });

@@ -41,7 +41,9 @@ function makeStatsPanel(): WidgetCtor {
 				const docs = wiki.filterTiddlers("[tag[tidme-import-doc]]");
 				const all = cardLikes("[!is[system]]");
 				const funnel = stats.funnelCounts(all);
-				const logTitles = wiki.filterTiddlers("[prefix[$:/Deck/]suffix[/log/]]");
+				// log tiddler title 形如 $:/Deck/<deck>/log/YYYY0MM0DD（repeat.tid 写入），用 prefix + JS 后过滤匹配
+				const logTitles = wiki.filterTiddlers("[all[shadows+tiddlers]prefix[$:/Deck/]]")
+					.filter((t: string) => /\/log\/\d{8}$/.test(t));
 				const entries: any[] = [];
 				for (const lt of logTitles) {
 					const data = wiki.getTiddlerData(lt);

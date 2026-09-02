@@ -38,10 +38,12 @@ export function composeDeckFilters(deckTitle: string, fields: DeckFields = {}): 
 	const due = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_due}subfilter{${d}!!order_due}]`;
 	const newly = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_new}subfilter{${d}!!order_new}]`;
 	const unfold = `[subfilter{${d}!!card_unfold}]`;
-	const random = `[subfilter<filter_due>] [subfilter<filter_new>] +[sortrandom[]]`;
+	// random 模式：内联 due/newly 子过滤并随机（不依赖 .tid 中由 $let 注入的 <filter_*>，
+	// 否则纯 JS 评估时变量未定义 → 子过滤崩溃，队列静默塌缩）
+	const random = `${due} ${newly} +[sortrandom[]]`;
 	const dueNew = `${learn} ${due} ${newly}`;
 	const newDue = `${learn} ${newly} ${due}`;
-	const randomCombo = `${learn} [subfilter<filter_random>]`;
+	const randomCombo = `${learn} ${random}`;
 	const order = fields.order || "due-new";
 	const queue = order === "new-due" ? newDue : order === "random" ? randomCombo : dueNew;
 	return { learn, due, newly, unfold, random, dueNew, newDue, randomCombo, queue };

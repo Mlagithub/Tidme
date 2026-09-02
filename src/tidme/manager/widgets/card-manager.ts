@@ -651,7 +651,8 @@ function makeCardManager(): WidgetCtor {
 					const dueVal = String(dueInput.value || "").trim();
 					if (dueVal) {
 						const m = dueVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-						if (m) patch.due = `${m[1]}${m[2]}${m[3]}00000000000`;
+						// 17 位 UTC 编码（YYYYMMDD + 9 位 0），与 schema.twDateString 兼容；parseTwDate 只认 17 位
+						if (m) patch.due = `${m[1]}${m[2]}${m[3]}000000000`;
 					}
 					const priVal = String(priInput.value || "").trim();
 					if (priVal !== "" && Number.isFinite(Number(priVal))) {

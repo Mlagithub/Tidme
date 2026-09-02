@@ -47,10 +47,6 @@ function blockHtml(block: any): string {
 	return `<p>${escapeHtml(normalizeText(block.text))}</p>`;
 }
 
-function escapeHtml(s: string): string {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 export function splitSentences(text: string, maxLen: number): string[] {
 	const sentences = String(text).match(/[^。！？!?；;\n]+[。！？!?；;]*/g) || [String(text)];
 	const out: string[] = [];
