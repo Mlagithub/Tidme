@@ -3,7 +3,7 @@ title: $:/language/tidme/
 tidme: Tidme
 tidmetip: Lifelong knowledge, deep in mind
 default: Default
-defaulttip: <center>This is a non-customisable default deck, which can be customised with ''{{$:/language/tidme/createdeck}}''.</center>
+defaulttip: <center>All knowledge cards (cloze / Q&amp;A) are collected into this deck automatically for review.</center>
 deck: Deck
 learn: Learn
 due: Due
@@ -32,10 +32,6 @@ cardstatefilter: Card [[State|https://github.com/open-spaced-repetition/fsrs.js#
 param: Param
 fsrsparam: [[FSRS algorithm|https://github.com/open-spaced-repetition/fsrs.js#usage]]
 exportdelete: Export or delete
-getshared: Get Shared
-createdeck: Create Deck
-createdecktip: Creating a new deck using the default deck as a template
-importfile: Import File
 startstudy: Start Study
 next: Next
 again: Again
