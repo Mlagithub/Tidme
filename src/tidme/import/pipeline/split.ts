@@ -11,7 +11,7 @@ G1 干预：runSplit 接受 overrides（按 trail key 强制合并/拆分），�
 
 import { makeDocId, makeSectionId, contentFingerprint, normalizeText } from "$:/plugins/keepone/tidme/core/ids";
 import type { BookMeta } from "$:/plugins/keepone/tidme/core/ids";
-import { bookRoot, docPageTitle, sectionPath } from "$:/plugins/keepone/tidme/core/paths";
+import { bookRoot, joinPath } from "$:/plugins/keepone/tidme/core/paths";
 import { initialFsrsFields, twDateString } from "$:/plugins/keepone/tidme/core/schema";
 import { normalizePriority, PRIORITY_DEFAULT, afactorForText } from "$:/plugins/keepone/tidme/core/scheduler";
 import { chunkBook, applyOverrides } from "./chunker";
@@ -51,6 +51,26 @@ export interface SplitInput {
 	priority?: number;
 	/** G1 干预：按 trail key 强制合并/拆分（预览微调后落库用） */
 	overrides?: SplitOverrides;
+	/**
+	 * 命名空间冲突探测：给定候选 book folder（Tidme/Books/<slug>），返回占用它的 docId（无占用返回 null）。
+	 * 同名书（不同 docId）导入时据此加 ~docId 后缀，避免文档页互相覆盖；同一 docId 重导入幂等复用。
+	 * 纯管线无 wiki 时不传（视为无冲突）。
+	 */
+	folderOccupied?: (baseFolder: string) => string | null;
+}
+
+/**
+ * 解析最终文档根路径：folder 被其它 docId 占用 → bookRoot + "~" + docId 短哈希；否则原样。
+ * 重导入（占用者为同一 docId）不加后缀 —— 幂等。
+ * （paths 纯函数不带 docId 后缀；占用的判定与追加都在此导入期完成）
+ */
+function resolveDocRoot(bookTitle: string, docId: string, folderOccupied?: (baseFolder: string) => string | null): string {
+	const base = bookRoot(bookTitle, docId);
+	const owner = folderOccupied ? folderOccupied(base) : null;
+	if (owner && String(owner) !== String(docId)) {
+		return base + "~" + String(docId).replace(/^d/, "").slice(0, 6);
+	}
+	return base;
 }
 
 export interface SplitResult {
@@ -95,17 +115,18 @@ export async function emitTiddlers(
 	sections: RawSection[],
 	bag: string,
 	autoDeck = true,
-	priority = PRIORITY_DEFAULT
+	priority = PRIORITY_DEFAULT,
+	folderOccupied?: (baseFolder: string) => string | null
 ): Promise<{ tiddlers: Record<string, any>[]; warnings: string[] }> {
 	const warnings: string[] = [];
 	const format = meta.__format || "epub";
 	const nowFields = initialFsrsFields(new Date());
 	const syncFields = { bag, revision: "0" };
 
-	// 文档页与节卡用 Tidme/Books/... 命名空间隔离；title 唯一稳定（基于 tidme.id）
-	// 同名 bookTitle 在同一批次内首次使用 docIndex=1（无后缀），重复时 docPageTitle 返回带后缀
+	// 文档根路径（A1：同名不同 docId 的 folder 冲突 → 加 ~docId 短哈希，幂等）：
+	// docRoot 是"每卡可读的真实文档页 title"，落库成 tidme.docpage，UI 导航不再重算。
 	const bookT = bookTitle || "未命名导入";
-	const docPagePath = bookRoot(bookT, docId); // 文档页实际 title 路径
+	const docRoot = resolveDocRoot(bookT, docId, folderOccupied);
 	const docTitle = bookT; // 面包屑/显示用可读名（保持 align.ts 的 cardKey 匹配逻辑）
 
 	const cards: Record<string, any>[] = [];
@@ -115,7 +136,7 @@ export async function emitTiddlers(
 		const id = await makeSectionId(docId, trail, s.ordinal as number);
 		const hash = await contentFingerprint(s.text);
 		const joined = trail.join(" › ");
-		const title = sectionPath(bookT, docId, trail, id);
+		const title = joinPath(docRoot, id); // 拍平在 docRoot 下；章层次靠 breadcrumb 字段
 		cards.push({
 			title,
 			type: "text/vnd.tiddlywiki",
@@ -124,6 +145,7 @@ export async function emitTiddlers(
 			...nowFields,
 			...syncFields,
 			"tidme.doc": docId,
+			"tidme.docpage": docRoot, // 文档页真实 title（含 ~docId 后缀时亦准确）
 			"tidme.id": id,
 			"tidme.hash": hash,
 			"tidme.order": String(s.ordinal).padStart(6, "0"), // 零填充：字符串排序=阅读顺序
@@ -144,7 +166,7 @@ export async function emitTiddlers(
 		});
 	}
 
-	const links = cards.map((t) => `* [[${t.title}]]`).join("\n");
+	const links = cards.map((t) => `* [[${t.caption || t.title}|${t.title}]]`).join("\n");
 	const docLines = [`//${formatLabel(format)}//`];
 	if (meta.creator) docLines.push("作者：" + meta.creator);
 	if (meta.language) docLines.push("语言：" + meta.language);
@@ -153,13 +175,15 @@ export async function emitTiddlers(
 	docLines.push(`共 ${cards.length} 节：`, "", links);
 
 	const docTiddler: Record<string, any> = {
-		title: docPagePath, // 文档页落 Tidme/Books/<书名> 命名空间
+		title: docRoot, // 文档页落 Tidme/Books/<书名>[/~docId] 命名空间
+		caption: docTitle, // 可读名：标题模板/列表显示用（title 是路径）
 		type: "text/vnd.tiddlywiki",
 		tags: ["tidme-import-doc"],
 		text: docLines.join("\n"),
 		bag,
 		revision: "0",
 		"tidme.doc": docId,
+		"tidme.docpage": docRoot,
 		...(meta.title ? { "tidme.source": meta.title } : {}),
 		...(meta.author || meta.creator ? { "tidme.author": meta.author || meta.creator } : {}),
 		...(meta.language ? { "tidme.language": meta.language } : {}),
@@ -198,7 +222,7 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
 		input.overrides
 	);
 	const metaWithFormat = { ...meta, __format: format };
-	const { tiddlers, warnings } = await emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority);
+	const { tiddlers, warnings } = await emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority, input.folderOccupied);
 	return {
 		bookTitle,
 		docId,

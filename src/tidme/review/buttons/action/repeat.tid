@@ -67,7 +67,7 @@ code-body: yes
             $param=<<deckTiddler>>
         />
         <$action-deletetiddler
-            $filter="[all[shadows+tiddlers]prefix[Tidme/Decks/]tag[$:/tags/TidmeDeck]]"
+            $filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]tidme.subset-doc[+]]"
         />
         <div>
             <div class=`tmc-btn-${ [<rating>lowercase[]] }$` style=`color:$(color)$;`>

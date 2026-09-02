@@ -12,17 +12,17 @@ paths.ts — tiddler 命名空间路径生成（M3 章节隔离）
 布局：
   Tidme/                                              根（用户内容）
     Books/
-      <bookSlug>~<docId?>/                            文档页 + 节卡 + 摘录（拍平）
+      <bookSlug>[/~docId6]/                           文档页 + 节卡 + 摘录（拍平）
         <sectionId>                                   节卡（如 s1234567890ab）
-        <sectionId>--e<extractId>                     摘录（-- 分隔避免冲突）
+        <sectionId>--extract                          摘录（-- 分隔；同层冲突 -N 后缀）
     Decks/
-      <bookSlug>~<docId?>/                            知识型卡片（拍平）
-        <sectionId>--cloze-<cardId>                   挖空
-        <sectionId>--qa-<cardId>                      问答
-      <bookSlug>~<docId?>/复习本书/                   文档子集牌组
+      <bookSlug>[/~docId6]/                           知识型卡片（拍平；与 Books 平行）
+        <sectionId>--cloze / --qa                     挖空 / 问答
+      <bookSlug>[/~docId6]/复习本书/                  文档子集牌组
       ...                                             未来用户自建牌组
     Clips/                                            Web 剪切（占位）
-冲突处理：bookSlug 相同时追加 ~<docId 短哈希> 后缀；其它层不冲突（短哈希已唯一）
+冲突处理：同名书（slug 相同、docId 不同）的 ~docId6 后缀在导入期解析（split.ts resolveDocRoot，
+经调用方 folderOccupied 探测真实占用后追加）；本模块为纯函数，不做状态探测。
 */
 
 // 保留 TW 系统 tiddler 段
@@ -60,19 +60,16 @@ export function joinPath(...parts: (string | undefined | null)[]): string {
 	return clean.join("/");
 }
 
-/** 文档根路径：Tidme/Books/<bookSlug>（slug 冲突时带 ~<docId>） */
-export function bookRoot(bookTitle: string, docId: string): string {
+/** 文档根路径：Tidme/Books/<bookSlug>。同名书冲突的 ~docId6 后缀由导入期 resolveDocRoot 追加（本模块纯函数）。 */
+export function bookRoot(bookTitle: string, _docId?: string): string {
 	const slug = slugify(bookTitle) || "untitled";
-	const base = "Tidme/Books/" + slug;
 	if (RESERVED.has(slug.toLowerCase())) throw new Error("bookRoot: reserved book title: " + slug);
-	return uniqueFolder(base, docId);
+	return "Tidme/Books/" + slug;
 }
 
-/** 知识型卡片根：Tidme/Decks/<bookSlug>[/~<docId>]（挖空/问答统一进这里） */
-export function bookCardsRoot(bookTitle: string, docId: string): string {
-	const slug = slugify(bookTitle) || "untitled";
-	const base = "Tidme/Decks/" + slug;
-	return uniqueFolder(base, docId);
+/** 知识型卡片根：Tidme/Decks/<bookSlug>（挖空/问答统一进这里；与 bookRoot 平行） */
+export function bookCardsRoot(bookTitle: string, _docId?: string): string {
+	return "Tidme/Decks/" + (slugify(bookTitle) || "untitled");
 }
 
 /** 子集牌组路径：Tidme/Decks/<bookSlug>[/~<docId>]/<用途> */
@@ -98,8 +95,9 @@ export function extractPath(
 	return joinPath(root, sectionId + "--extract");
 }
 
-/** 知识卡路径（挖空/问答）：Tidme/Decks/<bookSlug>[/~<docId>]/<sectionId>--<subkind>
- * 拍平在书对应的 decks 子目录里——不在节下嵌子目录（保持"一本书一个目录"原则） */
+/** 知识卡路径（挖空/问答）：Tidme/Decks/<bookSlug>[/~docId6]/<sectionId>--<subkind>
+ * 拍平在书对应的 decks 子目录里——不在节下嵌子目录（保持"一本书一个目录"原则）。
+ * 注：实际建卡（section.ts）从父卡位置派生以兼容带后缀 folder；本函数为纯形式路径。 */
 export function cardPath(
 	bookTitle: string,
 	docId: string,
@@ -110,67 +108,15 @@ export function cardPath(
 	return joinPath(root, sectionId + "--" + subkind);
 }
 
-/** 派生卡统一入口（按 subkind 自动路由到 extract 命名空间或 cards 命名空间）
- * 注意：当前调用方都走 buildExtract/Cloke/QA + collision check，不直接用 itemPath
- * 保留为向后兼容 */
-export function itemPath(
-	bookTitle: string,
-	docId: string,
-	_breadcrumb: string[],
-	sectionId: string,
-	subkind: "extract" | "cloze" | "qa"
-): string {
-	if (subkind === "extract") {
-		return extractPath(bookTitle, docId, sectionId);
-	}
-	return cardPath(bookTitle, docId, sectionId, subkind as "cloze" | "qa");
-}
-
-/** 文档页标题：Tidme/Books/<bookSlug>[/~<docIndex>]
- * docIndex 1 = 无后缀（首份）；同书二次导入 docIndex=2 追加 " ~2"
- */
-export function docPageTitle(bookTitle: string, docId: string, docIndex = 1): string {
-	const root = bookRoot(bookTitle, docId);
-	if (docIndex <= 1) return root;
-	return joinPath(root, "~" + docIndex);
-}
-
-/** 插入式新建节（在已有文档内手填时使用；拍平到书目录，文件名带 manual 前缀） */
-export function insertedSectionTitle(bookTitle: string, docId: string, sectionCaption: string, sectionId: string): string {
-	const root = bookRoot(bookTitle, docId);
-	return joinPath(root, "manual-" + slugify(sectionCaption) + "-" + sectionId);
-}
-
-/** 判断 tiddler 是否属于 Tidme 命名空间（用户内容） */
-export function isTidmeContent(title: string): boolean {
+/** 取命名空间 title 的叶段（末段）：Tidme/Books/<slug>/s123… → s123…。
+ * 集中"反解析"（生成在 paths，解析也在 paths），避免各处 substring 手切。 */
+export function leafIdOf(title: string): string {
 	const t = String(title ?? "");
-	return t === "Tidme"
-		|| t.startsWith("Tidme/")
-		|| t.startsWith("Tidme");
+	const i = t.lastIndexOf("/");
+	return i >= 0 ? t.slice(i + 1) : t;
 }
 
-/** 判断 tiddler 是否属于某本书（含文档页、节卡、摘录、知识卡、牌组） */
-export function isInBook(title: string, bookTitle: string, docId: string): boolean {
-	const bookRoot_ = bookRoot(bookTitle, docId);
-	const cardsRoot = bookCardsRoot(bookTitle, docId);
-	return title === bookRoot_ || title.startsWith(bookRoot_ + "/")
-		|| title === cardsRoot || title.startsWith(cardsRoot + "/");
+/** 插入式新建节（在已有文档内手填时使用；拍平到书目录，叶段带 manual 前缀） */
+export function insertedSectionTitle(bookTitle: string, docId: string, sectionCaption: string): string {
+	return joinPath(bookRoot(bookTitle, docId), "manual-" + (slugify(sectionCaption) || "untitled"));
 }
-
-/**
- * 唯一化文件夹路径：检测冲突；冲突时把 docId 前 6 位追加为 ~XXXXXX
- * 冲突检测由调用方传入 (existingTitles: Set<string>)：纯函数不持状态
- */
-export function uniqueFolder(baseFolder: string, docId: string, existing?: Set<string>): string {
-	if (!existing || !existing.has(baseFolder)) return baseFolder;
-	const tag = "~" + String(docId).replace(/^d/, "").slice(0, 6);
-	return baseFolder + tag;
-}
-
-/** 全部命名空间常量（供 UI 引用） */
-export const NS = {
-	ROOT: "Tidme",
-	BOOKS: "Tidme/Books",
-	DECKS: "Tidme/Decks",
-	CLIPS: "Tidme/Clips",
-} as const;

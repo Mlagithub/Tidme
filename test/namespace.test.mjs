@@ -73,13 +73,6 @@ test("paths: 摘录留在书目录、知识卡进 decks/（拍平+命名空间�
 	// 知识卡（问答）：Tidme/Decks/<书>/<sectionId>--qa
 	const qa = paths.cardPath("书", "d1", "s1234567890ab", "qa");
 	assert.equal(qa, "Tidme/Decks/书/s1234567890ab--qa", "问答进 decks 目录");
-	// itemPath 统一入口按 subkind 自动分流（新签名：5 个参数，无 itemId）
-	assert.equal(paths.itemPath("书", "d1", ["书"], "s1234567890ab", "extract"),
-		extract, "itemPath(extract) → extractPath");
-	assert.equal(paths.itemPath("书", "d1", ["书"], "s1234567890ab", "cloze"),
-		cloze, "itemPath(cloze) → cardPath");
-	assert.equal(paths.itemPath("书", "d1", ["书"], "s1234567890ab", "qa"),
-		qa, "itemPath(qa) → cardPath");
 });
 
 test("paths: deckSubsetPath 命名空间为 Tidme/Decks/<书>/<用途>", () => {
@@ -89,12 +82,6 @@ test("paths: deckSubsetPath 命名空间为 Tidme/Decks/<书>/<用途>", () => {
 test("paths: 拒绝保留字书名", () => {
 	assert.throws(() => paths.bookRoot("index", "d1"), /reserved/);
 	assert.throws(() => paths.bookRoot("default", "d1"), /reserved/);
-});
-
-test("paths: 重复导入 bookRoot 冲突时 uniqueFolder 加 docId 后缀", () => {
-	const existing = new Set(["Tidme/Books/书名"]);
-	assert.equal(paths.uniqueFolder("Tidme/Books/书名", "d12345678", existing), "Tidme/Books/书名~123456");
-	assert.equal(paths.uniqueFolder("Tidme/Books/书名", "d12345678"), "Tidme/Books/书名", "无 existing 时不附加");
 });
 
 // === 集成：runSplit 产物 ===
@@ -412,4 +399,38 @@ test("nav: section.ts 面包屑点击也用真实 doc title（修复同上）", 
 	const expectedDocTiddler = `Tidme/Books/${bookTitle}`;
 	assert.equal(crumbDocTitle, expectedDocTiddler);
 	assert.ok(wiki.getTiddler(crumbDocTitle), `doc tiddler 存在: ${crumbDocTitle}`);
+});
+
+test("A1: 同名书不同 docId folder 冲突 → ~docId 后缀；同 docId 重导入幂等复用；卡带 tidme.docpage", async () => {
+	const mk = (creator) => pipeline.makeDocId({ title: "同名书", creator, language: "" });
+	const dA = await mk("作者A");
+	const dB = await mk("作者B");
+	const text = "# 章\n\n内容。";
+	// 场景 1：folder 被别的 docId（B）占用 → 加 ~docId 后缀
+	const rA = await pipeline.runSplit({ text, title: "同名书", type: "text/markdown", sourceFields: { creator: "作者A" }, folderOccupied: () => dB });
+	const docA = rA.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes("tidme-import-doc"));
+	assert.ok(docA.title.startsWith("Tidme/Books/同名书~"), `被其它 doc 占用 → 加后缀：${docA.title}`);
+	assert.notEqual(docA.title, "Tidme/Books/同名书");
+	const secA = rA.tiddlers.find((t) => t["tidme.kind"] === "topic");
+	assert.ok(secA.title.startsWith(docA.title + "/"), "节卡落在带后缀 docRoot 下");
+	assert.equal(secA["tidme.docpage"], docA.title, "节卡带 tidme.docpage（= 真实 doc 页）");
+	assert.equal(docA["tidme.docpage"], docA.title, "doc 页自指 docpage");
+	// 场景 2：folder 被同一 docId 占用（重导入）→ 幂等复用，不加后缀
+	const rA2 = await pipeline.runSplit({ text, title: "同名书", type: "text/markdown", sourceFields: { creator: "作者A" }, folderOccupied: () => dA });
+	const docA2 = rA2.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes("tidme-import-doc"));
+	assert.equal(docA2.title, "Tidme/Books/同名书", "同 docId 占用 → 不加后缀（重导入幂等）");
+	// 场景 3：无占用 → 不加后缀
+	const r3 = await pipeline.runSplit({ text, title: "无冲突书", type: "text/markdown", folderOccupied: () => null });
+	const doc3 = r3.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes("tidme-import-doc"));
+	assert.equal(doc3.title, "Tidme/Books/无冲突书");
+});
+
+test("ui-utils: docPageOfDoc 按 docId 查到真实文档页（folder 带 ~docId 后缀亦准确）；docFolderOwner 可探测占用", async () => {
+	const uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
+	const r = await pipeline.runSplit({ text: "# 章\n\n内容。", title: "后缀书", type: "text/markdown", folderOccupied: () => "d000000000" });
+	for (const t of r.tiddlers) wiki.addTiddler(t);
+	const doc = r.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes("tidme-import-doc"));
+	assert.ok(doc.title.includes("~"), "前置：folder 应带后缀");
+	assert.equal(uiUtils.docPageOfDoc(wiki, r.docId), doc.title, "按 docId 查到真实（带后缀）文档页");
+	assert.equal(uiUtils.docFolderOwner(wiki, doc.title), r.docId, "folder 占用可探测到本 docId");
 });

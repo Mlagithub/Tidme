@@ -80,6 +80,37 @@ export function dateLabel(raw: any): string {
 	return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
 }
 
+/**
+ * 显示名（命名空间 title 可读化）：caption ?? breadcrumb 末段 ?? title 末段。
+ * title=路径（Tidme/Books/<slug>/<hash>）后，所有列表/表格显示一律经此，禁止裸显 title。
+ */
+export function displayTitle(fields: Record<string, any> | null | undefined, title?: string): string {
+	const cap = fields && fields.caption !== undefined && fields.caption !== "" ? String(fields.caption).trim() : "";
+	if (cap) return cap;
+	const br = fields && fields["tidme.breadcrumb"]
+		? String(fields["tidme.breadcrumb"]).split(" › ").pop()?.trim() || ""
+		: "";
+	if (br) return br;
+	const t = String(title ?? "");
+	const i = t.lastIndexOf("/");
+	return (i >= 0 ? t.slice(i + 1) : t).trim() || t;
+}
+
+/** 某 book folder（Tidme/Books/<slug>）下第一张带 tidme.doc 的卡所属 docId（无占用返回 null）——同名书冲突探测 */
+export function docFolderOwner(wiki: any, baseFolder: string): string | null {
+	if (!wiki || typeof wiki.filterTiddlers !== "function") return null;
+	const first = wiki.filterTiddlers(`[all[shadows+tiddlers]prefix[${baseFolder}]has[tidme.doc]]`)[0];
+	if (!first) return null;
+	const doc = wiki.getTiddler(first)?.fields?.["tidme.doc"];
+	return doc !== undefined && doc !== null && doc !== "" ? String(doc) : null;
+}
+
+/** 按 docId 查真实文档页 title（folder 含 ~docId 后缀时亦准确）；找不到返回 "" */
+export function docPageOfDoc(wiki: any, docId: string): string {
+	if (!wiki || typeof wiki.filterTiddlers !== "function") return "";
+	return wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${docId}]]`)[0] || "";
+}
+
 /** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 卡中排除摘录） */
 export function sectionsOfDoc(wiki: any, docId: string): string[] {
 	return wiki

@@ -139,7 +139,8 @@ function makeStatsPanel(): WidgetCtor {
 					const sections = cardLikes(`[tidme.doc[${docId}]tidme.kind[topic]]`);
 					const p = stats.docProgress(sections);
 					const tr = el(doc, "tr", "");
-					tr.appendChild(el(doc, "td", "tm-stat-doc-name", d));
+					const docFields = wiki.getTiddler(d)?.fields || {};
+					tr.appendChild(el(doc, "td", "tm-stat-doc-name", uiUtils.displayTitle(docFields, d)));
 					const progTd = el(doc, "td", "", "");
 					const barWrap = el(doc, "span", "tm-progress tm-stat-bar");
 					const bar = el(doc, "span", "tm-progress-fill tm-stat-bar-fill", "");

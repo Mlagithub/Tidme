@@ -158,9 +158,11 @@ function makeReadingList(): any {
 				// 文档组默认折叠（两本书也不占长页面）；summary = 名 + 进度 + 继续阅读
 				const docAll = sectionsOfDoc(wiki, g.doc);
 				const docDone = docAll.filter((t) => isReadDone(wiki.getTiddler(t)?.fields)).length;
-				// 真实 doc tiddler title（命名空间路径），用于 tm-navigate；展示用可读名
+				// 真实 doc tiddler title（命名空间路径，folder 冲突时含 ~docId 后缀）：
+				// 按 docId 查真实文档页（B1），不再由书名+docId 重算（slug 规则一变即失配）
 				const bookTitle = g.cards[0].breadcrumb.split(" › ")[0] || "";
-				const docTiddlerTitle = bookTitle ? paths.bookRoot(bookTitle, g.doc) : "";
+				const docTiddlerTitle = uiUtils.docPageOfDoc(wiki, g.doc)
+					|| (bookTitle ? paths.bookRoot(bookTitle, g.doc) : "");
 				const docLabel = bookTitle || g.doc;
 
 				const sum = el(doc, "summary", "tm-rl-doc-head");
@@ -183,7 +185,15 @@ function makeReadingList(): any {
 					sum.appendChild(barWrap);
 				}
 
-				const firstUnread = g.cards[0];
+				// D3：继续阅读跳到第一张"当前可读"卡（未完成且 due≤现在，与 section-bar isDueNow 一致）；
+				// 全部未来排期时退回第一张（允许显式打开）
+				const isDueNowCard = (c: TopicCard): boolean => {
+					if (isReadDone(c.fields) || c.fields["tidme.suspended"] === "yes") return false;
+					const due = c.fields.due;
+					if (due === undefined || due === null || String(due) === "") return true;
+					return sched.parseTwDate(due).getTime() <= Date.now();
+				};
+				const firstUnread = g.cards.find(isDueNowCard) || g.cards[0];
 				const cont = el(doc, "button", "tm-btn", "▶ 继续阅读");
 				cont.title = "从本组第一张待读卡开始";
 				cont.addEventListener("click", (e: Event) => {
@@ -217,7 +227,7 @@ function makeReadingList(): any {
 					tr.appendChild(kindTd);
 
 					const titleTd = el(doc, "td", "", "");
-					const titleLink = el(doc, "a", "tc-tiddlylink tm-rl-title", c.title);
+					const titleLink = el(doc, "a", "tc-tiddlylink tm-rl-title", uiUtils.displayTitle(c.fields, c.title));
 					titleLink.href = "#";
 					titleLink.title = "打开阅读";
 					titleLink.addEventListener("click", (e: Event) => {

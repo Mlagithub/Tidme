@@ -17,7 +17,7 @@ import { emitTiddlers, runSplit, twDateString, initialFsrsFields } from "./split
 
 export { runSplit, twDateString, initialFsrsFields, applyOverrides, cleanTitle } from "./split";
 export { makeExtractId, makeCardId, makeSectionId, makeDocId, contentFingerprint } from "$:/plugins/keepone/tidme/core/ids";
-export { bookRoot, bookCardsRoot, docPageTitle, sectionPath, extractPath, cardPath, itemPath, deckSubsetPath, insertedSectionTitle, slugify, isTidmeContent, isInBook, NS } from "$:/plugins/keepone/tidme/core/paths";
+export { bookRoot, bookCardsRoot, sectionPath, extractPath, cardPath, deckSubsetPath, insertedSectionTitle, leafIdOf, slugify } from "$:/plugins/keepone/tidme/core/paths";
 
 export interface ImportResult {
 	bookTitle: string;
@@ -30,7 +30,12 @@ export interface ImportResult {
 	warnings: string[];
 }
 
-export interface ImportOptions extends ChunkOptions { bag?: string; priority?: number }
+export interface ImportOptions extends ChunkOptions {
+	bag?: string;
+	priority?: number;
+	/** 命名空间冲突探测（同名书 folder 唯一化，见 core/paths + split.folderOccupied） */
+	folderOccupied?: (baseFolder: string) => string | null;
+}
 
 /** EPUB 主流程 */
 async function importEpubBytes(bytes: Uint8Array, fileName: string, options: ImportOptions): Promise<ImportResult> {
@@ -88,7 +93,7 @@ async function importEpubBytes(bytes: Uint8Array, fileName: string, options: Imp
 	};
 	const docId = await makeDocId(book.meta);
 	const bookTitle = (meta.title || fileName.replace(/.*\//, "") || "未命名导入").trim();
-	const { tiddlers, warnings } = await emitTiddlers(docId, meta, bookTitle, sections, options.bag || "default", true, options.priority);
+	const { tiddlers, warnings } = await emitTiddlers(docId, meta, bookTitle, sections, options.bag || "default", true, options.priority, options.folderOccupied);
 	return {
 		bookTitle,
 		docId,
@@ -116,6 +121,7 @@ async function importTextBytes(bytes: Uint8Array, fileName: string, options: Imp
 		type,
 		bag: options.bag || "default",
 		priority: options.priority,
+		folderOccupied: options.folderOccupied,
 		maxChars: options.maxChars,
 		minChars: options.minChars
 	});

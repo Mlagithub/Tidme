@@ -11,7 +11,6 @@ const pipeline = require("$:/plugins/keepone/tidme/import/pipeline.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
-
 // 共享 DOM 工具（实现收敛于 core/ui-utils）
 const el = uiUtils.el;
 
@@ -38,7 +37,8 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 		type: t.fields.type,
 		sourceFields: { ...provenanceOf(wiki, title), ...extraSourceFields },
 		priority,
-		overrides
+		overrides,
+		folderOccupied: (base: string) => uiUtils.docFolderOwner(wiki, base)
 	});
 	const [doc, ...cards] = r.tiddlers;
 	if (!cards.length) throw new Error("未切分出任何节（内容过短或无可识别结构）");
@@ -122,7 +122,11 @@ function makePasteSplit(): WidgetCtor {
 				btn.setAttribute("disabled", "true");
 				status.textContent = "解析中…";
 				try {
-					const r = await pipeline.runSplit({ text, title: firstLine, bag: this.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default" });
+					const r = await pipeline.runSplit({
+						text, title: firstLine,
+						bag: this.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default",
+						folderOccupied: (base: string) => uiUtils.docFolderOwner(this.wiki, base)
+					});
 					if (!r.tiddlers.some((x: any) => x["tidme.kind"] === "topic")) throw new Error("未切分出任何节");
 					for (const tdl of r.tiddlers) this.wiki.addTiddler(tdl);
 					events.dispatch(this, events.EVENTS.IMPORT_DONE, { docId: r.docId, bookTitle: firstLine });

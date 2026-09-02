@@ -183,8 +183,9 @@ function buildRow(
 			const tVal = titleIn.value.trim();
 			const cVal = textIn.value.trim();
 			if (tVal && cVal) {
+				// 手动插卡 title 走同一套命名空间/slug（paths.insertedSectionTitle），避免第三套转义
 				const newTiddler = {
-					title: `Tidme/Books/${r.bookTitle}/manual/${tVal.replace(/[/\\\\:*?"<>|]/g, "-").replace(/\s+/g, "-").slice(0, 80) || "untitled"}`,
+					title: pipeline.insertedSectionTitle(r.bookTitle, r.docId, tVal),
 					caption: tVal,
 					text: cVal,
 					"tidme.doc": r.docId,
@@ -533,7 +534,9 @@ function makeFileWidget(): WidgetCtor {
 						// SM 对齐：导入时按所选档位批量设定优先级（同批随机分散 ±8）
 						const result = await pipeline.runImport(bytes, file.name, {
 							...getOptions(this.wiki),
-							priority: sched.tierRandom(prioSel.value as any)
+							priority: sched.tierRandom(prioSel.value as any),
+							// 同名书 folder 唯一化探测（A1）：folder 已被其它 docId 占用 → 导入时加 ~docId 后缀
+							folderOccupied: (base: string) => uiUtils.docFolderOwner(this.wiki, base)
 						}) as ImportResult;
 						console.log("[tidme-import] 解析成功:", result.bookTitle, result.sectionCount, "节");
 						// 重复导入检测：同 docId 已在库中

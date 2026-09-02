@@ -338,6 +338,28 @@ function cleanProcessedText(wiki: any, title: string): number {
 	return removed;
 }
 
+/** 派生卡命名空间解析：从父卡 title 的实际位置派生（folder 冲突时可能带 ~docId 后缀，slug 重算会错位）。
+ * - 摘录：与父卡同目录，叶段 += "--extract"
+ * - 挖空/问答：移到平行 Decks 命名空间（目录 Books→Decks），叶段 += "--cloze"/"--qa"
+ * 无 "/"（非命名空间 title）时回退就地子目录。 */
+function derivedCardBase(pf: Record<string, any>, parentTitle: string, kind: "extract" | "cloze" | "qa"): string {
+	const leaf = paths.leafIdOf(parentTitle);
+	const slash = parentTitle.lastIndexOf("/");
+	if (slash <= 0 || !leaf) return `${parentTitle}/${kind}`;
+	const dir = parentTitle.slice(0, slash + 1); // 父所在目录（含末尾 /）
+	if (kind === "extract") return dir + leaf + "--extract";
+	const decksDir = dir.replace(/^Tidme\/Books\//, "Tidme/Decks/");
+	return decksDir + leaf + "--" + kind;
+}
+
+/** 拍平命名空间下同层冲突的序号后缀：base 已被占用则 base-N（N=2,3,…）。三处建卡器共用。 */
+function nextFreeTitle(wiki: any, base: string): string {
+	let title = base;
+	let i = 2;
+	while (wiki.getTiddler(title)) title = `${base}-${i++}`;
+	return title;
+}
+
 /** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用）。
  * 分类对齐 SuperMemo：摘录 = Topic（阅读材料），kind=topic/subkind=extract，
  * 进阅读列表（阅读流）。要成为测试卡：在摘录上挖空 → item（cloze）。 */
@@ -345,14 +367,8 @@ function buildExtract(wiki: any, parentTitle: string, selection: string): Record
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
 	// 命名空间（拍平版）：摘录与父节卡同在 Tidme/Books/<书>/ 目录下
-	// parentTitle = Tidme/Books/<bookSlug>/<sectionId>；摘录 title = <bookRoot>/<sectionId>--extract[-N]
-	const bookTitle = String(pf["tidme.breadcrumb"] || "").split(" › ")[0] || "";
-	const docId = String(pf["tidme.doc"] || "");
-	const sectionId = parentTitle.substring(parentTitle.lastIndexOf("/") + 1);
-	const base = (bookTitle && docId && sectionId) ? paths.extractPath(bookTitle, docId, sectionId) : `${parentTitle}/extract`;
-	let title = base;
-	let i = 2;
-	while (wiki.getTiddler(title)) title = `${base}-${i++}`;
+	const base = derivedCardBase(pf, parentTitle, "extract");
+	const title = nextFreeTitle(wiki, base);
 	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
 	const preview = selection.replace(/\s+/g, " ").trim().slice(0, 30);
 	return {
@@ -388,13 +404,8 @@ function buildCloze(wiki: any, parentTitle: string, block: string, selected: str
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
 	// 命名空间：挖空卡 = 知识型卡片 → 走 Tidme/Decks/<书>/ 命名空间（不在书目录里）
-	const bookTitle = String(pf["tidme.breadcrumb"] || "").split(" › ")[0] || "";
-	const docId = String(pf["tidme.doc"] || "");
-	const sectionId = parentTitle.substring(parentTitle.lastIndexOf("/") + 1);
-	const base = (bookTitle && docId && sectionId) ? paths.cardPath(bookTitle, docId, sectionId, "cloze") : `${parentTitle}/cloze`;
-	let title = base;
-	let i = 2;
-	while (wiki.getTiddler(title)) title = `${base}-${i++}`;
+	const base = derivedCardBase(pf, parentTitle, "cloze");
+	const title = nextFreeTitle(wiki, base);
 	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
 	return {
 		title,
@@ -425,13 +436,8 @@ function buildQA(wiki: any, parentTitle: string, question: string, answer: strin
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
 	// 命名空间：问答卡 = 知识型卡片 → 走 Tidme/Decks/<书>/ 命名空间（不在书目录里）
-	const bookTitle = String(pf["tidme.breadcrumb"] || "").split(" › ")[0] || "";
-	const docId = String(pf["tidme.doc"] || "");
-	const sectionId = parentTitle.substring(parentTitle.lastIndexOf("/") + 1);
-	const base = (bookTitle && docId && sectionId) ? paths.cardPath(bookTitle, docId, sectionId, "qa") : `${parentTitle}/qa`;
-	let title = base;
-	let i = 2;
-	while (wiki.getTiddler(title)) title = `${base}-${i++}`;
+	const base = derivedCardBase(pf, parentTitle, "qa");
+	const title = nextFreeTitle(wiki, base);
 	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
 	return {
 		title,
@@ -946,11 +952,14 @@ function makeSectionBar(): WidgetCtor {
 				infoRow.appendChild(span);
 			}
 
-			// 面包屑点击跳到本书汇总页：必须用真实 doc tiddler title（命名空间路径），不是 breadcrumb 的可读首段
+			// 面包屑点击跳到本书汇总页：真实 doc tiddler title（folder 冲突时含 ~docId 后缀）。
+			// 优先卡上已落的 tidme.docpage，其次按 docId 查库，最后才回退重算（B1：不在 UI 重算派生路径）
 			const crumbBreadcrumb = String(fields["tidme.breadcrumb"] || "");
 			const crumbBook = crumbBreadcrumb.split(" › ")[0] || "";
-			const crumbDoc = fields["tidme.doc"] || "";
-			const crumbDocTitle = crumbBook && crumbDoc ? paths.bookRoot(crumbBook, crumbDoc) : crumbBook;
+			const crumbDoc = String(fields["tidme.doc"] || "");
+			const crumbDocTitle = String(fields["tidme.docpage"] || "")
+				|| uiUtils.docPageOfDoc(wiki, crumbDoc)
+				|| (crumbBook && crumbDoc ? paths.bookRoot(crumbBook, crumbDoc) : crumbBook);
 			const crumb = el(doc, "span", "tm-section-crumb tm-import-muted", crumbBreadcrumb);
 			crumb.title = "点击打开本书汇总页";
 			crumb.addEventListener("click", () => {
@@ -1282,14 +1291,16 @@ function makeDocResume(): WidgetCtor {
 					// 从任意现有 deck 复制调度字段，覆盖 card 为本书 item 子集过滤器
 					const baseDeck = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]")[0];
 					const bf = (baseDeck && wiki.getTiddler(baseDeck)?.fields) || {};
-					// 命名空间：子集牌组进 Tidme/Decks/<书名>。docId 短哈希作 ~后缀防重名（同一 docId 重入幂等）
-					const bookSlug = String(title).replace(/^Tidme\/Books\//, "");
-					const deckTitle = `Tidme/Decks/${bookSlug}/复习本书`;
+					const docFields = wiki.getTiddler(title)?.fields || {};
+					// 子集牌组放"文档页所在 folder 的 Decks 镜像"（folder 冲突带 ~docId 后缀时亦准确）：
+					// 文档页 title == folder 根（含后缀），Books→Decks 即 decks 根
+					const deckRoot = String(title).replace(/^Tidme\/Books\//, "Tidme/Decks/") || `Tidme/Decks/${paths.leafIdOf(title)}`;
+					const deckTitle = `${deckRoot}/复习本书`;
 					wiki.addTiddler({
 						...bf,
 						title: deckTitle,
 						tags: ["$:/tags/TidmeDeck"],
-						caption: `复习：${title}`,
+						caption: `复习：${uiUtils.displayTitle(docFields, title)}`,
 						description: "临时子集牌组（复习本书测试卡）——复习完可删除",
 						card: itemFilter,
 						"tidme.subset-doc": docId
@@ -1317,7 +1328,8 @@ function makeDocResume(): WidgetCtor {
 				const tbody = el(doc, "tbody", "");
 				for (const dt of doneTitles) {
 					const tr = el(doc, "tr", "tm-doc-done-row");
-					tr.appendChild(el(doc, "td", "tm-cb-name", dt));
+					const doneFields = wiki.getTiddler(dt)?.fields || {};
+					tr.appendChild(el(doc, "td", "tm-cb-name", uiUtils.displayTitle(doneFields, dt)));
 					const actTd = el(doc, "td", "tm-cb-actions", "");
 					const back = el(doc, "button", "tm-btn tm-btn--ghost", "重新加入");
 					back.title = "恢复到学习队列";
@@ -1368,7 +1380,7 @@ function makeDocResume(): WidgetCtor {
 					const kindMark = c.fields["tidme.subkind"] === "cloze" ? "挖" : "摘";
 					kindTd.appendChild(el(doc, "span", "tm-cb-kind", kindMark));
 					tr.appendChild(kindTd);
-					tr.appendChild(el(doc, "td", "tm-cb-name", c.title));
+					tr.appendChild(el(doc, "td", "tm-cb-name", uiUtils.displayTitle(c.fields, c.title)));
 					// W3：摘录加工状态（可挖空/已挖空）
 					const stateTd = el(doc, "td", "", "");
 					if (c.fields["tidme.subkind"] === "extract") {
