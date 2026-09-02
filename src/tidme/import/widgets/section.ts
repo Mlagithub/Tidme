@@ -1307,6 +1307,24 @@ function makeDocResume(): WidgetCtor {
 				else wrap.appendChild(subsetBtn);
 			}
 
+			// 删除整本书（含全部派生卡/子集牌组/续读点，按 docId 清理）→ 跳回阅读列表
+			{
+				const docLabel = uiUtils.displayTitle(wiki.getTiddler(title)?.fields, title);
+				const delBook = el(doc, "button", "tm-btn tm-btn--ghost", "🗑 删除本书");
+				delBook.title = "删除整本《" + docLabel + "》的全部内容（含卡片与复习进度，不可恢复）";
+				delBook.addEventListener("click", () => {
+					if (confirm(`删除整本《${docLabel}》的全部内容？\n\n将删除文档页、全部节/摘录/挖空/问答卡、复习进度与续读点，不可恢复。`)) {
+						uiUtils.deleteDocContent(wiki, docId);
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+						this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
+						this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/plugins/keepone/tidme/import/ui/reading-list" });
+					}
+				});
+				const bannerActions = wrap.querySelector(".tm-doc-banner-actions");
+				if (bannerActions) bannerActions.appendChild(delBook);
+				else wrap.appendChild(delBook);
+			}
+
 			// 已读区：列出已读节，可"重新加入"队列（恢复可逆性，替代 8 秒撤销窗口）
 			const doneTitles = all.filter((x) => isDone(wiki.getTiddler(x)?.fields));
 			if (doneTitles.length) {

@@ -111,6 +111,44 @@ export function docPageOfDoc(wiki: any, docId: string): string {
 	return wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${docId}]]`)[0] || "";
 }
 
+const SESSION_STATE = "$:/state/tidme/learning-session";
+const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
+
+/**
+ * 删除整本书的全部内容（含派生物）：
+ * - tidme.doc === docId 的全部卡（节卡/摘录/挖空/问答/手动插卡，含 obsolete 归档）与文档页
+ * - 本书子集牌组（tidme.subset-doc === docId）
+ * - 本书续读点；全局续读点若指向本书卡则一并清除
+ * - 学习会话列表中剔除本书卡（会话状态保留其它内容）
+ * 一律按 docId 字段清（不依赖 title 结构，folder 后缀/历史格式均覆盖）。
+ * @returns 删除的 tiddler 数
+ */
+export function deleteDocContent(wiki: any, docId: string): number {
+	if (!wiki || typeof wiki.filterTiddlers !== "function" || !docId) return 0;
+	const owned = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${docId}]]`);
+	const decks = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.subset-doc[${docId}]]`);
+	const targets = new Set([...owned, ...decks]);
+
+	// 学习会话：剔除本书卡（保留其余卡与队列语义）
+	const sess = wiki.getTiddler(SESSION_STATE);
+	if (sess && Array.isArray(sess.fields.list)) {
+		const keep = sess.fields.list.filter((t: string) => !targets.has(t));
+		if (keep.length !== sess.fields.list.length) {
+			wiki.addTiddler({ ...sess.fields, title: SESSION_STATE, list: keep });
+		}
+	}
+	// 续读点
+	wiki.deleteTiddler(READPOINT_PREFIX + docId);
+	const g = wiki.getTiddler(READPOINT_PREFIX + "global");
+	if (g && targets.has(String(g.fields.text || ""))) wiki.deleteTiddler(READPOINT_PREFIX + "global");
+
+	let n = 0;
+	for (const t of targets) {
+		if (wiki.getTiddler(t)) { wiki.deleteTiddler(t); n++; }
+	}
+	return n;
+}
+
 /** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 卡中排除摘录） */
 export function sectionsOfDoc(wiki: any, docId: string): string[] {
 	return wiki

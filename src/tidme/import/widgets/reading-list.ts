@@ -195,6 +195,19 @@ function makeReadingList(): any {
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: firstUnread.title });
 				});
 				sum.appendChild(cont);
+
+				// 删除整本书（含文档页/节卡/摘录/挖空问答/子集牌组/续读点，按 docId 清理）
+				const del = el(doc, "button", "tm-btn tm-rl-del", "🗑 删除");
+				del.title = "删除整本《" + docLabel + "》的全部内容（含卡片与复习进度，不可恢复）";
+				del.addEventListener("click", (e: Event) => {
+					e.preventDefault(); e.stopPropagation();
+					if (confirm(`删除整本《${docLabel}》的全部内容？\n\n将删除文档页、全部节/摘录/挖空/问答卡、复习进度与续读点，不可恢复。`)) {
+						const n = uiUtils.deleteDocContent(wiki, g.doc);
+						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
+						if (n === 0) alert("未找到可删除的内容（可能已删除或属旧数据）。");
+					}
+				});
+				sum.appendChild(del);
 				det.appendChild(sum);
 
 				// 卡片表格（列式紧凑，避免竖排条目拉长页面；compact 只留 类型/标题 两列）
