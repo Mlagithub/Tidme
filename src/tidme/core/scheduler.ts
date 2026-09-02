@@ -137,6 +137,19 @@ export function restoreCard(fields: Record<string, any>): Record<string, any> {
 	return out;
 }
 
+/**
+ * 当前是否可调度（D3）：未完成/未忽略/未搁置，且 due ≤ now。
+ * 尊重评分/顺延写出的未来排期——"下一张/继续阅读"导航用此跳过未来到期的卡，不提前重放。
+ * 无 due 的卡（Pending 语义）视为可读。
+ */
+export function isDueNow(fields: Record<string, any> | null | undefined, now = new Date()): boolean {
+	if (!fields) return false;
+	if (fields["tidme.done"] === "yes" || fields["tidme.ignored"] === "yes" || fields["tidme.suspended"] === "yes") return false;
+	const due = fields.due;
+	if (due === undefined || due === null || String(due) === "") return true;
+	return parseTwDate(due).getTime() <= now.getTime();
+}
+
 export type QueueSortMode = "priority-first" | "due-first" | "hybrid";
 
 /**

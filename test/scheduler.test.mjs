@@ -141,6 +141,17 @@ test("autoPostpone: 搁置/已出队不处理；topic 阅读卡按 A-Factor 顺�
 	assert.ok(topicPatch.fields.scheduled_days, "topic 走 A-Factor 展期（写 scheduled_days）");
 });
 
+test("isDueNow: 未完成且 due≤now 可调度；未来排期/搁置/完成/忽略不可；无 due = Pending 可读", () => {
+	assert.ok(sched.isDueNow({ due: PAST() }), "逾期可调度");
+	assert.ok(sched.isDueNow({ due: T(0) }), "due=now 边界（≤）");
+	assert.ok(sched.isDueNow({}), "无 due（Pending）可读");
+	assert.ok(!sched.isDueNow({ due: FUTURE() }), "未来排期不可调度（评分/顺延写出）");
+	assert.ok(!sched.isDueNow({ due: PAST(), "tidme.suspended": "yes" }), "搁置不可");
+	assert.ok(!sched.isDueNow({ due: PAST(), "tidme.done": "yes" }), "完成不可");
+	assert.ok(!sched.isDueNow({ due: PAST(), "tidme.ignored": "yes" }), "忽略不可");
+	assert.ok(!sched.isDueNow(null), "无字段不可");
+});
+
 test("doneCard/restoreCard: Done 语义与可逆恢复（kind 决定归属，无标签）", () => {
 	const done = sched.doneCard({ title: "节", "tidme.kind": "topic", state: "0", "tidme.suspended": "yes" });
 	assert.equal(done["tidme.done"], "yes", "Done 置 tidme.done");

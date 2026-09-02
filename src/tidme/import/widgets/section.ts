@@ -842,19 +842,11 @@ function makeSectionBar(): WidgetCtor {
 				}
 			};
 			/**
-			 * 现在是否可调度：未完成/未忽略/未搁置，且 due ≤ 现在。
+			 * 现在是否可调度：未完成/未忽略/未搁置，且 due ≤ 现在（scheduler.isDueNow）。
 			 * 尊重评分/顺延写出的未来排期 —— 修复：昨天评分提示"5天后"的卡，
 			 * 若仍在会话列表/文档序列中，不再被"下一张"导航提前重放。
-			 * 无 due 的卡（Pending 语义）视为可读。
 			 */
-			const isDueNow = (t: string): boolean => {
-				const f = wiki.getTiddler(t)?.fields;
-				if (!f) return false;
-				if (isDone(f) || f["tidme.suspended"] === "yes") return false;
-				const due = f.due;
-				if (due === undefined || due === null || String(due) === "") return true;
-				return sched.parseTwDate(due).getTime() <= Date.now();
-			};
+			const isDueNow = (t: string): boolean => sched.isDueNow(wiki.getTiddler(t)?.fields);
 			const getScheduledNext = () => {
 				// 1. 优先尝试从全局混合学习流会话 ($:/state/tidme/learning-session) 中寻找下一卡
 				const sessionFields = wiki.getTiddler(SESSION_STATE)?.fields;
@@ -1270,7 +1262,9 @@ function makeDocResume(): WidgetCtor {
 			btn.addEventListener("click", () => {
 				const rp = parseReadPoint(wiki, docId);
 				const list = all.filter((x) => !isDone(wiki.getTiddler(x)?.fields));
-				const target = rp && list.includes(rp.t) ? rp.t : list[0];
+				// D3：优先跳到续读点（须当前可读），否则第一张 due≤now 的卡；全未来排期退回 list[0]
+				const readable = list.filter((x) => sched.isDueNow(wiki.getTiddler(x)?.fields));
+				const target = (rp && readable.includes(rp.t) ? rp.t : null) || readable[0] || list[0];
 				if (target) {
 					this.dispatchEvent({ type: "tm-close-tiddler" }); // 关闭文档页，进入阅读
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: target });

@@ -169,6 +169,13 @@ function buildRow(
 	let activeEditTitleIndex: number | null = null;
 	let activeAddIndex: number | null = null;
 
+	// 手动插卡 title 去重（同 caption 多次插入 → -N 后缀），会话内累积
+	const manualUsed = new Set<string>(
+		r.tiddlers
+			.filter((t: any) => t["tidme.kind"] === "topic" && String(t.title || "").includes("/manual-"))
+			.map((t: any) => String(t.title))
+	);
+
 	const makeAddForm = (insertAfterIdx: number) => {
 		const form = el(doc, "div", "tm-split-add-form");
 		const titleIn = doc.createElement("input");
@@ -183,9 +190,15 @@ function buildRow(
 			const tVal = titleIn.value.trim();
 			const cVal = textIn.value.trim();
 			if (tVal && cVal) {
-				// 手动插卡 title 走同一套命名空间/slug（paths.insertedSectionTitle），避免第三套转义
+				// 手动插卡 title 走同一套命名空间/slug（paths.insertedSectionTitle），避免第三套转义；
+				// 同 caption 冲突时追加 -N（manualUsed 会话内累积）
+				const mBase = pipeline.insertedSectionTitle(r.bookTitle, r.docId, tVal);
+				let mTitle = mBase;
+				let n = 2;
+				while (manualUsed.has(mTitle)) mTitle = `${mBase}-${n++}`;
+				manualUsed.add(mTitle);
 				const newTiddler = {
-					title: pipeline.insertedSectionTitle(r.bookTitle, r.docId, tVal),
+					title: mTitle,
 					caption: tVal,
 					text: cVal,
 					"tidme.doc": r.docId,
