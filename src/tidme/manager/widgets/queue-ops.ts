@@ -94,8 +94,8 @@ function makeQueueOps(): WidgetCtor {
 					// P2：每牌组一张卡片（名称 + 计数 + 动作组）
 					const card = el(doc, "div", "tm-queue-card");
 					const head = el(doc, "div", "tm-queue-card-head");
-					const caption = wiki.getTiddler(deck)?.fields?.caption || deck.split("/").pop() || deck;
-					head.appendChild(el(doc, "strong", "", String(caption)));
+					const caption = uiUtils.captionText(wiki, wiki.getTiddler(deck)?.fields?.caption || deck.split("/").pop() || deck, this);
+					head.appendChild(el(doc, "strong", "", caption));
 					head.appendChild(el(doc, "span", "tm-queue-card-count", `${cards.length} 卡`));
 					head.title = deck;
 					card.appendChild(head);

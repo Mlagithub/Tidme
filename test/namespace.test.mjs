@@ -467,6 +467,17 @@ test("ui-utils: docPageOfDoc 按 docId 查到真实文档页（folder 带 ~docId
 	assert.equal(uiUtils.docFolderOwner(wiki, doc.title), r.docId, "folder 占用可探测到本 docId");
 });
 
+test("ui-utils: captionText 把 wikitext 转义 caption 解析为可读文本（如牌组 {{$:/language/...}}）", async () => {
+	const uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
+	// 转义 caption → 解析（zh-Hans 语言包已加载，应得到"默认"而非原始 {{…}}）
+	const resolved = uiUtils.captionText(wiki, "{{$:/language/tidme/default}}");
+	assert.ok(!resolved.includes("{{"), `不应残留 {{ 模板：${resolved}`);
+	assert.ok(resolved.trim().length > 0, "应解析出可读文本");
+	// 纯文本 caption 原样返回（不触发不必要的渲染）
+	assert.equal(uiUtils.captionText(wiki, "章节标题"), "章节标题");
+	assert.equal(uiUtils.captionText(wiki, ""), "");
+});
+
 test("deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问答/无 kind 散卡）；他书与续读点指向保留卡时不误伤", async () => {
 	const uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
 	// 书 A：2 普通节 + 1 大纲手动"新节"（topic/section/manual-）+ 1 摘录 + 1 挖空 + 1 无 kind 散卡

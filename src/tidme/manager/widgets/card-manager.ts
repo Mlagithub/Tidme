@@ -129,7 +129,7 @@ function makeCardManager(): WidgetCtor {
 					const f = wiki.getTiddler(deck)?.fields || {};
 					return {
 						title: deck,
-						caption: String(f.caption || deck.split("/").pop() || deck),
+						caption: uiUtils.captionText(wiki, f.caption || deck.split("/").pop() || deck, this),
 						strict: new Set(wiki.filterTiddlers(`[subfilter{${deck}!!card}!subfilter{${deck}!!card_exclude}]`)),
 						loose: new Set(wiki.filterTiddlers(`[subfilter{${deck}!!card}]`))
 					};

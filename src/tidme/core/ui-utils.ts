@@ -96,6 +96,23 @@ export function displayTitle(fields: Record<string, any> | null | undefined, tit
 	return (i >= 0 ? t.slice(i + 1) : t).trim() || t;
 }
 
+
+/**
+ * caption 字段的可读文本：有些 caption 是 wikitext 转义（如牌组 caption = {{$:/language/tidme/default}}），
+ * 不能直接当纯文本 textContent。含转义时用 renderText 解析为纯文本；否则原样返回（避免无谓开销）。
+ */
+export function captionText(wiki: any, caption: unknown, widget?: any): string {
+	const raw = String(caption ?? "").trim();
+	if (!raw) return raw;
+	if (!/\{\{|<<|\$\([^)]*\)/.test(raw)) return raw;
+	try {
+		return wiki.renderText("text/plain", "text/vnd.tiddlywiki", raw, { parentWidget: widget });
+	} catch {
+		// 解析失败：剥掉明显未决的 {{...}} 转义，退回可读形式
+		const stripped = raw.replace(/\{\{[^}]+\}\}/g, "").trim();
+		return stripped || raw;
+	}
+}
 /** 某 book folder（Tidme/Books/<slug>）下第一张带 tidme.doc 的卡所属 docId（无占用返回 null）——同名书冲突探测 */
 export function docFolderOwner(wiki: any, baseFolder: string): string | null {
 	if (!wiki || typeof wiki.filterTiddlers !== "function") return null;
