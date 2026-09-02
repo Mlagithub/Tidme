@@ -16,6 +16,7 @@ const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
 const stats = require("$:/plugins/keepone/tidme/core/stats.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const paths = require("$:/plugins/keepone/tidme/core/paths.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
@@ -343,10 +344,15 @@ function cleanProcessedText(wiki: any, title: string): number {
 function buildExtract(wiki: any, parentTitle: string, selection: string): Record<string, any> {
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
-	const base = `${parentTitle} › 摘录`;
+	// 命名空间（拍平版）：摘录与父节卡同在 Tidme/Books/<书>/ 目录下
+	// parentTitle = Tidme/Books/<bookSlug>/<sectionId>；摘录 title = <bookRoot>/<sectionId>--extract[-N]
+	const bookTitle = String(pf["tidme.breadcrumb"] || "").split(" › ")[0] || "";
+	const docId = String(pf["tidme.doc"] || "");
+	const sectionId = parentTitle.substring(parentTitle.lastIndexOf("/") + 1);
+	const base = (bookTitle && docId && sectionId) ? paths.extractPath(bookTitle, docId, sectionId) : `${parentTitle}/extract`;
 	let title = base;
 	let i = 2;
-	while (wiki.getTiddler(title)) title = `${base} ${i++}`;
+	while (wiki.getTiddler(title)) title = `${base}-${i++}`;
 	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
 	const preview = selection.replace(/\s+/g, " ").trim().slice(0, 30);
 	return {
@@ -381,10 +387,14 @@ function buildCloze(wiki: any, parentTitle: string, block: string, selected: str
 	const clozeLine = `${block.slice(0, at)}<<C "${safeSel}" "c1" "">>${block.slice(at + selected.length)}`;
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
-	const base = `${parentTitle} › 挖空`;
+	// 命名空间：挖空卡 = 知识型卡片 → 走 Tidme/Decks/<书>/ 命名空间（不在书目录里）
+	const bookTitle = String(pf["tidme.breadcrumb"] || "").split(" › ")[0] || "";
+	const docId = String(pf["tidme.doc"] || "");
+	const sectionId = parentTitle.substring(parentTitle.lastIndexOf("/") + 1);
+	const base = (bookTitle && docId && sectionId) ? paths.cardPath(bookTitle, docId, sectionId, "cloze") : `${parentTitle}/cloze`;
 	let title = base;
 	let i = 2;
-	while (wiki.getTiddler(title)) title = `${base} ${i++}`;
+	while (wiki.getTiddler(title)) title = `${base}-${i++}`;
 	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
 	return {
 		title,
@@ -414,10 +424,14 @@ function buildCloze(wiki: any, parentTitle: string, block: string, selected: str
 function buildQA(wiki: any, parentTitle: string, question: string, answer: string): Record<string, any> {
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
 	const fsrs = pipeline.initialFsrsFields(new Date());
-	const base = `${parentTitle} › 问答`;
+	// 命名空间：问答卡 = 知识型卡片 → 走 Tidme/Decks/<书>/ 命名空间（不在书目录里）
+	const bookTitle = String(pf["tidme.breadcrumb"] || "").split(" › ")[0] || "";
+	const docId = String(pf["tidme.doc"] || "");
+	const sectionId = parentTitle.substring(parentTitle.lastIndexOf("/") + 1);
+	const base = (bookTitle && docId && sectionId) ? paths.cardPath(bookTitle, docId, sectionId, "qa") : `${parentTitle}/qa`;
 	let title = base;
 	let i = 2;
-	while (wiki.getTiddler(title)) title = `${base} ${i++}`;
+	while (wiki.getTiddler(title)) title = `${base}-${i++}`;
 	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
 	return {
 		title,
@@ -821,6 +835,20 @@ function makeSectionBar(): WidgetCtor {
 					wiki.addTiddler({ ...sess, title: SESSION_STATE, list: newList });
 				}
 			};
+			/**
+			 * 现在是否可调度：未完成/未忽略/未搁置，且 due ≤ 现在。
+			 * 尊重评分/顺延写出的未来排期 —— 修复：昨天评分提示"5天后"的卡，
+			 * 若仍在会话列表/文档序列中，不再被"下一张"导航提前重放。
+			 * 无 due 的卡（Pending 语义）视为可读。
+			 */
+			const isDueNow = (t: string): boolean => {
+				const f = wiki.getTiddler(t)?.fields;
+				if (!f) return false;
+				if (isDone(f) || f["tidme.suspended"] === "yes") return false;
+				const due = f.due;
+				if (due === undefined || due === null || String(due) === "") return true;
+				return sched.parseTwDate(due).getTime() <= Date.now();
+			};
 			const getScheduledNext = () => {
 				// 1. 优先尝试从全局混合学习流会话 ($:/state/tidme/learning-session) 中寻找下一卡
 				const sessionFields = wiki.getTiddler(SESSION_STATE)?.fields;
@@ -829,17 +857,17 @@ function makeSectionBar(): WidgetCtor {
 					const sIdx = sList.indexOf(title);
 					if (sIdx !== -1) {
 						for (let i = sIdx + 1; i < sList.length; i++) {
-							if (!isDone(wiki.getTiddler(sList[i])?.fields)) return sList[i];
+							if (isDueNow(sList[i])) return sList[i];
 						}
 					}
 				}
 
-				// 2. 兜底回退单文档 topicsOfDoc 列表
+				// 2. 兜底回退单文档 topicsOfDoc 列表（同样跳过未来排期的卡）
 				const all = topicsOfDoc(wiki, docId);
 				const idx = all.indexOf(title);
 				if (idx !== -1) {
 					for (let i = idx + 1; i < all.length; i++) {
-						if (!isDone(wiki.getTiddler(all[i])?.fields)) return all[i];
+						if (isDueNow(all[i])) return all[i];
 					}
 				}
 				return null;
@@ -918,12 +946,17 @@ function makeSectionBar(): WidgetCtor {
 				infoRow.appendChild(span);
 			}
 
-			const crumb = el(doc, "span", "tm-section-crumb tm-import-muted", String(fields["tidme.breadcrumb"] || ""));
+			// 面包屑点击跳到本书汇总页：必须用真实 doc tiddler title（命名空间路径），不是 breadcrumb 的可读首段
+			const crumbBreadcrumb = String(fields["tidme.breadcrumb"] || "");
+			const crumbBook = crumbBreadcrumb.split(" › ")[0] || "";
+			const crumbDoc = fields["tidme.doc"] || "";
+			const crumbDocTitle = crumbBook && crumbDoc ? paths.bookRoot(crumbBook, crumbDoc) : crumbBook;
+			const crumb = el(doc, "span", "tm-section-crumb tm-import-muted", crumbBreadcrumb);
 			crumb.title = "点击打开本书汇总页";
 			crumb.addEventListener("click", () => {
 				this._flushSave();
 				this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
-				this.dispatchEvent({ type: "tm-navigate", navigateTo: String(fields["tidme.breadcrumb"] || "").split(" › ")[0] });
+				this.dispatchEvent({ type: "tm-navigate", navigateTo: crumbDocTitle });
 			});
 			infoRow.appendChild(crumb);
 
@@ -1249,7 +1282,9 @@ function makeDocResume(): WidgetCtor {
 					// 从任意现有 deck 复制调度字段，覆盖 card 为本书 item 子集过滤器
 					const baseDeck = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]")[0];
 					const bf = (baseDeck && wiki.getTiddler(baseDeck)?.fields) || {};
-					const deckTitle = `$:/temp/tidme/subset/${docId}`;
+					// 命名空间：子集牌组进 Tidme/Decks/<书名>。docId 短哈希作 ~后缀防重名（同一 docId 重入幂等）
+					const bookSlug = String(title).replace(/^Tidme\/Books\//, "");
+					const deckTitle = `Tidme/Decks/${bookSlug}/复习本书`;
 					wiki.addTiddler({
 						...bf,
 						title: deckTitle,
@@ -1497,6 +1532,7 @@ exports["doc-resume"] = makeDocResume();
 // 供单元测试/复用：纯字段构建器与锚点解析
 exports.buildExtract = buildExtract;
 exports.buildCloze = buildCloze;
+exports.buildQA = buildQA;
 exports.parseAnchor = parseAnchor;
 exports.processedSnippets = processedSnippets;
 exports.cleanProcessedText = cleanProcessedText;

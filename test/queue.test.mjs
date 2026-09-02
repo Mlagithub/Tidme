@@ -98,3 +98,33 @@ test("strict：新 item（state 0）落在 Pending 段（到期卡之后）", ()
 	assert.ok(q.indexOf("item新") > q.indexOf("item到期"), "新卡在到期卡之后");
 	assert.ok(q.indexOf("item新") > q.indexOf("topic到期"), "新卡在到期阅读之后");
 });
+
+test("调度: 评分/顺延后未来排期（+5天）的卡不提前重放（修复：<now> 格式错误导致 due<now 恒真）", () => {
+	// 昨天评分 Good → due=+5 天的 item（state 2）与 topic
+	mkCard("item5天后", { kind: "item", state: "2", due: new Date(Date.now() + 5 * 86400000) });
+	mkCard("topic5天后", { kind: "topic", due: new Date(Date.now() + 5 * 86400000) });
+
+	const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f));
+	assert.ok(!q.includes("item5天后"), "未来排期的 item 不得出现在全局队列");
+	assert.ok(!q.includes("topic5天后"), "未来排期的 topic 不得出现在全局队列（顺延/评分后不被提前重放）");
+
+	// strict 模式同样排除
+	const qs = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { mode: "strict" });
+	assert.ok(!qs.includes("item5天后"), "strict: 未来排期 item 不入队");
+	assert.ok(!qs.includes("topic5天后"), "strict: 未来排期 topic 不入队");
+});
+
+test("调度: 学习步（state 1/3）due 未到不入 learn 队列", () => {
+	mkCard("学习未到期", { kind: "item", state: "1", due: new Date(Date.now() + 3600000) });
+	mkCard("学习已到期", { kind: "item", state: "1", due: new Date(Date.now() - 3600000) });
+
+	const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f));
+	assert.ok(!q.includes("学习未到期"), "学习步间隔未到不得入队（compare:date 依赖正确 UTC 格式）");
+	assert.ok(q.includes("学习已到期"), "学习步已到期入队");
+});
+
+test("调度: deck-engine 过滤器不包含损坏的 <now> 格式（回归防护）", () => {
+	const src = fs.readFileSync(path.resolve(here, "../src/tidme/core/deck-engine.ts"), "utf8");
+	assert.ok(!src.includes("[UTC]YYYY0MMDD0hh0mm0ss0XXX"), "不得使用损坏的日期格式（被 parse 为未来日期）");
+	assert.ok(src.includes("[UTC]YYYY0MM0DD0hh0mm0ssXXX"), "使用 TW 核心 UTC 格式");
+});

@@ -1,0 +1,15 @@
+title: Tidme/Decks/index
+type: text/vnd.tiddlywiki
+caption: 子集牌组
+tags: $:/tags/Tidme
+
+\whitespace trim
+
+! 子集与用户牌组
+
+全局默认牌组 $:/Decks/default 留在 $:/ 下；本目录下存放：
+
+* 「复习本书」子集牌组（按文档自动创建）— //Tidme/Decks/<书名>/复习本书//
+* 未来用户自建牌组
+
+子集牌组复习完可手动删除；下次「复习本书」按钮会重建。

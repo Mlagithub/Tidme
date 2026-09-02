@@ -1,0 +1,17 @@
+title: Tidme/Books/index
+type: text/vnd.tiddlywiki
+caption: 导入文档
+tags: $:/tags/Tidme
+
+\whitespace trim
+
+! 导入的文档
+
+每本书一个子目录：//Tidme/Books/<书名>//。子目录下：
+
+* <<currentTiddler>> 文档页
+* 章节子目录（按书目录层级）
+* 每个节卡是 $:<章>/<s<hash>>$ tiddler
+* 摘录/挖空/问答作为节卡的子 tiddler
+
+打开 [[导入中心|$:/plugins/keepone/tidme/import/ui/import-center]] 导入新书。

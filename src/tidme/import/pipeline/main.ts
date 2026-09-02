@@ -16,6 +16,8 @@ import { decodeBytes, sniffFormat } from "./ingest-text";
 import { emitTiddlers, runSplit, twDateString, initialFsrsFields } from "./split";
 
 export { runSplit, twDateString, initialFsrsFields, applyOverrides, cleanTitle } from "./split";
+export { makeExtractId, makeCardId, makeSectionId, makeDocId, contentFingerprint } from "$:/plugins/keepone/tidme/core/ids";
+export { bookRoot, bookCardsRoot, docPageTitle, sectionPath, extractPath, cardPath, itemPath, deckSubsetPath, insertedSectionTitle, slugify, isTidmeContent, isInBook, NS } from "$:/plugins/keepone/tidme/core/paths";
 
 export interface ImportResult {
 	bookTitle: string;

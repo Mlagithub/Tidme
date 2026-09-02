@@ -27,7 +27,7 @@ code-body: yes
 \end
 
 <$list
-    filter="[<studyTiddler>!is[blank]]"
+    filter="[<studyTiddler>!is[blank]!tidme.kind[topic]]"
     variable="studyTiddler"
 >
     <$list

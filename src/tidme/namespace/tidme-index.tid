@@ -1,0 +1,16 @@
+title: Tidme/index
+type: text/vnd.tiddlywiki
+caption: Tidme 命名空间
+tags: $:/tags/Tidme
+
+\whitespace trim
+
+! Tidme 命名空间根
+
+本目录是 Tidme 插件的根命名空间，所有用户内容均放在其下：
+
+* [[Tidme/Books]] — 导入的文档（每本书一个子目录）
+* [[Tidme/Decks]] — 用户/子集牌组
+* [[Tidme/Clips]] — Web 剪切（占位）
+
+全局默认牌组 $:/Deck/default 与插件系统 tiddler 继续留在 $:/ 下。

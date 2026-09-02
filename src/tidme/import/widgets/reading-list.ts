@@ -12,6 +12,7 @@ declare function require(module: string): any;
 const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const paths = require("$:/plugins/keepone/tidme/core/paths.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 // 共享 DOM/转义/文档节查询（实现收敛于 core/ui-utils）
@@ -157,15 +158,18 @@ function makeReadingList(): any {
 				// 文档组默认折叠（两本书也不占长页面）；summary = 名 + 进度 + 继续阅读
 				const docAll = sectionsOfDoc(wiki, g.doc);
 				const docDone = docAll.filter((t) => isReadDone(wiki.getTiddler(t)?.fields)).length;
-				const docTitle = g.cards[0].breadcrumb.split(" › ")[0] || g.doc;
+				// 真实 doc tiddler title（命名空间路径），用于 tm-navigate；展示用可读名
+				const bookTitle = g.cards[0].breadcrumb.split(" › ")[0] || "";
+				const docTiddlerTitle = bookTitle ? paths.bookRoot(bookTitle, g.doc) : "";
+				const docLabel = bookTitle || g.doc;
 
 				const sum = el(doc, "summary", "tm-rl-doc-head");
-				const name = el(doc, "a", "tc-tiddlylink tm-rl-doc-name", docTitle);
+				const name = el(doc, "a", "tc-tiddlylink tm-rl-doc-name", docLabel);
 				name.href = "#";
-				name.title = `打开文档页：${docTitle}`;
+				name.title = `打开文档页：${docLabel}`;
 				name.addEventListener("click", (e: Event) => {
 					e.preventDefault(); e.stopPropagation();
-					this.dispatchEvent({ type: "tm-navigate", navigateTo: docTitle });
+					this.dispatchEvent({ type: "tm-navigate", navigateTo: docTiddlerTitle || docLabel });
 				});
 				sum.appendChild(name);
 

@@ -1,0 +1,12 @@
+title: Tidme/Clips/index
+type: text/vnd.tiddlywiki
+caption: Web 剪切（占位）
+tags: $:/tags/Tidme
+
+\whitespace trim
+
+! Web 剪切命名空间占位
+
+本目录是 //Tidme/Clips/// 为将来「Web 剪切」功能预留的命名空间。插件会扫描 //Tidme/Clips/<主机>/<日期>-<slug>// 下的 tiddler 作为剪切内容。
+
+当前 Tidme 还没有专门的 Web 剪切 widget，目录保留以便未来扩展时无需迁移。

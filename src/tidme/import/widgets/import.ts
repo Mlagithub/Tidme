@@ -184,7 +184,7 @@ function buildRow(
 			const cVal = textIn.value.trim();
 			if (tVal && cVal) {
 				const newTiddler = {
-					title: `${r.bookTitle} › ${tVal}`,
+					title: `Tidme/Books/${r.bookTitle}/manual/${tVal.replace(/[/\\\\:*?"<>|]/g, "-").replace(/\s+/g, "-").slice(0, 80) || "untitled"}`,
 					caption: tVal,
 					text: cVal,
 					"tidme.doc": r.docId,

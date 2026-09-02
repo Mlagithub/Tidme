@@ -59,7 +59,7 @@ const TOPIC_BASE = "[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[
 /** 到期/逾期 Topic（has[due] 且 due ≤ 今天；含逾期积压，按优先级升序） */
 function topicDueFilter(): string {
 	return `${TOPIC_BASE}has[due]days:due[0]] ` +
-		`${TOPIC_BASE}has[due]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MMDD0hh0mm0ss0XXX>] ` +
+		`${TOPIC_BASE}has[due]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>] ` +
 		`+[nsort[priority]]`;
 }
 

@@ -11,6 +11,7 @@ G1 干预：runSplit 接受 overrides（按 trail key 强制合并/拆分），�
 
 import { makeDocId, makeSectionId, contentFingerprint, normalizeText } from "$:/plugins/keepone/tidme/core/ids";
 import type { BookMeta } from "$:/plugins/keepone/tidme/core/ids";
+import { bookRoot, docPageTitle, sectionPath } from "$:/plugins/keepone/tidme/core/paths";
 import { initialFsrsFields, twDateString } from "$:/plugins/keepone/tidme/core/schema";
 import { normalizePriority, PRIORITY_DEFAULT, afactorForText } from "$:/plugins/keepone/tidme/core/scheduler";
 import { chunkBook, applyOverrides } from "./chunker";
@@ -65,15 +66,6 @@ export interface SplitResult {
 	sections: RawSection[];
 }
 
-function uniqueTitleFactory() {
-	const used = new Map<string, number>();
-	return (base: string) => {
-		const n = (used.get(base) || 0) + 1;
-		used.set(base, n);
-		return n === 1 ? base : `${base} ~${n}`;
-	};
-}
-
 function formatFromType(type: string | undefined, text: string): TextFormat {
 	const t = String(type || "").toLowerCase();
 	if (t.includes("markdown")) return "markdown";
@@ -106,11 +98,15 @@ export async function emitTiddlers(
 	priority = PRIORITY_DEFAULT
 ): Promise<{ tiddlers: Record<string, any>[]; warnings: string[] }> {
 	const warnings: string[] = [];
-	const unique = uniqueTitleFactory();
-	const docTitle = unique(bookTitle || "未命名导入");
 	const format = meta.__format || "epub";
 	const nowFields = initialFsrsFields(new Date());
 	const syncFields = { bag, revision: "0" };
+
+	// 文档页与节卡用 Tidme/Books/... 命名空间隔离；title 唯一稳定（基于 tidme.id）
+	// 同名 bookTitle 在同一批次内首次使用 docIndex=1（无后缀），重复时 docPageTitle 返回带后缀
+	const bookT = bookTitle || "未命名导入";
+	const docPagePath = bookRoot(bookT, docId); // 文档页实际 title 路径
+	const docTitle = bookT; // 面包屑/显示用可读名（保持 align.ts 的 cardKey 匹配逻辑）
 
 	const cards: Record<string, any>[] = [];
 	for (const s of sections) {
@@ -119,8 +115,7 @@ export async function emitTiddlers(
 		const id = await makeSectionId(docId, trail, s.ordinal as number);
 		const hash = await contentFingerprint(s.text);
 		const joined = trail.join(" › ");
-		const title = unique(joined);
-		if (title !== joined) warnings.push(`标题去重：${joined}`);
+		const title = sectionPath(bookT, docId, trail, id);
 		cards.push({
 			title,
 			type: "text/vnd.tiddlywiki",
@@ -140,7 +135,7 @@ export async function emitTiddlers(
 			// SM 对齐：A-Factor 按文本长度启发式设定（短材料快速展期、长材料平缓长尾）
 			"tidme.afactor": String(afactorForText(s.chars)),
 			"tidme.path": joined,
-			"tidme.breadcrumb": joined, // 兼容旧字段名
+			"tidme.breadcrumb": joined, // 兼容旧字段名（保持 alignCards 匹配）
 			"tidme.source": meta.title || "",
 			"tidme.author": meta.creator || "",
 			"tidme.format": format,
@@ -158,7 +153,7 @@ export async function emitTiddlers(
 	docLines.push(`共 ${cards.length} 节：`, "", links);
 
 	const docTiddler: Record<string, any> = {
-		title: docTitle,
+		title: docPagePath, // 文档页落 Tidme/Books/<书名> 命名空间
 		type: "text/vnd.tiddlywiki",
 		tags: ["tidme-import-doc"],
 		text: docLines.join("\n"),
