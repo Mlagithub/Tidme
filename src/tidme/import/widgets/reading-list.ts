@@ -196,15 +196,15 @@ function makeReadingList(): any {
 				});
 				sum.appendChild(cont);
 
-				// 删除整本书（含文档页/节卡/摘录/挖空问答/子集牌组/续读点，按 docId 清理）
-				const del = el(doc, "button", "tm-btn tm-rl-del", "🗑 删除");
-				del.title = "删除整本《" + docLabel + "》的全部内容（含卡片与复习进度，不可恢复）";
+				// 删除阅读材料（文档页 + 节卡/大纲新节）；摘录/挖空/问答/手动散卡等知识产物保留
+				const del = el(doc, "button", "tm-btn tm-rl-del", "🗑 清理阅读");
+				del.title = "删除本书阅读材料（文档页 + 全部普通节卡）；已提取的知识（摘录/挖空/问答）保留在复习流";
 				del.addEventListener("click", (e: Event) => {
 					e.preventDefault(); e.stopPropagation();
-					if (confirm(`删除整本《${docLabel}》的全部内容？\n\n将删除文档页、全部节/摘录/挖空/问答卡、复习进度与续读点，不可恢复。`)) {
+					if (confirm(`删除《${docLabel}》的阅读材料？\n\n将删除文档页与全部普通节卡（含大纲手动插入的新节）。\n已提取的知识（摘录/挖空/问答/手动卡）会保留，不受影响。\n此操作不可恢复。`)) {
 						const n = uiUtils.deleteDocContent(wiki, g.doc);
 						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-						if (n === 0) alert("未找到可删除的内容（可能已删除或属旧数据）。");
+						if (n === 0) alert("没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。");
 					}
 				});
 				sum.appendChild(del);

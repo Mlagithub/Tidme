@@ -382,7 +382,7 @@ test("doc-resume: 子集复习按钮（复习本书）", () => {
 	const text = collectText(root);
 	assert.ok(text.includes("继续阅读"), "继续阅读按钮");
 	assert.ok(text.includes("复习本书"), "子集复习按钮（G7）");
-	assert.ok(text.includes("删除本书"), "删除整本书按钮");
+	assert.ok(text.includes("清理阅读材料"), "清理阅读材料按钮");
 	assert.ok(text.includes("已读"), "进度文案");
 });
 
@@ -574,7 +574,7 @@ test("reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
 	assert.ok(text.includes("书名甲"), "文档名");
 	assert.ok(text.includes("摘"), "摘录卡标记");
 	assert.ok(text.includes("继续阅读"), "继续按钮");
-	assert.ok(text.includes("删除"), "删除整本书按钮");
+	assert.ok(text.includes("清理阅读"), "清理阅读材料按钮");
 	assert.ok(text.includes("已读"), "进度文案");
 	// compact 模式（侧边栏）：文档分组折叠 + 不含页头"复习测试卡"与进度条
 	const compactRoot = renderWidgetEx(rl, "reading-list", { attributes: { compact: "yes" } }).root;
