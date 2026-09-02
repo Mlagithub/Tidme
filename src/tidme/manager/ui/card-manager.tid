@@ -12,8 +12,6 @@ type: text/vnd.tiddlywiki
 
 ---
 
-## 牌组批量操作（优先级调度）
-
 <$queue-ops/>
 
 自动顺延（auto-postpone）：浏览器与服务端每日（启动时 + 每小时检查）自动对低优先级逾期卡顺延、保留高优先级；上方「每日自动顺延」开关可开启，「⚡ 立即顺延」可手动触发。配置 <code>$:/config/Tidme/AutoPostpone</code> 为 <code>{"enable": true, "maxPriority": 60, "postponeDays": 7, "keepTop": 10}</code>。
