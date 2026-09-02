@@ -449,40 +449,52 @@ test("ui-utils: docPageOfDoc 按 docId 查到真实文档页（folder 带 ~docId
 	assert.equal(uiUtils.docFolderOwner(wiki, doc.title), r.docId, "folder 占用可探测到本 docId");
 });
 
-test("deleteDocContent: 删除整本书（卡/文档页/子集牌组/续读点/会话残留）且不影响他书", async () => {
+test("deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问答/无 kind 散卡）；他书与续读点指向保留卡时不误伤", async () => {
 	const uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
-	// 书 A：2 节 + 摘录 + 挖空 + 子集牌组 + 续读点 + 会话引用
+	// 书 A：2 普通节 + 1 大纲手动"新节"（topic/section/manual-）+ 1 摘录 + 1 挖空 + 1 无 kind 散卡
 	const rA = await pipeline.runSplit({ text: "# 章一\n\n内容一。\n\n# 章二\n\n内容二。", title: "删书A", type: "text/markdown", minChars: 0 });
-	for (const t of rA.tiddlers) wiki.addTiddler(t);
+	for (const t of rA.tiddlers) wiki.addTiddler(t); // 文档页 + 2 节
 	const secA = rA.tiddlers.find((t) => t["tidme.kind"] === "topic");
-	// 摘录/挖空（经 section widget 建卡）
+	const manualSec = { title: `${secA.title.slice(0, secA.title.lastIndexOf("/") + 1)}manual-新笔记`, caption: "新笔记", text: "手写知识。", "tidme.doc": rA.docId, "tidme.kind": "topic", "tidme.subkind": "section", state: "0", due: twDate() };
+	wiki.addTiddler(manualSec);
 	const ext = sectionMod.buildExtract(wiki, secA.title, "摘录句。");
 	wiki.addTiddler(ext);
 	const cloze = sectionMod.buildCloze(wiki, secA.title, "首都 Freetown", "Freetown");
 	wiki.addTiddler(cloze);
+	wiki.addTiddler({ title: "手动散卡A", caption: "Q?", text: "A", "tidme.doc": rA.docId, state: "0", due: twDate(), reps: "0", lapses: "0", stability: "0", difficulty: "0", elapsed_days: "0", scheduled_days: "0", last_review: twDate() });
 	// 子集牌组
-	wiki.addTiddler({ title: `Tidme/Decks/删书A/复习本书`, tags: ["$:/tags/TidmeDeck"], card: "[tidme.kind[item]]", "tidme.subset-doc": rA.docId });
-	// 续读点 + 会话
+	wiki.addTiddler({ title: "Tidme/Decks/删书A/复习本书", tags: ["$:/tags/TidmeDeck"], card: "[tidme.kind[item]]", "tidme.subset-doc": rA.docId });
+	// 续读点：一个指向普通节（应删）、一个指向摘录（应留）
 	wiki.addTiddler({ title: "$:/state/tidme-import/readpoint/" + rA.docId, text: JSON.stringify({ t: secA.title, s: "" }) });
-	wiki.addTiddler({ title: "$:/state/tidme/learning-session", list: [secA.title, "其它书卡"] });
-	// 书 B：不受影响
+	wiki.addTiddler({ title: "$:/state/tidme-import/readpoint/keep", text: JSON.stringify({ t: ext.title, s: "" }) });
+	wiki.addTiddler({ title: "$:/state/tidme/learning-session", list: [secA.title, ext.title, "其它书卡"] });
+	// 书 B 不受影响
 	const rB = await pipeline.runSplit({ text: "# 唯一章\n\n内容乙。", title: "别书B", type: "text/markdown", minChars: 0 });
 	for (const t of rB.tiddlers) wiki.addTiddler(t);
 	const secB = rB.tiddlers.find((t) => t["tidme.kind"] === "topic");
 
-	assert.ok(wiki.getTiddler(secB.title), "前置：B 在库");
 	const n = uiUtils.deleteDocContent(wiki, rA.docId);
-	assert.ok(n >= 5, `删除 ≥5 个对象，实际 ${n}`);
-	// A 全部清空
-	assert.equal(wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${rA.docId}]]`).length, 0, "A 的所有卡与文档页删除");
-	assert.equal(wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.subset-doc[${rA.docId}]]`).length, 0, "A 的子集牌组删除");
-	assert.equal(wiki.getTiddler("$:/state/tidme-import/readpoint/" + rA.docId), undefined, "A 续读点删除");
+	// 删除 5 个：文档页 + 2 普通节 + 1 大纲新节 + 1 子集牌组
+	assert.equal(n, 5, `删除数量=5，实际 ${n}`);
+	// 保留的知识产物仍存在
+	assert.ok(wiki.getTiddler(ext.title), "摘录保留");
+	assert.ok(wiki.getTiddler(cloze.title), "挖空保留");
+	assert.ok(wiki.getTiddler("手动散卡A"), "无 kind 手动散卡保留");
+	// 被删的不存在
+	assert.equal(wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${rA.docId}]tidme.kind[topic]!tidme.subkind[extract]]`).length, 0, "普通节卡/大纲新节全删");
+	assert.equal(wiki.getTiddler(manualSec.title), undefined, "大纲手动新节删除");
+	assert.equal(wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.subset-doc[${rA.docId}]]`).length, 0, "子集牌组删除");
+	// 文档页删除
+	assert.equal(wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${rA.docId}]]`).length, 0, "文档页删除");
+	// 续读点：指向节 → 删；指向摘录（保留）→ 留
+	assert.equal(wiki.getTiddler("$:/state/tidme-import/readpoint/" + rA.docId), undefined, "指向被删节的续读点删除");
+	assert.ok(wiki.getTiddler("$:/state/tidme-import/readpoint/keep"), "指向保留摘录的续读点保留");
+	// 会话：剔除被删节，保留摘录与其它的
 	const sess = wiki.getTiddler("$:/state/tidme/learning-session");
-	assert.ok(!sess.fields.list.includes(secA.title), "会话剔除 A 卡");
-	assert.ok(sess.fields.list.includes("其它书卡"), "会话保留其它内容");
-	// B 完好
+	assert.ok(!sess.fields.list.includes(secA.title), "会话剔除被删节");
+	assert.ok(sess.fields.list.includes(ext.title) && sess.fields.list.includes("其它书卡"), "会话保留摘录与其它");
+	// 书 B 完好
 	assert.ok(wiki.getTiddler(secB.title), "B 不受影响");
-	assert.equal(wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${rB.docId}]]`).length >= 1, true, "B 的卡仍在");
-	// 幂等：再删返回 0
-	assert.equal(uiUtils.deleteDocContent(wiki, rA.docId), 0, "重复删除幂等（返回 0）");
+	// 幂等
+	assert.equal(uiUtils.deleteDocContent(wiki, rA.docId), 0, "重复删除幂等");
 });

@@ -114,22 +114,46 @@ export function docPageOfDoc(wiki: any, docId: string): string {
 const SESSION_STATE = "$:/state/tidme/learning-session";
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
 
+/** 文档页判定：带 tidme-import-doc 标签 */
+function isDocPage(f: Record<string, any>): boolean {
+	return Array.isArray(f.tags) && f.tags.includes("tidme-import-doc");
+}
+
+/** 续读点目标 title（readpoint tiddler text：JSON {t,s} 或旧版纯标题） */
+function readpointTarget(raw: string | undefined): string {
+	const s = String(raw || "").trim();
+	if (!s) return "";
+	try {
+		const o = JSON.parse(s);
+		if (o && o.t) return String(o.t);
+	} catch { /* 旧格式 */ }
+	return s;
+}
+
 /**
- * 删除整本书的全部内容（含派生物）：
- * - tidme.doc === docId 的全部卡（节卡/摘录/挖空/问答/手动插卡，含 obsolete 归档）与文档页
- * - 本书子集牌组（tidme.subset-doc === docId）
- * - 本书续读点；全局续读点若指向本书卡则一并清除
- * - 学习会话列表中剔除本书卡（会话状态保留其它内容）
- * 一律按 docId 字段清（不依赖 title 结构，folder 后缀/历史格式均覆盖）。
+ * 删除一本书的"阅读材料"，保留全部"知识产物"：
+ * 删除：文档页 + 全部 topic/subkind=section 节卡（导入切分节 + 大纲手动插入的"新节"；含 obsolete 归档）
+ * 保留：摘录（topic/extract）、挖空/问答（item）、无 kind 手动散卡、子集牌组外的知识对象
+ * 附带：删除本书子集牌组（tidme.subset-doc）；续读点仅当其指向被删内容时清除；
+ *       学习会话列表剔除被删卡（保留其余队列语义）。
+ * 一律按 docId 字段筛选（不依赖 title 结构，folder 后缀/历史格式均覆盖）。
  * @returns 删除的 tiddler 数
  */
 export function deleteDocContent(wiki: any, docId: string): number {
 	if (!wiki || typeof wiki.filterTiddlers !== "function" || !docId) return 0;
 	const owned = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${docId}]]`);
+	const targets = new Set<string>();
+	for (const t of owned) {
+		const f = wiki.getTiddler(t)?.fields || {};
+		// 阅读材料：文档页 + topic 节卡（subkind!==extract → 摘录保留；kind=item/无 kind 保留）
+		if (isDocPage(f)) { targets.add(t); continue; }
+		if (f["tidme.kind"] === "topic" && String(f["tidme.subkind"] || "section") !== "extract") targets.add(t);
+	}
+	// 子集牌组是临时复习脚手架（引用保留的知识卡），随本书清理
 	const decks = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.subset-doc[${docId}]]`);
-	const targets = new Set([...owned, ...decks]);
+	for (const d of decks) targets.add(d);
 
-	// 学习会话：剔除本书卡（保留其余卡与队列语义）
+	// 学习会话：剔除被删卡（保留其余卡与队列语义）
 	const sess = wiki.getTiddler(SESSION_STATE);
 	if (sess && Array.isArray(sess.fields.list)) {
 		const keep = sess.fields.list.filter((t: string) => !targets.has(t));
@@ -137,10 +161,15 @@ export function deleteDocContent(wiki: any, docId: string): number {
 			wiki.addTiddler({ ...sess.fields, title: SESSION_STATE, list: keep });
 		}
 	}
-	// 续读点
-	wiki.deleteTiddler(READPOINT_PREFIX + docId);
+	// 续读点：仅当指向被删内容时清除（指向保留的摘录/卡则保留）
+	const rpTiddler = wiki.getTiddler(READPOINT_PREFIX + docId);
+	if (rpTiddler && targets.has(readpointTarget(String(rpTiddler.fields.text)))) {
+		wiki.deleteTiddler(READPOINT_PREFIX + docId);
+	}
 	const g = wiki.getTiddler(READPOINT_PREFIX + "global");
-	if (g && targets.has(String(g.fields.text || ""))) wiki.deleteTiddler(READPOINT_PREFIX + "global");
+	if (g && targets.has(readpointTarget(String(g.fields.text)))) {
+		wiki.deleteTiddler(READPOINT_PREFIX + "global");
+	}
 
 	let n = 0;
 	for (const t of targets) {

@@ -168,10 +168,10 @@ function makeReadingList(): any {
 				const sum = el(doc, "summary", "tm-rl-doc-head");
 				const name = el(doc, "a", "tc-tiddlylink tm-rl-doc-name", docLabel);
 				name.href = "#";
-				name.title = `打开文档页：${docLabel}`;
+				name.title = docTiddlerTitle ? `打开文档页：${docLabel}` : `文档页已删除（仅剩摘录/手动内容）`;
 				name.addEventListener("click", (e: Event) => {
 					e.preventDefault(); e.stopPropagation();
-					this.dispatchEvent({ type: "tm-navigate", navigateTo: docTiddlerTitle || docLabel });
+					if (docTiddlerTitle) this.dispatchEvent({ type: "tm-navigate", navigateTo: docTiddlerTitle });
 				});
 				sum.appendChild(name);
 
