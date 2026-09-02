@@ -347,6 +347,24 @@ test("shadow: FileSystemPaths config 不存在（plugin 不应自带；由 wiki/
 	assert.equal(wiki.getTiddler("$:/config/FileSystemPaths"), undefined, "plugin 不带 FSP shadow（避免 tiddlerExists 跳过）");
 });
 
+test("FSP: 启动自愈——filesystem 生效且缺失时创建真实 FSP，已存在不覆盖，非 filesystem 不动", () => {
+	const mod = tw.modules.execute("$:/plugins/keepone/tidme/core/server/ensure-filesystem.js");
+	// 当前测试 wiki 未加载 filesystem 插件 → 不创建（保证 shadow 测试与 headless 环境不受污染）
+	mod.ensureFileSystemPaths(wiki);
+	assert.equal(wiki.getTiddler("$:/config/FileSystemPaths"), undefined, "非 filesystem 环境不创建");
+	// 模拟 filesystem 插件存在 → 创建默认 FSP（真实 tiddler）
+	wiki.addTiddler({ title: "$:/plugins/tiddlywiki/filesystem", type: "application/javascript", text: "" });
+	mod.ensureFileSystemPaths(wiki);
+	const fsp = wiki.getTiddler("$:/config/FileSystemPaths");
+	assert.ok(fsp, "filesystem 生效且缺失 → 创建 FSP");
+	assert.ok(String(fsp.fields.text).includes("[is[tiddler]prefix[Tidme/Books/]]"), "默认含 Books/Decks 目录过滤");
+	assert.ok(String(fsp.fields.text).includes("prefix[Tidme/Decks/]"), "含 Decks 过滤");
+	// 已存在（wiki 自行定制）→ 不覆盖
+	wiki.addTiddler({ title: "$:/config/FileSystemPaths", type: "text/vnd.tiddlywiki", text: "[is[tiddler]prefix[Tidme/Books/]]" });
+	mod.ensureFileSystemPaths(wiki);
+	assert.equal(wiki.getTiddler("$:/config/FileSystemPaths").fields.text, "[is[tiddler]prefix[Tidme/Books/]]", "不覆盖 wiki 自定义 FSP");
+});
+
 test("FSP: 注入普通 tiddler 后保留 Tidme 目录结构（filesystem 适配器真正写入子目录）", () => {
 	// 注入 FSP config（模拟 wiki/tiddlers 加载）
 	wiki.addTiddler({
