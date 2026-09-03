@@ -6,7 +6,7 @@ icon: $:/plugins/keepone/tidme/review/icon
 
 <div class="tm-decks-head">
 <div class="tm-decks-top"><div class="tm-decks-title">学习中心</div><$tidme-theme-toggle/></div>
-<div class="tm-decks-sub">开始学习 = SuperMemo 动态交错学习：自动交错复习到期知识卡与优先的阅读材料；下方复习牌组集中管理知识卡（默认牌组自动收录全部挖空/问答），也可在阅读列表独立聚焦阅读。</div>
+<div class="tm-decks-sub">开始学习 = 复习全部到期与新知识卡（挖空/问答）的连续学习流，不混入阅读材料；下方复习牌组集中管理知识卡（默认牌组自动收录全部挖空/问答），阅读材料在阅读列表/文档页独立阅读（勾选按钮旁选项可让到期阅读材料按 4:1 交错进学习流）。</div>
 <$tidme-workflow/>
 <$tidme-nav/>
 </div>

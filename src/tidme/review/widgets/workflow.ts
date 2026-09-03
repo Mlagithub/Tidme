@@ -1,9 +1,10 @@
 /*
 widgets/workflow.ts — $:/Decks 工作流中心：开始学习按钮
 
-- 开始学习：调起 startGlobalLearning 走 core/deck-engine.composeGlobalLearningQueue，
-  写到 $:/state/tidme/learning-session 并跳到首张。
-- 严格队列（strict）vs 交错（interleaved）切换写 $:/config/Tidme/QueueMode。
+- 开始学习：调起 startGlobalLearning 走 core/deck-engine.composeGlobalLearningQueue
+  （默认纯知识卡复习流），写到 $:/state/tidme/learning-session 并跳到首张。
+- 可选项「到期阅读材料也加入学习流」写 $:/config/Tidme/QueueMode
+  （存在 = 混入 topic：strict=宏观三段式 / interleaved=4:1 交错）。
 */
 
 declare function require(module: string): any;
@@ -50,10 +51,12 @@ function iconButton(doc: Document, cls: string, name: keyof typeof ICON_PATHS, l
 const SESSION_STATE = "$:/state/tidme/learning-session";
 const QUEUE_MODE_TIDDLER = "$:/config/Tidme/QueueMode";
 
-/** 队列模式：$:/config/Tidme/QueueMode = "strict"（宏观三段式）| 其他（interleaved 交错，默认） */
-function queueMode(wiki: any): "interleaved" | "strict" {
-	const m = String(wiki?.getTiddlerText?.(QUEUE_MODE_TIDDLER, "interleaved") || "").trim();
-	return m === "strict" ? "strict" : "interleaved";
+/** 队列选项：$:/config/Tidme/QueueMode 存在 = 混入阅读材料（"strict"=宏观三段式，其余=4:1 交错）；
+ *  不存在（默认）= 纯知识卡复习流，阅读材料不打断（阅读走阅读列表/文档页/继续阅读）。 */
+function queueOptions(wiki: any): { mode: "interleaved" | "strict"; topics: boolean } {
+	const m = String(wiki?.getTiddlerText?.(QUEUE_MODE_TIDDLER, "") || "").trim();
+	if (m === "") return { mode: "interleaved", topics: false };
+	return { mode: m === "strict" ? "strict" : "interleaved", topics: true };
 }
 
 function makeWorkflow(): any {
@@ -68,23 +71,25 @@ function makeWorkflow(): any {
 			this.domNodes.push(root);
 
 			const learnBtn = iconButton(doc, "tm-btn tm-btn--primary tm-workflow-btn-hero", "study", "🚀 开始学习");
-			learnBtn.title = "全局学习流：自动交错复习到期的知识卡（挖空/问答）与优先的阅读材料（节/摘录）；勾选「严格队列」则按 到期知识卡 → 到期阅读 → 新导入 的顺序";
+			learnBtn.title = "复习全部到期/新知识卡（挖空/问答）：按 FSRS 到期与新卡顺序连续学习，不混入阅读材料；勾选下方选项可把到期阅读材料也加入（SM 交错）";
 			learnBtn.addEventListener("click", () => startGlobalLearning(wiki, this));
 			root.appendChild(learnBtn);
 
-			// SM 对齐：宏观队列模式切换（strict = 到期卡片 → 到期阅读 → 新导入；默认交错）
+			// 可选项：把到期/待读阅读材料（topic）混入学习流（SM 交错；默认纯知识卡）
 			const modeRow = el(doc, "div", "tm-decks-mode");
 			const modeCheck = doc.createElement("input");
 			modeCheck.type = "checkbox";
-			modeCheck.checked = queueMode(wiki) === "strict";
-			modeCheck.title = "严格队列：到期知识卡 → 到期阅读 → 新导入（宏观三段式）；默认 4:1 交错学习";
+			modeCheck.checked = queueOptions(wiki).topics;
+			modeCheck.title = "勾选后：到期/待读的阅读材料（节卡/摘录）会按 4:1 交错进学习流（SuperMemo 精神）；不勾选则学习流只含知识卡，阅读从阅读列表/文档页进入";
 			modeRow.appendChild(modeCheck);
 			const modeLabel = el(doc, "span", "tm-import-muted",
-				"严格队列（到期卡片 → 到期阅读 → 新导入）；默认交错学习");
+				"到期阅读材料也加入学习流（交错）");
 			modeLabel.title = modeCheck.title;
 			modeRow.appendChild(modeLabel);
 			modeCheck.addEventListener("change", () => {
-				wiki.addTiddler({ title: QUEUE_MODE_TIDDLER, text: modeCheck.checked ? "strict" : "interleaved" });
+				// 勾选 → 写 QueueMode（含 topic 交错）；取消 → 删 tiddler（纯知识卡）
+				if (modeCheck.checked) wiki.addTiddler({ title: QUEUE_MODE_TIDDLER, text: "interleaved" });
+				else wiki.deleteTiddler(QUEUE_MODE_TIDDLER);
 			});
 			root.appendChild(modeRow);
 
@@ -102,8 +107,8 @@ function makeWorkflow(): any {
  */
 function startGlobalLearning(wiki: any, widget: any): void {
 	const deckEngine = require("$:/plugins/keepone/tidme/core/deck-engine.js");
-	const mode = queueMode(wiki);
-	const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), { mode });
+	const { mode, topics } = queueOptions(wiki);
+	const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), { mode, topics });
 
 	if (!queue || queue.length === 0) {
 		widget.dispatchEvent({ type: "tm-confetti-launch" });
@@ -118,7 +123,7 @@ function startGlobalLearning(wiki: any, widget: any): void {
 		title: SESSION_STATE,
 		list: queue,
 		current_index: "0",
-		mode: mode === "strict" ? "global-strict" : "global-interleaved"
+		mode: mode === "strict" ? "global-strict" : topics ? "global-interleaved" : "items-only"
 	});
 
 	const f = deckEngine.composeDeckFilters(DEFAULT_DECK, wiki.getTiddler(DEFAULT_DECK)?.fields || {});

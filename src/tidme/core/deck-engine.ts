@@ -54,6 +54,13 @@ export interface GlobalQueueOptions {
 	topicRatio?: number;
 	/** strict = 宏观三段式（到期 Items → 到期 Topics → 新 Pending）；interleaved = item:topic 交错（默认，SM 交错学习精神） */
 	mode?: "interleaved" | "strict";
+	/**
+	 * 是否把阅读材料（topic）混入全局学习队列（默认 false = 纯知识卡复习流）。
+	 * 阅读节卡导入即带 due=now → 未读即"逾期"，默认混入会把整批待读阅读卡插进
+	 * 知识卡学习流（每 4 张词卡打断一次）。阅读材料由阅读列表/文档页/继续阅读消化；
+	 * 需要 SM 交错时显式 topics: true。
+	 */
+	topics?: boolean;
 }
 
 const TOPIC_BASE = "[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]";
@@ -72,8 +79,9 @@ function topicPendingFilter(): string {
 
 /**
  * SuperMemo 风格全局动态学习队列生成器：
- * - interleaved（默认）：到期/待读 Topic（Priority 升序）与 Item 队列按 itemRatio:topicRatio 交错为单轨队列。
- * - strict：宏观三段式 —— 当天到期 Items → 当天到期/逾期 Topics → 新导入 Pending（新 item + 无 due topic）。
+ * - 默认（topics 未开）：纯知识卡队列（default deck 的 learn+due+new）——阅读材料不打断复习。
+ * - topics:true + interleaved：到期/待读 Topic（Priority 升序）与 Item 队列按 itemRatio:topicRatio 交错。
+ * - topics:true + strict：宏观三段式 —— 到期 Items → 到期/逾期 Topics → 新导入 Pending。
  */
 export function composeGlobalLearningQueue(
 	evaluate: (filter: string) => string[],
@@ -81,18 +89,20 @@ export function composeGlobalLearningQueue(
 ): string[] {
 	const defaultDeckFilters = composeDeckFilters("$:/Deck/default");
 	const mode = opts.mode || "interleaved";
+	const includeTopics = opts.topics === true;
 
 	if (mode === "strict") {
 		const dueItems = evaluate(`${defaultDeckFilters.learn} ${defaultDeckFilters.due}`);
-		const dueTopics = evaluate(topicDueFilter());
 		const newItems = evaluate(defaultDeckFilters.newly);
+		if (!includeTopics) return [...dueItems, ...newItems];
+		const dueTopics = evaluate(topicDueFilter());
 		const pendingTopics = evaluate(topicPendingFilter());
 		return [...dueItems, ...dueTopics, ...newItems, ...pendingTopics];
 	}
 
-	// interleaved（默认）：item 队列与 topic 阅读流按比例交错
+	// interleaved：item 队列为主体；topics:true 时按比例交错优先 topic（否则纯知识卡）
 	const rawItems = evaluate(defaultDeckFilters.queue);
-	const rawTopics = evaluate(`${topicDueFilter()} ${topicPendingFilter()}`);
+	const rawTopics = includeTopics ? evaluate(`${topicDueFilter()} ${topicPendingFilter()}`) : [];
 
 	const itemRatio = opts.itemRatio ?? 4;
 	const topicRatio = opts.topicRatio ?? 1;

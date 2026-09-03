@@ -2,8 +2,10 @@
 queue.test.mjs — 全局学习队列（deck-engine composeGlobalLearningQueue）单元测试（node:test）
 
 覆盖：
-- interleaved（默认）：item 队列与 topic 阅读流 4:1 交错
-- strict：宏观三段式 —— 到期 Items → 到期/逾期 Topics → 新 Pending（新 item + 无 due topic）
+- 默认（无 opts）：纯知识卡队列 —— 阅读材料（topic）不混入学习流（修复：待读阅读卡
+  全部"逾期"混入 → 每 4 张词卡打断一次；阅读走阅读列表/文档页）
+- topics:true + interleaved：item 队列与 topic 阅读流 4:1 交错
+- topics:true + strict：宏观三段式 —— 到期 Items → 到期/逾期 Topics → 新 Pending
 - 逾期 topic 不再被漏掉（修复：旧过滤仅 days:due[0] 匹配当天，逾期积压不入队）
 */
 import { test } from "node:test";
@@ -61,13 +63,26 @@ test.beforeEach(() => {
 	for (const t of all) wiki.deleteTiddler(t);
 });
 
-test("interleaved（默认）：item 队列与 topic 阅读流 4:1 交错，逾期 topic 也入队", () => {
+test("默认（无 opts）：纯知识卡队列 —— topic 阅读材料不入队", () => {
 	mkCard("item到期", { kind: "item", state: "2", due: new Date(Date.now() - 3600000) });
 	mkCard("item新", { kind: "item" });
 	mkCard("topic逾期", { kind: "topic", due: new Date(Date.now() - 86400000 * 3) });
 	mkCard("topic无due", { kind: "topic", due: undefined });
 
 	const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f));
+	assert.ok(q.includes("item到期"), "到期 item 入队");
+	assert.ok(q.includes("item新"), "新 item 入队");
+	assert.ok(!q.includes("topic逾期"), "topic 默认不入队（纯知识卡复习流）");
+	assert.ok(!q.includes("topic无due"), "无 due topic 默认不入队");
+});
+
+test("topics:true + interleaved：item 与 topic 阅读流 4:1 交错，逾期 topic 也入队", () => {
+	mkCard("item到期", { kind: "item", state: "2", due: new Date(Date.now() - 3600000) });
+	mkCard("item新", { kind: "item" });
+	mkCard("topic逾期", { kind: "topic", due: new Date(Date.now() - 86400000 * 3) });
+	mkCard("topic无due", { kind: "topic", due: undefined });
+
+	const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
 	assert.ok(q.includes("topic逾期"), "逾期 topic 应入队（修复漏排）");
 	assert.ok(q.includes("topic无due"), "无 due topic 应入队（Pending）");
 	// 4:1 交错：2 item 在前，随后交替出现 topic
@@ -83,7 +98,7 @@ test("strict：宏观三段式（到期 Items → 到期 Topics → 新 Pending�
 	mkCard("topic到期", { kind: "topic", due: new Date(Date.now() - 7200000) });
 	mkCard("topic无due", { kind: "topic", due: undefined });
 
-	const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { mode: "strict" });
+	const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { mode: "strict", topics: true });
 	// 注：deck-engine 经 TW vm 执行返回跨 realm 数组，deepStrictEqual 校验原型会失败 → 展开到主 realm 再比
 	assert.deepStrictEqual([...q], ["item到期", "topic到期", "item新", "topic无due"], "三段式顺序：到期卡 → 到期阅读 → 新 Pending");
 });
@@ -93,7 +108,7 @@ test("strict：新 item（state 0）落在 Pending 段（到期卡之后）", ()
 	mkCard("item到期", { kind: "item", state: "2", due: new Date(Date.now() - 3600000) });
 	mkCard("topic到期", { kind: "topic", due: new Date(Date.now() - 7200000) });
 
-	const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { mode: "strict" });
+	const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { mode: "strict", topics: true });
 	assert.equal(q[0], "item到期", "到期卡优先");
 	assert.ok(q.indexOf("item新") > q.indexOf("item到期"), "新卡在到期卡之后");
 	assert.ok(q.indexOf("item新") > q.indexOf("topic到期"), "新卡在到期阅读之后");
