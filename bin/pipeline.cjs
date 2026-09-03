@@ -57,7 +57,6 @@ var __async = (__this, __arguments, generator) => {
 // src/tidme/import/pipeline/main.ts
 var main_exports = {};
 __export(main_exports, {
-  NS: () => NS,
   applyOverrides: () => applyOverrides,
   bookCardsRoot: () => bookCardsRoot,
   bookRoot: () => bookRoot,
@@ -65,13 +64,11 @@ __export(main_exports, {
   cleanTitle: () => cleanTitle,
   contentFingerprint: () => contentFingerprint,
   deckSubsetPath: () => deckSubsetPath,
-  docPageTitle: () => docPageTitle,
   extractPath: () => extractPath,
   initialFsrsFields: () => initialFsrsFields,
   insertedSectionTitle: () => insertedSectionTitle,
-  isInBook: () => isInBook,
-  isTidmeContent: () => isTidmeContent,
-  itemPath: () => itemPath,
+  joinPath: () => joinPath,
+  leafIdOf: () => leafIdOf,
   makeCardId: () => makeCardId,
   makeDocId: () => makeDocId,
   makeExtractId: () => makeExtractId,
@@ -79,6 +76,7 @@ __export(main_exports, {
   neighborsOf: () => neighborsOf,
   runImport: () => runImport,
   runSplit: () => runSplit,
+  sectionLeaf: () => sectionLeaf,
   sectionPath: () => sectionPath,
   slugify: () => slugify,
   twDateString: () => twDateString
@@ -628,9 +626,6 @@ function blockHtml(block) {
   }
   return `<p>${escapeHtml(normalizeText(block.text))}</p>`;
 }
-function escapeHtml(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 function splitSentences(text, maxLen) {
   const sentences = String(text).match(/[^。！？!?；;\n]+[。！？!?；;]*/g) || [String(text)];
   const out = [];
@@ -1176,25 +1171,25 @@ function joinPath(...parts) {
   }
   return clean.join("/");
 }
-function bookRoot(bookTitle, docId) {
+function bookRoot(bookTitle, _docId) {
   const slug = slugify(bookTitle) || "untitled";
-  const base = "Tidme/Books/" + slug;
   if (RESERVED.has(slug.toLowerCase()))
     throw new Error("bookRoot: reserved book title: " + slug);
-  return uniqueFolder(base, docId);
+  return "Tidme/Books/" + slug;
 }
-function bookCardsRoot(bookTitle, docId) {
-  const slug = slugify(bookTitle) || "untitled";
-  const base = "Tidme/Decks/" + slug;
-  return uniqueFolder(base, docId);
+function bookCardsRoot(bookTitle, _docId) {
+  return "Tidme/Decks/" + (slugify(bookTitle) || "untitled");
 }
 function deckSubsetPath(bookTitle, docId, purpose = "\u590D\u4E60\u672C\u4E66") {
   const root = bookCardsRoot(bookTitle, docId);
   return joinPath(root, slugify(purpose));
 }
-function sectionPath(bookTitle, docId, _breadcrumb, sectionId) {
-  const root = bookRoot(bookTitle, docId);
-  return joinPath(root, sectionId);
+function sectionLeaf(caption, sectionId) {
+  const slug = slugify(caption);
+  return (slug ? slug + "-" : "") + sectionId;
+}
+function sectionPath(bookTitle, caption, sectionId) {
+  return joinPath(bookRoot(bookTitle), sectionLeaf(caption, sectionId));
 }
 function extractPath(bookTitle, docId, sectionId) {
   const root = bookRoot(bookTitle, docId);
@@ -1204,43 +1199,14 @@ function cardPath(bookTitle, docId, sectionId, subkind) {
   const root = bookCardsRoot(bookTitle, docId);
   return joinPath(root, sectionId + "--" + subkind);
 }
-function itemPath(bookTitle, docId, _breadcrumb, sectionId, subkind) {
-  if (subkind === "extract") {
-    return extractPath(bookTitle, docId, sectionId);
-  }
-  return cardPath(bookTitle, docId, sectionId, subkind);
-}
-function docPageTitle(bookTitle, docId, docIndex = 1) {
-  const root = bookRoot(bookTitle, docId);
-  if (docIndex <= 1)
-    return root;
-  return joinPath(root, "~" + docIndex);
-}
-function insertedSectionTitle(bookTitle, docId, sectionCaption, sectionId) {
-  const root = bookRoot(bookTitle, docId);
-  return joinPath(root, "manual-" + slugify(sectionCaption) + "-" + sectionId);
-}
-function isTidmeContent(title) {
+function leafIdOf(title) {
   const t = String(title ?? "");
-  return t === "Tidme" || t.startsWith("Tidme/") || t.startsWith("Tidme");
+  const i = t.lastIndexOf("/");
+  return i >= 0 ? t.slice(i + 1) : t;
 }
-function isInBook(title, bookTitle, docId) {
-  const bookRoot_ = bookRoot(bookTitle, docId);
-  const cardsRoot = bookCardsRoot(bookTitle, docId);
-  return title === bookRoot_ || title.startsWith(bookRoot_ + "/") || title === cardsRoot || title.startsWith(cardsRoot + "/");
+function insertedSectionTitle(bookTitle, docId, sectionCaption) {
+  return joinPath(bookRoot(bookTitle, docId), "manual-" + (slugify(sectionCaption) || "untitled"));
 }
-function uniqueFolder(baseFolder, docId, existing) {
-  if (!existing || !existing.has(baseFolder))
-    return baseFolder;
-  const tag = "~" + String(docId).replace(/^d/, "").slice(0, 6);
-  return baseFolder + tag;
-}
-var NS = {
-  ROOT: "Tidme",
-  BOOKS: "Tidme/Books",
-  DECKS: "Tidme/Decks",
-  CLIPS: "Tidme/Clips"
-};
 
 // src/tidme/core/schema.ts
 function twDateString(d) {
@@ -1296,6 +1262,14 @@ function cleanTitle(title) {
   t = t.split(/[:：——–]/)[0].trim();
   return t || title;
 }
+function resolveDocRoot(bookTitle, docId, folderOccupied) {
+  const base = bookRoot(bookTitle, docId);
+  const owner = folderOccupied ? folderOccupied(base) : null;
+  if (owner && String(owner) !== String(docId)) {
+    return base + "~" + String(docId).replace(/^d/, "").slice(0, 6);
+  }
+  return base;
+}
 function formatFromType(type, text) {
   const t = String(type || "").toLowerCase();
   if (t.includes("markdown"))
@@ -1318,13 +1292,13 @@ function blocksFor(format, text) {
   return blocksFromPlainText(text);
 }
 function emitTiddlers(_0, _1, _2, _3, _4) {
-  return __async(this, arguments, function* (docId, meta, bookTitle, sections, bag, autoDeck = true, priority = PRIORITY_DEFAULT) {
+  return __async(this, arguments, function* (docId, meta, bookTitle, sections, bag, autoDeck = true, priority = PRIORITY_DEFAULT, folderOccupied) {
     const warnings = [];
     const format = meta.__format || "epub";
     const nowFields = initialFsrsFields(new Date());
     const syncFields = { bag, revision: "0" };
     const bookT = bookTitle || "\u672A\u547D\u540D\u5BFC\u5165";
-    const docPagePath = bookRoot(bookT, docId);
+    const docRoot = resolveDocRoot(bookT, docId, folderOccupied);
     const docTitle = bookT;
     const cards = [];
     for (const s of sections) {
@@ -1334,14 +1308,16 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
       const id = yield makeSectionId(docId, trail, s.ordinal);
       const hash = yield contentFingerprint(s.text);
       const joined = trail.join(" \u203A ");
-      const title = sectionPath(bookT, docId, trail, id);
+      const capText = s.title || trail[trail.length - 1] || "";
+      const title = joinPath(docRoot, sectionLeaf(capText, id));
       cards.push(__spreadValues(__spreadValues(__spreadProps(__spreadValues(__spreadValues({
         title,
         type: "text/vnd.tiddlywiki",
-        caption: s.title || trail[trail.length - 1] || "",
+        caption: capText,
         text: s.html
       }, nowFields), syncFields), {
         "tidme.doc": docId,
+        "tidme.docpage": docRoot,
         "tidme.id": id,
         "tidme.hash": hash,
         "tidme.order": String(s.ordinal).padStart(6, "0"),
@@ -1358,7 +1334,7 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
         "tidme.format": format
       }), s.merged ? { "tidme.merged": "yes" } : {}), s.file ? { "tidme.file": s.file } : {}));
     }
-    const links = cards.map((t) => `* [[${t.title}]]`).join("\n");
+    const links = cards.map((t) => `* [[${t.caption || t.title}|${t.title}]]`).join("\n");
     const docLines = [`//${formatLabel(format)}//`];
     if (meta.creator)
       docLines.push("\u4F5C\u8005\uFF1A" + meta.creator);
@@ -1369,13 +1345,15 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
     docLines.push("\u6587\u6863 ID\uFF1A" + docId);
     docLines.push(`\u5171 ${cards.length} \u8282\uFF1A`, "", links);
     const docTiddler = __spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({
-      title: docPagePath,
+      title: docRoot,
+      caption: docTitle,
       type: "text/vnd.tiddlywiki",
       tags: ["tidme-import-doc"],
       text: docLines.join("\n"),
       bag,
       revision: "0",
-      "tidme.doc": docId
+      "tidme.doc": docId,
+      "tidme.docpage": docRoot
     }, meta.title ? { "tidme.source": meta.title } : {}), meta.author || meta.creator ? { "tidme.author": meta.author || meta.creator } : {}), meta.language ? { "tidme.language": meta.language } : {}), meta.url ? { "tidme.url": meta.url } : {}), meta.date ? { "tidme.date": meta.date } : {}), meta.license ? { "tidme.license": meta.license } : {});
     const tiddlers = [docTiddler, ...cards];
     return { tiddlers, warnings };
@@ -1401,7 +1379,7 @@ function runSplit(input) {
       input.overrides
     );
     const metaWithFormat = __spreadProps(__spreadValues({}, meta), { __format: format });
-    const { tiddlers, warnings } = yield emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority);
+    const { tiddlers, warnings } = yield emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority, input.folderOccupied);
     return {
       bookTitle,
       docId,
@@ -1469,7 +1447,7 @@ function importEpubBytes(bytes, fileName, options) {
     });
     const docId = yield makeDocId(book.meta);
     const bookTitle = (meta.title || fileName.replace(/.*\//, "") || "\u672A\u547D\u540D\u5BFC\u5165").trim();
-    const { tiddlers, warnings } = yield emitTiddlers(docId, meta, bookTitle, sections, options.bag || "default", true, options.priority);
+    const { tiddlers, warnings } = yield emitTiddlers(docId, meta, bookTitle, sections, options.bag || "default", true, options.priority, options.folderOccupied);
     return {
       bookTitle,
       docId,
@@ -1496,6 +1474,7 @@ function importTextBytes(bytes, fileName, options) {
       type,
       bag: options.bag || "default",
       priority: options.priority,
+      folderOccupied: options.folderOccupied,
       maxChars: options.maxChars,
       minChars: options.minChars
     });

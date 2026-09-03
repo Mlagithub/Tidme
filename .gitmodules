@@ -1,30 +1,6 @@
-[submodule "src/review"]
-	path = src/review
-	url = https://github.com/open-spaced-repetition/fsrs4tw.git
-[submodule "src/read"]
-	path = src/read
-	url = https://github.com/oflg/Tidme-read.git
-[submodule "src/stats"]
-	path = src/stats
-	url = https://github.com/oflg/Tidme-stats.git
 [submodule "src/zh-Hans"]
 	path = src/zh-Hans
 	url = https://github.com/oflg/Tidme-zh-Hans.git
-[submodule "wiki/website/zh-Hans"]
-	path = wiki/website/zh-Hans
-	url = https://github.com/oflg/Tidme-website-zh-Hans.git
-[submodule "wiki/manual/zh-Hans"]
-	path = wiki/manual/zh-Hans
-	url = https://github.com/oflg/Tidme-manual-zh-Hans.git
-[submodule "wiki/website/fr-FR"]
-	path = wiki/website/fr-FR
-	url = https://github.com/papiche/Tidme-website-fr-FR.git
-[submodule "wiki/manual/fr-FR"]
-	path = wiki/manual/fr-FR
-	url = https://github.com/papiche/Tidme-manual-fr-FR.git
 [submodule "src/fr-FR"]
 	path = src/fr-FR
 	url = https://github.com/papiche/Tidme-fr-FR.git
-[submodule "wiki/website/de-DE"]
-	path = wiki/website/de-DE
-	url = https://github.com/MehrzweckMandala/Tidme-website-de-DE.git
