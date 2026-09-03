@@ -84,7 +84,7 @@ code-body: yes
     </$let>
 </$let>
 <$list
-    filter="[<studyTiddler>] :cascade[{$:/config/Tidme/Filters/decklist}] +[match<deckTiddler>]"
+    filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]] :filter[addsuffix[/study]has[title]]"
     variable="ignore"
 >
     {{$:/plugins/keepone/tidme/review/buttons/action/startstudy}}
