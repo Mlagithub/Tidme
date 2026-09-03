@@ -220,6 +220,7 @@ async function main() {
 				planned.push({
 					title: full,
 					fields: {
+						title: full,
 						caption: w.headWord,
 						type: "text/vnd.tiddlywiki",
 						due: nowStr,
