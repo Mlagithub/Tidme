@@ -1,7 +1,7 @@
 /*
 study-flow-test.cjs — 无头验证 FSRS 学习流转（不污染仓库 wiki）
 
-在临时空目录启动 TiddlyWiki，预载 out-m2 编译插件，合成 ? 卡，
+在临时空目录启动 TiddlyWiki，预载 bin 编译插件，合成 ? 卡，
 验证 startstudy → grade → 队列推进 的完整循环（FSRS 复习回归测试）。
 
 用法：
@@ -12,13 +12,13 @@ const os = require("os");
 const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 
-const pluginDir = path.resolve(__dirname, "../out-m2");
+const pluginDir = path.resolve(__dirname, "../bin");
 const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 if (!plugins.length) {
-	console.error("缺少 out-m2 插件产物，先运行: node tools/build-plugins.cjs");
+	console.error("缺少 bin 插件产物，先运行: node tools/build-plugins.cjs");
 	process.exit(1);
 }
 

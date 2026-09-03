@@ -1,11 +1,11 @@
 /*
-build-plugins.cjs — 编译 src/ 下全部插件为 out-m2/$__<plugin>.json
+build-plugins.cjs — 编译 src/ 下全部插件为 out/$__<plugin>.json
 
 用 tiddlywiki-plugin-dev 的 packup.rebuild（esbuild 编译 .ts/.tsx、压缩、Tailwind）产出
 与 dev 模式一致的插件 tiddler，落盘为 TiddlyWiki tiddler 文件格式（`$:/` → `$__`，`/` → `_`），
 供无头测试（tools/study-flow-test.cjs 等）与 CI 使用。
 
-附带产出 out-m2/pipeline.cjs（esbuild bundle 的导入管线），供 tools/pipeline-headless.mjs 使用。
+附带产出 out/pipeline.cjs（esbuild bundle 的导入管线），供 tools/pipeline-headless.mjs 使用。
 
 用法：node tools/build-plugins.cjs [--dev]
   --dev  不压缩（开发/调试）
@@ -23,7 +23,7 @@ function tiddlerFileName(title) {
 (async () => {
 	const root = path.resolve(__dirname, "..");
 	const src = path.join(root, "src");
-	const out = path.join(root, "out-m2");
+	const out = path.join(root, "out");
 	const devMode = process.argv.includes("--dev");
 	fs.rmSync(out, { recursive: true, force: true });
 	fs.mkdirSync(out, { recursive: true });

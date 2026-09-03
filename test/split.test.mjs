@@ -26,7 +26,7 @@ Module.default._load = function (request, parent, isMain) {
 };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const pipeline = (await import(pathToFileURL(path.join(here, "../out-m2/pipeline.cjs")).href)).default;
+const pipeline = (await import(pathToFileURL(path.join(here, "../bin/pipeline.cjs")).href)).default;
 
 function cardsOf(r) {
 	return r.tiddlers.filter((t) => t["tidme.kind"] === "topic");

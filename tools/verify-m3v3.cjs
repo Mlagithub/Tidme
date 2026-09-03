@@ -1,7 +1,7 @@
 /* verify-m3v3.cjs — 校验 v3 工具栏与弹窗移除 */
 const fs = require("fs");
-const imp = JSON.parse(fs.readFileSync("out-m2/$__plugins_keepone_tidme.json", "utf8"));
-const read = JSON.parse(fs.readFileSync("out-m2/$__plugins_keepone_tidme.json", "utf8"));
+const imp = JSON.parse(fs.readFileSync("bin/$__plugins_keepone_tidme.json", "utf8"));
+const read = JSON.parse(fs.readFileSync("bin/$__plugins_keepone_tidme.json", "utf8"));
 
 const it = JSON.parse(imp.text).tiddlers;
 const w = it["$:/plugins/keepone/tidme/import/widgets/section.js"].text;

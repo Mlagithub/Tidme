@@ -2,6 +2,6 @@
 const path = require("path");
 const { execSync } = require("child_process");
 execSync(
-	'npx esbuild src/tidme/import/pipeline/main.ts --bundle --format=cjs --platform=browser --external:$:/* --outfile=out-m2/pipeline.cjs',
+	'npx esbuild src/tidme/import/pipeline/main.ts --bundle --format=cjs --platform=browser --external:$:/* --outfile=bin/pipeline.cjs',
 	{ stdio: "inherit", cwd: path.resolve(__dirname, "..") }
 );

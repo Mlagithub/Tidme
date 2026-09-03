@@ -14,12 +14,12 @@ import { fileURLToPath } from "node:url";
 import TiddlyWiki from "tiddlywiki";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../out-m2");
+const pluginDir = path.resolve(here, "../bin");
 const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 out-m2 产物，先运行 node tools/build-plugins.cjs");
+if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
 
 function twDate(d) {
 	const p = (n, l = 2) => String(n).padStart(l, "0");

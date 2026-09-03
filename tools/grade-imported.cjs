@@ -7,7 +7,7 @@ const importFile = process.argv[2];
 if (!importFile) { console.error("用法: node grade-imported.cjs <导入.json>"); process.exit(1); }
 
 const tw = TiddlyWiki.TiddlyWiki();
-tw.preloadTiddlerArray([JSON.parse(fs.readFileSync(path.resolve(__dirname, "../out-m2/$__plugins_keepone_tidme.json"), "utf8"))]);
+tw.preloadTiddlerArray([JSON.parse(fs.readFileSync(path.resolve(__dirname, "../bin/$__plugins_keepone_tidme.json"), "utf8"))]);
 tw.boot.argv = [path.resolve(__dirname, "../wiki/manual/index")];
 tw.boot.boot();
 const wiki = tw.wiki;

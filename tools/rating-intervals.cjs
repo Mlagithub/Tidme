@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 
-const pluginDir = path.resolve(__dirname, "../out-m2");
+const pluginDir = path.resolve(__dirname, "../bin");
 const plugins = ["$__plugins_keepone_tidme"]
 	.map((n) => path.join(pluginDir, n + ".json"))
 	.filter((f) => fs.existsSync(f))

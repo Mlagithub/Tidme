@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build plugins (out-m2)
+      - name: Build plugins (bin)
         run: node tools/build-plugins.cjs
 
       - name: Unit tests (pipeline headless)

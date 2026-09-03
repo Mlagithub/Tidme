@@ -1,7 +1,7 @@
 /*
 pipeline.test.mjs — 导入管线单元测试（node:test）
 
-依赖 out-m2/pipeline.cjs（先运行 tools/build-plugins.cjs）与 tools/fixtures/demo.epub（tools/make-fixture.mjs）。
+依赖 bin/pipeline.cjs（先运行 tools/build-plugins.cjs）与 tools/fixtures/demo.epub（tools/make-fixture.mjs）。
 断言：EPUB 解析 → 大纲切分 → 确定性 ID → tiddler 落库的关键性质。
 */
 import { test } from "node:test";
@@ -26,7 +26,7 @@ Module.default._load = function (request, parent, isMain) {
 };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const pipeline = (await import(pathToFileURL(path.join(here, "../out-m2/pipeline.cjs")).href)).default;
+const pipeline = (await import(pathToFileURL(path.join(here, "../bin/pipeline.cjs")).href)).default;
 const fixturePath = path.join(here, "../tools/fixtures/demo.epub");
 const bytes = new Uint8Array(readFileSync(fixturePath));
 

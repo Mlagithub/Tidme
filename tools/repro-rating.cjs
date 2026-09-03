@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const TiddlyWiki = require("tiddlywiki");
 
-const pluginDir = path.resolve(__dirname, "../out-m2");
+const pluginDir = path.resolve(__dirname, "../bin");
 function boot(withImport) {
 	const tw = TiddlyWiki.TiddlyWiki();
 	const loads = [];

@@ -8,7 +8,7 @@ esbuild 把 src/tidme/import/pipeline/main.ts 打成浏览器等价 CJS（tools/
   3) 确定性：两次运行产物一致（剥离时间戳字段——due/last_review 是写入时刻，不在确定性保证内）
 
 用法：
-  node tools/build-plugins.cjs        # 产出 out-m2/pipeline.cjs
+  node tools/build-plugins.cjs        # 产出 bin/pipeline.cjs
   node tools/pipeline-headless.mjs <book.epub>
 */
 import { createRequire } from "module";
@@ -30,7 +30,7 @@ mod._load = function (request, parent, isMain) {
 	return origLoad.call(this, request, parent, isMain);
 };
 
-const pipelinePath = new URL("../out-m2/pipeline.cjs", import.meta.url).href;
+const pipelinePath = new URL("../bin/pipeline.cjs", import.meta.url).href;
 const pipeline = (await import(pipelinePath)).default;
 
 const epubFile = process.argv[2];
