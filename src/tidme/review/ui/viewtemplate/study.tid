@@ -26,4 +26,25 @@ code-body: yes
             <$fsrs4tw.repeat ratings="Again Hard Good Easy">
         </$fieldmangler>
     </div>
+    <details class="tmc-card-stats" style="margin-top:8px;">
+        <summary style="cursor:pointer;color:var(--tm-text-2,#777);font-size:12px;">📊 学习数据</summary>
+        <div class="tmc-card-stats-grid" style="margin-top:6px;padding:8px 12px;background:var(--tm-surface-2);color:var(--tm-text-1);border-radius:6px;font-size:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px 12px;border:1px solid var(--tm-border);">
+            <$let
+                st={{{ [<studyTiddler>get[state]else[0]] }}}
+                due={{{ [<studyTiddler>get[due]] }}}
+                last={{{ [<studyTiddler>get[last_review]] }}}
+            >
+                <div><strong>FSRS 状态：</strong><$text text={{{ [<st>match[0]then[新卡 (New)]]~[<st>match[1]then[学习中 (Learning)]]~[<st>match[2]then[复习中 (Review)]]~[<st>match[3]then[重学中 (Relearning)]]~[[未知]] }}}/></div>
+                <div><strong>到期时间：</strong><$text text={{{ [<st>match[0]then[首评后排期]]~[<due>format:relativedate[]] }}}/></div>
+                <div><strong>上次复习：</strong><$text text={{{ [<st>match[0]then[未复习]]~[<last>format:relativedate[]] }}}/></div>
+                <div><strong>间隔：</strong><$text text={{{ [<studyTiddler>get[scheduled_days]else[0]] }}}/> 天</div>
+                <div><strong>稳定性 (S)：</strong><$text text={{{ [<studyTiddler>get[stability]else[—]] }}}/></div>
+                <div><strong>难度 (D)：</strong><$text text={{{ [<studyTiddler>get[difficulty]else[—]] }}}/></div>
+                <div><strong>复习次数：</strong><$text text={{{ [<studyTiddler>get[reps]else[0]] }}}/></div>
+                <div><strong>遗忘次数：</strong><$text text={{{ [<studyTiddler>get[lapses]else[0]] }}}/></div>
+                <div><strong>优先级：</strong>p<$text text={{{ [<studyTiddler>get[tidme.priority]else[50]] }}}/></div>
+                <div><strong>A-Factor：</strong><$text text={{{ [<studyTiddler>get[tidme.afactor]else[1.5]] }}}/></div>
+            </$let>
+        </div>
+    </details>
 </$list>

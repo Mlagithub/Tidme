@@ -12,11 +12,11 @@ const T = (offsetHours) => {
 	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
 };
 
-test("deckLoad: new/learn/due/overdue 分类", () => {
+test("deckLoad: new/learn/due/overdue 分类（未来排期的 state2 不计 due）", () => {
 	const cards = [
 		{ title: "新卡", fields: { "tidme.kind": "item", state: "0", due: T(48) } },
 		{ title: "学习中", fields: { "tidme.kind": "item", state: "1", due: T(-1) } },
-		{ title: "到期", fields: { "tidme.kind": "item", state: "2", due: T(6) } },
+		{ title: "未来排期", fields: { "tidme.kind": "item", state: "2", due: T(6) } },
 		{ title: "逾期", fields: { "tidme.kind": "item", state: "2", due: T(-24) } },
 		{ title: "已出队", fields: { "tidme.kind": "item", state: "2", due: T(-24), "tidme.done": "yes" } },
 		{ title: "已忽略", fields: { "tidme.kind": "item", state: "2", due: T(-24), "tidme.ignored": "yes" } },
@@ -26,7 +26,7 @@ test("deckLoad: new/learn/due/overdue 分类", () => {
 	assert.equal(load.total, 7);
 	assert.equal(load.newCount, 1);
 	assert.equal(load.learn, 1);
-	assert.equal(load.due, 2); // 到期+逾期（已出队/已忽略/搁置排除）
+	assert.equal(load.due, 1); // 仅逾期（state2 且 due<=now）；未来排期不计入"到期"
 	assert.equal(load.overdue, 1);
 });
 
@@ -58,18 +58,19 @@ test("funnelCounts: 漏斗分层（topic/item 大类 + subkind）", () => {
 	assert.deepEqual(stats.funnelCounts(items), { docs: 1, sections: 2, extracts: 1, cards: 1 });
 });
 
-test("priorityBuckets: 分桶", () => {
+test("priorityBuckets: 分桶（缺失/空串 = 未设）", () => {
 	const cards = [
 		{ title: "A", fields: { "tidme.priority": "10" } },
 		{ title: "B", fields: { "tidme.priority": "90" } },
 		{ title: "C", fields: { "tidme.priority": "50" } },
-		{ title: "D", fields: {} }
+		{ title: "D", fields: {} },
+		{ title: "E", fields: { "tidme.priority": "" } }
 	];
 	const b = stats.priorityBuckets(cards);
 	assert.equal(b.high, 1);
 	assert.equal(b.medium, 1);
 	assert.equal(b.low, 1);
-	assert.equal(b.none, 1);
+	assert.equal(b.none, 2, "缺失与空串都算未设");
 });
 
 test("formatDuration: 格式化时间", () => {

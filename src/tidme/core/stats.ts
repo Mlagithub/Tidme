@@ -24,6 +24,7 @@ export interface DeckLoad {
 
 export function deckLoad(cards: CardLike[], now = new Date()): DeckLoad {
 	const load: DeckLoad = { total: cards.length, learn: 0, due: 0, overdue: 0, newCount: 0 };
+	const nowMs = now.getTime();
 	for (const c of cards) {
 		const f = c.fields;
 		if (isCardDone(f)) continue; // 已出队（done/ignored）
@@ -31,8 +32,12 @@ export function deckLoad(cards: CardLike[], now = new Date()): DeckLoad {
 		const state = String(f.state || "0");
 		if (state === "1" || state === "3") load.learn++;
 		else if (state === "2") {
-			load.due++;
-			if (parseTwDate(f.due).getTime() < now.getTime()) load.overdue++;
+			// 到期 = 已排期复习且 due ≤ now；未来排期不算"到期"（注释与实现对齐）
+			const dueMs = parseTwDate(f.due).getTime();
+			if (dueMs <= nowMs) {
+				load.due++;
+				if (dueMs < nowMs) load.overdue++;
+			}
 		} else load.newCount++;
 	}
 	return load;
@@ -146,12 +151,14 @@ export function recordReadTime(wiki: any, docId: string, seconds: number) {
 	});
 }
 
-/** 按优先级分桶（供排序展示） */
+/** 按优先级分桶（供排序展示）；priority 缺失或空串 = 未设 */
 export function priorityBuckets(cards: CardLike[]): { high: number; medium: number; low: number; none: number } {
 	const b = { high: 0, medium: 0, low: 0, none: 0 };
 	for (const c of cards) {
-		const p = normalizePriority(c.fields["tidme.priority"]);
-		if (c.fields["tidme.priority"] === undefined) b.none++;
+		const raw = c.fields["tidme.priority"];
+		const unset = raw === undefined || raw === null || String(raw).trim() === "";
+		const p = normalizePriority(raw);
+		if (unset) b.none++;
 		else if (p <= 33) b.high++;
 		else if (p <= 66) b.medium++;
 		else b.low++;

@@ -138,7 +138,8 @@ function makeStatsPanel(): WidgetCtor {
 				for (const d of docs) {
 					const docId = wiki.getTiddler(d)?.fields["tidme.doc"];
 					if (!docId) continue;
-					const sections = cardLikes(`[tidme.doc[${docId}]tidme.kind[topic]]`);
+					// 阅读进度口径：仅正文章节（排除摘录，与文档页 sectionsOfDoc 一致）——否则进度把摘录也计入分母
+					const sections = cardLikes(`[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]]`);
 					const p = stats.docProgress(sections);
 					const tr = el(doc, "tr", "");
 					const docFields = wiki.getTiddler(d)?.fields || {};

@@ -1166,7 +1166,9 @@ function makeSectionBar(): WidgetCtor {
 				addStat("A-Factor", `${sched.normalizeAFactor(fields["tidme.afactor"], sched.afactorForText(Number(fields["tidme.chars"]))).toFixed(2)}（间隔 ×A-Factor）`);
 				addStat("卡片类型", String(fields["tidme.kind"] || "item"));
 				addStat("FSRS 状态", stateText);
-				addStat("到期时间", fields.due ? sched.parseTwDate(fields.due).toLocaleString() : "未到期");
+				// 新卡（state 0/未调度）的 due 只是 FSRS 占位（导入时刻），并非"到期"——不展示为到期时间
+				const rawState = String(fields.state || "0");
+				addStat("到期时间", rawState === "0" ? "首评后排期" : fields.due ? sched.parseTwDate(fields.due).toLocaleString() : "未排期");
 				addStat("稳定性 (S)", fields.stability ? Number(fields.stability).toFixed(2) : "未设置");
 				addStat("难度 (D)", fields.difficulty ? Number(fields.difficulty).toFixed(2) : "未设置");
 				addStat("复习次数", String(fields.reps || 0));
