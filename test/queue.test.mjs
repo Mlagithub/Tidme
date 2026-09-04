@@ -27,6 +27,7 @@ if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/b
 let wiki;
 let deckEngine;
 let sched;
+let sessionMod;
 test.before(() => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-queue-"));
 	const tw = TiddlyWiki.TiddlyWiki();
@@ -36,6 +37,7 @@ test.before(() => {
 	wiki = tw.wiki;
 	deckEngine = tw.modules.execute("$:/plugins/keepone/tidme/core/deck-engine.js");
 	sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
+	sessionMod = tw.modules.execute("$:/plugins/keepone/tidme/core/session.js");
 });
 
 function twDate(d) {
@@ -171,4 +173,58 @@ test("调度: isDueNow — 出队/未来排期判定（nextSchedulable 的 canLe
 	assert.equal(sched.isDueNow({ "tidme.ignored": "yes" }), false);
 	assert.equal(sched.isDueNow({ "tidme.suspended": "yes" }), false);
 	assert.equal(sched.isDueNow(null), false);
+});
+
+test("调度: 学习会话 core/session — set/get/removeFrom/advance（cur 之后推进，跳未来排期；交错含 topic）", () => {
+	const now = Date.now();
+	const T = (ms) => {
+		const d = new Date(ms);
+		const p = (n, l = 2) => String(n).padStart(l, "0");
+		return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
+	};
+	const mk = (t, o = {}) => wiki.addTiddler({
+		title: t, "tidme.kind": o.kind || "item", state: o.state ?? "0",
+		due: o.due !== undefined ? T(o.due) : T(now), caption: t, text: "x"
+	});
+	mk("sItem1"); mk("sItem2"); mk("sTopic", { kind: "topic", due: now - 1000 }); mk("sItem3");
+	mk("sFuture", { state: "2", due: now + 5 * 86400000 }); mk("sItem4");
+	const list = ["sItem1", "sItem2", "sTopic", "sItem3", "sFuture", "sItem4"];
+	sessionMod.setSession(wiki, { list, mode: "global-interleaved" });
+	assert.deepEqual([...sessionMod.getSession(wiki).list], list, "会话写读一致（跨 realm 展开比较）");
+	// advance：cur 之后第一张可学（topic 参与交错、未来排期跳过、滞留不回头）
+	assert.equal(sessionMod.advanceSession(wiki, "sItem2"), "sTopic", "词卡后进交错阅读卡");
+	assert.equal(sessionMod.advanceSession(wiki, "sTopic"), "sItem3", "阅读卡后回词卡");
+	assert.equal(sessionMod.advanceSession(wiki, "sItem3"), "sItem4", "跳过未来排期的 sFuture");
+	assert.equal(sessionMod.advanceSession(wiki, "sItem4"), null, "末尾 → null（confetti）");
+	assert.equal(sessionMod.advanceSession(wiki, null), "sItem1", "无 cur 从头");
+	// removeFromSession
+	assert.equal(sessionMod.removeFromSession(wiki, "sItem1"), true);
+	assert.ok(!sessionMod.getSession(wiki).list.includes("sItem1"), "已移除");
+	assert.equal(sessionMod.removeFromSession(wiki, "不存在"), false);
+});
+
+test("调度: schedulable-next filter operator — startstudy 的 session_next 语义（单一实现）", () => {
+	const now = Date.now();
+	const T = (ms) => {
+		const d = new Date(ms);
+		const p = (n, l = 2) => String(n).padStart(l, "0");
+		return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
+	};
+	const mk = (t, o = {}) => wiki.addTiddler({
+		title: t, "tidme.kind": o.kind || "item", state: o.state ?? "0",
+		due: o.due !== undefined ? T(o.due) : T(now), caption: t, text: "x"
+	});
+	mk("oItem1"); mk("oItem2"); mk("oTopic", { kind: "topic", due: now - 1000 }); mk("oItem3"); mk("oFuture", { state: "2", due: now + 86400000 });
+	wiki.addTiddler({ title: "$:/state/tidme/learning-session", list: ["oItem1", "oItem2", "oTopic", "oItem3", "oFuture"] });
+	const parent = wiki.makeWidget({ tree: [] }, { document: { createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }) } });
+	const w = wiki.makeWidget({ tree: [] }, { parentWidget: parent });
+	const run = (cur) => {
+		parent.setVariable("studyTiddler", cur);
+		const filter = "[[$:/state/tidme/learning-session]get[list]enlist-input[]schedulablenext<studyTiddler>]";
+		return wiki.filterTiddlers(filter, w);
+	};
+	assert.deepEqual([...run("oItem2")], ["oTopic"], "词卡后 → 交错阅读卡");
+	assert.deepEqual([...run("oTopic")], ["oItem3"], "阅读卡后 → 词卡（跳过滞留）");
+	assert.deepEqual([...run("oItem3")], [], "其后只有未来排期 → 空");
+	assert.deepEqual([...run("oItem1")], ["oItem2"]);
 });

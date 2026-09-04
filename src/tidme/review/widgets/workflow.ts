@@ -9,6 +9,7 @@ widgets/workflow.ts — $:/Decks 工作流中心：开始学习按钮
 
 declare function require(module: string): any;
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const sessionMod = require("$:/plugins/keepone/tidme/core/session.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const DEFAULT_DECK = "$:/Deck/default";
@@ -48,7 +49,6 @@ function iconButton(doc: Document, cls: string, name: keyof typeof ICON_PATHS, l
 	return b;
 }
 
-const SESSION_STATE = "$:/state/tidme/learning-session";
 const QUEUE_MODE_TIDDLER = "$:/config/Tidme/QueueMode";
 
 /** 队列选项：$:/config/Tidme/QueueMode 存在 = 混入阅读材料（"strict"=宏观三段式，其余=4:1 交错）；
@@ -119,10 +119,9 @@ function startGlobalLearning(wiki: any, widget: any): void {
 	}
 
 	const first = queue[0];
-	wiki.addTiddler({
-		title: SESSION_STATE,
+	sessionMod.setSession(wiki, {
 		list: queue,
-		current_index: "0",
+		currentIndex: "0",
 		mode: mode === "strict" ? "global-strict" : topics ? "global-interleaved" : "items-only"
 	});
 

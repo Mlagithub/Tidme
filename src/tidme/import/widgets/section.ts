@@ -17,6 +17,7 @@ const stats = require("$:/plugins/keepone/tidme/core/stats.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const paths = require("$:/plugins/keepone/tidme/core/paths.js");
+const sessionMod = require("$:/plugins/keepone/tidme/core/session.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
@@ -845,13 +846,8 @@ function makeSectionBar(): WidgetCtor {
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: target });
 			};
 
-			const SESSION_STATE = "$:/state/tidme/learning-session";
 			const removeTitleFromSession = (targetTitle: string) => {
-				const sess = wiki.getTiddler(SESSION_STATE)?.fields;
-				if (sess && Array.isArray(sess.list)) {
-					const newList = sess.list.filter((x: string) => x !== targetTitle);
-					wiki.addTiddler({ ...sess, title: SESSION_STATE, list: newList });
-				}
+				sessionMod.removeFromSession(wiki, targetTitle);
 			};
 			/**
 			 * 调度判定（D3 统一走 core/scheduler）：
@@ -865,8 +861,8 @@ function makeSectionBar(): WidgetCtor {
 			 * section-bar 的 ▶/已读/稍后/忽略 全部经此推进，无分散重复实现。
 			 */
 			const getScheduledNext = (): string | null => {
-				const sess = wiki.getTiddler(SESSION_STATE)?.fields;
-				if (sess && Array.isArray(sess.list) && sess.list.indexOf(title) !== -1) {
+				const sess = sessionMod.getSession(wiki);
+				if (sess && sess.list.indexOf(title) !== -1) {
 					const n = sched.nextSchedulable(sess.list, title, learnable);
 					if (n) return n;
 				}
