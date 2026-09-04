@@ -881,9 +881,11 @@ function makeSectionBar(): WidgetCtor {
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
 				}
 			};
-			/** ▶ 下一节：同文档顺序里下一张"当前可读"的卡（跳过顺延/未来排期，走调度引擎） */
+			/** ▶ 下一节：走统一调度引擎 getScheduledNext（学习会话优先 → 本文档回退）。
+			 * 开始学习发起的交错会话中，▶ 会推进到会话下一卡（可能是知识卡），
+			 * 避免用户一直困在阅读材料里；无会话时则在同一文档内跳下一可读节。 */
 			const gotoNextDoc = () => {
-				const nxt = sched.nextSchedulable(topicsOfDoc(wiki, docId), title, learnable);
+				const nxt = getScheduledNext();
 				if (!nxt) return;
 				saveReadPoint(wiki, docId, { t: nxt, s: "" });
 				this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
@@ -945,8 +947,8 @@ function makeSectionBar(): WidgetCtor {
 			const queueList = fullList.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields) || x === title);
 			const { prev, next } = pipeline.neighborsOf(queueList, title);
 			const index = fullList.indexOf(title);
-			// ▶ 下一节目标 = 本文档内当前卡之后第一张可读卡（调度引擎 nextSchedulable；跳过顺延/未来排期）
-			const schedNext = sched.nextSchedulable(fullList, title, learnable);
+			// ▶ 下一节目标 = 统一调度（会话优先，与已读后推进一致；无会话=本文档内下一可读）
+			const schedNext = getScheduledNext();
 			const rp = parseReadPoint(wiki, docId);
 			const left = fullList.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields)).length;
 			wiki.addTiddler({ title: GLOBAL_READPOINT, text: title });

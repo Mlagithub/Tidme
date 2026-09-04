@@ -339,9 +339,9 @@ type: text/css
 	position: sticky;
 	top: 0;
 	z-index: 60;
-	/* 不透明底色：var 失效/半透明主题时回落纯色，防止长文滚动时正文透出遮挡按钮 */
-	background: #ffffff;
-	background: var(--tm-surface, #ffffff);
+	/* 不透明底色（亮/暗均写死不依赖 var：TW 对 CSS 的 wikify 可能把 "--" 变 en dash 使 var() 失效，
+	   导致半透明/透出正文。本规则与下方暗色覆盖保证任何环境不透明） */
+	background-color: #ffffff;
 	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 	display: flex;
 	flex-direction: column;
@@ -350,6 +350,11 @@ type: text/css
 	margin-bottom: 4px;
 	border-bottom: 1px dotted var(--tm-text-2);
 	font-size: 0.92em;
+}
+[data-tme-dark] .tm-section-bar,
+body.tc-body-dark .tm-section-bar,
+[data-theme="dark"] .tm-section-bar {
+	background-color: #1e293b;
 }
 .tm-section-row {
 	display: flex;
@@ -1760,11 +1765,15 @@ mark.tm-readpoint {
     position: sticky;
     top: 0;
     z-index: 60;
-    /* 不透明底色（fallback 同 .tm-section-bar） */
-    background: #ffffff;
-    background: var(--tm-surface, #ffffff);
+    /* 不透明底色（写死，理由同 .tm-section-bar） */
+    background-color: #ffffff;
     padding: 4px 0 6px;
     border-bottom: 1px solid var(--tm-border);
+}
+[data-tme-dark] .tmc-study-bar,
+body.tc-body-dark .tmc-study-bar,
+[data-theme="dark"] .tmc-study-bar {
+    background-color: #1e293b;
 }
 .tmc-study-count { font-size: 10px; color: var(--tm-text-2); }
 
