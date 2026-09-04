@@ -64,7 +64,8 @@ export function getDeck(wiki: any, nameOrTitle: string): Deck | null {
 	const title = titleOf(nameOrTitle); // 含 "/" 视为完整标题
 	const t = wiki.getTiddler(title);
 	if (!t) return null;
-	return { title, name: title.slice("$:/Deck/".length), fields: t.fields || {} };
+	const name = title.startsWith("$:/Deck/") ? title.slice("$:/Deck/".length) : (title.split("/").pop() || title);
+	return { title, name, fields: t.fields || {} };
 }
 
 /** subset 判定（tidme.subset-doc 存在） */

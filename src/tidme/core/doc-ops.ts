@@ -60,9 +60,11 @@ export function deleteDocContent(wiki: any, docId: string): number {
 		if (isDocPage(f)) { targets.add(t); continue; }
 		if (f["tidme.kind"] === "topic" && String(f["tidme.subkind"] || "section") !== "extract") targets.add(t);
 	}
-	// 子集牌组是临时复习脚手架（引用保留的知识卡），随本书清理
-	const decks = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.subset-doc[${docId}]]`);
-	for (const d of decks) targets.add(d);
+	// 子集牌组是临时复习脚手架（引用保留的知识卡），随本书清理（经 core/deck 判定）
+	for (const d of deckMod.listDecks(wiki)) {
+		const dd = deckMod.getDeck(wiki, d);
+		if (deckMod.isSubset(dd) && String(dd?.fields["tidme.subset-doc"] || "") === docId) targets.add(d);
+	}
 
 	// 学习会话：剔除被删卡（保留其余卡与队列语义）
 	const sess = wiki.getTiddler(session.SESSION_TIDDLER);

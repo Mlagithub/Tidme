@@ -129,7 +129,7 @@ function makeDeckManager(): WidgetCtor {
 				wrap.appendChild(createBox);
 
 				// —— 列表 ——
-				const decks = deckMod.listDecks(wiki);
+				const decks = [...deckMod.listDecks(wiki)].sort((a, b) => a.localeCompare(b));
 				if (!decks.length) {
 					wrap.appendChild(el(doc, "div", "tm-empty", "暂无牌组——在上方新建。"));
 					return;
@@ -144,7 +144,11 @@ function makeDeckManager(): WidgetCtor {
 					const cardEl = el(doc, "div", "tm-dm-deck" + (subset ? " tm-dm-deck-subset" : ""));
 					const row = el(doc, "div", "tm-dm-deck-row");
 					row.appendChild(el(doc, "strong", "", caption));
-					if (subset) row.appendChild(el(doc, "span", "tm-badge tm-badge-due", "子集"));
+					if (subset) {
+						row.appendChild(el(doc, "span", "tm-badge tm-badge-due", "子集"));
+						const src = String(d.fields["tidme.subset-doc"] || "");
+						if (src) row.appendChild(el(doc, "span", "tm-import-muted", "来源 doc " + src));
+					}
 					if (title === deckMod.DEFAULT_DECK) row.appendChild(el(doc, "span", "tm-import-muted", "（默认）"));
 					row.appendChild(el(doc, "span", "tm-dm-count", `${cards.length} 卡 · 新 ${load.newCount} · 学 ${load.learn} · 到 ${load.due} · 逾 ${load.overdue}`));
 					row.appendChild(el(doc, "span", "tm-import-muted", title));
@@ -214,6 +218,7 @@ function makeDeckManager(): WidgetCtor {
 					act.appendChild(save);
 					// 删除
 					const del = el(doc, "button", "tm-btn tm-btn--danger", "🗑 删除");
+					if (title === deckMod.DEFAULT_DECK) { del.setAttribute("disabled", "true"); del.title = "默认牌组不可删除"; }
 					del.addEventListener("click", () => {
 						const also = subset && confirm(`《${caption}》是子集牌组。\n是否连同其成员卡一并删除？\n（确定=连卡删除；取消=仅删牌组定义）`);
 						const msg = subset
