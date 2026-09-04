@@ -126,10 +126,9 @@ function startGlobalLearning(wiki: any, widget: any): void {
 		mode: mode === "strict" ? "global-strict" : topics ? "global-interleaved" : "items-only"
 	});
 
-	const f = deckEngine.composeDeckFilters(DEFAULT_DECK, wiki.getTiddler(DEFAULT_DECK)?.fields || {});
 	wiki.addTiddler({ title: DEFAULT_DECK + "/study", list: queue });
-	const unfolded = wiki.filterTiddlers(f.unfold);
-	wiki.addTiddler({ title: "$:/state/folded/" + first, text: unfolded.includes(first) ? "show" : "hide" });
+	// 首卡折叠态统一走 ui-utils（item → hide/show，按所属 deck card_unfold）
+	uiUtils.prepareCardFold(wiki, first);
 
 	widget.dispatchEvent({ type: "tm-navigate", navigateTo: first });
 }

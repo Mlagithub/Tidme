@@ -588,3 +588,32 @@ test("parseTwDate 接受 card-manager 的 17 位 due 串", () => {
 	const oldBuggy = sched.parseTwDate("2026123100000000000");
 	assert.equal(Number.isNaN(oldBuggy.getTime()) || oldBuggy.getUTCFullYear() !== 1970, true, "19 位非合法日期");
 });
+
+/* 回归测试：跳转复习卡前设置折叠态（$:/state/folded/<title>）——缺失时 reveal 默认展开 */
+test("prepareCardFold: item 复习卡默认 hide（折叠先看问题）；命中 card_unfold 才 show；topic 不设", async () => {
+	const card = {
+		title: "Tidme/Decks/fold测试/x--qa",
+		"tidme.kind": "item",
+		"tidme.subkind": "qa",
+		caption: "x",
+		text: "y",
+		due: twDate(new Date()), state: "0", reps: "0", lapses: "0",
+		stability: "0", difficulty: "0", elapsed_days: "0", scheduled_days: "0", last_review: twDate(new Date())
+	};
+	wiki.addTiddler(card);
+	// 默认（card_unfold 未命中）→ hide
+	uiUtils.prepareCardFold(wiki, card.title);
+	assert.equal(wiki.getTiddler("$:/state/folded/" + card.title)?.fields?.text, "hide", "复习卡默认折叠");
+	// 命中 card_unfold → show
+	const deck = wiki.getTiddler("$:/Deck/default");
+	wiki.addTiddler({ ...deck?.fields, title: "$:/Deck/default", card_unfold: `[all[]match[${card.title}]]` });
+	uiUtils.prepareCardFold(wiki, card.title);
+	assert.equal(wiki.getTiddler("$:/state/folded/" + card.title)?.fields?.text, "show", "命中 unfold 过滤器 → show");
+	// 还原 default deck 覆盖（防影响后续）
+	if (deck) wiki.addTiddler({ ...deck.fields, title: "$:/Deck/default" });
+	// topic 卡不设折叠态（阅读界面无关）
+	const topic = "Tidme/Books/折叠测试/s1-s1--topic";
+	wiki.addTiddler({ title: topic, "tidme.kind": "topic", caption: "t", text: "x", state: "0", due: twDate(new Date()) });
+	uiUtils.prepareCardFold(wiki, topic);
+	assert.equal(wiki.getTiddler("$:/state/folded/" + topic), undefined, "topic 卡不设折叠态");
+});
