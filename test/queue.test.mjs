@@ -26,6 +26,7 @@ if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/b
 
 let wiki;
 let deckEngine;
+let sched;
 test.before(() => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-queue-"));
 	const tw = TiddlyWiki.TiddlyWiki();
@@ -34,6 +35,7 @@ test.before(() => {
 	tw.boot.boot();
 	wiki = tw.wiki;
 	deckEngine = tw.modules.execute("$:/plugins/keepone/tidme/core/deck-engine.js");
+	sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
 });
 
 function twDate(d) {
@@ -142,4 +144,31 @@ test("调度: deck-engine 过滤器不包含损坏的 <now> 格式（回归防�
 	const src = fs.readFileSync(path.resolve(here, "../src/tidme/core/deck-engine.ts"), "utf8");
 	assert.ok(!src.includes("[UTC]YYYY0MMDD0hh0mm0ss0XXX"), "不得使用损坏的日期格式（被 parse 为未来日期）");
 	assert.ok(src.includes("[UTC]YYYY0MM0DD0hh0mm0ssXXX"), "使用 TW 核心 UTC 格式");
+});
+
+test("调度: nextSchedulable — 序列推进统一算法（section-bar/阅读列表/文档页共用）", () => {
+	const seq = ["A", "B", "C", "D", "E"];
+	const canLearn = (t) => t === "B" || t === "D";
+	assert.equal(sched.nextSchedulable(seq, null, canLearn), "B", "无 cur 从头找第一可学");
+	assert.equal(sched.nextSchedulable(seq, "A", canLearn), "B");
+	assert.equal(sched.nextSchedulable(seq, "B", canLearn), "D", "跳过不可学的 C");
+	assert.equal(sched.nextSchedulable(seq, "C", canLearn), "D");
+	assert.equal(sched.nextSchedulable(seq, "D", canLearn), null, "其后无可用 → null");
+	assert.equal(sched.nextSchedulable(seq, "X", canLearn), "B", "cur 不在序列 → 从头找");
+});
+
+test("调度: isDueNow — 出队/未来排期判定（nextSchedulable 的 canLearn 基础）", () => {
+	const T = (offsetDays) => {
+		const d = new Date(Date.now() + offsetDays * 86400000);
+		const p = (n, l = 2) => String(n).padStart(l, "0");
+		return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
+	};
+	// isDueNow 直接接收卡字段
+	assert.equal(sched.isDueNow({}), true, "无 due = 可读");
+	assert.equal(sched.isDueNow({ due: T(7) }), false, "未来排期不可学");
+	assert.equal(sched.isDueNow({ due: T(-1) }), true, "到期/逾期可学");
+	assert.equal(sched.isDueNow({ due: T(7), "tidme.done": "yes" }), false, "done 出队");
+	assert.equal(sched.isDueNow({ "tidme.ignored": "yes" }), false);
+	assert.equal(sched.isDueNow({ "tidme.suspended": "yes" }), false);
+	assert.equal(sched.isDueNow(null), false);
 });

@@ -238,6 +238,12 @@ function highlightCardAnchors(wiki: any, doc: Document, parentTitle: string) {
 		const escFn = (window as any).CSS?.escape ?? ((s: string) => s);
 		const frame = doc.querySelector(`[data-tiddler-title="${escFn(parentTitle)}"]`);
 		if (!frame) return;
+		// 幂等：清除既有高亮 mark（制卡后重跑时不叠加）
+		frame.querySelectorAll("mark.tm-card-highlight").forEach((m: any) => {
+			const pp = m.parentNode!;
+			while (m.firstChild) pp.insertBefore(m.firstChild, m);
+			pp.removeChild(m);
+		});
 
 		for (const title of childTitles) {
 			const fields = wiki.getTiddler(title)?.fields;
@@ -526,6 +532,15 @@ function openCardModal(
 }
 
 // ---------- 动作 ----------
+/** 制卡后留在原文：不 navigate（避免视图刷新丢失阅读焦点/滚动），延迟重新高亮派生卡锚点 */
+function refreshAnchorsAfterCard(): void {
+	const w = CTX.widget?.wiki;
+	if (w) {
+		const t = CTX.widget?.getVariable?.("currentTiddler") || CTX.bodyWidget?._title || CTX.sectionWidget?._title;
+		if (t) setTimeout(() => highlightCardAnchors(w, document, t), 200);
+	}
+}
+
 function actionExtract(win: any) {
 	const tt = frameTitleOfSelection(win);
 	if (!tt) { notify("select-first"); return; }
@@ -537,7 +552,7 @@ function actionExtract(win: any) {
 	if (docId) saveReadPoint(CTX.widget.wiki, docId, { t: tt, s: selected.replace(/\s+/g, " ").trim().slice(0, 200) });
 	try { win?.getSelection?.()?.removeAllRanges(); } catch { /* ignore */ }
 	events.dispatch(CTX.widget, events.EVENTS.CARD_CREATED, tt + " › 摘录");
-	navigate(tt);
+	refreshAnchorsAfterCard();
 	notify("extract");
 }
 
@@ -558,7 +573,7 @@ function actionCloze(win: any) {
 		if (docId) saveReadPoint(CTX.widget.wiki, docId, { t: tt, s: selected.replace(/\s+/g, " ").trim().slice(0, 200) });
 		try { win?.getSelection?.()?.removeAllRanges(); } catch { /* ignore */ }
 		events.dispatch(CTX.widget, events.EVENTS.CARD_CREATED, tt + " › 挖空");
-		navigate(tt);
+		refreshAnchorsAfterCard();
 		notify("cloze");
 	});
 }
@@ -576,7 +591,7 @@ function actionQA(win: any) {
 		if (docId) saveReadPoint(CTX.widget.wiki, docId, { t: tt, s: selected.replace(/\s+/g, " ").trim().slice(0, 200) });
 		try { win?.getSelection?.()?.removeAllRanges(); } catch { /* ignore */ }
 		events.dispatch(CTX.widget, events.EVENTS.CARD_CREATED, tt + " › 问答");
-		navigate(tt);
+		refreshAnchorsAfterCard();
 		notify("cloze");
 	});
 }
@@ -839,34 +854,42 @@ function makeSectionBar(): WidgetCtor {
 				}
 			};
 			/**
-			 * 现在是否可调度：未完成/未忽略/未搁置，且 due ≤ 现在（scheduler.isDueNow）。
-			 * 尊重评分/顺延写出的未来排期 —— 修复：昨天评分提示"5天后"的卡，
-			 * 若仍在会话列表/文档序列中，不再被"下一张"导航提前重放。
+			 * 调度判定（D3 统一走 core/scheduler）：
+			 * 未完成/未忽略/未搁置且 due ≤ now（sched.isDueNow）——
+			 * 顺延/评分写出的未来排期卡不被"下一张/已读后推进"提前重放。
 			 */
-			const isDueNow = (t: string): boolean => sched.isDueNow(wiki.getTiddler(t)?.fields);
-			const getScheduledNext = () => {
-				// 1. 优先尝试从全局混合学习流会话 ($:/state/tidme/learning-session) 中寻找下一卡
-				const sessionFields = wiki.getTiddler(SESSION_STATE)?.fields;
-				if (sessionFields && Array.isArray(sessionFields.list)) {
-					const sList: string[] = sessionFields.list;
-					const sIdx = sList.indexOf(title);
-					if (sIdx !== -1) {
-						for (let i = sIdx + 1; i < sList.length; i++) {
-							if (isDueNow(sList[i])) return sList[i];
-						}
-					}
+			const learnable = (t: string): boolean => sched.isDueNow(wiki.getTiddler(t)?.fields);
+			/**
+			 * 下一张可调度卡（阅读流统一决策 = core/scheduler.nextSchedulable）：
+			 * 1. 全局学习会话（若当前卡在其中）→ 2. 本文档 topic 顺序。
+			 * section-bar 的 ▶/已读/稍后/忽略 全部经此推进，无分散重复实现。
+			 */
+			const getScheduledNext = (): string | null => {
+				const sess = wiki.getTiddler(SESSION_STATE)?.fields;
+				if (sess && Array.isArray(sess.list) && sess.list.indexOf(title) !== -1) {
+					const n = sched.nextSchedulable(sess.list, title, learnable);
+					if (n) return n;
 				}
-
-				// 2. 兜底回退单文档 topicsOfDoc 列表（同样跳过未来排期的卡）
-				const all = topicsOfDoc(wiki, docId);
-				const idx = all.indexOf(title);
-				if (idx !== -1) {
-					for (let i = idx + 1; i < all.length; i++) {
-						if (isDueNow(all[i])) return all[i];
-					}
-				}
-				return null;
+				return sched.nextSchedulable(topicsOfDoc(wiki, docId), title, learnable);
 			};
+			/** 出队后离开当前卡：移出会话 + 关闭 +（有下一张时）记录续读点并跳转 */
+			const leaveTo = (nxt: string | null) => {
+				removeTitleFromSession(title);
+				this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
+				if (nxt) {
+					saveReadPoint(wiki, docId, { t: nxt, s: "" });
+					this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
+				}
+			};
+			/** ▶ 下一节：同文档顺序里下一张"当前可读"的卡（跳过顺延/未来排期，走调度引擎） */
+			const gotoNextDoc = () => {
+				const nxt = sched.nextSchedulable(topicsOfDoc(wiki, docId), title, learnable);
+				if (!nxt) return;
+				saveReadPoint(wiki, docId, { t: nxt, s: "" });
+				this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
+				this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
+			};
+
 
 			// 1. 测试卡 (Item：挖空卡 / 问答卡)
 			const subkind = fields["tidme.subkind"];
@@ -922,6 +945,8 @@ function makeSectionBar(): WidgetCtor {
 			const queueList = fullList.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields) || x === title);
 			const { prev, next } = pipeline.neighborsOf(queueList, title);
 			const index = fullList.indexOf(title);
+			// ▶ 下一节目标 = 本文档内当前卡之后第一张可读卡（调度引擎 nextSchedulable；跳过顺延/未来排期）
+			const schedNext = sched.nextSchedulable(fullList, title, learnable);
 			const rp = parseReadPoint(wiki, docId);
 			const left = fullList.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields)).length;
 			wiki.addTiddler({ title: GLOBAL_READPOINT, text: title });
@@ -987,7 +1012,7 @@ function makeSectionBar(): WidgetCtor {
 			}
 
 			btnRow.appendChild(mkBtn("", "nav", "上一节", !prev, () => { if (prev) gotoSection(prev); }, "chevron-left"));
-			btnRow.appendChild(mkBtn("", "nav", "下一节", !next, () => { if (next) gotoSection(next); }, "chevron-right"));
+			btnRow.appendChild(mkBtn("", "nav", "下一节", !schedNext, () => { if (schedNext) gotoNextDoc(); }, "chevron-right"));
 
 			sep();
 
@@ -1012,16 +1037,7 @@ function makeSectionBar(): WidgetCtor {
 					this._flushSave();
 					this._flushReadTime?.();
 					wiki.addTiddler(sched.doneCard(fields));
-					events.dispatch(this, events.EVENTS.SECTION_DONE, title);
-					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					// 撤销已读：通过文档页"已读卡"面板的"重新加入"按钮（section-bar 已随 tm-close-tiddler 关闭，按钮放此处拿不到点击）
-					const nxt = getScheduledNext();
-					removeTitleFromSession(title);
-					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
-					if (nxt) {
-						saveReadPoint(wiki, docId, { t: nxt, s: "" });
-						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
-					}
+					leaveTo(getScheduledNext());
 					notify("done");
 				}));
 				btnRow.appendChild(mkBtn("⏩", "later", "稍后再看 (SM A-Factor)：按优先级指数顺延展期", false, () => {
@@ -1029,14 +1045,7 @@ function makeSectionBar(): WidgetCtor {
 					this._flushReadTime?.();
 					const patch = sched.postponeTopicByAFactor(fields);
 					wiki.addTiddler({ ...fields, ...patch });
-					events.dispatch(this, events.EVENTS.SECTION_LATER, title);
-					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					const nxt = getScheduledNext();
-					removeTitleFromSession(title);
-					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
-					if (nxt) {
-						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
-					}
+					leaveTo(getScheduledNext());
 					notify("later");
 				}));
 				btnRow.appendChild(mkBtn("⚡ 提前", "advance", "今日抢占排期 (SM Topic 提前)：强行加入今日队列并提升优先级", false, () => {
@@ -1050,14 +1059,7 @@ function makeSectionBar(): WidgetCtor {
 				btnRow.appendChild(mkBtn("忽略", "ignore", "标记不重要：移出阅读队列", false, () => {
 					this._flushSave();
 					this._flushReadTime?.();
-					wiki.addTiddler(sched.ignoreCard(fields));
-					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					const nxt = getScheduledNext();
-					this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
-					if (nxt) {
-						saveReadPoint(wiki, docId, { t: nxt, s: "" });
-						this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
-					}
+					leaveTo(getScheduledNext());
 					notify("done");
 				}));
 			}

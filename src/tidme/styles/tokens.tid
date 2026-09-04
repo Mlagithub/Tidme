@@ -297,6 +297,12 @@ body.tc-body-dark {
 	background: #0f172a;
 	color: var(--tm-text-1);
 }
+
+/* 深色下顶部条栏不透明兜底（与 styles.tid 的 solid fallback 配合，防止半透明底色透出正文） */
+[data-tme-dark] .tm-section-bar,
+[data-tme-dark] .tmc-study-bar {
+	background: #1e293b;
+}
 [data-tme-dark] .tc-page-container,
 [data-tme-dark] .tc-story-river,
 [data-tme-dark] .tc-sidebar-scrollable,

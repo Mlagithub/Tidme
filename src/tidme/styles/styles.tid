@@ -339,7 +339,9 @@ type: text/css
 	position: sticky;
 	top: 0;
 	z-index: 60;
-	background: var(--tm-surface);
+	/* 不透明底色：var 失效/半透明主题时回落纯色，防止长文滚动时正文透出遮挡按钮 */
+	background: #ffffff;
+	background: var(--tm-surface, #ffffff);
 	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 	display: flex;
 	flex-direction: column;
@@ -1758,7 +1760,9 @@ mark.tm-readpoint {
     position: sticky;
     top: 0;
     z-index: 60;
-    background: var(--tm-surface);
+    /* 不透明底色（fallback 同 .tm-section-bar） */
+    background: #ffffff;
+    background: var(--tm-surface, #ffffff);
     padding: 4px 0 6px;
     border-bottom: 1px solid var(--tm-border);
 }

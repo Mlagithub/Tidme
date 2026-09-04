@@ -150,6 +150,25 @@ export function isDueNow(fields: Record<string, any> | null | undefined, now = n
 	return parseTwDate(due).getTime() <= now.getTime();
 }
 
+/**
+ * 序列推进（阅读流"下一张"统一决策，D3）：
+ * 在有序 title 序列中，从 cur 之后找第一张"当前可学"的卡；cur 为 null 时从序列头找。
+ * 可学判定由调用方注入（通常是 isDueNow(fields) —— 已含出队/未来排期过滤），
+ * 使 section-bar / 阅读列表 / 文档页 / 复习帧等所有"下一张"入口共享同一调度算法。
+ * 找不到返回 null。
+ */
+export function nextSchedulable(
+	ordered: readonly string[],
+	cur: string | null,
+	canLearn: (title: string) => boolean
+): string | null {
+	const start = cur === null || cur === undefined ? 0 : ordered.indexOf(cur) + 1;
+	for (let i = start; i < ordered.length; i++) {
+		if (canLearn(ordered[i])) return ordered[i];
+	}
+	return null;
+}
+
 export type QueueSortMode = "priority-first" | "due-first" | "hybrid";
 
 /**
