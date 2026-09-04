@@ -887,6 +887,9 @@ function makeSectionBar(): WidgetCtor {
 			const gotoNextDoc = () => {
 				const nxt = getScheduledNext();
 				if (!nxt) return;
+				// ▶ 会话中 = 明确"跳过本卡"：移出会话，避免滞留卡被复习流"下一张"
+				// （从会话头找）反复拉回 → 摘录↔词卡 1:1 死循环。
+				removeTitleFromSession(title);
 				saveReadPoint(wiki, docId, { t: nxt, s: "" });
 				this.dispatchEvent({ type: "tm-close-tiddler", param: title, tiddlerTitle: title });
 				this.dispatchEvent({ type: "tm-navigate", navigateTo: nxt });
