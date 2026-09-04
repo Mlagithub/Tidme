@@ -17,6 +17,7 @@ const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
 const stats = require("$:/plugins/keepone/tidme/core/stats.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 type View = "all" | "inqueue" | "done" | "suspended" | "overdue";
@@ -125,16 +126,15 @@ function makeCardManager(): WidgetCtor {
 				allCards = wiki.filterTiddlers(CARD_FILTER)
 					.filter((t: string, i: number, arr: string[]) => arr.indexOf(t) === i)
 					.map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
-				deckInfos = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]").map((deck: string) => {
+deckInfos = deckMod.listDecks(wiki).map((deck: string) => {
 					const f = wiki.getTiddler(deck)?.fields || {};
 					return {
 						title: deck,
 						caption: uiUtils.captionText(wiki, f.caption || deck.split("/").pop() || deck, this),
-						strict: new Set(wiki.filterTiddlers(`[subfilter{${deck}!!card}!subfilter{${deck}!!card_exclude}]`)),
-						loose: new Set(wiki.filterTiddlers(`[subfilter{${deck}!!card}]`))
+						strict: new Set(deckMod.deckCards(wiki, deck)),
+						loose: new Set(deckMod.deckCards(wiki, deck, { strict: false }))
 					};
-				});
-			};
+				})			};
 
 			const inView = (f: Record<string, any>, v: View): boolean => {
 				const suspended = f["tidme.suspended"] === "yes";

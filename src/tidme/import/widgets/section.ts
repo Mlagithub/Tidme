@@ -18,6 +18,7 @@ const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
 const paths = require("$:/plugins/keepone/tidme/core/paths.js");
 const sessionMod = require("$:/plugins/keepone/tidme/core/session.js");
+const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
@@ -1280,23 +1281,22 @@ function makeDocResume(): WidgetCtor {
 				const subsetBtn = el(doc, "button", "tm-btn tm-btn--primary", "复习本书");
 				subsetBtn.title = `子集复习：仅复习本书 ${inQueueCount} 张挖空/问答卡（临时牌组，复习完可删除）`;
 				subsetBtn.addEventListener("click", () => {
-					// 从任意现有 deck 复制调度字段，覆盖 card 为本书 item 子集过滤器
-					const baseDeck = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]")[0];
-					const bf = (baseDeck && wiki.getTiddler(baseDeck)?.fields) || {};
-					const docFields = wiki.getTiddler(title)?.fields || {};
 					// 子集牌组放"文档页所在 folder 的 Decks 镜像"（folder 冲突带 ~docId 后缀时亦准确）：
 					// 文档页 title == folder 根（含后缀），Books→Decks 即 decks 根
 					const deckRoot = String(title).replace(/^Tidme\/Books\//, "Tidme/Decks/") || `Tidme/Decks/${paths.leafIdOf(title)}`;
 					const deckTitle = `${deckRoot}/复习本书`;
-					wiki.addTiddler({
-						...bf,
-						title: deckTitle,
-						tags: ["$:/tags/TidmeDeck"],
-						caption: `复习：${uiUtils.displayTitle(docFields, title)}`,
-						description: "临时子集牌组（复习本书测试卡）——复习完可删除",
+					const docFields = wiki.getTiddler(title)?.fields || {};
+					// 统一走 core/deck（低层 fsrs4tw 字段由 configToFields 生成；重复点击 = 刷新 card）
+					const cfg: any = {
+						name: deckTitle,
+						kind: "subset",
+						sourceDoc: docId,
 						card: itemFilter,
-						"tidme.subset-doc": docId
-					});
+						caption: `复习：${uiUtils.displayTitle(docFields, title)}`,
+						description: "临时子集牌组（复习本书测试卡）——复习完可删除"
+					};
+					if (deckMod.getDeck(wiki, deckTitle)) deckMod.updateDeck(wiki, deckTitle, deckMod.configToFields(wiki, cfg));
+					else deckMod.createDeck(wiki, cfg);
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: deckTitle });
 				});
 				// 并入横幅右侧操作区（P1）

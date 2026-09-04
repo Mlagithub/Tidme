@@ -6,6 +6,7 @@ core/doc-ops.ts — 文档/卡片运维操作（文档查询、删除阅读材�
 
 declare function require(module: string): any;
 const session = require("$:/plugins/keepone/tidme/core/session.js");
+const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 
 const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
 
@@ -112,13 +113,15 @@ export function prepareCardFold(wiki: any, title: string): void {
 	const f = wiki.getTiddler(title)?.fields;
 	if (!f || f["tidme.kind"] !== "item") return;
 	// 卡所属 deck（同复习帧 decktiddler 语义：card 收录它的第一个 deck）；取该 deck 的 card_unfold
-	const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]");
+	const decks = deckMod.listDecks(wiki);
 	for (const d of decks) {
-		if (!wiki.filterTiddlers(`[subfilter{${d}!!card}]`).includes(title)) continue;
-		const unfold = wiki.filterTiddlers(`[subfilter{${d}!!card_unfold}]`).includes(title);
+		if (!deckMod.deckCards(wiki, d).includes(title)) continue;
+		const f = deckMod.getDeck(wiki, d)?.fields || {};
+		const unfoldFilter = String(f.card_unfold || "");
+		const unfold = unfoldFilter && wiki.filterTiddlers(`[subfilter{${d}!!card_unfold}]`).includes(title);
 		wiki.addTiddler({ title: "$:/state/folded/" + title, text: unfold ? "show" : "hide" });
 		return;
 	}
 	// 兜底：默认折叠
-	wiki.addTiddler({ title: "$:/state/folded/" + title, text: "hide" });
+	wiki.addTiddler({ title: "$:/state/folded/" + title, text: "hide" })
 }

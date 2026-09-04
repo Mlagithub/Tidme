@@ -8,6 +8,9 @@ icon: $:/plugins/keepone/tidme/review/icon
 <div class="tm-decks-top"><div class="tm-decks-title">学习中心</div><$tidme-theme-toggle/></div>
 <div class="tm-decks-sub">开始学习 = 复习全部到期与新知识卡（挖空/问答）的连续学习流，不混入阅读材料；下方复习牌组集中管理知识卡（默认牌组自动收录全部挖空/问答），阅读材料在阅读列表/文档页独立阅读（勾选按钮旁选项可让到期阅读材料按 4:1 交错进学习流）。</div>
 <$tidme-workflow/>
+<div style="display:flex;justify-content:flex-end;margin:2px 0 6px">
+<span class="tm-btn tm-btn-sm">[[🃏 管理牌组|$:/plugins/keepone/tidme/manager/ui/deck-manager]]</span>
+</div>
 <$tidme-nav/>
 </div>
 

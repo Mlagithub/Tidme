@@ -12,6 +12,7 @@ declare function require(module: string): any;
 const stats = require("$:/plugins/keepone/tidme/core/stats.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 // 共享 DOM 工具（实现收敛于 core/ui-utils）
@@ -37,7 +38,7 @@ function makeStatsPanel(): WidgetCtor {
 				const cardLikes = (filter: string) =>
 					wiki.filterTiddlers(filter).map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
 
-				const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]");
+				const decks = deckMod.listDecks(wiki);
 				const docs = wiki.filterTiddlers("[tag[tidme-import-doc]]");
 				const all = cardLikes("[!is[system]]");
 				const funnel = stats.funnelCounts(all);
@@ -102,7 +103,7 @@ function makeStatsPanel(): WidgetCtor {
 					tbody.lastChild.appendChild(td);
 				}
 				for (const deck of decks) {
-					const cards2 = cardLikes(`[subfilter{${deck}!!card}!subfilter{${deck}!!card_exclude}]`);
+					const cards2 = deckMod.deckCards(wiki, deck).map((t) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
 					const load = stats.deckLoad(cards2);
 					const tr = el(doc, "tr", "");
 					tr.appendChild(el(doc, "td", "tm-stats-deck", deck));

@@ -11,6 +11,7 @@ declare function require(module: string): any;
 const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
 const events = require("$:/plugins/keepone/tidme/core/events.js");
 const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 // 共享 DOM 工具（实现收敛于 core/ui-utils）
@@ -81,7 +82,7 @@ function makeQueueOps(): WidgetCtor {
 
 			const renderList = () => {
 				list.textContent = "";
-				const decks = wiki.filterTiddlers("[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]!is[draft]]");
+				const decks = deckMod.listDecks(wiki);
 				if (!decks.length) {
 					const empty = el(doc, "div", "tm-empty", "");
 					empty.appendChild(el(doc, "div", "tm-empty-icon", "🃏"));
@@ -90,7 +91,7 @@ function makeQueueOps(): WidgetCtor {
 					return;
 				}
 				for (const deck of decks) {
-					const cards = wiki.filterTiddlers(`[subfilter{${deck}!!card}!subfilter{${deck}!!card_exclude}]`);
+					const cards = deckMod.deckCards(wiki, deck);
 					// P2：每牌组一张卡片（名称 + 计数 + 动作组）
 					const card = el(doc, "div", "tm-queue-card");
 					const head = el(doc, "div", "tm-queue-card-head");

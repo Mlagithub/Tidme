@@ -1,0 +1,14 @@
+title: $:/plugins/keepone/tidme/manager/ui/deck-manager
+caption: 牌组管理
+
+<div class="tm-page">
+
+<$tidme-nav/>
+
+<div class="tm-decks-sub">牌组 = 复习流的容器，成员由 card 过滤器决定。新建/编辑/删除均在本页；<strong>删除牌组默认只删容器、成员卡保留</strong>（挖空/问答卡仍由默认牌组收录）。</div>
+
+<$deck-manager/>
+
+<div style="margin-top:20px"><span class="tm-import-muted">← </span>[[返回学习中心|$:/Decks]]</div>
+
+</div>
