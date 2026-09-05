@@ -6,7 +6,7 @@ split.ts — 通用切分器（M2 核心）
 产物即标准 TW 导入格式；节卡带 kind=topic（阅读材料）。
 
 docId 由源标题派生（同一 tiddler 重切分 ID 稳定；标题唯一性由 TW 保证）。
-G1 干预：runSplit 接受 overrides（按 trail key 强制合并/拆分），预览微调后落库。
+G1 干预（挂账）：overrides API 在 chunker 层（applyOverrides，有测试）；UI 接入前 runSplit 不线程此参数。
 */
 
 import { makeDocId, makeSectionId, contentFingerprint, normalizeText } from "$:/plugins/keepone/tidme/core/ids";
@@ -15,7 +15,7 @@ import { bookRoot, joinPath, sectionLeaf } from "$:/plugins/keepone/tidme/core/p
 import { initialFsrsFields, twDateString } from "$:/plugins/keepone/tidme/core/schema";
 import { normalizePriority, PRIORITY_DEFAULT, afactorForText } from "$:/plugins/keepone/tidme/core/scheduler";
 import { chunkBook, applyOverrides } from "./chunker";
-import type { ChunkOptions, RawSection, SplitOverrides } from "./chunker";
+import type { ChunkOptions, RawSection } from "./chunker";
 import { blocksFromMarkdown, blocksFromWikitext, blocksFromHtml, blocksFromPlainText, sniffFormat, guessTitle, formatLabel } from "./ingest-text";
 import type { TextFormat } from "./ingest-text";
 
@@ -49,8 +49,10 @@ export interface SplitInput {
 	autoDeck?: boolean;
 	/** 卡片优先级 0–100（0 最高；默认 50；M4） */
 	priority?: number;
-	/** G1 干预：按 trail key 强制合并/拆分（预览微调后落库用） */
-	overrides?: SplitOverrides;
+	/**
+	 * G1 干预（挂账）：overrides 管线 API 已实现（chunker.applyOverrides，有测试），
+	 * 但导入预览 UI 走 _deleted/_renamed 标记，未经 runSplit 传入——UI 接入时在此恢复参数。
+	 */
 	/**
 	 * 命名空间冲突探测：给定候选 book folder（Tidme/Books/<slug>），返回占用它的 docId（无占用返回 null）。
 	 * 同名书（不同 docId）导入时据此加 ~docId 后缀，避免文档页互相覆盖；同一 docId 重导入幂等复用。
@@ -158,8 +160,7 @@ export async function emitTiddlers(
 			"tidme.priority": String(normalizePriority(priority)),
 			// SM 对齐：A-Factor 按文本长度启发式设定（短材料快速展期、长材料平缓长尾）
 			"tidme.afactor": String(afactorForText(s.chars)),
-			"tidme.path": joined,
-			"tidme.breadcrumb": joined, // 兼容旧字段名（保持 alignCards 匹配）
+			"tidme.breadcrumb": joined, // 路径显示唯一字段（tidme.path 已废止：同值冗余、无读取方）
 			"tidme.source": meta.title || "",
 			"tidme.author": meta.creator || "",
 			"tidme.format": format,
@@ -202,7 +203,6 @@ export async function emitTiddlers(
 /**
  * 通用切分：任意 markdown / wikitext / HTML / TXT 文本 → 文档页 + Section 卡 + 自动 deck。
  * 同一输入（title + text 不变）重切分产物确定（ID 稳定）。
- * overrides 按 trail key 干预（合并/拆分），重切分后 key 稳定不漂移。
  */
 export async function runSplit(input: SplitInput): Promise<SplitResult> {
 	const text = String(input.text || "");
@@ -220,8 +220,7 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
 
 	const { sections, stats } = chunkBook(
 		[{ fileName: bookTitle, fileBreadcrumb: [], blocks }],
-		{ maxChars: input.maxChars, minChars: input.minChars },
-		input.overrides
+		{ maxChars: input.maxChars, minChars: input.minChars }
 	);
 	const metaWithFormat = { ...meta, __format: format };
 	const { tiddlers, warnings } = await emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority, input.folderOccupied);
@@ -239,5 +238,3 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
 }
 
 export { twDateString, initialFsrsFields };
-// 干预指令（G1）实现收敛于 chunker.ts（chunkBook 内部同源使用），此处仅转发保 API 兼容
-export { applyOverrides } from "./chunker";

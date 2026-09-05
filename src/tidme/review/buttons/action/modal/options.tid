@@ -1,5 +1,5 @@
 title: $:/plugins/keepone/tidme/review/buttons/action/modal/options
-footer: <div style="display:flex;width:100%;justify-content:space-between;"><$button message="tm-close-tiddler" class="tmc-btn-dirty"><$action-deletetiddler $tiddler=<<deckTiddler>>/>{{$:/language/Buttons/Delete/Caption}}</$button><div><$button message="tm-close-tiddler"><$action-deletetiddler $tiddler="$:/temp/tidme/options"/>{{$:/language/Buttons/Cancel/Caption}}</$button>  <$button message="tm-close-tiddler" class="tmc-btn-primary"><$action-createtiddler $basetitle=<<deckTiddler>> $template="$:/temp/tidme/options" $overwrite="yes"/>{{$:/language/Buttons/Save/Caption}}</$button></div></div>
+footer: <div style="display:flex;width:100%;justify-content:space-between;align-items:center;gap:8px;"><$deck-delete deck=<<deckTiddler>>/><div style="display:flex;gap:8px;margin-left:auto;"><$button message="tm-close-tiddler" class="tm-btn"><$action-deletetiddler $tiddler="$:/temp/tidme/options"/>{{$:/language/Buttons/Cancel/Caption}}</$button>  <$button message="tm-close-tiddler" class="tm-btn tm-btn-primary"><$action-createtiddler $basetitle=<<deckTiddler>> $template="$:/temp/tidme/options" $overwrite="yes"/>{{$:/language/Buttons/Save/Caption}}</$button></div></div>
 subtitle: {{$:/language/tidme/options}}: <$text text=<<deckTiddler>> />
 code-body: yes
 

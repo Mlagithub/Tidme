@@ -5,7 +5,7 @@ migrate-parent.cjs — 旧数据迁移：为缺 tidme.parent 的 Section 卡补 
 本脚本按 breadcrumb 反推层级：
   - 节 的父 = breadcrumb 去掉末段后对应的 tiddler（按 tidme.breadcrumb 精确匹配）
   - 找不到则父 = 文档页（breadcrumb 首段，tidme-import-doc 标签）
-同时补 tidme.path（= tidme.breadcrumb）。
+tidme.path 已废止（与 breadcrumb 同值），不再回填。
 
 用法：
   node tools/migrate-parent.cjs <wiki-dir> [--dry-run]
@@ -48,7 +48,6 @@ for (const title of sections) {
 		parent = wiki.filterTiddlers(`[title[${segs[0]}]tag[tidme-import-doc]]`)[0] || segs[0];
 	}
 	const patch = { title, "tidme.parent": parent };
-	if (!f["tidme.path"]) patch["tidme.path"] = bc;
 	if (dryRun) {
 		console.log(`[dry] ${title} -> parent=${parent}`);
 	} else {

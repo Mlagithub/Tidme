@@ -1,0 +1,19 @@
+title: $:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row
+
+<!-- 「今天」页牌组行：名称（链到牌组详情）+ 三计数徽章；拖拽排序由 list-tagged-draggable 提供 -->
+<$let
+    deckTiddler=<<currentTiddler>>
+    filter_learn=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]`
+    filter_due=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_due}] +[subfilter{$(deckTiddler)$!!order_due}]`
+    filter_new=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_new}] +[subfilter{$(deckTiddler)$!!order_new}]`
+>
+<div class="tm-today-deck-row">
+<$link to=<<deckTiddler>>><span class="tm-today-deck-name"><$wikify name="deckCaption" text={{{ [<deckTiddler>get[caption]] ~[<deckTiddler>split[/]last[]] }}} mode="inline" output="text"><<deckCaption>></$wikify></span></$link>
+<span class="tm-today-deck-counts">
+<span class="tm-badge tm-badge-learn"><$text text={{$:/language/tidme/learn}}/> <$count filter="[subfilter<filter_learn>]"/></span>
+<span class="tm-badge tm-badge-due"><$text text={{$:/language/tidme/due}}/> <$count filter="[subfilter<filter_due>]"/></span>
+<span class="tm-badge tm-badge-new"><$text text={{$:/language/tidme/new}}/> <$count filter="[subfilter<filter_new>]"/></span>
+</span>
+<span class="tm-today-deck-open"><$link to=<<deckTiddler>> class="tm-btn tm-btn--sm">打开 ›</$link></span>
+</div>
+</$let>

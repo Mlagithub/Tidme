@@ -7,11 +7,9 @@ tags: $:/tags/Tidme
 
 ! 导入的文档
 
-每本书一个子目录：//Tidme/Books/<书名>//。子目录下：
+每本书一个目录：//Tidme/Books/<书名>//（同名书冲突时追加 ~docId 后缀）。目录内拍平：
 
-* <<currentTiddler>> 文档页
-* 章节子目录（按书目录层级）
-* 每个节卡是 $:<章>/<s<hash>>$ tiddler
-* 摘录/挖空/问答作为节卡的子 tiddler
-
-打开 [[导入中心|$:/plugins/keepone/tidme/import/ui/import-center]] 导入新书。
+* 文档页（title = 目录根，tags 含 tidme-import-doc）
+* 节卡：//<可读短标题>-<sectionId>//（tidme.kind=topic / subkind=section）
+* 摘录卡：//<节叶段>--extract//（与节卡同目录）
+* 挖空/问答不在本目录——移到平行命名空间 //Tidme/Decks/<书名>//

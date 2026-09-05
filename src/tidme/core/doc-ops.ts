@@ -8,7 +8,9 @@ declare function require(module: string): any;
 const session = require("$:/plugins/keepone/tidme/core/session.js");
 const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 
-const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
+export const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
+/** 全局续读点（最近打开的阅读卡；section-bar 写、workflow「开始阅读」读） */
+export const GLOBAL_READPOINT = READPOINT_PREFIX + "global";
 
 /** 某 book folder（Tidme/Books/<slug>）下第一张带 tidme.doc 的卡所属 docId（无占用返回 null）——同名书冲突探测 */
 export function docFolderOwner(wiki: any, baseFolder: string): string | null {
@@ -30,15 +32,34 @@ function isDocPage(f: Record<string, any>): boolean {
 	return Array.isArray(f.tags) && f.tags.includes("tidme-import-doc");
 }
 
-/** 续读点目标 title（readpoint tiddler text：JSON {t,s} 或旧版纯标题） */
-function readpointTarget(raw: string | undefined): string {
-	const s = String(raw || "").trim();
-	if (!s) return "";
+/** 续读点 text 解析（JSON {t,s} 或旧版纯标题）→ {t,s}；空返回 null */
+function parseReadPointRaw(raw: string | undefined): { t: string; s: string } | null {
+	const s0 = String(raw || "").trim();
+	if (!s0) return null;
 	try {
-		const o = JSON.parse(s);
-		if (o && o.t) return String(o.t);
+		const o = JSON.parse(s0);
+		if (o && o.t) return { t: String(o.t), s: String(o.s || "") };
 	} catch { /* 旧格式 */ }
-	return s;
+	return { t: s0, s: "" };
+}
+
+/** 读续读点（$:/state/tidme-import/readpoint/<docId>；无 → null）。阅读条栏/文档页/全局续读唯一实现 */
+export function parseReadPoint(wiki: any, doc: string): { t: string; s: string } | null {
+	if (!wiki || !doc) return null;
+	const t = wiki.getTiddler(READPOINT_PREFIX + doc);
+	return t ? parseReadPointRaw(String(t.fields.text || "")) : null;
+}
+
+/** 写续读点（text = JSON {t,s}） */
+export function saveReadPoint(wiki: any, doc: string, rp: { t: string; s: string }): void {
+	if (!wiki || !doc || !rp || !rp.t) return;
+	wiki.addTiddler({ title: READPOINT_PREFIX + doc, type: "application/json", text: JSON.stringify(rp) });
+}
+
+/** 清除续读点 */
+export function clearReadPoint(wiki: any, doc: string): void {
+	if (!wiki || !doc) return;
+	wiki.deleteTiddler(READPOINT_PREFIX + doc);
 }
 
 /**
@@ -75,14 +96,10 @@ export function deleteDocContent(wiki: any, docId: string): number {
 		}
 	}
 	// 续读点：仅当指向被删内容时清除（指向保留的摘录/卡则保留）
-	const rpTiddler = wiki.getTiddler(READPOINT_PREFIX + docId);
-	if (rpTiddler && targets.has(readpointTarget(String(rpTiddler.fields.text)))) {
-		wiki.deleteTiddler(READPOINT_PREFIX + docId);
-	}
-	const g = wiki.getTiddler(READPOINT_PREFIX + "global");
-	if (g && targets.has(readpointTarget(String(g.fields.text)))) {
-		wiki.deleteTiddler(READPOINT_PREFIX + "global");
-	}
+	const rpTarget = parseReadPointRaw(String(wiki.getTiddler(READPOINT_PREFIX + docId)?.fields.text || ""));
+	if (rpTarget && targets.has(rpTarget.t)) wiki.deleteTiddler(READPOINT_PREFIX + docId);
+	const gTarget = parseReadPointRaw(String(wiki.getTiddler(READPOINT_PREFIX + "global")?.fields.text || ""));
+	if (gTarget && targets.has(gTarget.t)) wiki.deleteTiddler(READPOINT_PREFIX + "global");
 
 	let n = 0;
 	for (const t of targets) {

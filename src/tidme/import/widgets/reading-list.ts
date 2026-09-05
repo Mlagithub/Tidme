@@ -10,20 +10,23 @@ widgets/reading-list.ts — 阅读列表（topic 队列，统一阅读入口）
 
 declare function require(module: string): any;
 const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
-const events = require("$:/plugins/keepone/tidme/core/events.js");
-const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const dom = require("$:/plugins/keepone/tidme/core/dom.js");
+const dialog = require("$:/plugins/keepone/tidme/core/dialog.js");
+const icons = require("$:/plugins/keepone/tidme/core/icons.js");
+const display = require("$:/plugins/keepone/tidme/core/display.js");
+const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
 const paths = require("$:/plugins/keepone/tidme/core/paths.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
-// 共享 DOM/转义/文档节查询（实现收敛于 core/ui-utils）
-const el = uiUtils.el;
-const escapeHtml = uiUtils.escapeHtml;
+// 共享 DOM/徽章/文档节查询（实现收敛于 core/dom、core/display、core/doc-ops）
+const el = dom.el;
+const badgeOf = display.badgeOf;
+const sectionsOfDoc = docOps.sectionsOfDoc;
 
 /** 阅读列表过滤（topic 队列）：全库 kind=topic 卡，未搁置/未完成。
- * 忽略（tidme.ignored）与已读（tidme.done）自动出列；item 卡不在此页。 */
-function topicQueueFilter(): string {
-	return "[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!has[tidme.suspended]!has[tidme.done]!has[tidme.ignored]]";
-}
+ * 忽略（tidme.ignored）与已读（tidme.done）自动出列；item 卡不在此页。
+ * 过滤器唯一产地 = core/scheduler.TOPIC_QUEUE_FILTER（勿在此手拼）。 */
+const topicQueueFilter = () => sched.TOPIC_QUEUE_FILTER;
 
 interface TopicCard {
 	title: string;
@@ -76,8 +79,6 @@ function groupByDoc(cards: TopicCard[]): { doc: string; cards: TopicCard[] }[] {
 		.sort((a, b) => String(a.doc).localeCompare(String(b.doc), "zh"));
 }
 
-/** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 中排除摘录） */
-const sectionsOfDoc = uiUtils.sectionsOfDoc;
 
 function makeReadingList(): any {
 	class ReadingListWidget extends Widget {
@@ -95,15 +96,6 @@ function makeReadingList(): any {
 			this.build();
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
-			// 事件总线：队列/导入/制卡变化 → 重建（实例判活）
-			this._rerender = () => { if (this._root) this.build(); };
-			if (!this._bound) {
-				this._bound = true;
-				events.bindComponentRefresh(
-					[events.EVENTS.QUEUE_CHANGED, events.EVENTS.IMPORT_DONE, events.EVENTS.CARD_CREATED],
-					this._rerender
-				);
-			}
 		}
 
 		build() {
@@ -123,12 +115,7 @@ function makeReadingList(): any {
 				`${groups.length} 篇文档 · ${total} 张待读`));
 			if (!compact) {
 				head.appendChild(el(doc, "div", "tm-rl-sub", "按优先级和到期时间排序"));
-				const toDeck = el(doc, "button", "tm-btn tm-rl-deck-btn", "去复习 →");
-				toDeck.title = "跳转默认牌组（复习流：挖空/问答）";
-				toDeck.addEventListener("click", () => {
-					this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/Deck/default" });
-				});
-				head.appendChild(toDeck);
+
 			}
 			root.appendChild(head);
 
@@ -156,7 +143,7 @@ function makeReadingList(): any {
 				// 真实 doc tiddler title（命名空间路径，folder 冲突时含 ~docId 后缀）：
 				// 按 docId 查真实文档页（B1），不再由书名+docId 重算（slug 规则一变即失配）
 				const bookTitle = g.cards[0].breadcrumb.split(" › ")[0] || "";
-				const docTiddlerTitle = uiUtils.docPageOfDoc(wiki, g.doc)
+				const docTiddlerTitle = docOps.docPageOfDoc(wiki, g.doc)
 					|| (bookTitle ? paths.bookRoot(bookTitle, g.doc) : "");
 				const docLabel = bookTitle || g.doc;
 
@@ -192,14 +179,21 @@ function makeReadingList(): any {
 				sum.appendChild(cont);
 
 				// 删除阅读材料（文档页 + 节卡/大纲新节）；摘录/挖空/问答/手动散卡等知识产物保留
-				const del = el(doc, "button", "tm-btn tm-rl-del", "🗑 清理阅读");
+				const del = icons.iconButton(doc, "tm-btn tm-rl-del", "trash", "清理阅读");
 				del.title = "删除本书阅读材料（文档页 + 全部普通节卡）；已提取的知识（摘录/挖空/问答）保留在复习流";
-				del.addEventListener("click", (e: Event) => {
+				del.addEventListener("click", async (e: Event) => {
 					e.preventDefault(); e.stopPropagation();
-					if (confirm(`删除《${docLabel}》的阅读材料？\n\n将删除文档页与全部普通节卡（含大纲手动插入的新节）。\n已提取的知识（摘录/挖空/问答/手动卡）会保留，不受影响。\n此操作不可恢复。`)) {
-						const n = uiUtils.deleteDocContent(wiki, g.doc);
-						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-						if (n === 0) alert("没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。");
+					if (await dialog.confirmDialog(doc, {
+						title: "清理阅读材料",
+						message: `删除《${docLabel}》的阅读材料？
+
+将删除文档页与全部普通节卡（含大纲手动插入的新节）。
+已提取的知识（摘录/挖空/问答/手动卡）会保留，不受影响。
+此操作不可恢复。`,
+						confirmLabel: "删除", danger: true
+					})) {
+						const n = docOps.deleteDocContent(wiki, g.doc);
+						if (n === 0) await dialog.alertDialog(doc, { message: "没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。" });
 					}
 				});
 				sum.appendChild(del);
@@ -229,7 +223,7 @@ function makeReadingList(): any {
 					tr.appendChild(kindTd);
 
 					const titleTd = el(doc, "td", "", "");
-					const titleLink = el(doc, "a", "tc-tiddlylink tm-rl-title", uiUtils.displayTitle(c.fields, c.title));
+					const titleLink = el(doc, "a", "tc-tiddlylink tm-rl-title", display.displayTitle(c.fields, c.title));
 					titleLink.href = "#";
 					titleLink.title = "打开阅读";
 					titleLink.addEventListener("click", (e: Event) => {
@@ -244,16 +238,9 @@ function makeReadingList(): any {
 						priTd.title = `优先级 ${c.priority}（0 最高）`;
 						tr.appendChild(priTd);
 						const dueTd = el(doc, "td", "", "");
-						const dueTxt = dueLabel(c);
-						if (dueTxt) {
-							const badgeCls =
-								dueTxt === "逾" ? "tm-badge tm-badge-overdue" :
-								dueTxt === "到" ? "tm-badge tm-badge-due" :
-								dueTxt === "学" ? "tm-badge tm-badge-learn" :
-								"tm-badge tm-badge-new";
-							const badge = el(doc, "span", badgeCls, dueTxt);
-							dueTd.appendChild(badge);
-						}
+						// 状态徽章统一走 core/display.badgeOf（本页已过滤 done/suspended，无 ✓/⏸ 分支）
+						const bd = badgeOf(c.fields);
+						dueTd.appendChild(el(doc, "span", `tm-badge ${bd.cls}`, bd.text));
 						tr.appendChild(dueTd);
 					}
 
@@ -282,16 +269,6 @@ function makeReadingList(): any {
 		}
 	}
 	return ReadingListWidget as any;
-}
-
-function dueLabel(c: TopicCard): string {
-	const state = String(c.fields.state || "0");
-	if (state === "2") {
-		const overdue = c.due.getTime() < Date.now();
-		return overdue ? "逾" : "到";
-	}
-	if (state === "1" || state === "3") return "学";
-	return "新";
 }
 
 exports["reading-list"] = makeReadingList();

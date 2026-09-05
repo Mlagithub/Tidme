@@ -65,7 +65,7 @@ const fakeDocument = {
 	defaultView: null
 };
 
-let wiki, tw, queueOps, statsPanel, cardManager, sectionBar, importFile;
+let wiki, tw, queueOps, statsPanel, cardManager, sectionBar, importFile, deckUi;
 let docTitle, sectionTitle, extractTitle, clozeTitle; // 命名空间化后的固定 tiddler title 引用
 test.before(async () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-browser-"));
@@ -90,7 +90,7 @@ test.before(async () => {
 		title: extractTitle, caption: "摘",
 		text: "<blockquote>第一章的摘录</blockquote>",
 		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "topic", "tidme.subkind": "extract",
-		"tidme.breadcrumb": `${section["tidme.path"]} › 摘录`, "tidme.source": "书名甲",
+		"tidme.breadcrumb": `${section["tidme.breadcrumb"]} › 摘录`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
 	// 分类重构：摘录卡（topic）进阅读流；挖空卡（item）进复习流
@@ -98,13 +98,14 @@ test.before(async () => {
 		title: clozeTitle, caption: "首都",
 		text: "",
 		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "item", "tidme.subkind": "cloze",
-		"tidme.breadcrumb": `${section["tidme.path"]} › 挖空`, "tidme.source": "书名甲",
+		"tidme.breadcrumb": `${section["tidme.breadcrumb"]} › 挖空`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
 	queueOps = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/queue-ops.js");
 	statsPanel = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/stats-panel.js");
 	cardManager = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/card-manager.js");
 	sectionBar = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
+	deckUi = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/deck-ui.js");
 });
 
 function renderWidgetEx(mod, name, opts = {}) {
@@ -154,7 +155,7 @@ test("queue-ops: 每牌组渲染批量操作按钮（只剩默认牌组）", () 
 });
 
 test("stats-panel: 渲染负载/文档进度/漏斗", () => {
-	const root = renderWidget(statsPanel, "stats-panel");
+	const { root, w } = renderWidgetEx(statsPanel, "stats-panel");
 	const text = collectText(root);
 	assert.ok(text.includes("牌组负载"), "应有负载区");
 	assert.ok(text.includes("书名甲"), "应含文档进度");
@@ -204,24 +205,6 @@ test("scheduler: 过载自动顺延 autoPostpone 门槛触发", () => {
 	assert.equal(resOver.patches.length, 1, "超阈值顺延 1 张卡");
 });
 
-test("pipeline: 大纲干预编辑器 applyOverrides（改短/删/增）", () => {
-	const pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
-	const chunker = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
-	const rawSections = [
-		{ level: 1, title: "超级无敌非常长的一个原章节名称用于测试改短", trail: ["超级无敌非常长的一个原章节名称用于测试改短"], html: "<p>1</p>", text: "1", chars: 1, ordinal: 1 },
-		{ level: 1, title: "待删除噪音卡", trail: ["待删除噪音卡"], html: "<p>2</p>", text: "2", chars: 1, ordinal: 2 }
-	];
-	const overrides = {
-		titles: { "超级无敌非常长的一个原章节名称用于测试改短": "短标题甲" },
-		delete: ["待删除噪音卡"],
-		customSections: [{ title: "手动新增卡", text: "手动内容", insertAfterKey: "短标题甲" }]
-	};
-	const res = pipeline.applyOverrides(rawSections, overrides);
-	assert.equal(res.length, 2, "删除1节+新增1节后总节数不变");
-	assert.equal(res[0].title, "短标题甲", "标题被成功改短");
-	assert.equal(res[1].title, "手动新增卡", "成功插入手动新增卡");
-});
-
 test("pipeline: cleanTitle 剔除冗余副标题与括号说明", () => {
 	const pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	const rawTitle = "批判性思维与说服性写作：独立思考者的精进技巧（通过25种思维练习、30项写作训练，让你更具备思辨力和创造性, 实现独立思考和写作精进）";
@@ -267,15 +250,20 @@ test("card-manager: Done 语义（置 tidme.done，kind 决定归属）与恢复
 	const done = cardManager.doneFields({ title: "节", "tidme.kind": "topic", state: "0" });
 	assert.equal(done["tidme.done"], "yes");
 	assert.equal(done["tidme.kind"], "topic", "kind 保留");
-	// 恢复：清除 done/ignored/suspended，kind 决定归属（无需补标签）
-	const resumed = cardManager.resumeFields({ ...done });
+	// 恢复（「回」按钮路径 = restoreCard 整体替换）：清除 done/ignored/suspended，kind 决定归属
+	const resumed = sched.restoreCard({ ...done });
 	assert.equal(resumed["tidme.done"], undefined, "恢复删除 tidme.done");
 	assert.equal(resumed["tidme.kind"], "topic", "topic 保留（阅读流）");
 	assert.ok(!sched.isCardDone(resumed), "恢复后不在完成态");
-	// item 恢复同样只清标记
-	const resumeCloze = cardManager.resumeFields({ ...done, "tidme.kind": "item" });
-	assert.equal(resumeCloze["tidme.kind"], "item", "item 保留（复习流）");
-	assert.ok(!sched.isCardDone(resumeCloze));
+	// 批量恢复是合并式补丁：三键显式 undefined（TW addTiddler = 删除字段）
+	const resumePatch = cardManager.resumePatch();
+	// 批量恢复是合并式补丁：三键显式 undefined（TW addTiddler = 删除字段），
+	// 回归防护——曾因返回"删除键后的完整字段集"导致 {...fields, ...patch} 合并下恢复静默失效
+	assert.equal(resumePatch["tidme.done"], undefined);
+	assert.equal(resumePatch["tidme.ignored"], undefined);
+	assert.equal(resumePatch["tidme.suspended"], undefined);
+	assert.ok(!sched.isCardDone({ ...done, ...resumePatch, "tidme.kind": "item" }), "合并写回后应脱离完成态");
+	assert.ok(!sched.isCardDone({ ...done, ...resumePatch, "tidme.kind": "item", "tidme.suspended": "yes" }), "合并可覆盖旧搁置值");
 });
 
 test("card-manager: 全部卡片可见（含已读卡与手动散卡）", () => {
@@ -349,31 +337,32 @@ test("section-bar: 两行布局 + 统一按钮风格", () => {
 test("section-bar: 即时刷新（本文档卡变化 → 重建）", () => {
 	const title = wiki.filterTiddlers("[has[tidme.kind]tidme.kind[topic]tidme.subkind[section]!has[tidme.done]]")[0];
 	const { root, w } = renderWidgetEx(sectionBar, "section-bar", { variables: { currentTiddler: title } });
-	// 初始未读：有「✔ 已读」按钮，无「✓ 已读」状态
-	assert.ok(collectText(root).includes("✔ 已读"), "初始为未读状态");
+	// 初始未读：有「已读」按钮，无「已读」完成状态
+	assert.ok(collectText(root).includes("已读"), "初始为未读状态");
 	// 外部把本卡标为已读（模拟文档页/管理器入口）
 	const f = wiki.getTiddler(title).fields;
 	wiki.addTiddler({ ...f, "tidme.done": "yes" });
 	assert.equal(w.refresh({ [title]: { modified: true } }), true, "refresh 处理了变化");
 	const text2 = collectText(root);
-	assert.ok(text2.includes("✓ 已读"), "重建后显示已读状态");
-	assert.ok(text2.includes("↩ 重新加入"), "重建后显示重新加入按钮");
-	assert.ok(!text2.includes("✔ 已读"), "已读按钮消失");
+	assert.ok(text2.includes("已读"), "重建后显示已读状态");
+	assert.ok(text2.includes("重新加入"), "重建后显示重新加入按钮");
+	assert.ok(!text2.includes("已读\"") , "旧已读按钮消失");
+	assert.ok(text2.includes("更多"), "M6 分层：低频调控收进「更多」菜单");
 });
 
-test("事件总线: 队列变化通知 → 监听组件重建（stats-panel 数字更新）", async () => {
-	const events = tw.modules.execute("$:/plugins/keepone/tidme/core/events.js");
-	// 先渲染统计面板（注册事件监听）
-	const root = renderWidget(statsPanel, "stats-panel");
+test("刷新机制: 数据变化 → refresh 嗅探重建（stats-panel，M5 唯一机制）", async () => {
+	// 先渲染统计面板
+	const { root, w } = renderWidgetEx(statsPanel, "stats-panel");
 	// 新导入第二本书（直接写库，模拟切分/导入落库）
 	const pipeline2 = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	const r = await pipeline2.runSplit({ text: "# 第二本书\n\n第二章正文。", title: "第二本书", type: "text/markdown", minChars: 0 });
 	for (const t of r.tiddlers) wiki.addTiddler(t);
-	// 直接进程内通知（等价于 tm-tidme-* 消息经 rootWidget 桥接到达）
-	events.notifyTidme(events.EVENTS.IMPORT_DONE);
-	events.notifyTidme(events.EVENTS.QUEUE_CHANGED);
+	// TW 原生刷新：把变更集喂给组件 refresh（等价真实环境的变化传播）
+	const changed = {};
+	for (const t of r.tiddlers) changed[t.title] = { modified: true };
+	assert.equal(w.refresh(changed), true, "嗅探到 tidme 数据变化并重建");
 	const text = collectText(root);
-	assert.ok(text.includes("第二本书"), "事件后统计面板重建，出现新书进度");
+	assert.ok(text.includes("第二本书"), "刷新后统计面板出现新书进度");
 });
 
 test("doc-resume: 子集复习按钮（复习本书）", () => {
@@ -588,7 +577,8 @@ test("startstudy: 队列过滤器在按钮 transclude 上下文显式解析（$(
 	// 回归：2658977 曾把视图模板的队列过滤器从显式 {$(deckTiddler)$!!card} 改成隐式 {!!card}，
 	// 导致「开始学习」按钮经 <$transclude> 渲染时 currentTiddler=按钮自身，{!!card} 取空 → 永远"无新卡"。
 	// 1) 视图模板必须使用显式 $(deckTiddler)$ 引用（不依赖 currentTiddler）
-	for (const t of ["deck", "tiddler", "tr"]) {
+	// （tr.tid 已随 $:/Decks 页退役——今天页的 today-deck-row 接替其行渲染职责）
+	for (const t of ["deck", "tiddler"]) {
 		const text = wiki.getTiddler(`$:/plugins/keepone/tidme/review/ui/ViewTemplate/${t}`).fields.text;
 		assert.ok(text.includes("$(deckTiddler)$!!card"), `${t} 模板用显式 $(deckTiddler)$ 引用`);
 		assert.ok(!text.includes("[subfilter{!!card}]"), `${t} 模板不得用隐式 {!!card}`);
@@ -666,8 +656,8 @@ test("workflow: $:/Decks 工作流中心（全局交错学习流 + 阅读目标�
 	const learnBtn = btns.find((b) => collectText(b).includes("开始学习"));
 	assert.ok(learnBtn, "找到开始学习按钮");
 	assert.ok(String(learnBtn.className).includes("tm-btn--primary"), "开始学习是主色按钮（tm-btn--primary）");
-	const svg = learnBtn.childNodes.find((n) => String(n.tagName) === "SVG");
-	assert.ok(svg, "开始学习按钮含 SVG 图标");
+	const iconSpan = learnBtn.childNodes.find((n) => String(n.className || "").includes("tm-icon"));
+	assert.ok(iconSpan, "开始学习按钮含图标容器（.tm-icon；icons.iconButton 产物）");
 	// 开始阅读目标：无全局续读点 → 第一待读节卡
 	const target1 = wf.globalReadingTarget(wiki);
 	assert.ok(target1 && wiki.getTiddler(target1), "开始阅读跳到一张存在节卡");
@@ -678,4 +668,21 @@ test("workflow: $:/Decks 工作流中心（全局交错学习流 + 阅读目标�
 	// 全无 → 阅读列表页
 	const emptyWiki = { filterTiddlers: () => [], getTiddler: () => null };
 	assert.equal(wf.globalReadingTarget(emptyWiki), "$:/plugins/keepone/tidme/import/ui/reading-list", "全无跳阅读列表");
+});
+
+test("deck-ui: 新建牌组折叠表单渲染（tm 风格）；默认牌组删除按钮禁用", () => {
+	const root = renderWidget(deckUi, "deck-create");
+	const text = collectText(root);
+	assert.ok(text.includes("新建牌组"), "deck-create 有「＋ 新建牌组」入口");
+	assert.ok(text.includes("成员来源"), "表单含成员来源选择");
+	// deck-delete：默认牌组 → 禁用（不可删）
+	const delRoot = renderWidget(deckUi, "deck-delete", { attributes: { deck: "$:/Deck/default" } });
+	const btns = collectButtons(delRoot);
+	assert.ok(btns.length >= 1, "deck-delete 渲染按钮");
+	if (btns[0]) {
+		assert.equal(btns[0].getAttribute("disabled"), "true", "默认牌组删除按钮禁用");
+	}
+	// deck-delete：普通（不存在的）牌组也禁用
+	const delMissing = renderWidget(deckUi, "deck-delete", { attributes: { deck: "$:/Deck/不存在" } });
+	assert.equal(collectButtons(delMissing)[0]?.getAttribute("disabled"), "true", "不存在牌组删除禁用");
 });

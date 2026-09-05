@@ -19,12 +19,12 @@ Tidme 自动顺延调度器（浏览器 / Node / TiddlyWeb 通用）
 
 	function runAutoPostpone() {
 		try {
-			var raw = $tw.wiki.getTiddlerText("$:/config/Tidme/AutoPostpone", "{}");
+			var sched = require("$:/plugins/keepone/tidme/core/scheduler");
+			var raw = $tw.wiki.getTiddlerText(sched.AUTOPOSTPONE_CONFIG_TITLE, "{}");
 			var cfg = {};
 			try { cfg = JSON.parse(raw || "{}"); } catch (e) { /* 忽略非法配置 */ }
 			if (!cfg.enable) return;
 
-			var sched = require("$:/plugins/keepone/tidme/core/scheduler");
 			var cards = $tw.wiki.filterTiddlers("[all[shadows+tiddlers]!is[draft]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]has[due]]").map(function (title) {
 				return { title: title, fields: $tw.wiki.getTiddler(title).fields };
 			});

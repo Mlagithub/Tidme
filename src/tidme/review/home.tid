@@ -7,7 +7,7 @@ title: $:/plugins/keepone/tidme/review/home
 \define tidme-home-button(class)
 \whitespace trim
 <$button
-    to="$:/Decks"
+    to="$:/Today"
     tooltip={{$:/language/tidme/tidme}}
     aria-label={{$:/language/tidme/tidme}}
     class="""$(tv-config-toolbar-class)$ $class$"""
@@ -29,6 +29,6 @@ title: $:/plugins/keepone/tidme/review/home
 </$button>
 \end
 
-<$list filter="[list<tv-story-list>] +[field:title[$:/Decks]]" emptyMessage=<<tidme-home-button>>>
+<$list filter="[list<tv-story-list>] +[field:title[$:/Today]]" emptyMessage=<<tidme-home-button>>>
 <<tidme-home-button "tc-selected">>
 </$list>

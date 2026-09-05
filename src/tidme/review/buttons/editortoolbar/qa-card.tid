@@ -1,0 +1,12 @@
+caption: 问答成卡
+condition: [<targetTiddler>]
+description: 把选中文本作为答案，补问题后制成问答卡（kind=item 进缺省牌组；不改正文）
+icon: $:/plugins/keepone/tidme/review/icons/type
+list-after: $:/plugins/keepone/tidme/review/buttons/editortoolbar/cloze-card
+tags: $:/tags/EditorToolbar
+title: $:/plugins/keepone/tidme/review/buttons/editortoolbar/qa-card
+
+<$action-sendmessage
+    $message="tm-edit-text-operation"
+    $param="tidme-make-qa"
+/>

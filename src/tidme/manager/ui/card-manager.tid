@@ -2,7 +2,6 @@ title: $:/plugins/keepone/tidme/manager/ui/card-manager
 caption: 卡片管理器
 type: text/vnd.tiddlywiki
 
-! 卡片管理器
 
 <$tidme-nav/>
 
@@ -14,6 +13,9 @@ type: text/vnd.tiddlywiki
 
 <$queue-ops/>
 
+<details class="tm-cm-help"><summary>自动顺延（auto-postpone）说明</summary>
+
 自动顺延（auto-postpone）：浏览器与服务端每日（启动时 + 每小时检查）自动对低优先级逾期卡顺延、保留高优先级；上方「每日自动顺延」开关可开启，「⚡ 立即顺延」可手动触发。配置 <code>$:/config/Tidme/AutoPostpone</code> 为 <code>{"enable": true, "maxPriority": 60, "postponeDays": 7, "keepTop": 10}</code>。
 
-子集复习：文档页「复习本书」创建临时子集牌组（仅本书挖空/问答卡），复习完自动清理，不占用学习中心的复习牌组列表。
+</details>
+子集复习：文档页「复习本书」创建临时子集牌组（仅本书挖空/问答卡），复习完自动清理，不占用今天的复习牌组列表。

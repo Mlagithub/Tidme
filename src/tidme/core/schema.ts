@@ -36,7 +36,6 @@ export interface SectionRequired {
 	"tidme.doc": string;
 	"tidme.id": string;
 	"tidme.parent": string;
-	"tidme.path": string;
 	"tidme.order": string;
 	"tidme.level": string;
 	"tidme.kind": "topic";
@@ -108,9 +107,10 @@ export function inferKind(fields: Record<string, unknown>): Kind | null {
 	return null;
 }
 
-/** 返回必填字段缺失清单（宽容模式：不抛错，由调用方补默认） */
+/** 返回必填字段缺失清单（宽容模式：不抛错，由调用方补默认）
+ * 注：tidme.path 已废止（与 tidme.breadcrumb 全程同值、无任何读取方，M5 字段收口）；路径显示一律走 tidme.breadcrumb */
 export function missingRequired(fields: Record<string, unknown>, kind: Kind): string[] {
-	const base = ["tidme.doc", "tidme.id", "tidme.parent", "tidme.path", "caption"];
+	const base = ["tidme.doc", "tidme.id", "tidme.parent", "caption"];
 	// topic 需正文；item（挖空/问答）正面在 caption，text 允许为空
 	const extra = kind === "topic" ? ["tidme.kind", "text"] : ["tidme.kind"];
 	return [...base, ...extra].filter((f) => fields[f] === undefined || fields[f] === null || fields[f] === "");

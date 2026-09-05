@@ -8,6 +8,9 @@ scheduler.ts — 调度体系（M4，对标 SuperMemo 优先级）
 所有函数纯字段操作（无 $tw 依赖），返回 { title, fields } 补丁由调用方写入。
 */
 
+/** auto-postpone 配置 tiddler（startup 定时器 / queue-ops / card-manager 共用同一产地） */
+export const AUTOPOSTPONE_CONFIG_TITLE = "$:/config/Tidme/AutoPostpone";
+
 export const PRIORITY_DEFAULT = 50;
 export const PRIORITY_TIERS = { high: 10, medium: 50, low: 90 } as const;
 
@@ -18,6 +21,23 @@ export const PRIORITY_TIERS = { high: 10, medium: 50, low: 90 } as const;
  * 注：无 kind 的手动卡由默认牌组 card 过滤器的兜底分支收录（has[state]has[due]），不在此处。
  */
 export const ITEM_FILTER = `[tidme.kind[item]]`;
+
+/**
+ * 阅读列表（topic 队列）过滤器：全库 kind=topic 在队卡（未搁置/未完成/未忽略）。
+ * item 卡不在此页（走默认牌组/子集复习）。唯一产地：reading-list 等页面引用此常量，勿手拼。
+ */
+export const TOPIC_QUEUE_FILTER =
+	"[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!has[tidme.suspended]!has[tidme.done]!has[tidme.ignored]]";
+
+/**
+ * 本书 item 在队过滤器（「复习本书」子集牌组的 card 来源 / 文档页计数）。
+ * 出队标记一律在此排除（done/ignored/suspended），与默认牌组 card 口径一致。
+ * 注意：过滤器 run 之间是并集——严禁把 ITEM_FILTER 之类片段拼接进单个 run 之外
+ * （曾因拼接产生第二个 run，把全库 item 混进"复习本书"子集）。
+ */
+export function docItemsFilter(docId: string): string {
+	return `[all[shadows+tiddlers]tidme.doc[${docId}]tidme.kind[item]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]]`;
+}
 
 /** 归一化优先级：非法值回默认 50 */
 export function normalizePriority(v: unknown): number {

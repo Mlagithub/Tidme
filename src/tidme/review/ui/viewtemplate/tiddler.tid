@@ -1,5 +1,6 @@
 code-body: yes
 title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/tiddler
+<!-- !!同步守护：本 $let 的过滤器组合与 core/deck-engine.composeDeckFilters 保持同构（JS 侧唯一真源）；修改任一侧须同步 review/ui/ViewTemplate/{deck,tr,tiddler}.tid 三处模板 -->
 
 \whitespace trim
 

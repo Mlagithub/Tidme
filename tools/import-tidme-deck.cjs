@@ -200,7 +200,7 @@ async function importDeck(pluginFile, wikiFolder) {
                 if (f.word_json) {
                     try {
                         wordData = typeof f.word_json === "string" ? JSON.parse(f.word_json) : f.word_json;
-                    } catch (e) {}
+                    } catch (e) { }
                 }
 
                 const headWord = (wordData && (wordData.headWord || wordData.word)) || f.word || f.headWord || title.split("/").pop();
@@ -383,7 +383,7 @@ async function importDeck(pluginFile, wikiFolder) {
         }
 
         console.log(`\n🎉 全部卡片导入处理完毕! 共迁移 ${totalMigrated} 张卡片。`);
-        
+
         // 6. 等待 filesystem syncer 将所有异步 save/delete 任务持久化落盘
         if (tw.syncer) {
             console.log("💾 正在等待 filesystem syncer 将卡片持久化保存到磁盘...");

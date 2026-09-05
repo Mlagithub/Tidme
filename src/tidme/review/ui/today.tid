@@ -1,0 +1,27 @@
+title: $:/Today
+caption: 今天
+type: text/vnd.tiddlywiki
+
+<div class="tm-today">
+
+<div class="tm-today-header">
+<div class="tm-today-title">今天</div>
+<div class="tm-today-sub">增量学习驾驶舱——系统替你安排，你只管推进</div>
+<$tidme-theme-toggle/>
+</div>
+
+<$tidme-today-hero/>
+
+<div class="tm-today-section">
+<div class="tm-today-section-head">
+<span class="tm-today-section-title">复习牌组</span>
+<$deck-create/>
+</div>
+<<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row" storyview:"classic">>
+</div>
+
+<$tidme-today-recent/>
+
+<$tidme-nav/>
+
+</div>

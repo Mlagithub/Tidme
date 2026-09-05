@@ -1,7 +1,7 @@
 /*
 section.test.mjs — 阅读闭环字段构建器单元测试（node:test）
 
-在临时 TW 环境加载 import 插件的 widgets/section.js，验证：
+在临时 TW 环境加载 core/card-factory.js（制卡唯一实现；section.js 为迁移期转发），验证：
 - buildExtract/buildCloze：parent 链、anchor 记录、嵌套摘录（parent = 摘录卡）
 - parseAnchor：round-trip
 */
@@ -22,7 +22,9 @@ const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
 
 let wiki;
-let sectionMod;
+let tw;
+let sectionMod; // = core/card-factory（测试目标即唯一实现）
+let deckMod;
 test.before(() => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-section-"));
 	const tw = TiddlyWiki.TiddlyWiki();
@@ -30,7 +32,8 @@ test.before(() => {
 	tw.boot.argv = [tmp];
 	tw.boot.boot();
 	wiki = tw.wiki;
-	sectionMod = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
+	sectionMod = tw.modules.execute("$:/plugins/keepone/tidme/core/card-factory.js");
+	deckMod = tw.modules.execute("$:/plugins/keepone/tidme/core/deck.js");
 });
 
 test("buildExtract: parent 链 + anchor 记录", () => {
@@ -106,4 +109,30 @@ test("cleanProcessedText: 整段被摘录后清理遗留空 <p>", () => {
 	const text = wiki.getTiddler("书 › 第四章").fields.text;
 	assert.ok(!text.includes("<p></p>") && !text.includes("整段被摘录"), "空 <p> 与片段均已清理");
 	assert.ok(text.includes("保留段"), "保留段不受影响");
+});
+
+test("M3 泛化: 无 doc 普通笔记不提供摘录（buildExtract → null）", () => {
+	wiki.addTiddler({ title: "随手笔记", text: "想法正文" });
+	assert.equal(sectionMod.buildExtract(wiki, "随手笔记", "想法片段"), null, "摘录只属于阅读材料");
+});
+
+test("M3 泛化: commitCard——无 doc 笔记挖空/问答 → item 卡入缺省牌组 + 折叠预备 + 空安全", () => {
+	const cloze = sectionMod.buildCloze(wiki, "随手笔记", "记忆的核心是 间隔重复。", "间隔重复");
+	assert.equal(cloze["tidme.kind"], "item");
+	assert.equal(cloze["tidme.parent"], "随手笔记");
+	assert.equal(cloze["tidme.doc"], "", "无 doc 来源");
+	assert.ok(sectionMod.commitCard(wiki, cloze, null), "写库成功");
+
+	const qa = sectionMod.buildQA(wiki, "随手笔记", "记忆的核心机制?", "间隔重复");
+	assert.equal(qa["tidme.kind"], "item");
+	assert.ok(sectionMod.commitCard(wiki, qa, null));
+
+	// 缺省 input.deck：无 doc item 由默认牌组 card 过滤器自动收录
+	const inDeck = deckMod.deckCards(wiki, "$:/Deck/default");
+	assert.ok(inDeck.includes(cloze.title), "挖空卡入缺省牌组");
+	assert.ok(inDeck.includes(qa.title), "问答卡入缺省牌组");
+	// 折叠态预备（默认 hide：先看问题再翻面）
+	assert.equal(wiki.getTiddler("$:/state/folded/" + cloze.title).fields.text, "hide");
+	// 空安全
+	assert.equal(sectionMod.commitCard(wiki, null), false);
 });

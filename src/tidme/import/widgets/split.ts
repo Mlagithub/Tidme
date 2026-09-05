@@ -8,11 +8,12 @@ widgets/split.ts — M2 切分入口组件（M4 加优先级三档；G1 加预�
 
 declare function require(module: string): any;
 const pipeline = require("$:/plugins/keepone/tidme/import/pipeline.js");
-const events = require("$:/plugins/keepone/tidme/core/events.js");
-const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const dom = require("$:/plugins/keepone/tidme/core/dom.js");
+const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
+const commitMod = require("$:/plugins/keepone/tidme/core/import-commit.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
-// 共享 DOM 工具（实现收敛于 core/ui-utils）
-const el = uiUtils.el;
+// 共享 DOM 工具（实现收敛于 core/dom）
+const el = dom.el;
 
 /** 从源 tiddler 提取溯源字段（切分后保留到文档页） */
 function provenanceOf(wiki: any, title: string): Record<string, string> {
@@ -26,9 +27,8 @@ function provenanceOf(wiki: any, title: string): Record<string, string> {
 }
 
 /** 执行切分并写库：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签）。
- * G2 对齐：若同 docId 已存在旧 Section 卡（重切分），走 alignCards 增量修补
- * （未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档），而非全量重建。 */
-async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number, overrides?: any) {
+ * 对齐写库统一走 core/import-commit（G2：未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档）。 */
+async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number) {
 	const t = wiki.getTiddler(title);
 	if (!t) throw new Error("源 tiddler 不存在");
 	const r = await pipeline.runSplit({
@@ -37,38 +37,13 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 		type: t.fields.type,
 		sourceFields: { ...provenanceOf(wiki, title), ...extraSourceFields },
 		priority,
-		overrides,
-		folderOccupied: (base: string) => uiUtils.docFolderOwner(wiki, base)
+		folderOccupied: (base: string) => docOps.docFolderOwner(wiki, base)
 	});
 	const [doc, ...cards] = r.tiddlers;
 	if (!cards.length) throw new Error("未切分出任何节（内容过短或无可识别结构）");
-	const sectionCards = cards.filter((x: any) => x["tidme.kind"] === "topic");
 
-	// G2 对齐：重切分已有文档时增量修补
-	const align = require("$:/plugins/keepone/tidme/core/align.js");
-	const docPage = wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${r.docId}]]`)[0] || "";
-	// 仅对齐 section（普通阅读节）：摘录/挖空/问答/手动卡由用户决定，不在重切分时归档
-	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r.docId}]tidme.kind[topic]!tidme.subkind[extract]!is[draft]]`)
-		.map((ot: string) => ({ title: ot, fields: wiki.getTiddler(ot)?.fields || {} }));
-	let aligned: any = null;
-	if (oldCards.length) {
-		aligned = await align.alignCards(oldCards, docPage || title, sectionCards.map((c: any) => ({ title: c.title, fields: c })));
-		// 保留的新卡（新增节）写库
-		for (const k of aligned.keep) wiki.addTiddler({ ...k.fields });
-		// 更新补丁（内容变 / 顺序变）：保留旧 ID 与 SRS 进度
-		for (const p of aligned.patches) {
-			const existing = wiki.getTiddler(p.title);
-			if (existing) wiki.addTiddler({ ...existing.fields, ...p.fields });
-		}
-		// 归档：标记 obsolete + done（出队，不硬删；分类重构后无 ? 标签，靠 done 出队）
-		for (const at of aligned.archives) {
-			const existing = wiki.getTiddler(at);
-			if (!existing) continue;
-			wiki.addTiddler({ ...existing.fields, "tidme.obsolete": "yes", "tidme.done": "yes" });
-		}
-	}
-
-	// 源 tiddler → 文档页：合并溯源字段、标签合并（去 tidme-inbox）
+	// 源 tiddler → 文档页：合并溯源字段、标签合并（去 tidme-inbox）；
+	// 卡片 tidme.docpage 须指向合并后真实存在的文档页 title（源 tiddler title 优先于管线 docRoot）
 	const srcFields = t.fields;
 	const srcTags = Array.isArray(srcFields.tags) ? srcFields.tags.filter((x: string) => x !== "tidme-inbox") : [];
 	const mergedDoc: Record<string, any> = {
@@ -80,36 +55,15 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 		...(srcFields["tidme.author"] ? { "tidme.author": srcFields["tidme.author"] } : {}),
 		...(srcFields["tidme.date"] ? { "tidme.date": srcFields["tidme.date"] } : {})
 	};
-	wiki.addTiddler(mergedDoc);
-	// 卡片的 tidme.docpage 需指向合并后真实存在的文档页 title（源 tiddler title 优先于 emitTiddlers 默认 docRoot）
-	const realDocTitle = title;
-	const fixDocPage = (c: Record<string, any>) => {
-		if (c["tidme.docpage"] && c["tidme.docpage"] !== realDocTitle) c["tidme.docpage"] = realDocTitle;
-	};
-	if (!aligned) {
-		// 首次切分：全量写库
-		for (const c of cards) { fixDocPage(c); wiki.addTiddler(c); }
-	} else {
-		// 对齐模式：非新增卡不重复写（keep 已写；同 key 旧卡已在库）
-		for (const k of aligned.keep) { fixDocPage(k.fields); wiki.addTiddler({ ...k.fields }); }
-		for (const p of aligned.patches) {
-			const existing = wiki.getTiddler(p.title);
-			if (existing) {
-				const merged = { ...existing.fields, ...p.fields };
-				fixDocPage(merged);
-				wiki.addTiddler(merged);
-			}
-		}
-		// 其它防御性写
-		for (const c of cards) {
-			if (aligned.keep.some((k: any) => k.title === c.title)) continue;
-			if (aligned.patches.some((p: any) => p.title === c.title)) continue;
-			if (!wiki.getTiddler(c.title)) { fixDocPage(c); wiki.addTiddler(c); }
-		}
-	}
+	await commitMod.commitImportToWiki(wiki, {
+		docId: r.docId,
+		docTiddler: mergedDoc,
+		docTitle: title,
+		cards,
+		rewriteDocPage: true
+	});
 	// 无自动阅读牌组：topic 由阅读列表管理，item 进默认牌组
 	// 事件总线：切分完成（paste-split / inbox-split 共用此出口）
-	events.dispatch(widget, events.EVENTS.IMPORT_DONE, { docId: r.docId, bookTitle: title });
 	return r;
 }
 
@@ -129,7 +83,7 @@ function makePasteSplit(): WidgetCtor {
 			ta.placeholder = "粘贴 markdown / HTML / 纯文本…";
 			ta.rows = 8;
 			inner.appendChild(ta);
-			const btn = el(doc, "button", "tm-btn tm-btn-primary", "切分文本并入库");
+			const btn = el(doc, "button", "tm-btn tm-btn--primary", "切分文本并入库");
 			const status = el(doc, "div", "tm-import-muted", "");
 			btn.addEventListener("click", async () => {
 				const text = String(ta.value || "").trim();
@@ -140,12 +94,11 @@ function makePasteSplit(): WidgetCtor {
 				try {
 					const r = await pipeline.runSplit({
 						text, title: firstLine,
-						bag: this.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default",
-						folderOccupied: (base: string) => uiUtils.docFolderOwner(this.wiki, base)
+						bag: this.wiki.getTiddlerText(pipeline.IMPORT_BAG_TITLE, "") || "default",
+						folderOccupied: (base: string) => docOps.docFolderOwner(this.wiki, base)
 					});
 					if (!r.tiddlers.some((x: any) => x["tidme.kind"] === "topic")) throw new Error("未切分出任何节");
 					for (const tdl of r.tiddlers) this.wiki.addTiddler(tdl);
-					events.dispatch(this, events.EVENTS.IMPORT_DONE, { docId: r.docId, bookTitle: firstLine });
 					this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-done" });
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: r.tiddlers[0].title });
 				} catch (e: any) {
@@ -185,7 +138,7 @@ function makeInboxSplit(): WidgetCtor {
 				for (const item of items) {
 					const row = el(doc, "div", "tm-import-row");
 					row.appendChild(el(doc, "strong", "", item));
-					const btn = el(doc, "button", "tm-btn tm-btn-primary", "切分并入库");
+					const btn = el(doc, "button", "tm-btn tm-btn--primary", "切分并入库");
 					btn.addEventListener("click", async () => {
 						btn.setAttribute("disabled", "true");
 						btn.textContent = "…";

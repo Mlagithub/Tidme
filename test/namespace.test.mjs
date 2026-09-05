@@ -20,7 +20,7 @@ const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
 
-let wiki, tw, pipeline, paths, sectionMod, uiUtils, align, sched;
+let wiki, tw, pipeline, paths, sectionMod, docOps, display, align, sched;
 test.before(() => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-ns-"));
 	tw = TiddlyWiki.TiddlyWiki();
@@ -31,7 +31,8 @@ test.before(() => {
 	pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	paths = tw.modules.execute("$:/plugins/keepone/tidme/core/paths.js");
 	sectionMod = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
-	uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
+	docOps = tw.modules.execute("$:/plugins/keepone/tidme/core/doc-ops.js");
+	display = tw.modules.execute("$:/plugins/keepone/tidme/core/display.js");
 	align = tw.modules.execute("$:/plugins/keepone/tidme/core/align.js");
 	sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
 });
@@ -460,29 +461,29 @@ test("A1: 同名书不同 docId folder 冲突 → ~docId 后缀；同 docId 重�
 	assert.equal(doc3.title, "Tidme/Books/无冲突书");
 });
 
-test("ui-utils: docPageOfDoc 按 docId 查到真实文档页（folder 带 ~docId 后缀亦准确）；docFolderOwner 可探测占用", async () => {
-	const uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
+test("doc-ops: docPageOfDoc 按 docId 查到真实文档页（folder 带 ~docId 后缀亦准确）；docFolderOwner 可探测占用", async () => {
+	const docOps = tw.modules.execute("$:/plugins/keepone/tidme/core/doc-ops.js");
 	const r = await pipeline.runSplit({ text: "# 章\n\n内容。", title: "后缀书", type: "text/markdown", folderOccupied: () => "d000000000" });
 	for (const t of r.tiddlers) wiki.addTiddler(t);
 	const doc = r.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes("tidme-import-doc"));
 	assert.ok(doc.title.includes("~"), "前置：folder 应带后缀");
-	assert.equal(uiUtils.docPageOfDoc(wiki, r.docId), doc.title, "按 docId 查到真实（带后缀）文档页");
-	assert.equal(uiUtils.docFolderOwner(wiki, doc.title), r.docId, "folder 占用可探测到本 docId");
+	assert.equal(docOps.docPageOfDoc(wiki, r.docId), doc.title, "按 docId 查到真实（带后缀）文档页");
+	assert.equal(docOps.docFolderOwner(wiki, doc.title), r.docId, "folder 占用可探测到本 docId");
 });
 
-test("ui-utils: captionText 把 wikitext 转义 caption 解析为可读文本（如牌组 {{$:/language/...}}）", async () => {
-	const uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
+test("display: captionText 把 wikitext 转义 caption 解析为可读文本（如牌组 {{$:/language/...}}）", async () => {
+	const display = tw.modules.execute("$:/plugins/keepone/tidme/core/display.js");
 	// 转义 caption → 解析（zh-Hans 语言包已加载，应得到"默认"而非原始 {{…}}）
-	const resolved = uiUtils.captionText(wiki, "{{$:/language/tidme/default}}");
+	const resolved = display.captionText(wiki, "{{$:/language/tidme/default}}");
 	assert.ok(!resolved.includes("{{"), `不应残留 {{ 模板：${resolved}`);
 	assert.ok(resolved.trim().length > 0, "应解析出可读文本");
 	// 纯文本 caption 原样返回（不触发不必要的渲染）
-	assert.equal(uiUtils.captionText(wiki, "章节标题"), "章节标题");
-	assert.equal(uiUtils.captionText(wiki, ""), "");
+	assert.equal(display.captionText(wiki, "章节标题"), "章节标题");
+	assert.equal(display.captionText(wiki, ""), "");
 });
 
 test("deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问答/无 kind 散卡）；他书与续读点指向保留卡时不误伤", async () => {
-	const uiUtils = tw.modules.execute("$:/plugins/keepone/tidme/core/ui-utils.js");
+	const docOps = tw.modules.execute("$:/plugins/keepone/tidme/core/doc-ops.js");
 	// 书 A：2 普通节 + 1 大纲手动"新节"（topic/section/manual-）+ 1 摘录 + 1 挖空 + 1 无 kind 散卡
 	const rA = await pipeline.runSplit({ text: "# 章一\n\n内容一。\n\n# 章二\n\n内容二。", title: "删书A", type: "text/markdown", minChars: 0 });
 	for (const t of rA.tiddlers) wiki.addTiddler(t); // 文档页 + 2 节
@@ -505,7 +506,7 @@ test("deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
 	for (const t of rB.tiddlers) wiki.addTiddler(t);
 	const secB = rB.tiddlers.find((t) => t["tidme.kind"] === "topic");
 
-	const n = uiUtils.deleteDocContent(wiki, rA.docId);
+	const n = docOps.deleteDocContent(wiki, rA.docId);
 	// 删除 5 个：文档页 + 2 普通节 + 1 大纲新节 + 1 子集牌组
 	assert.equal(n, 5, `删除数量=5，实际 ${n}`);
 	// 保留的知识产物仍存在
@@ -528,7 +529,7 @@ test("deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
 	// 书 B 完好
 	assert.ok(wiki.getTiddler(secB.title), "B 不受影响");
 	// 幂等
-	assert.equal(uiUtils.deleteDocContent(wiki, rA.docId), 0, "重复删除幂等");
+	assert.equal(docOps.deleteDocContent(wiki, rA.docId), 0, "重复删除幂等");
 });
 
 /* 回归测试：重切分时保留摘录 —— alignCards 旧卡查询必须排除 subkind=extract，否则摘录被批量归档 done */
@@ -553,7 +554,7 @@ test("re-split 保留已有摘录（不被归档为 obsolete/done）", async () 
 	wiki.addTiddler(ext);
 	// 重切分：标题更短、文末新加一节
 	const text2 = "# 1\n\n第一段新内容。\n\n## 子节 A\n\n子节 A 改后内容。\n\n## 新增子节 B\n\nB 内容。";
-	const r2 = await pipeline.runSplit({ text: text2, title: "重切分测试书", folderOccupied: (base) => uiUtils.docFolderOwner(wiki, base) });
+	const r2 = await pipeline.runSplit({ text: text2, title: "重切分测试书", folderOccupied: (base) => docOps.docFolderOwner(wiki, base) });
 	const [doc2, ...cards2] = r2.tiddlers;
 	const sectionCards2 = cards2.filter((c) => c["tidme.kind"] === "topic");
 	const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]!tidme.subkind[extract]!is[draft]]`)
@@ -602,18 +603,18 @@ test("prepareCardFold: item 复习卡默认 hide（折叠先看问题）；命�
 	};
 	wiki.addTiddler(card);
 	// 默认（card_unfold 未命中）→ hide
-	uiUtils.prepareCardFold(wiki, card.title);
+	docOps.prepareCardFold(wiki, card.title);
 	assert.equal(wiki.getTiddler("$:/state/folded/" + card.title)?.fields?.text, "hide", "复习卡默认折叠");
 	// 命中 card_unfold → show
 	const deck = wiki.getTiddler("$:/Deck/default");
 	wiki.addTiddler({ ...deck?.fields, title: "$:/Deck/default", card_unfold: `[all[]match[${card.title}]]` });
-	uiUtils.prepareCardFold(wiki, card.title);
+	docOps.prepareCardFold(wiki, card.title);
 	assert.equal(wiki.getTiddler("$:/state/folded/" + card.title)?.fields?.text, "show", "命中 unfold 过滤器 → show");
 	// 还原 default deck 覆盖（防影响后续）
 	if (deck) wiki.addTiddler({ ...deck.fields, title: "$:/Deck/default" });
 	// topic 卡不设折叠态（阅读界面无关）
 	const topic = "Tidme/Books/折叠测试/s1-s1--topic";
 	wiki.addTiddler({ title: topic, "tidme.kind": "topic", caption: "t", text: "x", state: "0", due: twDate(new Date()) });
-	uiUtils.prepareCardFold(wiki, topic);
+	docOps.prepareCardFold(wiki, topic);
 	assert.equal(wiki.getTiddler("$:/state/folded/" + topic), undefined, "topic 卡不设折叠态");
 });

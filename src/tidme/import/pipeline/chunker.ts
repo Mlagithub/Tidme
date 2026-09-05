@@ -143,26 +143,6 @@ export interface RawSection {
 	parts?: SectionPart[];
 }
 
-export interface CustomSectionInput {
-	title: string;
-	text: string;
-	insertAfterKey?: string;
-}
-
-/** 干预指令（按 trail key = trail.join(" › ") 匹配，重切分后稳定不漂移） */
-export interface SplitOverrides {
-	/** 强制并入上一节的 trail key */
-	merge?: string[];
-	/** 强制拆分（容器内第一个带标题的并入子节拆为独立卡）的 trail key */
-	split?: string[];
-	/** 标题修改/改短（trailKey -> 自定义短标题） */
-	titles?: Record<string, string>;
-	/** 移除/删除节的 trailKey */
-	delete?: string[];
-	/** 手动新增节 */
-	customSections?: CustomSectionInput[];
-}
-
 export interface SectionPart { html: string; text: string; chars: number; title?: string }
 
 function deriveSection(sec: RawSection): RawSection {
@@ -177,99 +157,15 @@ function deriveSection(sec: RawSection): RawSection {
 }
 
 /**
- * 应用干预指令（G1）：按 trail key 拆分合并容器 / 合并独立节，重排 ordinal。
- * 拆分依赖 parts 里的子节边界（parts[1..] 中第一个带 title 的段），无 parts 信息时跳过。
+ * 产物收尾：由 parts 派生 html/text/chars 并重排 ordinal（原 G1 applyOverrides 的公共尾段；
+ * 干预机制已移除——YAGNI，导入预览走 _deleted/_renamed + cleanTitle，见 architecture.md W6）。
  */
-export function applyOverrides(sections: RawSection[], overrides?: SplitOverrides): RawSection[] {
-	const o = overrides || {};
-	const mergeKeys = new Set(o.merge || []);
-	const splitKeys = new Set(o.split || []);
-	const deleteKeys = new Set(o.delete || []);
-	const titleMap = o.titles || {};
-	const customList = o.customSections || [];
-	const keyOf = (s: RawSection) => s.trail.join(" › ");
-
-	// 0. 过滤删除节与修改标题/改短
-	const filtered: RawSection[] = [];
-	for (const s of sections) {
-		const k = keyOf(s);
-		if (deleteKeys.has(k)) continue;
-		const sec = { ...s, trail: [...s.trail] };
-		if (titleMap[k]) {
-			sec.title = titleMap[k];
-			if (sec.trail.length) sec.trail[sec.trail.length - 1] = titleMap[k];
-		}
-		filtered.push(sec);
-	}
-
-	// 第一遍：拆分（拆分增加节数，先处理；结果顺序保持）
-	const out: RawSection[] = [];
-	for (const sec of filtered) {
-		out.push(sec);
-		if (splitKeys.has(keyOf(sec))) {
-			const parts = sec.parts || [];
-			const idx = parts.findIndex((p, i) => i > 0 && p.title);
-			if (idx > 0) {
-				const sub = parts[idx];
-				sec.parts = [parts[0], ...parts.slice(idx + 1)];
-				sec.merged = sec.parts.length > 1;
-				const newSec: RawSection = {
-					level: sec.level,
-					title: sub.title || "",
-					trail: [...sec.trail, sub.title || ""].filter(Boolean),
-					html: sub.html,
-					text: sub.text,
-					chars: sub.chars,
-					parts: [{ html: sub.html, text: sub.text, chars: sub.chars }]
-				};
-				out.push(newSec);
-			}
-		}
-	}
-
-	// 第二遍：合并（并入前一节）
-	const result: RawSection[] = [];
-	for (const sec of out) {
-		if (mergeKeys.has(keyOf(sec)) && result.length) {
-			const prev = result[result.length - 1];
-			const parts = sec.parts || [{ html: sec.html, text: sec.text, chars: sec.chars }];
-			prev.parts = prev.parts || [{ html: prev.html, text: prev.text, chars: prev.chars }];
-			prev.parts.push({ title: sec.title || undefined, html: parts[0].html, text: parts[0].text, chars: parts[0].chars });
-			for (const p of parts.slice(1)) prev.parts.push(p);
-			prev.merged = true;
-			prev.level = Math.min(prev.level, sec.level);
-			continue;
-		}
-		result.push(sec);
-	}
-
-	// 第三遍：插入手动新增的自定义节
-	for (const cs of customList) {
-		if (!cs.title || !cs.text) continue;
-		const newSec: RawSection = {
-			level: 1,
-			title: cs.title,
-			trail: [cs.title],
-			html: `<p>${escapeHtml(cs.text)}</p>`,
-			text: cs.text,
-			chars: cs.text.length,
-			parts: [{ html: `<p>${escapeHtml(cs.text)}</p>`, text: cs.text, chars: cs.text.length }]
-		};
-		if (cs.insertAfterKey) {
-			const idx = result.findIndex((s) => keyOf(s) === cs.insertAfterKey);
-			if (idx >= 0) result.splice(idx + 1, 0, newSec);
-			else result.push(newSec);
-		} else {
-			result.push(newSec);
-		}
-	}
-
-	// 派生 html/text/chars + ordinal 重排
-	result.forEach((sec, i) => {
+function finalizeSections(sections: RawSection[]): RawSection[] {
+	sections.forEach((sec, i) => {
 		deriveSection(sec);
 		sec.ordinal = i;
 	});
-	return result;
+	return sections;
 }
 
 function applySizeRules(leaves: Leaf[], cfg: { maxChars: number; minChars: number }, stats: { hardSplitCount: number }): RawSection[] {
@@ -374,8 +270,7 @@ export interface InputFile { fileName: string; fileBreadcrumb: string[]; blocks:
 
 export function chunkBook(
 	files: InputFile[],
-	options: ChunkOptions = {},
-	overrides?: SplitOverrides
+	options: ChunkOptions = {}
 ): { sections: RawSection[]; stats: { sections: number; hardSplitCount: number } } {
 	const stats = { hardSplitCount: 0, sections: 0 };
 	const sections: RawSection[] = [];
@@ -391,8 +286,8 @@ export function chunkBook(
 		}
 		if (!s.title) s.title = s.trail[s.trail.length - 1] || "续";
 	});
-	// G1 干预：拆分/合并 + ordinal 重排
-	const final = applyOverrides(sections, overrides);
+	// 收尾：派生产物 + ordinal 重排
+	const final = finalizeSections(sections);
 	stats.sections = final.length;
 	return { sections: final, stats };
 }

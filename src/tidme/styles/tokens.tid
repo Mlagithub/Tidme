@@ -138,6 +138,11 @@ type: text/css
 	color: var(--tm-accent-strong);
 }
 
+.tm-btn--sm {
+	padding: 2px 8px;
+	font-size: 0.86em;
+}
+
 /* ---- 卡片（卡面） ---- */
 .tm-card {
 	background: var(--tm-surface);
@@ -231,7 +236,6 @@ type: text/css
 
 /* ---- 内滚动容器 ---- */
 .tm-scroll { max-height: 340px; overflow-y: auto; }
-.tm-scroll-lg { max-height: 480px; overflow-y: auto; }
 .tm-scroll-sm { max-height: 220px; overflow-y: auto; }
 
 /* ---- 进度条（圆角） ---- */
@@ -318,3 +322,12 @@ body.tc-body-dark {
 }
 [data-tme-dark] a.tc-tiddlylink { color: var(--tm-accent); }
 [data-tme-dark] .tc-page-container { background: var(--tm-surface-3); }
+
+.tm-icon {
+	display: inline-flex;
+	width: 1em;
+	height: 1em;
+	vertical-align: -0.12em;
+	margin-right: 5px;
+}
+.tm-icon svg { width: 100%; height: 100%; }

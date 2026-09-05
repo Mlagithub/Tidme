@@ -17,7 +17,9 @@
  */
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const TiddlyWiki = require("tiddlywiki");
 
 // ---------- 小工具 ----------
 const RE_TITLE_UNSAFE = /[《》「」『』（）()【\[\]】/\\:*?"<>|\s]+/g;
@@ -31,12 +33,6 @@ function slugify(name) {
 		.replace(/^[\-_.]+|[\-_.]+$/g, "")
 		.slice(0, 80);
 	return s || "word";
-}
-
-/** TW UTC 日期串（YYYY0MM0DD0hh0mm0ss0XXX，与 schema.twDateString 同形） */
-function twDateString(d) {
-	const p = (n, l = 2) => String(n).padStart(l, "0");
-	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
 }
 
 /** 字段值清洗：去控制字符与首尾空白（防 TW .tid 解析退化 .json 落盘） */
@@ -165,8 +161,9 @@ function serializeTid(fields, text) {
 // ---------- 主流程 ----------
 async function main() {
 	const args = process.argv.slice(2);
-	const files = args.filter((a) => !a.startsWith("--"));
-	const optOut = args.indexOf("--out") >= 0 ? args[args.indexOf("--out") + 1] : null;
+	const outIdx = args.indexOf("--out");
+	const optOut = outIdx >= 0 ? args[outIdx + 1] : null;
+	const files = args.filter((a, i) => !a.startsWith("--") && i !== outIdx + 1);
 	const dryRun = args.includes("--dry-run");
 	if (!files.length) {
 		console.error("用法: node tools/deck-to-tid.cjs <plugin-file.json> [--out <dir>] [--dry-run]");
@@ -174,6 +171,27 @@ async function main() {
 	}
 	const root = path.resolve(__dirname, "..");
 	const outRoot = optOut ? path.resolve(optOut) : path.join(root, "wiki", "tiddlers");
+
+	// 启动空 TW（载入 bin 编译插件）：deck 定义经 core/deck.configToFields 依
+	// $:/Deck/default 模板生成（消除手抄漂移）；card 过滤器用 core/scheduler.docItemsFilter；
+	// 日期串用 core/schema.twDateString。本地仅保留卡片叶段 slug（词卡命名，非 core 路径范畴）。
+	const pluginDir = path.resolve(__dirname, "../bin");
+	const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
+		.map((n) => path.join(pluginDir, n + ".json"))
+		.filter((f) => fs.existsSync(f))
+		.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
+	if (!plugins.length) {
+		console.error("缺少 bin 插件产物，先运行: node tools/build-plugins.cjs");
+		process.exit(1);
+	}
+	const tw = TiddlyWiki.TiddlyWiki();
+	tw.preloadTiddlerArray(plugins);
+	tw.boot.argv = [fs.mkdtempSync(path.join(os.tmpdir(), "tidme-deck2tid-"))];
+	tw.boot.boot();
+	const wiki = tw.wiki;
+	const deckMod = tw.modules.execute("$:/plugins/keepone/tidme/core/deck.js");
+	const sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
+	const schema = tw.modules.execute("$:/plugins/keepone/tidme/core/schema.js");
 
 	for (const file of files) {
 		console.log(`\n📖 解析: ${path.basename(file)}`);
@@ -201,7 +219,7 @@ async function main() {
 			console.log(`🃏 牌组 [${deckTitle}] caption=${caption} · 卡前缀 ${prefix} · 命中 ${cardTitles.length} 卡`);
 
 			const now = new Date();
-			const nowStr = twDateString(now);
+			const nowStr = schema.twDateString(now);
 			const planned = []; // { title, fields, text, fileRel }
 			const usedTitles = new Set();
 
@@ -232,7 +250,6 @@ async function main() {
 						"tidme.doc": deckName,
 						"tidme.id": w.wordId,
 						"tidme.breadcrumb": crumb,
-						"tidme.path": crumb,
 						"tidme.order": String(w.wordRank || 0).padStart(6, "0"),
 						"tidme.source": caption,
 						"tidme.author": cleanField(plugin.author || ""),

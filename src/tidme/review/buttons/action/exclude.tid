@@ -14,7 +14,6 @@ code-body: yes
     $timestamp={{$:/config/TimestampDisable}}
 />
 <$action-sendmessage
-    $message="tm-tidme-queue-changed"
     $param=<<deckTiddler>>
 />
 <$list

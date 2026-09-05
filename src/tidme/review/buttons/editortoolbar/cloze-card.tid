@@ -1,0 +1,12 @@
+caption: 挖空成卡
+condition: [<targetTiddler>]
+description: 把选中文本直接制成挖空卡（kind=item 进缺省牌组；不改正文）。旧「挖空」按钮插入 <<C >> 宏用于既有卡片排版
+icon: $:/plugins/keepone/tidme/review/icons/cloze
+list-after: $:/plugins/keepone/tidme/review/buttons/editortoolbar/cloze
+tags: $:/tags/EditorToolbar
+title: $:/plugins/keepone/tidme/review/buttons/editortoolbar/cloze-card
+
+<$action-sendmessage
+    $message="tm-edit-text-operation"
+    $param="tidme-make-cloze"
+/>

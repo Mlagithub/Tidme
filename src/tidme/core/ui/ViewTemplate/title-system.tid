@@ -1,0 +1,8 @@
+title: $:/core/ui/ViewTemplate/title/system
+
+\whitespace trim
+<h2 class="tc-title">
+<$view field="caption">
+	<span class="tc-system-title-prefix">$:/</span><$text text={{{ [<currentTiddler>removeprefix[$:/]] }}}/>
+</$view>
+</h2>

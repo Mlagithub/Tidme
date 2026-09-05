@@ -1,27 +1,32 @@
 /*
-widgets/card-manager.ts — 统一卡片管理器 v2
+widgets/card-manager.ts — 统一卡片管理器 v3（M5 拆件）
 
 对标 SuperMemo 的管理三件套（Contents 知识树 / Browser 子集浏览 / Find elements）：
 - 视图过滤：全部 / 在队 / 已读 / 搁置 / 逾期（定义一个"子集"）
-- 组织方式：按文档（树，默认，全量稳定）/ 按牌组（树，含「未入组」兜底）/ 列表（Browser 式平铺，可排序、行预览联动）
+- 组织方式：按文档（树，默认，全量稳定）/ 按牌组（树，含「未入组」兜底）/ 列表（Browser 式平铺）
 - 每卡：状态徽章 + 类型 + 优先级 + 标题(点击打开) + 行内操作(读/回/删除)
-- 批量工具条：选中卡 → 顺延/提前/移出队列/搁置/恢复/遗忘/删除
+- 批量工具条：选中卡 → 顺延/提前/移出队列/搁置/恢复/遗忘/删除/批量优先级
 
-卡片 = 任何带 tidme.* 的 tiddler 或带 ?/. 学习标签的 tiddler（含手动建卡）。
+结构（原 render 闭包拆件）：状态收进 CMState（原 16 个闭包可变量），视图构建为
+模块级函数（统一收 Ctx），事件处理器早退扁平化。
+卡片 = 任何带 tidme.kind 的 tiddler 或无 kind 有 FSRS 字段的手动散卡（含 ?/. 时代旧卡）。
 "全部"视图计数与实际显示一致：按文档树全量；按牌组树由各牌组分支 + 未入组分支兜底全量。
 Done 语义：移出队列 = 置 tidme.done（kind 决定归属：item 出默认牌组，topic 出阅读列表）。
 */
 
 declare function require(module: string): any;
 const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
-const stats = require("$:/plugins/keepone/tidme/core/stats.js");
-const events = require("$:/plugins/keepone/tidme/core/events.js");
-const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const reactive = require("$:/plugins/keepone/tidme/core/reactive.js");
+const dialog = require("$:/plugins/keepone/tidme/core/dialog.js");
+const icons = require("$:/plugins/keepone/tidme/core/icons.js");
+const dom = require("$:/plugins/keepone/tidme/core/dom.js");
+const display = require("$:/plugins/keepone/tidme/core/display.js");
 const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 type View = "all" | "inqueue" | "done" | "suspended" | "overdue";
 type Org = "doc" | "deck" | "list";
+type SortKey = "breadcrumb" | "priority" | "due" | "deck" | "mixed";
 
 const VIEWS: { id: View; label: string }[] = [
 	{ id: "all", label: "全部" },
@@ -38,36 +43,848 @@ const ORGS: { id: Org; label: string; tip: string }[] = [
 ];
 
 interface Card { title: string; fields: Record<string, any> }
-
 interface DeckInfo { title: string; caption: string; strict: Set<string>; loose: Set<string> }
 
-// 共享 DOM/徽章/标签工具（实现收敛于 core/ui-utils）
-const el = uiUtils.el;
-const badgeOf = uiUtils.badgeOf;
-const kindMark = uiUtils.kindMark;
-const stateLabel = uiUtils.stateLabel;
-const dueLabel = uiUtils.dueLabel;
-const intervalLabel = uiUtils.intervalLabel;
-const repsLabel = uiUtils.repsLabel;
-const lapsesLabel = uiUtils.lapsesLabel;
-const diffLabel = uiUtils.diffLabel;
-const dateLabel = uiUtils.dateLabel;
+/** 管理器状态（原 render 闭包的 16 个可变量收进一处；render 时重建，选中集跨重建保持） */
+interface CMState {
+	view: View;
+	org: Org;
+	sortKey: SortKey;
+	sortAsc: boolean;
+	searchText: string;
+	previewTitle: string | null;
+	editTitle: string | null;
+	selected: Set<string>;
+	lastCheckedCardTitle: string | null;
+	renderedCardTitles: string[];
+	allCards: Card[];
+	deckInfos: DeckInfo[];
+	visibleCards: Card[];
+	groupCbUpdaters: (() => void)[];
+	cardCbUpdaters: (() => void)[];
+	bulkCb: HTMLInputElement | null;
+	selLabel: HTMLElement | null;
+}
 
-/** 卡片收集：带 tidme.kind 的 tiddler（topic/item）+ 无 kind 但有 FSRS 字段的手动卡。
- * 排除文档汇总页（仅有 tidme.doc/tag，无 kind、无 FSRS 字段）。 */
+/** 渲染上下文：模块级视图函数统一收 ctx */
+interface Ctx {
+	widget: any;
+	doc: Document;
+	wiki: any;
+	wrap: HTMLElement;
+	st: CMState;
+}
+
+// 共享 DOM/徽章/标签工具（实现收敛于 core/dom、core/display）
+const el = dom.el;
+const badgeOf = display.badgeOf;
+const kindMark = display.kindMark;
+const stateLabel = display.stateLabel;
+const dueLabel = display.dueLabel;
+const intervalLabel = display.intervalLabel;
+const repsLabel = display.repsLabel;
+const lapsesLabel = display.lapsesLabel;
+const diffLabel = display.diffLabel;
+const dateLabel = display.dateLabel;
+
+/** 卡片收集：带 tidme.kind 的 tiddler（topic/item）+ 无 kind 但有 FSRS 字段的手动卡。排除文档汇总页。 */
 const CARD_FILTER =
 	"[all[shadows+tiddlers]!is[draft]has[tidme.kind]] " +
 	"[all[shadows+tiddlers]!is[draft]!has[tidme.kind]has[state]has[due]]";
 
-/** Done：移出队列（core scheduler 实现） */
+/** Done：字段补丁（core scheduler 实现） */
 function doneFields(fields: Record<string, any>): Record<string, any> {
 	return sched.doneCard(fields);
 }
-
-/** 恢复：回到队列（core scheduler 实现） */
-function resumeFields(fields: Record<string, any>): Record<string, any> {
-	return sched.restoreCard(fields);
+/**
+ * 恢复：**合并式补丁**——三键显式 undefined（TW addTiddler 语义 = 删除字段）。
+ * 不能用 sched.restoreCard（它返回删除键后的完整字段集，供整体替换；
+ * 一旦走 {...fields, ...patch} 合并，旧值不会被覆盖 → 恢复静默失效）。
+ */
+function resumePatch(): Record<string, any> {
+	return { "tidme.done": undefined, "tidme.ignored": undefined, "tidme.suspended": undefined };
 }
+
+// ---------- 纯查询 ----------
+
+function crumbOf(c: Card): string {
+	return String(c.fields["tidme.breadcrumb"] || c.title);
+}
+
+function inView(f: Record<string, any>, v: View): boolean {
+	const suspended = f["tidme.suspended"] === "yes";
+	const done = sched.isCardDone(f);
+	if (v === "inqueue") return !done && !suspended;
+	if (v === "done") return done;
+	if (v === "suspended") return suspended;
+	if (v === "overdue") return String(f.state || "0") === "2" && sched.parseTwDate(f.due).getTime() < Date.now();
+	return true;
+}
+
+function matches(st: CMState, c: Card): boolean {
+	if (!st.searchText.trim()) return true;
+	const hay = String(c.title + " " + (c.fields["tidme.breadcrumb"] || "")).toLowerCase();
+	return hay.includes(st.searchText.trim().toLowerCase());
+}
+
+function decksOf(st: CMState, c: Card): DeckInfo[] {
+	return st.deckInfos.filter((d) => d.loose.has(c.title));
+}
+
+function anyStrict(st: CMState, c: Card): boolean {
+	return st.deckInfos.some((d) => d.strict.has(c.title));
+}
+
+function isDescendantOf(wiki: any, child: Card, parent: Card): boolean {
+	if (child.title === parent.title) return false;
+	const parentCrumb = crumbOf(parent);
+	const childCrumb = crumbOf(child);
+	if (childCrumb.startsWith(parentCrumb + " › ")) return true;
+	let p = String(child.fields["tidme.parent"] || "");
+	while (p) {
+		if (p === parent.title) return true;
+		const pt = wiki.getTiddler(p);
+		p = pt ? String(pt.fields["tidme.parent"] || "") : "";
+	}
+	return false;
+}
+
+function docNameOf(c: Card): string {
+	const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "");
+	if (!key) return "未分组";
+	const first = crumbOf(c).split(" › ")[0] || key;
+	// 语义名回退：内部路径名去前缀显示（$:/Deck/IELTS_3 → IELTS_3；$:/Today → Today）
+	return (first || key).replace(/^\$:\/Deck\//, "").replace(/^\$:\//, "");
+}
+
+function docGroupsOf(cards: Card[]): [string, Card[]][] {
+	const m = new Map<string, Card[]>();
+	for (const c of cards) {
+		const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "");
+		if (!m.has(key)) m.set(key, []);
+		m.get(key)!.push(c);
+	}
+	return [...m.entries()].sort((a, b) => {
+		const na = docNameOf(a[1][0]);
+		const nb = docNameOf(b[1][0]);
+		return na < nb ? -1 : na > nb ? 1 : 0;
+	});
+}
+
+function collectAll(ctx: Ctx) {
+	const { wiki, st } = ctx;
+	st.allCards = wiki.filterTiddlers(CARD_FILTER)
+		.filter((t: string, i: number, arr: string[]) => arr.indexOf(t) === i)
+		.map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
+	// card/card_exclude 各求值一次：strict = loose − exclude（省去 strict 内部对 card 的二次求值）
+	st.deckInfos = deckMod.listDecks(wiki).map((deck: string) => {
+		const f = wiki.getTiddler(deck)?.fields || {};
+		const loose = new Set(deckMod.deckCards(wiki, deck, { strict: false }));
+		const excludeFilter = String(f.card_exclude || "");
+		const exclude = new Set(excludeFilter ? wiki.filterTiddlers(`[subfilter{${deck}!!card_exclude}]`) : []);
+		const strict = new Set([...loose].filter((t) => !exclude.has(t)));
+		return {
+			title: deck,
+			caption: display.captionText(wiki, f.caption || deck.split("/").pop() || deck, ctx.widget),
+			strict,
+			loose
+		};
+	});
+}
+
+// ---------- 选中状态与反馈 ----------
+
+function toast(ctx: Ctx, msg: string, kind = "") {
+	const t = el(ctx.doc, "div", "tm-toast" + (kind ? " tm-toast--" + kind : ""), msg);
+	ctx.wrap.insertBefore(t, ctx.wrap.firstChild);
+	setTimeout(() => t.remove(), 2500);
+}
+
+function updateSelectionUI(ctx: Ctx) {
+	const { st } = ctx;
+	const visibleCount = st.visibleCards.length;
+	const selectedVisibleCount = st.visibleCards.filter((c) => st.selected.has(c.title)).length;
+	if (st.bulkCb) {
+		st.bulkCb.checked = visibleCount > 0 && selectedVisibleCount === visibleCount;
+		st.bulkCb.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleCount;
+	}
+	if (st.selLabel) {
+		st.selLabel.textContent = `已选 ${st.selected.size}/${visibleCount} 张`;
+	}
+	for (const u of st.groupCbUpdaters) u();
+	for (const u of st.cardCbUpdaters) u();
+}
+
+/** shift 区选：以渲染顺序为界，把 [上次勾选, 当前] 区间统一置为 checked */
+function applyShiftRange(ctx: Ctx, checked: boolean, curTitle: string) {
+	const { st } = ctx;
+	const anchor = st.lastCheckedCardTitle;
+	if (!anchor || !st.renderedCardTitles.includes(anchor)) return;
+	const i1 = st.renderedCardTitles.indexOf(anchor);
+	const i2 = st.renderedCardTitles.indexOf(curTitle);
+	if (i1 === -1 || i2 === -1) return;
+	for (const title of st.renderedCardTitles.slice(Math.min(i1, i2), Math.max(i1, i2) + 1)) {
+		if (checked) st.selected.add(title);
+		else st.selected.delete(title);
+	}
+}
+
+// ---------- 折叠持久化 ----------
+
+function foldStateTitle(view: string, key: string): string {
+	return `$:/state/tidme/manager/fold/${view}/${encodeURIComponent(key)}`;
+}
+
+function isFoldOpen(wiki: any, stateTitle: string, defOpen: boolean): boolean {
+	const v = wiki.getTiddlerText(stateTitle, "");
+	if (v === "open") return true;
+	if (v === "closed") return false;
+	return defOpen;
+}
+
+function bindFold(wiki: any, details: HTMLElement, stateTitle: string) {
+	details.addEventListener("toggle", () => {
+		wiki.addTiddler({ title: stateTitle, text: (details as any).open ? "open" : "closed" });
+	});
+}
+
+function emptyEl(doc: Document, text: string, icon = "🗂"): HTMLElement {
+	const e = el(doc, "div", "tm-empty", "");
+	e.appendChild(el(doc, "div", "tm-empty-icon", icon));
+	e.appendChild(el(doc, "div", "", text));
+	return e;
+}
+
+// ---------- 行构建 ----------
+
+/** 卡片行通用操作：读（移出队列）/ 回（恢复）+ 删除 */
+function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
+	const { doc, wiki, st } = ctx;
+	const inQueue = !sched.isCardDone(c.fields) && c.fields["tidme.suspended"] !== "yes";
+	if (inQueue) {
+		const readBtn = el(doc, "button", "tm-cm-op", "读");
+		readBtn.title = "移出队列（已读）";
+		readBtn.addEventListener("click", () => {
+			wiki.addTiddler(doneFields(c.fields));
+			render(ctx);
+		});
+		row.appendChild(readBtn);
+	} else {
+		const resumeBtn = el(doc, "button", "tm-cm-op", "回");
+		resumeBtn.title = "恢复到学习队列";
+		resumeBtn.addEventListener("click", () => {
+			wiki.addTiddler(sched.restoreCard(c.fields));
+			render(ctx);
+		});
+		row.appendChild(resumeBtn);
+	}
+	const del = el(doc, "button", "tm-cm-op tm-cm-del", "✕");
+	del.title = "删除卡片";
+	del.addEventListener("click", () => {
+		st.selected.delete(c.title);
+		wiki.deleteTiddler(c.title);
+		render(ctx);
+	});
+	row.appendChild(del);
+}
+
+/** 卡片行基础：复选框 + 状态 + 类型 + 优先级 + 标题链接（勾选含子孙联动与 shift 区选） */
+function appendRowBase(ctx: Ctx, row: HTMLElement, c: Card, cb: HTMLInputElement) {
+	const { doc, st } = ctx;
+	const bd = badgeOf(c.fields);
+	const badge = el(doc, "span", `tm-badge tm-cm-badge ${bd.cls}`, bd.text);
+	badge.title = stateLabel(c.fields);
+	row.appendChild(badge);
+	const km = kindMark(c.fields);
+	if (km) row.appendChild(el(doc, "span", "tm-cm-kind", km));
+	const pri = c.fields["tidme.priority"];
+	if (pri !== undefined) {
+		row.appendChild(el(doc, "span", "tm-cm-pri", `p${String(pri).padStart(2, "0")}`));
+	}
+	const link = el(doc, "a", "tc-tiddlylink tm-cm-link",
+		String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title);
+	link.href = "#";
+	link.title = crumbOf(c);
+	link.addEventListener("click", (e: Event) => {
+		e.preventDefault();
+		ctx.widget.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
+	});
+	row.appendChild(link);
+
+	const updateCardCb = () => {
+		const children = st.allCards.filter((child) => isDescendantOf(ctx.wiki, child, c));
+		if (children.length > 0) {
+			const selChildrenCount = children.filter((child) => st.selected.has(child.title)).length;
+			const selfSel = st.selected.has(c.title);
+			cb.checked = selfSel && selChildrenCount === children.length;
+			cb.indeterminate = (selfSel || selChildrenCount > 0) && !(selfSel && selChildrenCount === children.length);
+		} else {
+			cb.checked = st.selected.has(c.title);
+			cb.indeterminate = false;
+		}
+	};
+	st.cardCbUpdaters.push(updateCardCb);
+
+	cb.addEventListener("click", (e: MouseEvent) => {
+		if (e.shiftKey && st.lastCheckedCardTitle && st.renderedCardTitles.includes(st.lastCheckedCardTitle)) {
+			applyShiftRange(ctx, cb.checked, c.title);
+		} else {
+			if (cb.checked) st.selected.add(c.title);
+			else st.selected.delete(c.title);
+			for (const child of st.allCards) {
+				if (isDescendantOf(ctx.wiki, child, c)) {
+					if (cb.checked) st.selected.add(child.title);
+					else st.selected.delete(child.title);
+				}
+			}
+		}
+		st.lastCheckedCardTitle = c.title;
+		updateSelectionUI(ctx);
+	});
+}
+
+/** 文档分组 details（带折叠状态 + 分组三态复选） */
+function docDetails(ctx: Ctx, view: string, key: string, docCards: Card[]): HTMLElement {
+	const { doc, wiki, st } = ctx;
+	const dd = el(doc, "details", "tm-cm-doc");
+	const stateTitle = foldStateTitle(view, key);
+	dd.open = isFoldOpen(wiki, stateTitle, true);
+	bindFold(wiki, dd, stateTitle);
+	const dsum = el(doc, "summary", "", "");
+
+	const groupCb = doc.createElement("input");
+	groupCb.type = "checkbox";
+	groupCb.className = "tm-cm-group-cb";
+	const updateDocGroupCb = () => {
+		const docSelCount = docCards.filter((c) => st.selected.has(c.title)).length;
+		groupCb.checked = docCards.length > 0 && docSelCount === docCards.length;
+		groupCb.indeterminate = docSelCount > 0 && docSelCount < docCards.length;
+	};
+	updateDocGroupCb();
+	st.groupCbUpdaters.push(updateDocGroupCb);
+	groupCb.addEventListener("click", (e) => e.stopPropagation());
+	groupCb.addEventListener("change", () => {
+		for (const c of docCards) {
+			if (groupCb.checked) st.selected.add(c.title);
+			else st.selected.delete(c.title);
+		}
+		updateSelectionUI(ctx);
+	});
+	dsum.appendChild(groupCb);
+
+	dsum.appendChild(el(doc, "span", "tm-cm-doc-title", `${docNameOf(docCards[0])}（${docCards.length}）`));
+	dd.appendChild(dsum);
+	const sorted = [...docCards].sort((a, b) => {
+		const pa = crumbOf(a);
+		const pb = crumbOf(b);
+		return pa < pb ? -1 : pa > pb ? 1 : 0;
+	});
+	for (const c of sorted) renderCardRow(ctx, dd, c);
+	return dd;
+}
+
+/** 树形：按文档组织（全量，默认） */
+function renderDocTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
+	if (!cards.length) {
+		treeBox.appendChild(emptyEl(ctx.doc, "当前视图下没有卡片。"));
+		return;
+	}
+	for (const [key, docCards] of docGroupsOf(cards)) {
+		treeBox.appendChild(docDetails(ctx, "doc", key, docCards));
+	}
+}
+
+/** 树形：按牌组组织（牌组分支 + 未入组兜底） */
+function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
+	const { doc, wiki, st } = ctx;
+	if (!st.deckInfos.length) {
+		treeBox.appendChild(emptyEl(doc, "暂无牌组——导入/切分后自动创建。未入组卡片见下方「未入组」分支。", "🃏"));
+	}
+	for (const d of st.deckInfos) {
+		const deckCards = cards.filter((c) => d.strict.has(c.title));
+		const details = el(doc, "details", "tm-cm-deck");
+		const deckFold = foldStateTitle("deck", d.title);
+		details.open = isFoldOpen(wiki, deckFold, deckCards.length > 0);
+		bindFold(wiki, details, deckFold);
+		const ds = el(doc, "summary", "", "");
+
+		const deckCb = doc.createElement("input");
+		deckCb.type = "checkbox";
+		deckCb.className = "tm-cm-group-cb";
+		const updateDeckCb = () => {
+			const deckSelCount = deckCards.filter((c) => st.selected.has(c.title)).length;
+			deckCb.checked = deckCards.length > 0 && deckSelCount === deckCards.length;
+			deckCb.indeterminate = deckSelCount > 0 && deckSelCount < deckCards.length;
+		};
+		updateDeckCb();
+		st.groupCbUpdaters.push(updateDeckCb);
+		deckCb.addEventListener("click", (e) => e.stopPropagation());
+		deckCb.addEventListener("change", () => {
+			for (const c of deckCards) {
+				if (deckCb.checked) st.selected.add(c.title);
+				else st.selected.delete(c.title);
+			}
+			updateSelectionUI(ctx);
+		});
+		ds.appendChild(deckCb);
+
+		ds.appendChild(el(doc, "strong", "", ` ${d.caption}（${deckCards.length}）`));
+		details.appendChild(ds);
+		for (const [docKey, docCards] of docGroupsOf(deckCards)) {
+			details.appendChild(docDetails(ctx, "deck", d.title + "/" + docKey, docCards));
+		}
+		treeBox.appendChild(details);
+	}
+	// 未入组：不被任何牌组命中的卡（已读/搁置/手动散卡）
+	const orphans = cards.filter((c) => !anyStrict(st, c));
+	const ob = el(doc, "details", "tm-cm-deck tm-cm-orphan");
+	const orphanFold = foldStateTitle("deck", "__orphan__");
+	ob.open = isFoldOpen(wiki, orphanFold, orphans.length > 0);
+	bindFold(wiki, ob, orphanFold);
+	const os = el(doc, "summary", "", "");
+
+	const orphanCb = doc.createElement("input");
+	orphanCb.type = "checkbox";
+	orphanCb.className = "tm-cm-group-cb";
+	const updateOrphanCb = () => {
+		const orphanSelCount = orphans.filter((c) => st.selected.has(c.title)).length;
+		orphanCb.checked = orphans.length > 0 && orphanSelCount === orphans.length;
+		orphanCb.indeterminate = orphanSelCount > 0 && orphanSelCount < orphans.length;
+	};
+	updateOrphanCb();
+	st.groupCbUpdaters.push(updateOrphanCb);
+	orphanCb.addEventListener("click", (e) => e.stopPropagation());
+	orphanCb.addEventListener("change", () => {
+		for (const c of orphans) {
+			if (orphanCb.checked) st.selected.add(c.title);
+			else st.selected.delete(c.title);
+		}
+		updateSelectionUI(ctx);
+	});
+	os.appendChild(orphanCb);
+
+	os.appendChild(el(doc, "strong", "", ` 未入组（${orphans.length}）`));
+	os.title = "不属于任何牌组队列的卡片：已读、搁置或手动创建的散卡";
+	ob.appendChild(os);
+	for (const [docKey, docCards] of docGroupsOf(orphans)) {
+		ob.appendChild(docDetails(ctx, "deck", "__orphan__/" + docKey, docCards));
+	}
+	treeBox.appendChild(ob);
+}
+
+/** 树行：复选框 + 徽章 + 标题 + 操作（缩进按 breadcrumb 深度） */
+function renderCardRow(ctx: Ctx, parentEl: HTMLElement, c: Card) {
+	const { doc, st } = ctx;
+	st.renderedCardTitles.push(c.title);
+	const row = el(doc, "div", "tm-cm-card");
+	const depth = Math.max(0, crumbOf(c).split(" › ").length - 1);
+	row.style.paddingLeft = `${depth * 0.9}em`;
+	const cb = doc.createElement("input");
+	cb.type = "checkbox";
+	cb.checked = st.selected.has(c.title);
+	row.appendChild(cb);
+	appendRowBase(ctx, row, c, cb);
+	appendOps(ctx, row, c);
+	parentEl.appendChild(row);
+}
+
+// ---------- 列表视图 ----------
+
+function cmpCards(ctx: Ctx): (a: Card, b: Card) => number {
+	const { st } = ctx;
+	return (a, b) => {
+		let r = 0;
+		if (st.sortKey === "mixed") {
+			const sorted = sched.sortPriorityMixedQueue([a, b], "hybrid");
+			r = sorted[0] === a ? -1 : 1;
+		} else if (st.sortKey === "priority") {
+			const pa = Number(a.fields["tidme.priority"] ?? 99);
+			const pb = Number(b.fields["tidme.priority"] ?? 99);
+			r = pa - pb;
+		} else if (st.sortKey === "due") {
+			const da = String(a.fields.state || "0") === "2" ? sched.parseTwDate(a.fields.due).getTime() : Infinity;
+			const db = String(b.fields.state || "0") === "2" ? sched.parseTwDate(b.fields.due).getTime() : Infinity;
+			r = da - db;
+		} else if (st.sortKey === "deck") {
+			const da = decksOf(st, a).map((d) => d.caption).join("·");
+			const db = decksOf(st, b).map((d) => d.caption).join("·");
+			r = da < db ? -1 : da > db ? 1 : 0;
+		} else {
+			const pa = crumbOf(a);
+			const pb = crumbOf(b);
+			r = pa < pb ? -1 : pa > pb ? 1 : 0;
+		}
+		return st.sortAsc ? r : -r;
+	};
+}
+
+/** 列表行（Browser 式表格行）：勾选 + 状态/类型/优先/标题 + 牌组/到期/信息列 + 行点击预览联动 */
+function renderListRow(ctx: Ctx, tbody: HTMLElement, c: Card) {
+	const { doc, st } = ctx;
+	st.renderedCardTitles.push(c.title);
+	const tr = el(doc, "tr", "tm-cm-listrow");
+	const cbTd = el(doc, "td", "tm-cm-cell-cb");
+	const cb = doc.createElement("input");
+	cb.type = "checkbox";
+	cb.checked = st.selected.has(c.title);
+	cbTd.appendChild(cb);
+	tr.appendChild(cbTd);
+	const baseTd = el(doc, "td", "tm-cm-cell-flex", "");
+	appendRowBase(ctx, baseTd, c, cb);
+	tr.appendChild(baseTd);
+	const ds = decksOf(st, c);
+	tr.appendChild(el(doc, "td", "tm-cm-col-deck", ds.length ? ds.map((d) => d.caption).join("·") : "—"));
+	tr.appendChild(el(doc, "td", "tm-cm-col-due", dueLabel(c.fields)));
+	tr.appendChild(el(doc, "td", "tm-cm-col-info", intervalLabel(c.fields)));
+	tr.appendChild(el(doc, "td", "tm-cm-col-info", repsLabel(c.fields)));
+	tr.appendChild(el(doc, "td", "tm-cm-col-info", diffLabel(c.fields)));
+	const opTd = el(doc, "td", "tm-cm-cell-flex", "");
+	appendOps(ctx, opTd, c);
+	tr.appendChild(opTd);
+	tr.addEventListener("click", (e: Event) => {
+		const t = e.target as HTMLElement;
+		if (t && (t.tagName === "A" || t.tagName === "BUTTON" || t.tagName === "INPUT")) return;
+		st.previewTitle = st.previewTitle === c.title ? null : c.title;
+		st.editTitle = null;
+		render(ctx);
+	});
+	tbody.appendChild(tr);
+}
+
+/** 单卡参数编辑表单（对标 Element parameters：下次到期 / 优先级 / 注释） */
+function editForm(ctx: Ctx, c: Card): HTMLElement {
+	const { doc, wiki, st } = ctx;
+	const box = el(doc, "div", "tm-cm-edit");
+	const f = c.fields;
+	const row = (label: string, input: HTMLElement) => {
+		const r = el(doc, "div", "tm-cm-edit-row");
+		r.appendChild(el(doc, "span", "tm-cm-info-label", label));
+		r.appendChild(input);
+		box.appendChild(r);
+	};
+	const dueInput = doc.createElement("input");
+	dueInput.type = "text";
+	dueInput.value = dueLabel(f) !== "—" ? dueLabel(f) : "";
+	dueInput.placeholder = "YYYY-MM-DD（下次到期）";
+	row("下次到期", dueInput);
+	const priInput = doc.createElement("input");
+	priInput.type = "number";
+	priInput.min = "0";
+	priInput.max = "100";
+	priInput.value = String(f["tidme.priority"] ?? "");
+	priInput.placeholder = "0-100（0 最高）";
+	row("优先级", priInput);
+	const commentInput = doc.createElement("input");
+	commentInput.type = "text";
+	commentInput.value = String(f["tidme.comment"] || "");
+	commentInput.placeholder = "注释（tidme.comment）";
+	row("注释", commentInput);
+	const save = el(doc, "button", "tm-btn tm-btn--primary", "✔ 保存");
+	save.addEventListener("click", () => {
+		const patch: Record<string, any> = {};
+		const m = String(dueInput.value || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+		// 17 位 UTC 编码（YYYYMMDD + 9 位 0），与 schema.twDateString 兼容
+		if (m) patch.due = `${m[1]}${m[2]}${m[3]}000000000`;
+		const priVal = String(priInput.value || "").trim();
+		if (priVal !== "" && Number.isFinite(Number(priVal))) {
+			patch["tidme.priority"] = String(Math.max(0, Math.min(100, Math.round(Number(priVal)))));
+		}
+		patch["tidme.comment"] = String(commentInput.value || "");
+		const ex = wiki.getTiddler(c.title);
+		if (ex) wiki.addTiddler({ ...ex.fields, ...patch });
+		st.editTitle = null;
+		render(ctx);
+		toast(ctx, "✔ 已保存卡片参数", "ok");
+	});
+	const cancel = el(doc, "button", "tm-btn", "取消");
+	cancel.addEventListener("click", () => {
+		st.editTitle = null;
+		render(ctx);
+	});
+	const r = el(doc, "div", "tm-cm-edit-row");
+	r.appendChild(save);
+	r.appendChild(cancel);
+	box.appendChild(r);
+	return box;
+}
+
+/** 列表视图（真 <table>，表头 sticky + 排序箭头 + 预览联动区） */
+function renderList(ctx: Ctx, listBox: HTMLElement, cards: Card[]) {
+	const { doc, st } = ctx;
+	const table = el(doc, "table", "tm-cm-table");
+	const thead = el(doc, "thead", "");
+	const trh = el(doc, "tr", "");
+	trh.appendChild(el(doc, "th", "tm-cm-cell-cb", ""));
+	trh.appendChild(el(doc, "th", "", "状态"));
+	trh.appendChild(el(doc, "th", "", "类型"));
+	const th = (label: string, key?: SortKey) => {
+		const t = el(doc, "th", "");
+		if (key) {
+			const active = st.sortKey === key;
+			const b = el(doc, "button", "tm-cm-sort" + (active ? " tm-cm-sort-active" : ""),
+				label + (active ? (st.sortAsc ? " ↑" : " ↓") : ""));
+			b.title = "点击排序";
+			b.addEventListener("click", () => {
+				if (st.sortKey === key) st.sortAsc = !st.sortAsc;
+				else {
+					st.sortKey = key;
+					st.sortAsc = true;
+				}
+				render(ctx);
+			});
+			t.appendChild(b);
+		} else {
+			t.textContent = label;
+		}
+		return t;
+	};
+	trh.appendChild(th("优先", "priority"));
+	trh.appendChild(th("混合", "mixed"));
+	trh.appendChild(th("标题", "breadcrumb"));
+	trh.appendChild(th("牌组", "deck"));
+	trh.appendChild(th("到期", "due"));
+	trh.appendChild(th("间隔"));
+	trh.appendChild(th("重复"));
+	trh.appendChild(th("难度"));
+	trh.appendChild(th("操作"));
+	thead.appendChild(trh);
+	table.appendChild(thead);
+
+	if (!cards.length) {
+		listBox.appendChild(emptyEl(doc, "当前视图下没有卡片。"));
+		return;
+	}
+	const tbody = el(doc, "tbody", "");
+	for (const c of [...cards].sort(cmpCards(ctx))) renderListRow(ctx, tbody, c);
+	table.appendChild(tbody);
+	listBox.appendChild(table);
+
+	// 预览联动区（对标 SuperMemo Browser Synchronization + Element data + Element parameters）
+	const prev = st.previewTitle ? cards.find((c) => c.title === st.previewTitle) : null;
+	if (!prev) return;
+	const pv = el(doc, "div", "tm-cm-preview");
+	const f = prev.fields;
+	pv.appendChild(el(doc, "div", "tm-cm-preview-head",
+		`${crumbOf(prev)} · ${kindMark(f) || "节"} · p${String(f["tidme.priority"] ?? "-").padStart(2, "0")} · ${stateLabel(f)}${dueLabel(f) !== "—" ? " · 到期 " + dueLabel(f) : ""}`));
+	const grid = el(doc, "div", "tm-cm-info-grid");
+	const info = (label: string, value: any) => {
+		const s = el(doc, "span", "");
+		s.appendChild(el(doc, "span", "tm-cm-info-label", label));
+		s.appendChild(doc.createTextNode(String(value ?? "—")));
+		grid.appendChild(s);
+	};
+	info("下次到期", dueLabel(f));
+	info("上次复习", dateLabel(f.last_review));
+	info("间隔", intervalLabel(f));
+	info("重复", repsLabel(f));
+	info("遗忘", lapsesLabel(f));
+	info("稳定性", f.stability !== undefined && f.stability !== "" ? String(Number(f.stability).toFixed(1)) : "—");
+	info("难度", diffLabel(f));
+	info("已过天数", f.elapsed_days !== undefined && f.elapsed_days !== "" ? String(Number(f.elapsed_days).toFixed(1)) : "—");
+	info("牌组", decksOf(st, prev).map((d) => d.caption).join("·") || "—");
+	if (f["tidme.comment"]) info("注释", f["tidme.comment"]);
+	pv.appendChild(grid);
+	if (st.editTitle === prev.title) {
+		pv.appendChild(editForm(ctx, prev));
+	} else {
+		const editBtn = el(doc, "button", "tm-cm-op", "✎ 编辑参数");
+		editBtn.title = "修改下次到期 / 优先级 / 注释（对标 SuperMemo Element parameters）";
+		editBtn.addEventListener("click", () => {
+			st.editTitle = prev.title;
+			render(ctx);
+		});
+		pv.appendChild(editBtn);
+	}
+	const body = el(doc, "div", "tm-cm-preview-body");
+	const text = String(f.text || "").replace(/\s+/g, " ").trim();
+	body.appendChild(el(doc, "span", "", text.slice(0, 400) + (text.length > 400 ? " …" : "")));
+	pv.appendChild(body);
+	listBox.appendChild(pv);
+}
+
+// ---------- 工具条与主渲染 ----------
+
+/** 批量动作按钮：对选中卡逐张写字段（删除带确认） */
+function batchButton(ctx: Ctx, label: string, apply: (f: Record<string, any>) => Record<string, any>, destructive = false): HTMLElement {
+	const { doc, wiki, st } = ctx;
+	const b = el(doc, "button", "tm-btn" + (destructive ? " tm-btn--danger" : ""), label);
+	b.addEventListener("click", async () => {
+		if (destructive && !(await dialog.confirmDialog(doc, {
+			title: "删除卡片",
+			message: `确定删除选中的 ${st.selected.size} 张卡片？此操作不可恢复。`,
+			confirmLabel: "删除", danger: true
+		}))) return;
+		let n = 0;
+		for (const title of st.selected) {
+			const t = wiki.getTiddler(title);
+			if (!t) continue;
+			if (destructive) wiki.deleteTiddler(title);
+			else wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
+			n++;
+		}
+		st.selected.clear();
+		render(ctx);
+		toast(ctx, destructive ? `已删除 ${n} 张卡片` : `${label}：已处理 ${n} 张`, destructive ? "err" : "ok");
+	});
+	return b;
+}
+
+/** ⚡ 顺延过载：autoPostpone 当前可见卡（按优先级保高顺低） */
+function autoPostponeButton(ctx: Ctx): HTMLElement {
+	const { doc, wiki, st } = ctx;
+	const b = icons.iconButton(doc, "tm-cm-btn", "zap", "顺延过载");
+	b.title = "自动按优先级顺延低优先级的逾期卡片（保留高优先级卡片）";
+	b.addEventListener("click", () => {
+		let cfg: any = {};
+		try {
+			cfg = JSON.parse(wiki.getTiddlerText(sched.AUTOPOSTPONE_CONFIG_TITLE, "{}") || "{}");
+		} catch { /* 默认配置 */ }
+		const res = sched.autoPostpone(st.visibleCards, cfg);
+		if (res.patches.length === 0) {
+			toast(ctx, `无需顺延（逾期 ${res.stats.overdue} 张，保留 Top ${res.stats.kept}）`, "ok");
+			return;
+		}
+		for (const p of res.patches) {
+			const tiddler = wiki.getTiddler(p.title);
+			if (tiddler) wiki.addTiddler({ ...tiddler.fields, ...p.fields });
+		}
+		render(ctx);
+		toast(ctx, `已顺延 ${res.stats.postponed} 张低优先逾期卡（保留 Top ${res.stats.kept}）`, "ok");
+	});
+	return b;
+}
+
+function buildToolbar(ctx: Ctx): HTMLElement {
+	const { doc, st } = ctx;
+	const toolbar = el(doc, "div", "tm-cm-toolbar");
+	const topRow = el(doc, "div", "tm-cm-top-row");
+
+	// 查找（按标题/面包屑过滤当前视图）
+	const searchRow = el(doc, "div", "tm-cm-search-row");
+	const input = el(doc, "input", "tm-cm-search");
+	input.placeholder = "查找卡片...";
+	input.value = st.searchText;
+	input.addEventListener("input", () => {
+		st.searchText = (input.value || "").trim().toLowerCase();
+		render(ctx);
+	});
+	searchRow.appendChild(input);
+	if (st.searchText) {
+		const clear = el(doc, "button", "tm-btn tm-cm-clear", "✕");
+		clear.addEventListener("click", () => {
+			st.searchText = "";
+			render(ctx);
+		});
+		searchRow.appendChild(clear);
+	}
+	topRow.appendChild(searchRow);
+
+	// 组织方式切换
+	const orgRow = el(doc, "div", "tm-cm-orgs");
+	for (const o of ORGS) {
+		const b = el(doc, "button", "tm-btn" + (st.org === o.id ? " tm-btn--active" : ""), o.label);
+		b.title = o.tip;
+		b.addEventListener("click", () => {
+			st.org = o.id;
+			render(ctx);
+		});
+		orgRow.appendChild(b);
+	}
+	topRow.appendChild(orgRow);
+
+	// 视图过滤按钮（计数 = 该子集实际卡数）
+	const viewRow = el(doc, "div", "tm-cm-views");
+	for (const v of VIEWS) {
+		const count = v.id === "all" ? st.allCards.length
+			: st.allCards.filter((c) => inView(c.fields, v.id)).length;
+		const b = el(doc, "button", "tm-btn" + (st.view === v.id ? " tm-btn--active" : ""), `${v.label}(${count})`);
+		b.addEventListener("click", () => {
+			st.view = v.id;
+			render(ctx);
+		});
+		viewRow.appendChild(b);
+	}
+	topRow.appendChild(viewRow);
+	toolbar.appendChild(topRow);
+
+	// 批量工具条（单行：全选 + 调度 + 状态 + 危险 + 优先级）
+	const bar = el(doc, "div", "tm-cm-bar");
+	const row = el(doc, "div", "tm-cm-bar-row", "");
+
+	const bulkCbGroup = el(doc, "span", "tm-cm-bar-group", "");
+	st.bulkCb = doc.createElement("input");
+	st.bulkCb.type = "checkbox";
+	st.bulkCb.className = "tm-cm-group-cb";
+	st.bulkCb.title = "全选/清空所有当前可见卡片";
+	st.bulkCb.addEventListener("change", () => {
+		for (const c of st.visibleCards) {
+			if (st.bulkCb?.checked) st.selected.add(c.title);
+			else st.selected.delete(c.title);
+		}
+		updateSelectionUI(ctx);
+	});
+	bulkCbGroup.appendChild(st.bulkCb);
+	st.selLabel = el(doc, "span", "tm-cm-sel-info", `已选 ${st.selected.size}/${st.visibleCards.length} 张`);
+	bulkCbGroup.appendChild(st.selLabel);
+	row.appendChild(bulkCbGroup);
+
+	const schedGroup = el(doc, "span", "tm-cm-bar-group", "");
+	schedGroup.appendChild(batchButton(ctx, "顺延7d", (f) => sched.postponeCard(f, 7)));
+	schedGroup.appendChild(batchButton(ctx, "提前", () => sched.advanceCard()));
+	schedGroup.appendChild(batchButton(ctx, "遗忘", () => sched.forgetCard()));
+	schedGroup.appendChild(autoPostponeButton(ctx));
+	row.appendChild(schedGroup);
+
+	const stateGroup = el(doc, "span", "tm-cm-bar-group", "");
+	stateGroup.appendChild(batchButton(ctx, "移出队列", (f) => doneFields(f)));
+	stateGroup.appendChild(batchButton(ctx, "搁置", () => sched.suspendCard()));
+	stateGroup.appendChild(batchButton(ctx, "恢复", () => resumePatch()));
+	row.appendChild(stateGroup);
+
+	const dangerGroup = el(doc, "span", "tm-cm-bar-group", "");
+	dangerGroup.appendChild(batchButton(ctx, "删除", () => ({} as Record<string, any>), true));
+	row.appendChild(dangerGroup);
+
+	// 批量优先级（对标 SM Browser Priority: Modify）
+	const priGroup = el(doc, "span", "tm-cm-bar-group", "");
+	priGroup.appendChild(batchButton(ctx, "优先↑", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], -5) })));
+	priGroup.appendChild(batchButton(ctx, "优先↓", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], 5) })));
+	priGroup.appendChild(batchButton(ctx, "设高", () => ({ "tidme.priority": "10" })));
+	priGroup.appendChild(batchButton(ctx, "设中", () => ({ "tidme.priority": "50" })));
+	priGroup.appendChild(batchButton(ctx, "设低", () => ({ "tidme.priority": "90" })));
+	row.appendChild(priGroup);
+
+	bar.appendChild(row);
+	toolbar.appendChild(bar);
+	return toolbar;
+}
+
+/** 主渲染：保存滚动 → 收集 → 工具条 → 按组织方式分派主体 */
+function render(ctx: Ctx) {
+	const { doc, wrap, st } = ctx;
+	const oldBody = wrap.querySelector(".tm-cm-body") as HTMLElement | null;
+	const savedScrollTop = oldBody ? oldBody.scrollTop : 0;
+
+	wrap.textContent = "";
+	collectAll(ctx);
+	st.renderedCardTitles = [];
+	st.groupCbUpdaters = [];
+	st.cardCbUpdaters = [];
+	st.visibleCards = st.allCards.filter((c) => inView(c.fields, st.view) && matches(st, c));
+
+	wrap.appendChild(buildToolbar(ctx));
+
+	const body = el(doc, "div", "tm-cm-body");
+	if (st.org === "deck") renderDeckTree(ctx, body, st.visibleCards);
+	else if (st.org === "list") renderList(ctx, body, st.visibleCards);
+	else renderDocTree(ctx, body, st.visibleCards);
+	body.scrollTop = savedScrollTop;
+	wrap.appendChild(body);
+}
+
+// ---------- Widget ----------
+
+type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
 function makeCardManager(): WidgetCtor {
 	class CardManagerWidget extends Widget {
@@ -76,803 +893,59 @@ function makeCardManager(): WidgetCtor {
 			this.computeAttributes();
 			this.execute();
 			const doc = this.document;
-			const wiki = this.wiki;
 			const wrap = el(doc, "div", "tm-card-manager");
 
-			// 可选属性：view / org（模板可固定初始视图与组织方式）
 			const viewAttr = this.getAttribute("view", "") as View;
 			const orgAttr = this.getAttribute("org", "") as Org;
-			let view: View = VIEWS.some((v) => v.id === viewAttr) ? viewAttr : "all";
-			let org: Org = ORGS.some((o) => o.id === orgAttr) ? orgAttr : "doc";
-			let sortKey: "breadcrumb" | "priority" | "due" | "deck" | "mixed" = "breadcrumb";
-			let sortAsc = true;
-			let searchText = ""; // 查找：按标题/面包屑过滤当前视图
-			let previewTitle: string | null = null;
-			let editTitle: string | null = null; // 单卡参数编辑（对标 Element parameters）
-			const selected = new Set<string>();
-			let lastCheckedCardTitle: string | null = null;
-			let renderedCardTitles: string[] = [];
-			let allCards: Card[] = [];
-			let deckInfos: DeckInfo[] = [];
-			let bulkCb: HTMLInputElement | null = null;
-			let selLabel: HTMLElement | null = null;
-			let visibleCards: Card[] = [];
-			let groupCbUpdaters: (() => void)[] = [];
-			let cardCbUpdaters: (() => void)[] = [];
-
-			const updateSelectionUI = () => {
-				const visibleCount = visibleCards.length;
-				const selectedVisibleCount = visibleCards.filter((c) => selected.has(c.title)).length;
-
-				if (bulkCb) {
-					bulkCb.checked = visibleCount > 0 && selectedVisibleCount === visibleCount;
-					bulkCb.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleCount;
-				}
-				if (selLabel) {
-					selLabel.textContent = `已选 ${selected.size}/${visibleCount} 张`;
-				}
-				for (const u of groupCbUpdaters) u();
-				for (const u of cardCbUpdaters) u();
-			};
-
-			// P3 toast 反馈（面板内临时提示；写库动作后调用）
-			const toast = (msg: string, kind = "") => {
-				const t = el(doc, "div", "tm-toast" + (kind ? " tm-toast--" + kind : ""), msg);
-				wrap.insertBefore(t, wrap.firstChild);
-				setTimeout(() => t.remove(), 2500);
-			};
-
-			const collectAll = () => {
-				allCards = wiki.filterTiddlers(CARD_FILTER)
-					.filter((t: string, i: number, arr: string[]) => arr.indexOf(t) === i)
-					.map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
-deckInfos = deckMod.listDecks(wiki).map((deck: string) => {
-					const f = wiki.getTiddler(deck)?.fields || {};
-					return {
-						title: deck,
-						caption: uiUtils.captionText(wiki, f.caption || deck.split("/").pop() || deck, this),
-						strict: new Set(deckMod.deckCards(wiki, deck)),
-						loose: new Set(deckMod.deckCards(wiki, deck, { strict: false }))
-					};
-				})			};
-
-			const inView = (f: Record<string, any>, v: View): boolean => {
-				const suspended = f["tidme.suspended"] === "yes";
-				const done = sched.isCardDone(f);
-				if (v === "inqueue") return !done && !suspended;
-				if (v === "done") return done;
-				if (v === "suspended") return suspended;
-				if (v === "overdue") return String(f.state || "0") === "2" && sched.parseTwDate(f.due).getTime() < Date.now();
-				return true;
-			};
-
-			const decksOf = (c: Card): DeckInfo[] => deckInfos.filter((d) => d.loose.has(c.title));
-			const anyStrict = (c: Card): boolean => deckInfos.some((d) => d.strict.has(c.title));
-
-			const crumbOf = (c: Card): string => String(c.fields["tidme.breadcrumb"] || c.title);
-			const isDescendantOf = (child: Card, parent: Card): boolean => {
-				if (child.title === parent.title) return false;
-				const parentCrumb = crumbOf(parent);
-				const childCrumb = crumbOf(child);
-				if (childCrumb.startsWith(parentCrumb + " › ")) return true;
-				let p = String(child.fields["tidme.parent"] || "");
-				while (p) {
-					if (p === parent.title) return true;
-					const pt = wiki.getTiddler(p);
-					p = pt ? String(pt.fields["tidme.parent"] || "") : "";
-				}
-				return false;
-			};
-			const docNameOf = (c: Card): string => {
-				const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "");
-				if (!key) return "未分组";
-				const first = crumbOf(c).split(" › ")[0];
-				return first || key;
-			};
-
-			/** 按文档分组（组间按文档名排序；docKey 为空 → 未分组） */
-			const docGroupsOf = (cards: Card[]): [string, Card[]][] => {
-				const m = new Map<string, Card[]>();
-				for (const c of cards) {
-					const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "");
-					if (!m.has(key)) m.set(key, []);
-					m.get(key)!.push(c);
-				}
-				return [...m.entries()].sort((a, b) => {
-					const na = docNameOf(a[1][0]); const nb = docNameOf(b[1][0]);
-					return na < nb ? -1 : na > nb ? 1 : 0;
-				});
-			};
-
-			/** 卡片行通用操作：读（移出队列）/ 回（恢复）+ 删除 */
-			const appendOps = (row: HTMLElement, c: Card) => {
-				const inQueue = !sched.isCardDone(c.fields) && c.fields["tidme.suspended"] !== "yes";
-				if (inQueue) {
-					const readBtn = el(doc, "button", "tm-cm-op", "读");
-					readBtn.title = "移出队列（已读）";
-					readBtn.addEventListener("click", () => {
-						wiki.addTiddler(doneFields(c.fields));
-						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-						render();
-					});
-					row.appendChild(readBtn);
-				} else {
-					const resumeBtn = el(doc, "button", "tm-cm-op", "回");
-					resumeBtn.title = "恢复到学习队列";
-					resumeBtn.addEventListener("click", () => {
-						wiki.addTiddler(resumeFields(c.fields));
-						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-						render();
-					});
-					row.appendChild(resumeBtn);
-				}
-				const del = el(doc, "button", "tm-cm-op tm-cm-del", "✕");
-				del.title = "删除卡片";
-				del.addEventListener("click", () => {
-					selected.delete(c.title);
-					wiki.deleteTiddler(c.title);
-					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					render();
-				});
-				row.appendChild(del);
-			};
-
-			/** 卡片行基础：复选框 + 状态 + 类型 + 优先级 + 标题链接 */
-			const appendRowBase = (row: HTMLElement, c: Card, cb: HTMLInputElement) => {
-				const bd = badgeOf(c.fields);
-				const badge = el(doc, "span", `tm-badge tm-cm-badge ${bd.cls}`, bd.text);
-				badge.title = stateLabel(c.fields); // P2：徽章 tooltip
-				row.appendChild(badge);
-				const km = kindMark(c.fields);
-				if (km) row.appendChild(el(doc, "span", "tm-cm-kind", km));
-				const pri = c.fields["tidme.priority"];
-				if (pri !== undefined) {
-					row.appendChild(el(doc, "span", "tm-cm-pri", `p${String(pri).padStart(2, "0")}`));
-				}
-				const link = el(doc, "a", "tc-tiddlylink tm-cm-link",
-					String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title);
-				link.href = "#";
-				link.title = crumbOf(c);
-				link.addEventListener("click", (e: Event) => {
-					e.preventDefault();
-					this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
-				});
-				row.appendChild(link);
-				const updateCardCb = () => {
-					const children = allCards.filter((child) => isDescendantOf(child, c));
-					if (children.length > 0) {
-						const selChildrenCount = children.filter((child) => selected.has(child.title)).length;
-						const selfSel = selected.has(c.title);
-						cb.checked = selfSel && selChildrenCount === children.length;
-						cb.indeterminate = (selfSel || selChildrenCount > 0) && !(selfSel && selChildrenCount === children.length);
-					} else {
-						cb.checked = selected.has(c.title);
-						cb.indeterminate = false;
-					}
-				};
-				cardCbUpdaters.push(updateCardCb);
-				cb.addEventListener("click", (e: MouseEvent) => {
-					if (e.shiftKey && lastCheckedCardTitle && renderedCardTitles.includes(lastCheckedCardTitle)) {
-						const idx1 = renderedCardTitles.indexOf(lastCheckedCardTitle);
-						const idx2 = renderedCardTitles.indexOf(c.title);
-						if (idx1 !== -1 && idx2 !== -1) {
-							const start = Math.min(idx1, idx2);
-							const end = Math.max(idx1, idx2);
-							const range = renderedCardTitles.slice(start, end + 1);
-							const checked = cb.checked;
-							for (const title of range) {
-								if (checked) selected.add(title); else selected.delete(title);
-							}
-						}
-					} else {
-						const checked = cb.checked;
-						if (checked) {
-							selected.add(c.title);
-						} else {
-							selected.delete(c.title);
-						}
-						for (const child of allCards) {
-							if (isDescendantOf(child, c)) {
-								if (checked) selected.add(child.title); else selected.delete(child.title);
-							}
-						}
-					}
-					lastCheckedCardTitle = c.title;
-					updateSelectionUI();
-				});
-			};
-
-			/** 空状态（P0：tm-empty 组件） */
-			const emptyEl = (text: string, icon = "🗂") => {
-				const e = el(doc, "div", "tm-empty", "");
-				e.appendChild(el(doc, "div", "tm-empty-icon", icon));
-				e.appendChild(el(doc, "div", "", text));
-				return e;
-			};
-
-			/** 树折叠状态持久化（P2）：$:/state/tidme/manager/fold/<view>/<key>，text = open/closed */
-			const foldState = (view: string, key: string): string =>
-				`$:/state/tidme/manager/fold/${view}/${encodeURIComponent(key)}`;
-			const isFoldOpen = (stateTitle: string, defOpen: boolean): boolean => {
-				const v = wiki.getTiddlerText(stateTitle, "");
-				if (v === "open") return true;
-				if (v === "closed") return false;
-				return defOpen;
-			};
-			const bindFold = (details: HTMLElement, stateTitle: string) => {
-				details.addEventListener("toggle", () => {
-					wiki.addTiddler({ title: stateTitle, text: (details as any).open ? "open" : "closed" });
-				});
-			};
-			/** 文档分组 details（带折叠状态） */
-			const docDetails = (view: string, key: string, docCards: Card[]): HTMLElement => {
-				const dd = el(doc, "details", "tm-cm-doc");
-				dd.open = isFoldOpen(foldState(view, key), true);
-				bindFold(dd, foldState(view, key));
-				const dsum = el(doc, "summary", "", "");
-
-				// Checkbox for doc group
-				const groupCb = doc.createElement("input");
-				groupCb.type = "checkbox";
-				groupCb.className = "tm-cm-group-cb";
-				const updateDocGroupCb = () => {
-					const docSelCount = docCards.filter((c) => selected.has(c.title)).length;
-					groupCb.checked = docCards.length > 0 && docSelCount === docCards.length;
-					groupCb.indeterminate = docSelCount > 0 && docSelCount < docCards.length;
-				};
-				updateDocGroupCb();
-				groupCbUpdaters.push(updateDocGroupCb);
-				groupCb.addEventListener("click", (e) => {
-					e.stopPropagation(); // Prevent toggling the details
-				});
-				groupCb.addEventListener("change", () => {
-					if (groupCb.checked) {
-						for (const c of docCards) selected.add(c.title);
-					} else {
-						for (const c of docCards) selected.delete(c.title);
-					}
-					updateSelectionUI();
-				});
-				dsum.appendChild(groupCb);
-
-				dsum.appendChild(el(doc, "span", "tm-cm-doc-title",
-					`${docNameOf(docCards[0])}（${docCards.length}）`));
-				dd.appendChild(dsum);
-				const sorted = [...docCards].sort((a: Card, b: Card) => {
-					const pa = crumbOf(a); const pb = crumbOf(b);
-					return pa < pb ? -1 : pa > pb ? 1 : 0;
-				});
-				for (const c of sorted) renderCardRow(dd, c);
-				return dd;
-			};
-
-			/** 树形：按文档组织（全量，默认） */
-			const renderDocTree = (treeBox: HTMLElement, cards: Card[]) => {
-				const groups = docGroupsOf(cards);
-				if (!groups.length) {
-					treeBox.appendChild(emptyEl("当前视图下没有卡片。"));
-					return;
-				}
-				for (const [key, docCards] of groups) {
-					treeBox.appendChild(docDetails("doc", key, docCards));
+			const ctx: Ctx = {
+				widget: this,
+				doc,
+				wiki: this.wiki,
+				wrap,
+				st: {
+					view: VIEWS.some((v) => v.id === viewAttr) ? viewAttr : "all",
+					org: ORGS.some((o) => o.id === orgAttr) ? orgAttr : "doc",
+					sortKey: "breadcrumb",
+					sortAsc: true,
+					searchText: "",
+					previewTitle: null,
+					editTitle: null,
+					selected: new Set<string>(),
+					lastCheckedCardTitle: null,
+					renderedCardTitles: [],
+					allCards: [],
+					deckInfos: [],
+					visibleCards: [],
+					groupCbUpdaters: [],
+					cardCbUpdaters: [],
+					bulkCb: null,
+					selLabel: null
 				}
 			};
 
-			/** 树形：按牌组组织（牌组分支 + 未入组兜底） */
-			const renderDeckTree = (treeBox: HTMLElement, cards: Card[]) => {
-				if (!deckInfos.length) {
-					treeBox.appendChild(emptyEl("暂无牌组——导入/切分后自动创建。未入组卡片见下方「未入组」分支。", "🃏"));
-				}
-				for (const d of deckInfos) {
-					const deckCards = cards.filter((c) => d.strict.has(c.title));
-					const details = el(doc, "details", "tm-cm-deck");
-					const deckFold = foldState("deck", d.title);
-					details.open = isFoldOpen(deckFold, deckCards.length > 0);
-					bindFold(details, deckFold);
-					const ds = el(doc, "summary", "", "");
+			// 刷新：唯一机制（TW 原生 refresh 嗅探 + core/reactive 谓词）
+			this._ctx = ctx;
 
-					// Deck checkbox
-					const deckCb = doc.createElement("input");
-					deckCb.type = "checkbox";
-					deckCb.className = "tm-cm-group-cb";
-					const updateDeckCb = () => {
-						const deckSelCount = deckCards.filter((c) => selected.has(c.title)).length;
-						deckCb.checked = deckCards.length > 0 && deckSelCount === deckCards.length;
-						deckCb.indeterminate = deckSelCount > 0 && deckSelCount < deckCards.length;
-					};
-					updateDeckCb();
-					groupCbUpdaters.push(updateDeckCb);
-					deckCb.addEventListener("click", (e) => {
-						e.stopPropagation();
-					});
-					deckCb.addEventListener("change", () => {
-						if (deckCb.checked) {
-							for (const c of deckCards) selected.add(c.title);
-						} else {
-							for (const c of deckCards) selected.delete(c.title);
-						}
-						updateSelectionUI();
-					});
-					ds.appendChild(deckCb);
-
-					ds.appendChild(el(doc, "strong", "", ` ${d.caption}（${deckCards.length}）`));
-					details.appendChild(ds);
-					if (deckCards.length) {
-						const groups = docGroupsOf(deckCards);
-						for (const [docKey, docCards] of groups) {
-							details.appendChild(docDetails("deck", d.title + "/" + docKey, docCards));
-						}
-					}
-					treeBox.appendChild(details);
-				}
-				// 未入组：不被任何牌组命中的卡（已读/搁置/手动散卡）
-				const orphans = cards.filter((c) => !anyStrict(c));
-				const ob = el(doc, "details", "tm-cm-deck tm-cm-orphan");
-				const orphanFold = foldState("deck", "__orphan__");
-				ob.open = isFoldOpen(orphanFold, orphans.length > 0);
-				bindFold(ob, orphanFold);
-				const os = el(doc, "summary", "", "");
-
-				// Orphans checkbox
-				const orphanCb = doc.createElement("input");
-				orphanCb.type = "checkbox";
-				orphanCb.className = "tm-cm-group-cb";
-				const updateOrphanCb = () => {
-					const orphanSelCount = orphans.filter((c) => selected.has(c.title)).length;
-					orphanCb.checked = orphans.length > 0 && orphanSelCount === orphans.length;
-					orphanCb.indeterminate = orphanSelCount > 0 && orphanSelCount < orphans.length;
-				};
-				updateOrphanCb();
-				groupCbUpdaters.push(updateOrphanCb);
-				orphanCb.addEventListener("click", (e) => {
-					e.stopPropagation();
-				});
-				orphanCb.addEventListener("change", () => {
-					if (orphanCb.checked) {
-						for (const c of orphans) selected.add(c.title);
-					} else {
-						for (const c of orphans) selected.delete(c.title);
-					}
-					updateSelectionUI();
-				});
-				os.appendChild(orphanCb);
-
-				os.appendChild(el(doc, "strong", "", ` 未入组（${orphans.length}）`));
-				os.title = "不属于任何牌组队列的卡片：已读、搁置或手动创建的散卡";
-				ob.appendChild(os);
-				if (orphans.length) {
-					const groups = docGroupsOf(orphans);
-					for (const [docKey, docCards] of groups) {
-						ob.appendChild(docDetails("deck", "__orphan__/" + docKey, docCards));
-					}
-				}
-				treeBox.appendChild(ob);
-			};
-
-			/** 树行：复选框 + 徽章 + 标题 + 操作（缩进按 breadcrumb 深度） */
-			const renderCardRow = (parentEl: HTMLElement, c: Card) => {
-				renderedCardTitles.push(c.title);
-				const row = el(doc, "div", "tm-cm-card");
-				const depth = Math.max(0, crumbOf(c).split(" › ").length - 1);
-				row.style.paddingLeft = `${depth * 0.9}em`;
-				const cb = doc.createElement("input");
-				cb.type = "checkbox";
-				cb.checked = selected.has(c.title);
-				row.appendChild(cb);
-				appendRowBase(row, c, cb);
-				appendOps(row, c);
-				parentEl.appendChild(row);
-			};
-
-			/** 列表行（Browser 式表格行，P2）：勾选 + 状态 + 类型 + 优先 + 标题 + 牌组 + 到期 + 间隔/重复/难度 + 操作 */
-			const renderListRow = (tbody: HTMLElement, c: Card) => {
-				renderedCardTitles.push(c.title);
-				const tr = el(doc, "tr", "tm-cm-listrow");
-				const cbTd = el(doc, "td", "tm-cm-cell-cb");
-				const cb = doc.createElement("input");
-				cb.type = "checkbox";
-				cb.checked = selected.has(c.title);
-				cbTd.appendChild(cb);
-				tr.appendChild(cbTd);
-				// 状态/类型/优先/标题（flex 单元）
-				const baseTd = el(doc, "td", "tm-cm-cell-flex", "");
-				appendRowBase(baseTd, c, cb);
-				tr.appendChild(baseTd);
-				// 牌组列
-				const ds = decksOf(c);
-				tr.appendChild(el(doc, "td", "tm-cm-col-deck", ds.length ? ds.map((d) => d.caption).join("·") : "—"));
-				// 到期列
-				tr.appendChild(el(doc, "td", "tm-cm-col-due", dueLabel(c.fields)));
-				// 信息列（对标 Element data）
-				tr.appendChild(el(doc, "td", "tm-cm-col-info", intervalLabel(c.fields)));
-				tr.appendChild(el(doc, "td", "tm-cm-col-info", repsLabel(c.fields)));
-				tr.appendChild(el(doc, "td", "tm-cm-col-info", diffLabel(c.fields)));
-				// 操作列（图标按钮）
-				const opTd = el(doc, "td", "tm-cm-cell-flex", "");
-				appendOps(opTd, c);
-				tr.appendChild(opTd);
-				// 行点击 → 预览联动（对标 SuperMemo Browser 的 Synchronization）
-				tr.addEventListener("click", (e: Event) => {
-					const t = e.target as HTMLElement;
-					if (t && (t.tagName === "A" || t.tagName === "BUTTON" || t.tagName === "INPUT")) return;
-					previewTitle = previewTitle === c.title ? null : c.title;
-					editTitle = null;
-					render();
-				});
-				tbody.appendChild(tr);
-			};
-
-			/** 列表排序比较 */
-			const cmpCards = (a: Card, b: Card): number => {
-				let r = 0;
-				if (sortKey === "mixed") {
-					const sorted = sched.sortPriorityMixedQueue([a, b], "hybrid");
-					r = sorted[0] === a ? -1 : 1;
-				} else if (sortKey === "priority") {
-					const pa = Number(a.fields["tidme.priority"] ?? 99);
-					const pb = Number(b.fields["tidme.priority"] ?? 99);
-					r = pa - pb;
-				} else if (sortKey === "due") {
-					const da = String(a.fields.state || "0") === "2" ? sched.parseTwDate(a.fields.due).getTime() : Infinity;
-					const db = String(b.fields.state || "0") === "2" ? sched.parseTwDate(b.fields.due).getTime() : Infinity;
-					r = da - db;
-				} else if (sortKey === "deck") {
-					const da = decksOf(a).map((d) => d.caption).join("·");
-					const db = decksOf(b).map((d) => d.caption).join("·");
-					r = da < db ? -1 : da > db ? 1 : 0;
-				} else {
-					const pa = crumbOf(a); const pb = crumbOf(b);
-					r = pa < pb ? -1 : pa > pb ? 1 : 0;
-				}
-				return sortAsc ? r : -r;
-			};
-
-			/** 列表视图（P2：真 <table>，表头 sticky + 排序箭头 + hover） */
-			const renderList = (listBox: HTMLElement, cards: Card[]) => {
-				const table = el(doc, "table", "tm-cm-table");
-				const thead = el(doc, "thead", "");
-				const trh = el(doc, "tr", "");
-				const allTd = el(doc, "th", "tm-cm-cell-cb", "");
-				trh.appendChild(allTd);
-				trh.appendChild(el(doc, "th", "", "状态"));
-				trh.appendChild(el(doc, "th", "", "类型"));
-				const th = (label: string, key?: "breadcrumb" | "priority" | "due" | "deck" | "mixed") => {
-					const t = el(doc, "th", "");
-					if (key) {
-						const b = el(doc, "button", "tm-cm-sort" + (sortKey === key ? " tm-cm-sort-active" : ""),
-							label + (sortKey === key ? (sortAsc ? " ↑" : " ↓") : ""));
-						b.title = "点击排序";
-						b.addEventListener("click", () => {
-							if (sortKey === key) sortAsc = !sortAsc; else { sortKey = key; sortAsc = true; }
-							render();
-						});
-						t.appendChild(b);
-					} else {
-						t.textContent = label;
-					}
-					return t;
-				};
-				trh.appendChild(th("优先", "priority"));
-				trh.appendChild(th("混合", "mixed"));
-				trh.appendChild(th("标题", "breadcrumb"));
-				trh.appendChild(th("牌组", "deck"));
-				trh.appendChild(th("到期", "due"));
-				trh.appendChild(th("间隔"));
-				trh.appendChild(th("重复"));
-				trh.appendChild(th("难度"));
-				trh.appendChild(th("操作"));
-				thead.appendChild(trh);
-				table.appendChild(thead);
-
-				if (!cards.length) {
-					listBox.appendChild(emptyEl("当前视图下没有卡片。"));
-					return;
-				}
-				const tbody = el(doc, "tbody", "");
-				const sorted = [...cards].sort(cmpCards);
-				for (const c of sorted) renderListRow(tbody, c);
-				table.appendChild(tbody);
-				listBox.appendChild(table);
-
-				// 预览联动区（对标 SuperMemo Browser Synchronization + Element data + Element parameters）
-				const prev = previewTitle ? allCards.find((c) => c.title === previewTitle) : null;
-				if (prev) {
-					const pv = el(doc, "div", "tm-cm-preview");
-					const f = prev.fields;
-					pv.appendChild(el(doc, "div", "tm-cm-preview-head",
-						`${crumbOf(prev)} · ${kindMark(f) || "节"} · p${String(f["tidme.priority"] ?? "-").padStart(2, "0")} · ${stateLabel(f)}${dueLabel(f) !== "—" ? " · 到期 " + dueLabel(f) : ""}`));
-					// 信息网格（对标 Element data：Dates/Interval/Repetitions/Difficulty/DSR）
-					const grid = el(doc, "div", "tm-cm-info-grid");
-					const info = (label: string, value: any) => {
-						const s = el(doc, "span", "");
-						s.appendChild(el(doc, "span", "tm-cm-info-label", label));
-						s.appendChild(doc.createTextNode(String(value ?? "—")));
-						grid.appendChild(s);
-					};
-					info("下次到期", dueLabel(f));
-					info("上次复习", dateLabel(f.last_review));
-					info("间隔", intervalLabel(f));
-					info("重复", repsLabel(f));
-					info("遗忘", lapsesLabel(f));
-					info("稳定性", f.stability !== undefined && f.stability !== "" ? String(Number(f.stability).toFixed(1)) : "—");
-					info("难度", diffLabel(f));
-					info("已过天数", f.elapsed_days !== undefined && f.elapsed_days !== "" ? String(Number(f.elapsed_days).toFixed(1)) : "—");
-					info("牌组", decksOf(prev).map((d) => d.caption).join("·") || "—");
-					if (f["tidme.comment"]) info("注释", f["tidme.comment"]);
-					pv.appendChild(grid);
-					// 单卡参数编辑（对标 Element parameters）
-					if (editTitle === prev.title) {
-						pv.appendChild(editForm(prev));
-					} else {
-						const editBtn = el(doc, "button", "tm-cm-op", "✎ 编辑参数");
-						editBtn.title = "修改下次到期 / 优先级 / 注释（对标 SuperMemo Element parameters）";
-						editBtn.addEventListener("click", () => { editTitle = prev.title; render(); });
-						pv.appendChild(editBtn);
-					}
-					// 正文预览
-					const body = el(doc, "div", "tm-cm-preview-body");
-					const text = String(f.text || "").replace(/\s+/g, " ").trim();
-					body.appendChild(el(doc, "span", "", text.slice(0, 400) + (text.length > 400 ? " …" : "")));
-					pv.appendChild(body);
-					listBox.appendChild(pv);
-				}
-			};
-
-			/** 单卡参数编辑表单（对标 Element parameters：下次到期 / 优先级 / 注释） */
-			const editForm = (c: Card) => {
-				const box = el(doc, "div", "tm-cm-edit");
-				const f = c.fields;
-				const row = (label: string, input: HTMLElement) => {
-					const r = el(doc, "div", "tm-cm-edit-row");
-					r.appendChild(el(doc, "span", "tm-cm-info-label", label));
-					r.appendChild(input);
-					box.appendChild(r);
-				};
-				const dueInput = doc.createElement("input");
-				dueInput.type = "text";
-				dueInput.value = dueLabel(f) !== "—" ? dueLabel(f) : "";
-				dueInput.placeholder = "YYYY-MM-DD（下次到期）";
-				row("下次到期", dueInput);
-				const priInput = doc.createElement("input");
-				priInput.type = "number";
-				priInput.min = "0";
-				priInput.max = "100";
-				priInput.value = String(f["tidme.priority"] ?? "");
-				priInput.placeholder = "0-100（0 最高）";
-				row("优先级", priInput);
-				const commentInput = doc.createElement("input");
-				commentInput.type = "text";
-				commentInput.value = String(f["tidme.comment"] || "");
-				commentInput.placeholder = "注释（tidme.comment）";
-				row("注释", commentInput);
-				const save = el(doc, "button", "tm-btn tm-btn--primary", "✔ 保存");
-				save.addEventListener("click", () => {
-					const patch: Record<string, any> = {};
-					const dueVal = String(dueInput.value || "").trim();
-					if (dueVal) {
-						const m = dueVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-						// 17 位 UTC 编码（YYYYMMDD + 9 位 0），与 schema.twDateString 兼容；parseTwDate 只认 17 位
-						if (m) patch.due = `${m[1]}${m[2]}${m[3]}000000000`;
-					}
-					const priVal = String(priInput.value || "").trim();
-					if (priVal !== "" && Number.isFinite(Number(priVal))) {
-						patch["tidme.priority"] = String(Math.max(0, Math.min(100, Math.round(Number(priVal)))));
-					}
-					patch["tidme.comment"] = String(commentInput.value || "");
-					const ex = wiki.getTiddler(c.title);
-					if (ex) wiki.addTiddler({ ...ex.fields, ...patch });
-					editTitle = null;
-					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					render();
-					toast("✔ 已保存卡片参数", "ok");
-				});
-				const cancel = el(doc, "button", "tm-btn", "取消");
-				cancel.addEventListener("click", () => { editTitle = null; render(); });
-				const r = el(doc, "div", "tm-cm-edit-row");
-				r.appendChild(save);
-				r.appendChild(cancel);
-				box.appendChild(r);
-				return box;
-			};
-
-			/** 重新渲染整个面板 */
-			const render = () => {
-				const oldBody = wrap.querySelector(".tm-cm-body") as HTMLElement | null;
-				const savedScrollTop = oldBody ? oldBody.scrollTop : 0;
-
-				wrap.textContent = "";
-				collectAll();
-				renderedCardTitles = [];
-				groupCbUpdaters = [];
-				cardCbUpdaters = [];
-				// 查找：按标题/面包屑包含过滤
-				const matches = (c: Card) => {
-					if (!searchText.trim()) return true;
-					const hay = String(c.title + " " + (c.fields["tidme.breadcrumb"] || "")).toLowerCase();
-					return hay.includes(searchText.trim().toLowerCase());
-				};
-				visibleCards = allCards.filter((c) => inView(c.fields, view) && matches(c));
-
-				// 工具栏（sticky：查找/视图/组织/批量操作固定在顶部）
-				const toolbar = el(doc, "div", "tm-cm-toolbar");
-				const topRow = el(doc, "div", "tm-cm-top-row");
-
-				// 查找输入框
-				const searchRow = el(doc, "div", "tm-cm-search-row");
-				const input = el(doc, "input", "tm-cm-search");
-				input.placeholder = "查找卡片...";
-				input.value = searchText;
-				input.addEventListener("input", () => {
-					searchText = (input.value || "").trim().toLowerCase();
-					render();
-				});
-				searchRow.appendChild(input);
-				if (searchText) {
-					const clear = el(doc, "button", "tm-btn tm-cm-clear", "✕");
-					clear.addEventListener("click", () => { searchText = ""; render(); });
-					searchRow.appendChild(clear);
-				}
-				topRow.appendChild(searchRow);
-
-				// 组织方式切换
-				const orgRow = el(doc, "div", "tm-cm-orgs");
-				for (const o of ORGS) {
-					const b = el(doc, "button", "tm-btn" + (org === o.id ? " tm-btn--active" : ""), o.label);
-					b.title = o.tip;
-					b.addEventListener("click", () => { org = o.id; render(); });
-					orgRow.appendChild(b);
-				}
-				topRow.appendChild(orgRow);
-
-				// 视图过滤按钮（计数 = 该子集实际卡数）
-				const viewRow = el(doc, "div", "tm-cm-views");
-				for (const v of VIEWS) {
-					const count = v.id === "all" ? allCards.length
-						: allCards.filter((c) => inView(c.fields, v.id)).length;
-					const b = el(doc, "button", "tm-btn" + (view === v.id ? " tm-btn--active" : ""),
-						`${v.label}(${count})`);
-					b.addEventListener("click", () => { view = v.id; render(); });
-					viewRow.appendChild(b);
-				}
-				topRow.appendChild(viewRow);
-
-				toolbar.appendChild(topRow);
-
-				// 批量工具条（单行排列，删除“勾选卡片后可批量操作”文本）
-				const bar = el(doc, "div", "tm-cm-bar");
-				const row = el(doc, "div", "tm-cm-bar-row", "");
-
-				// Top-level bulk select checkbox
-				const visibleCount = visibleCards.length;
-				const selectedVisibleCount = visibleCards.filter((c) => selected.has(c.title)).length;
-
-				const bulkCbGroup = el(doc, "span", "tm-cm-bar-group", "");
-				bulkCb = doc.createElement("input") as HTMLInputElement;
-				bulkCb.type = "checkbox";
-				bulkCb.className = "tm-cm-group-cb";
-				bulkCb.title = "全选/清空所有当前可见卡片";
-				bulkCb.checked = visibleCount > 0 && selectedVisibleCount === visibleCount;
-				bulkCb.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleCount;
-				bulkCb.addEventListener("change", () => {
-					if (bulkCb?.checked) {
-						for (const c of visibleCards) selected.add(c.title);
-					} else {
-						for (const c of visibleCards) selected.delete(c.title);
-					}
-					updateSelectionUI();
-				});
-				bulkCbGroup.appendChild(bulkCb);
-
-				selLabel = el(doc, "span", "tm-cm-sel-info", `已选 ${selected.size}/${visibleCount} 张`);
-				bulkCbGroup.appendChild(selLabel);
-				row.appendChild(bulkCbGroup);
-
-				const schedGroup = el(doc, "span", "tm-cm-bar-group", "");
-				const priGroup = el(doc, "span", "tm-cm-bar-group", "");
-				const stateGroup = el(doc, "span", "tm-cm-bar-group", "");
-				const dangerGroup = el(doc, "span", "tm-cm-bar-group", "");
-
-				const batch = (label: string, apply: (f: Record<string, any>) => Record<string, any>, destructive = false) => {
-					const b = el(doc, "button", "tm-btn" + (destructive ? " tm-btn--danger" : ""), label);
-					b.addEventListener("click", () => {
-						// P2：危险操作确认
-						const confirmFn = (globalThis as any).confirm;
-						if (destructive && typeof confirmFn === "function" &&
-							!confirmFn(`确定删除选中的 ${selected.size} 张卡片？此操作不可恢复。`)) return;
-						let n = 0;
-						for (const title of selected) {
-							const t = wiki.getTiddler(title);
-							if (!t) continue;
-							if (destructive) wiki.deleteTiddler(title);
-							else wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
-							n++;
-						}
-						selected.clear();
-						events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-						render();
-						toast(destructive ? `已删除 ${n} 张卡片` : `${label}：已处理 ${n} 张`, destructive ? "err" : "ok");
-					});
-					return b;
-				};
-
-				schedGroup.appendChild(batch("顺延7d", (f) => sched.postponeCard(f, 7)));
-				schedGroup.appendChild(batch("提前", () => sched.advanceCard()));
-				schedGroup.appendChild(batch("遗忘", () => sched.forgetCard()));
-				const autoBtn = el(doc, "button", "tm-cm-btn", "⚡ 顺延过载");
-				autoBtn.title = "自动按优先级顺延低优先级的逾期卡片（保留高优先级卡片）";
-				autoBtn.addEventListener("click", () => {
-					let cfg: any = {};
-					try { cfg = JSON.parse(wiki.getTiddlerText("$:/config/Tidme/AutoPostpone", "{}") || "{}"); } catch { /* 默认配置 */ }
-					const res = sched.autoPostpone(visibleCards, cfg);
-					if (res.patches.length === 0) {
-						toast(`无需顺延（逾期 ${res.stats.overdue} 张，保留 Top ${res.stats.kept}）`, "ok");
-						return;
-					}
-					for (const p of res.patches) {
-						const tiddler = wiki.getTiddler(p.title);
-						if (tiddler) wiki.addTiddler({ ...tiddler.fields, ...p.fields });
-					}
-					events.dispatch(this, events.EVENTS.QUEUE_CHANGED);
-					render();
-					toast(`已顺延 ${res.stats.postponed} 张低优先逾期卡（保留 Top ${res.stats.kept}）`, "ok");
-				});
-				schedGroup.appendChild(autoBtn);
-				row.appendChild(schedGroup);
-
-				stateGroup.appendChild(batch("移出队列", (f) => doneFields(f)));
-				stateGroup.appendChild(batch("搁置", () => sched.suspendCard()));
-				stateGroup.appendChild(batch("恢复", (f) => resumeFields(f)));
-				row.appendChild(stateGroup);
-
-				dangerGroup.appendChild(batch("删除", () => ({} as Record<string, any>), true));
-				row.appendChild(dangerGroup);
-
-				// G3 批量优先级（对标 SM Browser Priority: Modify）
-				priGroup.appendChild(batch("优先↑", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], -5) })));
-				priGroup.appendChild(batch("优先↓", (f) => ({ "tidme.priority": sched.shiftPriority(f["tidme.priority"], 5) })));
-				priGroup.appendChild(batch("设高", () => ({ "tidme.priority": "10" })));
-				priGroup.appendChild(batch("设中", () => ({ "tidme.priority": "50" })));
-				priGroup.appendChild(batch("设低", () => ({ "tidme.priority": "90" })));
-				row.appendChild(priGroup);
-
-				bar.appendChild(row);
-
-				toolbar.appendChild(bar);
-				wrap.appendChild(toolbar);
-
-				// 主体：按组织方式渲染
-				const body = el(doc, "div", "tm-cm-body");
-				if (org === "deck") renderDeckTree(body, visibleCards);
-				else if (org === "list") renderList(body, visibleCards);
-				else renderDocTree(body, visibleCards);
-				body.scrollTop = savedScrollTop;
-				wrap.appendChild(body);
-			};
-
-			// 事件总线：队列/导入变化 → 重建面板（评分、阅读操作、批量操作后即时刷新）
-			this._rerender = render;
-			if (!this._bound) {
-				this._bound = true;
-				events.bindComponentRefresh(
-					[events.EVENTS.QUEUE_CHANGED, events.EVENTS.IMPORT_DONE, events.EVENTS.CARD_CREATED],
-					() => this._rerender?.()
-				);
-			}
-
-			render();
+			render(ctx);
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
 		}
-		refresh() { return false; }
+		refresh(changedTiddlers: Record<string, any>) {
+			const ctx = this._ctx;
+			if (!ctx) return false;
+			let need = false;
+			for (const title of Object.keys(changedTiddlers || {})) {
+				if (reactive.isTidmeDataChange(ctx.wiki, title)) { need = true; break; }
+			}
+			if (need) render(ctx);
+			return need;
+		}
 	}
 	return CardManagerWidget as any;
 }
 
-type WidgetCtor = { new(parseTreeNode: any, options: any): any };
-
 exports["card-manager"] = makeCardManager();
-// 供测试/复用：Done 与恢复的字段转换
+// 供测试/复用：Done 字段补丁、恢复合并补丁（三键 undefined = 删除）、信息标签
 exports.doneFields = doneFields;
-exports.resumeFields = resumeFields;
-// 供测试：卡片信息标签（对标 Element data 的显示层）
+exports.resumePatch = resumePatch;
 exports.labels = { dueLabel, intervalLabel, repsLabel, lapsesLabel, diffLabel, dateLabel };

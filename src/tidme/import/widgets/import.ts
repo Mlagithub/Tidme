@@ -9,8 +9,12 @@ widgets/import.ts — 自包含导入组件
 declare function require(module: string): any;
 const pipeline = require("$:/plugins/keepone/tidme/import/pipeline.js");
 const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
-const events = require("$:/plugins/keepone/tidme/core/events.js");
-const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const dom = require("$:/plugins/keepone/tidme/core/dom.js");
+const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
+const commitMod = require("$:/plugins/keepone/tidme/core/import-commit.js");
+const dialog = require("$:/plugins/keepone/tidme/core/dialog.js");
+const icons = require("$:/plugins/keepone/tidme/core/icons.js");
+const semMod = require("$:/plugins/keepone/tidme/core/server/semantic-split");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 interface ImportResult {
@@ -38,10 +42,10 @@ function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: str
 		const v = parseInt(wiki.getTiddlerText(t, "").trim(), 10);
 		return Number.isFinite(v) && v > 0 ? v : undefined;
 	};
-	const bag = (wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "").trim();
+	const bag = (wiki.getTiddlerText(pipeline.IMPORT_BAG_TITLE, "") || "").trim();
 	let semanticSplitCfg: any = null;
 	try {
-		const raw = wiki.getTiddlerText("$:/config/Tidme/SemanticSplit", "");
+		const raw = wiki.getTiddlerText(semMod.SEMANTIC_SPLIT_CONFIG_TITLE, "");
 		if (raw) semanticSplitCfg = JSON.parse(raw);
 	} catch {}
 	return {
@@ -64,10 +68,10 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 // 共享 DOM 工具（实现收敛于 core/ui-utils）
-const el = uiUtils.el;
+const el = dom.el;
 
 function getSemanticSplitConfig(wiki: any): any {
-	const t = wiki.getTiddler("$:/config/Tidme/SemanticSplit");
+	const t = wiki.getTiddler(semMod.SEMANTIC_SPLIT_CONFIG_TITLE);
 	if (!t) return {};
 	let cfg: any = {};
 	if (t.fields.text) {
@@ -185,7 +189,7 @@ function buildRow(
 		textIn.className = "tm-input";
 		textIn.placeholder = "内容...";
 		textIn.rows = 2;
-		const confirmBtn = el(doc, "button", "tm-btn tm-btn-primary tm-btn-sm", "确认插入");
+		const confirmBtn = el(doc, "button", "tm-btn tm-btn--primary tm-btn-sm", "确认插入");
 		confirmBtn.onclick = () => {
 			const tVal = titleIn.value.trim();
 			const cVal = textIn.value.trim();
@@ -219,7 +223,7 @@ function buildRow(
 				renderTree();
 			}
 		};
-		const cancelBtn = el(doc, "button", "tm-btn tm-btn-sm", "取消");
+		const cancelBtn = el(doc, "button", "tm-btn tm-btn--sm", "取消");
 		cancelBtn.onclick = () => { activeAddIndex = null; renderTree(); };
 		form.appendChild(titleIn);
 		form.appendChild(textIn);
@@ -239,7 +243,7 @@ function buildRow(
 
 		// 顶部工具栏：一键提炼短标题
 		const toolRow = el(doc, "div", "tm-import-actions", "");
-		const cleanBtn = el(doc, "button", "tm-btn tm-btn-sm", "✨ 一键提炼短标题");
+		const cleanBtn = icons.iconButton(doc, "tm-btn tm-btn--sm", "sparkles", "一键提炼短标题");
 		cleanBtn.title = "自动剔除副标题（冒号/破折号后）与括号内营销/描述说明";
 		cleanBtn.onclick = () => {
 			const cleanTitleFn = pipeline.cleanTitle || ((x: string) => x);
@@ -297,7 +301,7 @@ function buildRow(
 				const editIn = doc.createElement("input");
 				editIn.className = "tm-split-title-input";
 				editIn.value = shortTitle;
-				const confirmBtn = el(doc, "button", "tm-btn tm-btn-sm", "✔ 保存");
+				const confirmBtn = el(doc, "button", "tm-btn tm-btn--sm", "✔ 保存");
 				confirmBtn.onclick = () => {
 					const newShort = editIn.value.trim();
 					if (newShort && newShort !== shortTitle) {
@@ -327,7 +331,7 @@ function buildRow(
 
 			// 核心操作：针对偏长章节（>= 1万字）的“✂️ 二次切分”
 			if (isOverlong || charCount >= 10000) {
-				const subSplitBtn = el(doc, "button", "tm-btn tm-btn-sm tm-btn-primary", "✂️ 二次切分");
+				const subSplitBtn = icons.iconButton(doc, "tm-btn tm-btn--sm tm-btn--primary", "scissors", "二次切分");
 				subSplitBtn.title = "使用 LLM 语义分析将本偏长章节切分为带主题的子切片";
 				subSplitBtn.onclick = async () => {
 					subSplitBtn.textContent = "🤖 LLM 切片中...";
@@ -340,7 +344,7 @@ function buildRow(
 							subSplitBtn.removeAttribute("disabled");
 						}
 					} catch (e: any) {
-						alert("LLM 二次切分失败: " + (e && e.message || e));
+						await dialog.alertDialog(document, { title: "LLM 二次切分失败", message: String(e && e.message || e) });
 						subSplitBtn.textContent = "✂️ 二次切分";
 						subSplitBtn.removeAttribute("disabled");
 					}
@@ -354,7 +358,7 @@ function buildRow(
 				restoreBtn.onclick = () => { delete t._deleted; renderTree(); };
 				line.appendChild(restoreBtn);
 			} else {
-				const delBtn = el(doc, "button", "tm-btn tm-btn-icon", "🗑 移除");
+				const delBtn = icons.iconButton(doc, "tm-btn tm-btn--sm", "trash", "移除");
 				delBtn.onclick = () => { t._deleted = true; renderTree(); };
 				line.appendChild(delBtn);
 			}
@@ -398,7 +402,7 @@ function makeFileWidget(): WidgetCtor {
 			const rowsBox = el(doc, "div", "tm-import-rows");
 			const actions = el(doc, "div", "tm-import-actions");
 			actions.style.display = "none";
-			const btnImport = el(doc, "button", "tc-btn-primary", "✔ 全部导入");
+			const btnImport = el(doc, "button", "tm-btn tm-btn--primary", "✔ 全部导入");
 			const btnClear = el(doc, "button", "tm-btn", "清除");
 
 			// G10 服务端处理选项（TiddlyWeb）：大文件上传 → 服务端后台解析，不阻塞页面
@@ -455,7 +459,6 @@ function makeFileWidget(): WidgetCtor {
 							clearInterval(timer);
 							const secs = t.fields["tidme.import-sections"];
 							statusEl.textContent = `✓ 导入完成（docId ${t.fields["tidme.import-docId"] || "?"}${secs ? "，" + secs + " 节" : ""}）`;
-							events.dispatch(this, events.EVENTS.IMPORT_DONE, { docId: t.fields["tidme.import-docId"] });
 						} else if (t.fields["tidme.import-error"]) {
 							clearInterval(timer);
 							statusEl.textContent = `✕ 失败：${t.fields["tidme.import-error"]}`;
@@ -471,45 +474,22 @@ function makeFileWidget(): WidgetCtor {
 				previewCard.style.display = hasPending ? "" : "none";
 			};
 
-			// A：落库单个解析结果。同 docId 已有旧卡 → alignCards 增量（未变保 SRS 进度 /
-			// 修改重挂接 / 新增建卡 / 删除归档），否则全量写库。返回 { created, updated, archived }。
+			// A：落库单个解析结果。写库统一走 core/import-commit：同 docId 已有旧卡 →
+			// alignCards 增量（未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档），否则全量写。
+			// 返回 { created, updated, archived, aligned }。
 			const commitResult = async (result: ImportResult): Promise<{ created: number; updated: number; archived: number }> => {
 				const validTiddlers = result.tiddlers.filter((x: any) => !x._deleted);
 				const [doc, ...cards] = validTiddlers;
-				const sectionCards = cards.filter((x: any) => x["tidme.kind"] === "topic");
-				const align = require("$:/plugins/keepone/tidme/core/align.js");
+				// 文档页复用旧标题（引用稳定）：已存在 docPage 时以其为最终 title
 				const docPage = this.wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${result.docId}]]`)[0] || "";
-				// 仅对齐 section（普通阅读节）：摘录/挖空/问答/手动卡由用户决定，不在重切分时归档
-				const oldCards = this.wiki.filterTiddlers(`[tidme.doc[${result.docId}]tidme.kind[topic]!tidme.subkind[extract]!is[draft]]`)
-					.map((ot: string) => ({ title: ot, fields: this.wiki.getTiddler(ot)?.fields || {} }));
-
-				let aligned: any = null;
-				if (oldCards.length) {
-					aligned = await align.alignCards(oldCards, docPage || result.bookTitle,
-						sectionCards.map((c: any) => ({ title: c.title, fields: c })));
-					for (const k of aligned.keep) this.wiki.addTiddler({ ...k.fields });
-					for (const p of aligned.patches) {
-						const ex = this.wiki.getTiddler(p.title);
-						if (ex) this.wiki.addTiddler({ ...ex.fields, ...p.fields });
-					}
-					for (const at of aligned.archives) {
-						const ex = this.wiki.getTiddler(at);
-						if (!ex) continue;
-						this.wiki.addTiddler({ ...ex.fields, "tidme.obsolete": "yes", "tidme.done": "yes" });
-					}
-				}
-				// 文档页：复用旧标题（引用稳定），更新索引内容
-				const docTitle = docPage || doc.title;
-				this.wiki.addTiddler({ ...doc, title: docTitle, "tidme.doc": result.docId });
-				if (docPage && docTitle !== doc.title) this.wiki.deleteTiddler(doc.title);
-				// 非对齐模式：全量写卡；对齐模式：keep 已写，其余同 key 旧卡已在库
-				if (!aligned) {
-					for (const c of cards) this.wiki.addTiddler({ ...c });
-				}
-				// 无自动阅读牌组：topic 由阅读列表管理，item 进默认牌组
-				return aligned
-					? { created: aligned.keep.length, updated: aligned.patches.length, archived: aligned.archives.length }
-					: { created: cards.length, updated: 0, archived: 0 };
+				const r = await commitMod.commitImportToWiki(this.wiki, {
+					docId: result.docId,
+					docTiddler: { ...doc, "tidme.doc": result.docId },
+					docTitle: docPage || doc.title,
+					cards,
+					rewriteDocPage: false
+				});
+				return { created: r.created, updated: r.updated, archived: r.archived };
 			};
 
 			btnImport.addEventListener("click", async () => {
@@ -530,7 +510,6 @@ function makeFileWidget(): WidgetCtor {
 				for (const [token, item] of pending) rowsBox.appendChild(buildRow(doc, token, item, this.wiki));
 				refreshActions();
 				this.wiki.addTiddler({ title: "$:/temp/tidme-import/last-created", text: String(created) });
-				events.dispatch(this, events.EVENTS.IMPORT_DONE, { token: "", docId: "", bookTitle: "" });
 				this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-done" });
 				if (updated || archived) {
 					rowsBox.appendChild(el(doc, "div", "tm-import-summary tm-import-muted",
@@ -570,7 +549,7 @@ function makeFileWidget(): WidgetCtor {
 							...getOptions(this.wiki),
 							priority: sched.tierRandom(prioSel.value as any),
 							// 同名书 folder 唯一化探测（A1）：folder 已被其它 docId 占用 → 导入时加 ~docId 后缀
-							folderOccupied: (base: string) => uiUtils.docFolderOwner(this.wiki, base)
+							folderOccupied: (base: string) => docOps.docFolderOwner(this.wiki, base)
 						}) as ImportResult;
 						console.log("[tidme-import] 解析成功:", result.bookTitle, result.sectionCount, "节");
 						// 重复导入检测：同 docId 已在库中

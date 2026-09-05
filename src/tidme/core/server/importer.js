@@ -106,7 +106,7 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 						if (/\.(md|markdown|txt)$/.test(lower)) {
 							var semCfg = {};
 							try {
-								semCfg = JSON.parse($tw.wiki.getTiddlerText("$:/config/Tidme/SemanticSplit", "{}") || "{}");
+								semCfg = JSON.parse($tw.wiki.getTiddlerText(semantic.SEMANTIC_SPLIT_CONFIG_TITLE, "{}") || "{}");
 							} catch (e) { /* 忽略非法配置 */ }
 							if (semCfg && semCfg.enable === true) {
 								var semantic = require("$:/plugins/keepone/tidme/core/server/semantic-split.js");

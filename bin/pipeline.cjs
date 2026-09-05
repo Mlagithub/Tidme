@@ -57,7 +57,7 @@ var __async = (__this, __arguments, generator) => {
 // src/tidme/import/pipeline/main.ts
 var main_exports = {};
 __export(main_exports, {
-  applyOverrides: () => applyOverrides,
+  IMPORT_BAG_TITLE: () => IMPORT_BAG_TITLE,
   bookCardsRoot: () => bookCardsRoot,
   bookRoot: () => bookRoot,
   cardPath: () => cardPath,
@@ -65,21 +65,17 @@ __export(main_exports, {
   contentFingerprint: () => contentFingerprint,
   deckSubsetPath: () => deckSubsetPath,
   extractPath: () => extractPath,
-  initialFsrsFields: () => initialFsrsFields,
   insertedSectionTitle: () => insertedSectionTitle,
   joinPath: () => joinPath,
   leafIdOf: () => leafIdOf,
-  makeCardId: () => makeCardId,
   makeDocId: () => makeDocId,
-  makeExtractId: () => makeExtractId,
   makeSectionId: () => makeSectionId,
   neighborsOf: () => neighborsOf,
   runImport: () => runImport,
   runSplit: () => runSplit,
   sectionLeaf: () => sectionLeaf,
   sectionPath: () => sectionPath,
-  slugify: () => slugify,
-  twDateString: () => twDateString
+  slugify: () => slugify
 });
 module.exports = __toCommonJS(main_exports);
 
@@ -136,14 +132,6 @@ async function makeDocId(meta) {
 async function makeSectionId(docId, breadcrumb, ordinal) {
   const basis = [docId, breadcrumb.join(" \u203A "), String(ordinal)].join("|");
   return "s" + await shortHash(basis, 12);
-}
-async function makeExtractId(parentId, text, ordinal) {
-  const basis = [parentId, await contentFingerprint(text), String(ordinal)].join("|");
-  return "e" + await shortHash(basis, 12);
-}
-async function makeCardId(parentId, caption, text, ordinal) {
-  const basis = [parentId, await contentFingerprint(caption + "\n" + text), String(ordinal)].join("|");
-  return "c" + await shortHash(basis, 12);
 }
 
 // src/tidme/import/pipeline/epub.ts
@@ -728,92 +716,12 @@ function deriveSection(sec) {
   }
   return sec;
 }
-function applyOverrides(sections, overrides) {
-  const o = overrides || {};
-  const mergeKeys = new Set(o.merge || []);
-  const splitKeys = new Set(o.split || []);
-  const deleteKeys = new Set(o.delete || []);
-  const titleMap = o.titles || {};
-  const customList = o.customSections || [];
-  const keyOf = (s) => s.trail.join(" \u203A ");
-  const filtered = [];
-  for (const s of sections) {
-    const k = keyOf(s);
-    if (deleteKeys.has(k))
-      continue;
-    const sec = __spreadProps(__spreadValues({}, s), { trail: [...s.trail] });
-    if (titleMap[k]) {
-      sec.title = titleMap[k];
-      if (sec.trail.length)
-        sec.trail[sec.trail.length - 1] = titleMap[k];
-    }
-    filtered.push(sec);
-  }
-  const out = [];
-  for (const sec of filtered) {
-    out.push(sec);
-    if (splitKeys.has(keyOf(sec))) {
-      const parts = sec.parts || [];
-      const idx = parts.findIndex((p, i) => i > 0 && p.title);
-      if (idx > 0) {
-        const sub = parts[idx];
-        sec.parts = [parts[0], ...parts.slice(idx + 1)];
-        sec.merged = sec.parts.length > 1;
-        const newSec = {
-          level: sec.level,
-          title: sub.title || "",
-          trail: [...sec.trail, sub.title || ""].filter(Boolean),
-          html: sub.html,
-          text: sub.text,
-          chars: sub.chars,
-          parts: [{ html: sub.html, text: sub.text, chars: sub.chars }]
-        };
-        out.push(newSec);
-      }
-    }
-  }
-  const result = [];
-  for (const sec of out) {
-    if (mergeKeys.has(keyOf(sec)) && result.length) {
-      const prev = result[result.length - 1];
-      const parts = sec.parts || [{ html: sec.html, text: sec.text, chars: sec.chars }];
-      prev.parts = prev.parts || [{ html: prev.html, text: prev.text, chars: prev.chars }];
-      prev.parts.push({ title: sec.title || void 0, html: parts[0].html, text: parts[0].text, chars: parts[0].chars });
-      for (const p of parts.slice(1))
-        prev.parts.push(p);
-      prev.merged = true;
-      prev.level = Math.min(prev.level, sec.level);
-      continue;
-    }
-    result.push(sec);
-  }
-  for (const cs of customList) {
-    if (!cs.title || !cs.text)
-      continue;
-    const newSec = {
-      level: 1,
-      title: cs.title,
-      trail: [cs.title],
-      html: `<p>${escapeHtml(cs.text)}</p>`,
-      text: cs.text,
-      chars: cs.text.length,
-      parts: [{ html: `<p>${escapeHtml(cs.text)}</p>`, text: cs.text, chars: cs.text.length }]
-    };
-    if (cs.insertAfterKey) {
-      const idx = result.findIndex((s) => keyOf(s) === cs.insertAfterKey);
-      if (idx >= 0)
-        result.splice(idx + 1, 0, newSec);
-      else
-        result.push(newSec);
-    } else {
-      result.push(newSec);
-    }
-  }
-  result.forEach((sec, i) => {
+function finalizeSections(sections) {
+  sections.forEach((sec, i) => {
     deriveSection(sec);
     sec.ordinal = i;
   });
-  return result;
+  return sections;
 }
 function applySizeRules(leaves, cfg, stats) {
   const expanded = [];
@@ -893,7 +801,7 @@ function chunkFile(p, statsOut = {}) {
     isContinuation: !!sec.isContinuation
   }, sec.parts ? { parts: sec.parts } : {}));
 }
-function chunkBook(files, options = {}, overrides) {
+function chunkBook(files, options = {}) {
   const stats = { hardSplitCount: 0, sections: 0 };
   const sections = [];
   for (const f of files) {
@@ -909,7 +817,7 @@ function chunkBook(files, options = {}, overrides) {
     if (!s.title)
       s.title = s.trail[s.trail.length - 1] || "\u7EED";
   });
-  const final = applyOverrides(sections, overrides);
+  const final = finalizeSections(sections);
   stats.sections = final.length;
   return { sections: final, stats };
 }
@@ -1327,7 +1235,6 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
         "tidme.chars": String(s.chars),
         "tidme.priority": String(normalizePriority(priority)),
         "tidme.afactor": String(afactorForText(s.chars)),
-        "tidme.path": joined,
         "tidme.breadcrumb": joined,
         "tidme.source": meta.title || "",
         "tidme.author": meta.creator || "",
@@ -1375,8 +1282,7 @@ function runSplit(input) {
     const docId = yield makeDocId({ title: bookTitle, creator: meta.creator || "", language: meta.language || "" });
     const { sections, stats } = chunkBook(
       [{ fileName: bookTitle, fileBreadcrumb: [], blocks }],
-      { maxChars: input.maxChars, minChars: input.minChars },
-      input.overrides
+      { maxChars: input.maxChars, minChars: input.minChars }
     );
     const metaWithFormat = __spreadProps(__spreadValues({}, meta), { __format: format });
     const { tiddlers, warnings } = yield emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority, input.folderOccupied);
@@ -1395,6 +1301,7 @@ function runSplit(input) {
 }
 
 // src/tidme/import/pipeline/main.ts
+var IMPORT_BAG_TITLE = "$:/temp/tidme-import/bag";
 function importEpubBytes(bytes, fileName, options) {
   return __async(this, null, function* () {
     const book = yield readEpubBytes(bytes);

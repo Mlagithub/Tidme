@@ -10,13 +10,15 @@ widgets/stats-panel.ts — 统计面板（M5-T4，P1 UI：指标卡 + 表格 + �
 
 declare function require(module: string): any;
 const stats = require("$:/plugins/keepone/tidme/core/stats.js");
-const events = require("$:/plugins/keepone/tidme/core/events.js");
-const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const reactive = require("$:/plugins/keepone/tidme/core/reactive.js");
+const dom = require("$:/plugins/keepone/tidme/core/dom.js");
+const display = require("$:/plugins/keepone/tidme/core/display.js");
 const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
-// 共享 DOM 工具（实现收敛于 core/ui-utils）
-const el = uiUtils.el;
+// 共享 DOM/显示工具（实现收敛于 core/dom、core/display）
+const el = dom.el;
+const displayTitle = display.displayTitle;
 
 function sectionTitle(doc: Document, label: string): HTMLElement {
 	return el(doc, "div", "tm-section-title", label);
@@ -144,7 +146,7 @@ function makeStatsPanel(): WidgetCtor {
 					const p = stats.docProgress(sections);
 					const tr = el(doc, "tr", "");
 					const docFields = wiki.getTiddler(d)?.fields || {};
-					tr.appendChild(el(doc, "td", "tm-stat-doc-name", uiUtils.displayTitle(docFields, d)));
+					tr.appendChild(el(doc, "td", "tm-stat-doc-name", displayTitle(docFields, d)));
 					const progTd = el(doc, "td", "", "");
 					const barWrap = el(doc, "span", "tm-progress tm-stat-bar");
 					const bar = el(doc, "span", "tm-progress-fill tm-stat-bar-fill", "");
@@ -209,24 +211,23 @@ function makeStatsPanel(): WidgetCtor {
 			};
 			build();
 
-			// 事件总线：队列/导入变化 → 重建
-			this._rebuild = () => {
-				if (!this._wrap || !this._wrap.parentNode) return;
-				this._wrap.textContent = "";
-				build();
-			};
-			if (!this._bound) {
-				this._bound = true;
-				events.bindComponentRefresh(
-					[events.EVENTS.QUEUE_CHANGED, events.EVENTS.IMPORT_DONE, events.EVENTS.CARD_CREATED],
-					() => this._rebuild?.()
-				);
-			}
+			// 刷新：唯一机制（TW 原生 refresh 嗅探 + core/reactive 谓词）
+			this._build = build;
 
 			parent.insertBefore(wrap, nextSibling);
 			this.domNodes.push(wrap);
 		}
-		refresh() { return false; }
+		refresh(changedTiddlers: Record<string, any>) {
+			let need = false;
+			for (const title of Object.keys(changedTiddlers || {})) {
+				if (reactive.isTidmeDataChange(this.wiki, title)) { need = true; break; }
+			}
+			if (need && this._wrap && this._wrap.parentNode) {
+				this._wrap.textContent = "";
+				this._build?.();
+			}
+			return need;
+		}
 	}
 	return StatsPanelWidget as any;
 }

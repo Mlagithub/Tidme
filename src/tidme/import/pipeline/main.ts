@@ -13,10 +13,13 @@ import { smartMergeParagraphs } from "./smart-merge";
 import { chunkBook } from "./chunker";
 import type { ChunkOptions } from "./chunker";
 import { decodeBytes, sniffFormat } from "./ingest-text";
-import { emitTiddlers, runSplit, twDateString, initialFsrsFields } from "./split";
+import { emitTiddlers, runSplit } from "./split";
 
-export { runSplit, twDateString, initialFsrsFields, applyOverrides, cleanTitle } from "./split";
-export { makeExtractId, makeCardId, makeSectionId, makeDocId, contentFingerprint } from "$:/plugins/keepone/tidme/core/ids";
+/** 同步目标桶的临时配置 tiddler（浏览器 import widgets 与服务端 importer 共用） */
+export const IMPORT_BAG_TITLE = "$:/temp/tidme-import/bag";
+
+export { runSplit, cleanTitle } from "./split";
+export { makeSectionId, makeDocId, contentFingerprint } from "$:/plugins/keepone/tidme/core/ids";
 export { bookRoot, bookCardsRoot, sectionPath, sectionLeaf, extractPath, cardPath, deckSubsetPath, insertedSectionTitle, leafIdOf, slugify, joinPath } from "$:/plugins/keepone/tidme/core/paths";
 
 export interface ImportResult {

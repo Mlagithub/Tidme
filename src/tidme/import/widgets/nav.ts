@@ -1,25 +1,25 @@
 /*
 widgets/nav.ts — 页面间导航条（Tidme 主页面切换 + 分隔线 + 当前页高亮）
 
-渲染：学习中心 · 阅读列表 · 导入中心 · 卡片管理器 · 统计
+渲染：今天 · 阅读 · 导入 · 管理 · 统计
 点击 tm-navigate 切换；当前 tiddler 高亮（主色）。
 放各主页面顶部，替换散落的底部链接。
 */
 
 declare function require(module: string): any;
-const uiUtils = require("$:/plugins/keepone/tidme/core/ui-utils.js");
+const dom = require("$:/plugins/keepone/tidme/core/dom.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const NAV: [string, string][] = [
-	["$:/Decks", "学习中心"],
-	["$:/plugins/keepone/tidme/import/ui/reading-list", "阅读列表"],
-	["$:/plugins/keepone/tidme/import/ui/import-center", "导入中心"],
-	["$:/plugins/keepone/tidme/manager/ui/card-manager", "卡片管理器"],
+	["$:/Today", "今天"],
+	["$:/plugins/keepone/tidme/import/ui/reading-list", "阅读"],
+	["$:/plugins/keepone/tidme/import/ui/import-center", "导入"],
+	["$:/plugins/keepone/tidme/manager/ui/card-manager", "管理"],
 	["$:/plugins/keepone/tidme/import/ui/stats", "统计"]
 ];
 
-// 共享 DOM 工具（实现收敛于 core/ui-utils）
-const el = uiUtils.el;
+// 共享 DOM 工具（实现收敛于 core/dom）
+const el = dom.el;
 
 function makeNav(): any {
 	class NavWidget extends Widget {

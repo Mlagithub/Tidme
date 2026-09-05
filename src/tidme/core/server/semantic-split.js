@@ -286,6 +286,9 @@ insertVirtualHeadings / buildPrompt）导出供单元测试；网络层可注入
 			});
 	};
 
+	/** 配置 tiddler 标题（服务端 importer 与浏览器 import widget 共用唯一产地） */
+	exports.SEMANTIC_SPLIT_CONFIG_TITLE = "$:/config/Tidme/SemanticSplit";
+
 	exports.isUnstructured = isUnstructured;
 	exports.extractParagraphs = extractParagraphs;
 	exports.parseBreaksResponse = parseBreaksResponse;
