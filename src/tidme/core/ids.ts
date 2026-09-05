@@ -2,7 +2,10 @@
 ids.ts — 确定性 ID 与内容指纹（双端：浏览器 WebCrypto / Node / TW 服务端 vm 沙箱）
 
 规格见 doc/research/data-model.md §4。纯函数、无副作用。
+本模块被 node 测试直接 import，禁用 require；仅 ES 引零依赖的 core/ns 常量。
 */
+
+import { CRUMB_SEP } from "./ns.ts";
 
 export interface BookMeta {
 	title?: string;
@@ -68,7 +71,7 @@ export async function makeDocId(meta: BookMeta): Promise<string> {
 
 /** 节 ID：'s' + 12 位短哈希(docId | 全面包屑 | 全局序号) */
 export async function makeSectionId(docId: string, breadcrumb: string[], ordinal: number): Promise<string> {
-	const basis = [docId, breadcrumb.join(" › "), String(ordinal)].join("|");
+	const basis = [docId, breadcrumb.join(CRUMB_SEP), String(ordinal)].join("|");
 	return "s" + (await shortHash(basis, 12));
 }
 

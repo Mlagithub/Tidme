@@ -14,6 +14,7 @@ import type { BookMeta } from "$:/plugins/keepone/tidme/core/ids";
 import { bookRoot, joinPath, sectionLeaf } from "$:/plugins/keepone/tidme/core/paths";
 import { initialFsrsFields, twDateString } from "$:/plugins/keepone/tidme/core/schema";
 import { normalizePriority, PRIORITY_DEFAULT, afactorForText } from "$:/plugins/keepone/tidme/core/scheduler";
+import { CRUMB_SEP } from "$:/plugins/keepone/tidme/core/ns";
 import { chunkBook, applyOverrides } from "./chunker";
 import type { ChunkOptions, RawSection } from "./chunker";
 import { blocksFromMarkdown, blocksFromWikitext, blocksFromHtml, blocksFromPlainText, sniffFormat, guessTitle, formatLabel } from "./ingest-text";
@@ -137,7 +138,7 @@ export async function emitTiddlers(
 		const trail = [docTitle, ...s.trail].map((t) => String(t || "").trim()).filter(Boolean);
 		const id = await makeSectionId(docId, trail, s.ordinal as number);
 		const hash = await contentFingerprint(s.text);
-		const joined = trail.join(" › ");
+		const joined = trail.join(CRUMB_SEP);
 		// 叶段 = 可读 caption slug + "-" + 稳定 id（A2：搜索/最近/反向链接可读；唯一性由 id 保证）
 		const capText = s.title || trail[trail.length - 1] || "";
 		const title = joinPath(docRoot, sectionLeaf(capText, id));

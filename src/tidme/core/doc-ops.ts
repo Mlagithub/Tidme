@@ -7,6 +7,7 @@ core/doc-ops.ts — 文档/卡片运维操作（文档查询、删除阅读材�
 declare function require(module: string): any;
 const session = require("$:/plugins/keepone/tidme/core/session.js");
 const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 
 export const READPOINT_PREFIX = "$:/state/tidme-import/readpoint/";
 /** 全局续读点（最近打开的阅读卡；section-bar 写、workflow「开始阅读」读） */
@@ -135,12 +136,12 @@ export function prepareCardFold(wiki: any, title: string): void {
 	const decks = deckMod.listDecks(wiki);
 	for (const d of decks) {
 		if (!deckMod.deckCards(wiki, d).includes(title)) continue;
-		const f = deckMod.getDeck(wiki, d)?.fields || {};
-		const unfoldFilter = String(f.card_unfold || "");
+		const deckFields = deckMod.getDeck(wiki, d)?.fields || {};
+		const unfoldFilter = String(deckFields.card_unfold || "");
 		const unfold = unfoldFilter && wiki.filterTiddlers(`[subfilter{${d}!!card_unfold}]`).includes(title);
-		wiki.addTiddler({ title: "$:/state/folded/" + title, text: unfold ? "show" : "hide" });
+		wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text: unfold ? "show" : "hide" });
 		return;
 	}
 	// 兜底：默认折叠
-	wiki.addTiddler({ title: "$:/state/folded/" + title, text: "hide" })
+	wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text: "hide" })
 }

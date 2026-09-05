@@ -4,7 +4,10 @@ deck-engine.ts — deck 队列组合逻辑（纯函数）
 复刻 fsrs4tw ui/ViewTemplate/deck 的 <$let> 过滤器组合（learn/due/new/unfold/random/queue）。
 无头/服务端测试可无 DOM 直接使用；wikitext 模板（M4 起）可改用本模块产出的过滤器字符串。
 注：本模块产出的是"已插值 deck 标题"的过滤器字符串（无 $(var)$ 依赖，双端一致）。
+本模块被 node 测试直接 import，禁用 require；仅 ES 引零依赖的 core/ns 常量。
 */
+
+import { DECK_PREFIX } from "./ns.ts";
 
 export interface DeckFields {
 	card?: string;
@@ -87,7 +90,7 @@ export function composeGlobalLearningQueue(
 	evaluate: (filter: string) => string[],
 	opts: GlobalQueueOptions = {}
 ): string[] {
-	const defaultDeckFilters = composeDeckFilters("$:/Deck/default");
+	const defaultDeckFilters = composeDeckFilters(DECK_PREFIX + "default");
 	const mode = opts.mode || "interleaved";
 	const includeTopics = opts.topics === true;
 

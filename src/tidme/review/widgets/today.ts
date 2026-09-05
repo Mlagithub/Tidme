@@ -19,18 +19,19 @@ const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 const deckEngine = require("$:/plugins/keepone/tidme/core/deck-engine.js");
 const workflow = require("$:/plugins/keepone/tidme/review/widgets/workflow.js");
 const icons = require("$:/plugins/keepone/tidme/core/icons.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const el = dom.el;
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
-/** 今日复习卡数：遍历全部牌组当日日志条目 */
+/** 今日复习卡数：遍历全部牌组当日日志条目（<deck>/log/<YYYYMMDD> 契约见 core/ns） */
 function todayReviewCount(wiki: any): number {
-	const key = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+	const key = ns.todayKey();
 	let n = 0;
-	for (const lt of wiki.filterTiddlers("[prefix[$:/Deck/]]")) {
-		if (!/\/log\/\d{8}$/.test(lt) || !lt.endsWith(key)) continue;
+	for (const lt of wiki.filterTiddlers(`[prefix[${ns.DECK_PREFIX}]]`)) {
+		if (!ns.isDeckLogTitle(lt, key)) continue;
 		const data = wiki.getTiddlerData(lt);
 		if (data && typeof data === "object") n += Object.keys(data).length;
 	}
@@ -39,7 +40,7 @@ function todayReviewCount(wiki: any): number {
 
 /** 待学数（全局学习队列 = learn+due+new）与待读数（topic 在队） */
 function todayCounts(wiki: any): { learn: number; due: number; newly: number; toRead: number } {
-	const f = deckEngine.composeDeckFilters("$:/Deck/default");
+	const f = deckEngine.composeDeckFilters(deckMod.DEFAULT_DECK);
 	const count = (filter: string) => wiki.filterTiddlers(filter).length;
 	return {
 		learn: count(f.learn),
@@ -103,13 +104,7 @@ function makeTodayHero(): WidgetCtor {
 
 		refresh(changedTiddlers: Record<string, any>) {
 			if (!this._container) return false;
-			let need = false;
-			for (const title of Object.keys(changedTiddlers || {})) {
-				if (reactive.isTidmeDataChange(this.wiki, title)) {
-					need = true;
-					break;
-				}
-			}
+			const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
 			if (need) this.build();
 			return need;
 		}
@@ -182,13 +177,7 @@ function makeTodayRecent(): WidgetCtor {
 
 		refresh(changedTiddlers: Record<string, any>) {
 			if (!this._container) return false;
-			let need = false;
-			for (const title of Object.keys(changedTiddlers || {})) {
-				if (reactive.isTidmeDataChange(this.wiki, title)) {
-					need = true;
-					break;
-				}
-			}
+			const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
 			if (need) this.build();
 			return need;
 		}

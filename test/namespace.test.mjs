@@ -20,7 +20,7 @@ const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
 	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
 
-let wiki, tw, pipeline, paths, sectionMod, docOps, display, align, sched;
+let wiki, tw, pipeline, paths, factoryMod, docOps, display, align, sched;
 test.before(() => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-ns-"));
 	tw = TiddlyWiki.TiddlyWiki();
@@ -30,7 +30,7 @@ test.before(() => {
 	wiki = tw.wiki;
 	pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
 	paths = tw.modules.execute("$:/plugins/keepone/tidme/core/paths.js");
-	sectionMod = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
+	factoryMod = tw.modules.execute("$:/plugins/keepone/tidme/core/card-factory.js");
 	docOps = tw.modules.execute("$:/plugins/keepone/tidme/core/doc-ops.js");
 	display = tw.modules.execute("$:/plugins/keepone/tidme/core/display.js");
 	align = tw.modules.execute("$:/plugins/keepone/tidme/core/align.js");
@@ -204,7 +204,7 @@ test("section widget: buildExtract 拍平到书目录（与父节卡同层）", 
 		"tidme.kind": "topic", "tidme.subkind": "section",
 		"tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 章 › 节", bag: "default"
 	});
-	const t = sectionMod.buildExtract(wiki, parentTitle, "摘录文本");
+	const t = factoryMod.buildExtract(wiki, parentTitle, "摘录文本");
 	// 拍平：摘录 title = <bookRoot>/<sectionId>--extract（不再嵌 /s<hash>/）
 	assert.equal(t.title, "Tidme/Books/书/s1234567890ab--extract");
 	assert.ok(t.title.startsWith("Tidme/Books/"), "摘录 title 在 Tidme/Books/ 下");
@@ -221,12 +221,12 @@ test("section widget: buildCloze 与 buildQA 进 Tidme/Decks/<书>/ 命名空间
 		"tidme.kind": "topic", "tidme.subkind": "section",
 		"tidme.doc": "d1", "tidme.breadcrumb": "书 › 章 › 节"
 	});
-	const cloze = sectionMod.buildCloze(wiki, parentTitle, "首都是北京", "北京");
+	const cloze = factoryMod.buildCloze(wiki, parentTitle, "首都是北京", "北京");
 	// 知识卡走 Tidme/Decks/<书>/ 命名空间（拍平）
 	assert.equal(cloze.title, "Tidme/Decks/书/s1234567890ab--cloze");
 	assert.equal(cloze["tidme.subkind"], "cloze");
 	assert.equal(cloze["tidme.kind"], "item");
-	const qa = sectionMod.buildQA(wiki, parentTitle, "问题", "答案");
+	const qa = factoryMod.buildQA(wiki, parentTitle, "问题", "答案");
 	assert.equal(qa.title, "Tidme/Decks/书/s1234567890ab--qa");
 	assert.equal(qa["tidme.subkind"], "qa");
 	assert.equal(qa["tidme.kind"], "item");
@@ -241,13 +241,13 @@ test("section widget: 同位置多张摘录/挖空/问答自动加序号（拍�
 		"tidme.doc": "d1", "tidme.breadcrumb": "书 › 章 › 节"
 	});
 	// buildExtract 拍平后：base = <bookRoot>/<sectionId>--extract，冲突加 -N
-	const a = sectionMod.buildExtract(wiki, parentTitle, "选一");
+	const a = factoryMod.buildExtract(wiki, parentTitle, "选一");
 	wiki.addTiddler(a);
-	const b = sectionMod.buildExtract(wiki, parentTitle, "选二");
+	const b = factoryMod.buildExtract(wiki, parentTitle, "选二");
 	wiki.addTiddler(b);
-	const c = sectionMod.buildExtract(wiki, parentTitle, "选三");
+	const c = factoryMod.buildExtract(wiki, parentTitle, "选三");
 	wiki.addTiddler(c);
-	const d = sectionMod.buildExtract(wiki, parentTitle, "选四");
+	const d = factoryMod.buildExtract(wiki, parentTitle, "选四");
 	const extractBase = "Tidme/Books/书/s1234567890ab--extract";
 	assert.equal(a.title, extractBase);
 	assert.equal(b.title, extractBase + "-2");
@@ -490,9 +490,9 @@ test("deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
 	const secA = rA.tiddlers.find((t) => t["tidme.kind"] === "topic");
 	const manualSec = { title: `${secA.title.slice(0, secA.title.lastIndexOf("/") + 1)}manual-新笔记`, caption: "新笔记", text: "手写知识。", "tidme.doc": rA.docId, "tidme.kind": "topic", "tidme.subkind": "section", state: "0", due: twDate() };
 	wiki.addTiddler(manualSec);
-	const ext = sectionMod.buildExtract(wiki, secA.title, "摘录句。");
+	const ext = factoryMod.buildExtract(wiki, secA.title, "摘录句。");
 	wiki.addTiddler(ext);
-	const cloze = sectionMod.buildCloze(wiki, secA.title, "首都 Freetown", "Freetown");
+	const cloze = factoryMod.buildCloze(wiki, secA.title, "首都 Freetown", "Freetown");
 	wiki.addTiddler(cloze);
 	wiki.addTiddler({ title: "手动散卡A", caption: "Q?", text: "A", "tidme.doc": rA.docId, state: "0", due: twDate(), reps: "0", lapses: "0", stability: "0", difficulty: "0", elapsed_days: "0", scheduled_days: "0", last_review: twDate() });
 	// 子集牌组

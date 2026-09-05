@@ -1,7 +1,7 @@
 /*
 section.test.mjs — 阅读闭环字段构建器单元测试（node:test）
 
-在临时 TW 环境加载 core/card-factory.js（制卡唯一实现；section.js 为迁移期转发），验证：
+在临时 TW 环境加载 core/card-factory.js（制卡唯一实现），验证：
 - buildExtract/buildCloze：parent 链、anchor 记录、嵌套摘录（parent = 摘录卡）
 - parseAnchor：round-trip
 */

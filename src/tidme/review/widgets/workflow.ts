@@ -41,7 +41,7 @@ function makeWorkflow(): any {
 			const root = el(doc, "div", "tm-decks-actions");
 			this.domNodes.push(root);
 
-const learnBtn = icons.iconButton(doc, "tm-btn tm-btn--primary tm-workflow-btn-hero", "study", "开始学习");
+			const learnBtn = icons.iconButton(doc, "tm-btn tm-btn--primary tm-workflow-btn-hero", "study", "开始学习");
 			learnBtn.title = "复习全部到期/新知识卡（挖空/问答）：按 FSRS 到期与新卡顺序连续学习，不混入阅读材料；勾选下方选项可把到期阅读材料也加入（SM 交错）";
 			learnBtn.addEventListener("click", () => startGlobalLearning(wiki, this));
 			root.appendChild(learnBtn);
@@ -96,7 +96,8 @@ function startGlobalLearning(wiki: any, widget: any): void {
 		mode: mode === "strict" ? "global-strict" : topics ? "global-interleaved" : "items-only"
 	});
 
-	wiki.addTiddler({ title: DEFAULT_DECK + "/study", list: queue });
+	// <deck>/study 会话列表（fsrs4tw 契约后缀见 core/session）
+	wiki.addTiddler({ title: DEFAULT_DECK + sessionMod.DECK_STUDY_SUFFIX, list: queue });
 	// 首卡折叠态统一走 core/doc-ops.prepareCardFold（item → hide/show，按所属 deck card_unfold）
 	docOps.prepareCardFold(wiki, first);
 
@@ -115,12 +116,6 @@ function globalReadingTarget(wiki: any): string {
 	return "$:/plugins/keepone/tidme/import/ui/reading-list";
 }
 
-/** 开始复习：startGlobalLearning 的别名（与"开始学习"同义；历史 API 兼容） */
-function startStudy(wiki: any, widget: any): void {
-	startGlobalLearning(wiki, widget);
-}
-
 exports["tidme-workflow"] = makeWorkflow();
 exports.globalReadingTarget = globalReadingTarget;
-exports.startStudy = startStudy;
 exports.startGlobalLearning = startGlobalLearning;

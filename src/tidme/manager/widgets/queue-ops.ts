@@ -136,10 +136,7 @@ function makeQueueOps(): WidgetCtor {
 			this.domNodes.push(wrap);
 		}
 		refresh(changedTiddlers: Record<string, any>) {
-			let need = false;
-			for (const title of Object.keys(changedTiddlers || {})) {
-				if (reactive.isTidmeDataChange(this.wiki, title)) { need = true; break; }
-			}
+			const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
 			if (need && this._renderList) this._renderList();
 			return need;
 		}

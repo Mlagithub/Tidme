@@ -6,6 +6,7 @@ core/display.ts — 展示层纯函数（徽章/标签/标题/日期，从 ui-ut
 
 declare function require(module: string): any;
 const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 
 export function badgeOf(fields: Record<string, any>): { text: string; cls: string } {
 	if (fields["tidme.suspended"] === "yes") return { text: "⏸", cls: "tm-badge-suspended" };
@@ -79,7 +80,7 @@ export function displayTitle(fields: Record<string, any> | null | undefined, tit
 	const cap = fields && fields.caption !== undefined && fields.caption !== "" ? String(fields.caption).trim() : "";
 	if (cap) return cap;
 	const br = fields && fields["tidme.breadcrumb"]
-		? String(fields["tidme.breadcrumb"]).split(" › ").pop()?.trim() || ""
+		? String(fields["tidme.breadcrumb"]).split(ns.CRUMB_SEP).pop()?.trim() || ""
 		: "";
 	if (br) return br;
 	const t = String(title ?? "");

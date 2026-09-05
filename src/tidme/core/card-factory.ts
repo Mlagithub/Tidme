@@ -18,6 +18,7 @@ const schema = require("$:/plugins/keepone/tidme/core/schema.js");
 const paths = require("$:/plugins/keepone/tidme/core/paths.js");
 const dom = require("$:/plugins/keepone/tidme/core/dom.js");
 const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 
 const escapeHtml = dom.escapeHtml;
 
@@ -40,14 +41,14 @@ export function parseAnchor(raw: any): { section: string; snippet: string } | nu
 export function derivedCardBase(pf: Record<string, any>, parentTitle: string, kind: "extract" | "cloze" | "qa"): string {
 	const leaf = paths.leafIdOf(parentTitle);
 	// 阅读材料（Tidme/Books/ 下）：摘录留原目录，挖空/问答镜像到平行 Decks
-	if (parentTitle.startsWith("Tidme/Books/") && leaf) {
+	if (parentTitle.startsWith(ns.NS_BOOKS) && leaf) {
 		const dir = parentTitle.slice(0, parentTitle.lastIndexOf("/") + 1);
 		if (kind === "extract") return dir + leaf + "--extract";
-		return dir.replace(/^Tidme\/Books\//, "Tidme/Decks/") + leaf + "--" + kind;
+		return ns.booksToDecksRoot(dir) + leaf + "--" + kind;
 	}
 	// 普通笔记（无 doc 来源）→ 散卡桶：Tidme/Decks/散卡/<笔记名 slug>--<类型>
 	const parentSlug = paths.slugify(parentTitle) || "untitled";
-	return paths.joinPath("Tidme/Decks/散卡", parentSlug) + "--" + kind;
+	return paths.joinPath(ns.NS_DECKS_SCATTER, parentSlug) + "--" + kind;
 }
 
 /** 拍平命名空间下同层冲突的序号后缀：base 已被占用则 base-N（N=2,3,…）。 */
@@ -58,33 +59,42 @@ export function nextFreeTitle(wiki: any, base: string): string {
 	return title;
 }
 
-/** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用）。
- * 分类对齐 SuperMemo：摘录 = Topic（阅读材料），kind=topic/subkind=extract，
- * 进阅读列表（阅读流）。要成为测试卡：在摘录上挖空 → item（cloze）。
- * M3 泛化：父卡无 tidme.doc（普通笔记）→ 返回 null（摘录不属于笔记；改用挖空/问答）。 */
-export function buildExtract(wiki: any, parentTitle: string, selection: string): Record<string, any> | null {
-	const pf = wiki.getTiddler(parentTitle)?.fields || {};
-	if (!pf["tidme.doc"]) return null;
-	const fsrs = schema.initialFsrsFields(new Date());
-	// 命名空间（拍平版）：摘录与父节卡同在 Tidme/Books/<书>/ 目录下
-	const base = derivedCardBase(pf, parentTitle, "extract");
-	const title = nextFreeTitle(wiki, base);
+/** 规整片段（紧凑空白 + 截断），用于 anchor.snippet / caption 预览 */
+function compactSnippet(s: string, max: number): string {
+	return String(s).replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+/**
+ * 派生卡公共字段基座：FSRS 初值 + 溯源继承（source/author/format/priority/afactor）+
+ * 命名空间字段（doc/parent/kind/subkind/anchor/breadcrumb）。三个 build* 只提供差异项。
+ */
+function derivedCardFields(opts: {
+	parentTitle: string;
+	pf: Record<string, any>;
+	title: string;
+	kind: "topic" | "item";
+	subkind: "extract" | "cloze" | "qa";
+	caption: string;
+	text: string;
+	snippet: string;
+	breadcrumbSuffix: string;
+}): Record<string, any> {
+	const { pf, parentTitle } = opts;
 	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
-	const preview = selection.replace(/\s+/g, " ").trim().slice(0, 30);
 	return {
-		title,
+		title: opts.title,
 		type: "text/vnd.tiddlywiki",
-		caption: preview + (selection.length > preview.length ? "…" : ""),
-		text: `<blockquote>\n${escapeHtml(selection.trim())}\n</blockquote>\n\n<p class="tm-import-muted">—— 摘自 [[${parentTitle}]]</p>`,
-		...fsrs,
+		caption: opts.caption,
+		text: opts.text,
+		...schema.initialFsrsFields(new Date()),
 		...(pf.bag ? { bag: pf.bag } : {}),
 		revision: "0",
 		"tidme.doc": pf["tidme.doc"] || "",
 		"tidme.parent": parentTitle,
-		"tidme.kind": "topic",
-		"tidme.subkind": "extract",
-		"tidme.anchor": JSON.stringify({ section: parentTitle, snippet: selection.replace(/\s+/g, " ").trim().slice(0, 80) }),
-		"tidme.breadcrumb": `${crumbTail} › 摘录`,
+		"tidme.kind": opts.kind,
+		"tidme.subkind": opts.subkind,
+		"tidme.anchor": JSON.stringify({ section: parentTitle, snippet: opts.snippet }),
+		"tidme.breadcrumb": `${crumbTail}${ns.CRUMB_SEP}${opts.breadcrumbSuffix}`,
 		"tidme.source": pf["tidme.source"] || "",
 		"tidme.author": pf["tidme.author"] || "",
 		"tidme.format": pf["tidme.format"] || "",
@@ -93,6 +103,28 @@ export function buildExtract(wiki: any, parentTitle: string, selection: string):
 		// SM 对齐：派生卡继承父卡 A-Factor（摘录/挖空作为独立材料沿用父文章的展期节奏）
 		...(pf["tidme.afactor"] !== undefined ? { "tidme.afactor": String(pf["tidme.afactor"]) } : {})
 	};
+}
+
+/** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用）。
+ * 分类对齐 SuperMemo：摘录 = Topic（阅读材料），kind=topic/subkind=extract，
+ * 进阅读列表（阅读流）。要成为测试卡：在摘录上挖空 → item（cloze）。
+ * M3 泛化：父卡无 tidme.doc（普通笔记）→ 返回 null（摘录不属于笔记；改用挖空/问答）。 */
+export function buildExtract(wiki: any, parentTitle: string, selection: string): Record<string, any> | null {
+	const pf = wiki.getTiddler(parentTitle)?.fields || {};
+	if (!pf["tidme.doc"]) return null;
+	const title = nextFreeTitle(wiki, derivedCardBase(pf, parentTitle, "extract"));
+	const preview = compactSnippet(selection, 30);
+	return derivedCardFields({
+		parentTitle,
+		pf,
+		title,
+		kind: "topic",
+		subkind: "extract",
+		caption: preview + (selection.length > preview.length ? "…" : ""),
+		text: `<blockquote>\n${escapeHtml(selection.trim())}\n</blockquote>\n\n<p class="tm-import-muted">—— 摘自 [[${parentTitle}]]</p>`,
+		snippet: compactSnippet(selection, 80),
+		breadcrumbSuffix: "摘录"
+	});
 }
 
 /** 挖空卡字段（Alt+Z）。分类对齐 SuperMemo：挖空 = Item（测试卡），kind=item/subkind=cloze */
@@ -102,64 +134,35 @@ export function buildCloze(wiki: any, parentTitle: string, block: string, select
 	const safeSel = selected.replace(/"/g, "”");
 	const clozeLine = `${block.slice(0, at)}<<C "${safeSel}" "c1" "">>${block.slice(at + selected.length)}`;
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
-	const fsrs = schema.initialFsrsFields(new Date());
-	// 命名空间：挖空卡 = 知识型卡片 → 走 Tidme/Decks/<书>/ 命名空间（不在书目录里）
-	const base = derivedCardBase(pf, parentTitle, "cloze");
-	const title = nextFreeTitle(wiki, base);
-	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
-	return {
+	const title = nextFreeTitle(wiki, derivedCardBase(pf, parentTitle, "cloze"));
+	return derivedCardFields({
+		parentTitle,
+		pf,
 		title,
-		type: "text/vnd.tiddlywiki",
+		kind: "item",
+		subkind: "cloze",
 		caption: clozeLine,
 		text: "",
-		...fsrs,
-		...(pf.bag ? { bag: pf.bag } : {}),
-		revision: "0",
-		"tidme.doc": pf["tidme.doc"] || "",
-		"tidme.parent": parentTitle,
-		"tidme.kind": "item",
-		"tidme.subkind": "cloze",
-		"tidme.anchor": JSON.stringify({ section: parentTitle, snippet: selected.replace(/\s+/g, " ").trim().slice(0, 80) }),
-		"tidme.breadcrumb": `${crumbTail} › 挖空`,
-		"tidme.source": pf["tidme.source"] || "",
-		"tidme.author": pf["tidme.author"] || "",
-		"tidme.format": pf["tidme.format"] || "",
-		// G4：派生卡继承父卡优先级（SM 摘录/挖空继承文章优先）
-		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {}),
-		// SM 对齐：派生卡继承父卡 A-Factor（摘录/挖空作为独立材料沿用父文章的展期节奏）
-		...(pf["tidme.afactor"] !== undefined ? { "tidme.afactor": String(pf["tidme.afactor"]) } : {})
-	};
+		snippet: compactSnippet(selected, 80),
+		breadcrumbSuffix: "挖空"
+	});
 }
 
 /** 问答卡字段（QA Card）。kind=item/subkind=qa */
 export function buildQA(wiki: any, parentTitle: string, question: string, answer: string): Record<string, any> {
 	const pf = wiki.getTiddler(parentTitle)?.fields || {};
-	const fsrs = schema.initialFsrsFields(new Date());
-	// 命名空间：问答卡 = 知识型卡片 → 走 Tidme/Decks/<书>/ 命名空间（不在书目录里）
-	const base = derivedCardBase(pf, parentTitle, "qa");
-	const title = nextFreeTitle(wiki, base);
-	const crumbTail = String(pf["tidme.breadcrumb"] || parentTitle);
-	return {
+	const title = nextFreeTitle(wiki, derivedCardBase(pf, parentTitle, "qa"));
+	return derivedCardFields({
+		parentTitle,
+		pf,
 		title,
-		type: "text/vnd.tiddlywiki",
+		kind: "item",
+		subkind: "qa",
 		caption: question || answer.slice(0, 30),
 		text: `Q: ${question}\n\nA: ${answer}`,
-		...fsrs,
-		...(pf.bag ? { bag: pf.bag } : {}),
-		revision: "0",
-		"tidme.doc": pf["tidme.doc"] || "",
-		"tidme.parent": parentTitle,
-		"tidme.kind": "item",
-		"tidme.subkind": "qa",
-		"tidme.anchor": JSON.stringify({ section: parentTitle, snippet: answer.replace(/\s+/g, " ").trim().slice(0, 80) }),
-		"tidme.breadcrumb": `${crumbTail} › 问答`,
-		"tidme.source": pf["tidme.source"] || "",
-		"tidme.author": pf["tidme.author"] || "",
-		"tidme.format": pf["tidme.format"] || "",
-		...(pf["tidme.priority"] !== undefined ? { "tidme.priority": String(pf["tidme.priority"]) } : {}),
-		// SM 对齐：派生卡继承父卡 A-Factor
-		...(pf["tidme.afactor"] !== undefined ? { "tidme.afactor": String(pf["tidme.afactor"]) } : {})
-	};
+		snippet: compactSnippet(answer, 80),
+		breadcrumbSuffix: "问答"
+	});
 }
 
 /**

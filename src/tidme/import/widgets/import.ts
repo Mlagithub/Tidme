@@ -3,7 +3,7 @@ widgets/import.ts — 自包含导入组件
 
 <$import-file> 一个组件完成全部交互：
   拖放/选择 → 调用共享管线解析 → 就地渲染预览（含目录大纲折叠面板）→ 导入/清除。
-不依赖 wikitext 响应式列表（规避状态刷新时序问题）；完整产物留在模块级缓存。
+不依赖 wikitext 响应式列表（规避状态刷新时序问题）；待导入产物随 pending 队列存活。
 */
 
 declare function require(module: string): any;
@@ -14,6 +14,7 @@ const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
 const commitMod = require("$:/plugins/keepone/tidme/core/import-commit.js");
 const dialog = require("$:/plugins/keepone/tidme/core/dialog.js");
 const icons = require("$:/plugins/keepone/tidme/core/icons.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const semMod = require("$:/plugins/keepone/tidme/core/server/semantic-split");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
@@ -27,15 +28,10 @@ interface ImportResult {
 	warnings: string[];
 }
 
-// 模块级结果缓存：token → 完整产物
-const results = new Map<string, { result: ImportResult; at: number }>();
-function cacheResult(result: ImportResult): string {
-	const token = "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-	results.set(token, { result, at: Date.now() });
-	for (const [k, v] of results) if (Date.now() - v.at > RESULT_TTL_MS) results.delete(k);
-	return token;
+/** 预览条目 token：仅作 pending Map 键与 DOM 标识；产物生命周期随 pending，不另设模块级缓存 */
+function makeToken(): string {
+	return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
-const RESULT_TTL_MS = 30 * 60 * 1000;
 
 function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: string; semanticSplitCfg?: any } {
 	const num = (t: string) => {
@@ -43,16 +39,13 @@ function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: str
 		return Number.isFinite(v) && v > 0 ? v : undefined;
 	};
 	const bag = (wiki.getTiddlerText(pipeline.IMPORT_BAG_TITLE, "") || "").trim();
-	let semanticSplitCfg: any = null;
-	try {
-		const raw = wiki.getTiddlerText(semMod.SEMANTIC_SPLIT_CONFIG_TITLE, "");
-		if (raw) semanticSplitCfg = JSON.parse(raw);
-	} catch {}
+	// 语义切分配置唯一读取口 = getSemanticSplitConfig（text JSON + apiKey/baseUrl/model 字段覆盖）
+	const hasCfg = wiki.getTiddler(semMod.SEMANTIC_SPLIT_CONFIG_TITLE);
 	return {
 		maxChars: num("$:/temp/tidme-import/max"),
 		minChars: num("$:/temp/tidme-import/min"),
 		bag: bag || "default", // TiddlyWeb server 版同步目标桶
-		semanticSplitCfg
+		semanticSplitCfg: hasCfg ? getSemanticSplitConfig(wiki) : null
 	};
 }
 
@@ -87,11 +80,13 @@ function getSemanticSplitConfig(wiki: any): any {
 async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any): Promise<boolean> {
 	const aiCfg = getSemanticSplitConfig(wiki);
 	if (!aiCfg.apiKey) {
-		alert("请先在【控制面板 ➔ Tidme Import ➔ 配置】中输入并保存 API Key，然后再执行二次切分！");
+		await dialog.alertDialog(document, {
+			title: "缺少 API Key",
+			message: "请先在【控制面板 ➔ Tidme Import ➔ 配置】中输入并保存 API Key，然后再执行二次切分！"
+		});
 		return false;
 	}
 
-	const sem = require("$:/plugins/keepone/tidme/core/server/semantic-split");
 	const origText = String(tiddler.text || "").trim();
 	const subChunks: Array<{ title: string; text: string; chars: number }> = await sem.splitSectionText(origText, aiCfg);
 	if (!subChunks || subChunks.length <= 1) return false;
@@ -100,24 +95,27 @@ async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any):
 	const sumChars = subChunks.reduce((n, c) => n + c.text.length, 0);
 	const ratio = sumChars / (origText.length || 1);
 	if (ratio < 0.95 || ratio > 1.05) {
-		alert(`[二次切分校验失败] 切分后字数 (${sumChars}) 与原文 (${origText.length}) 偏差过大，已自动拦截以保护原文完整性。`);
+		await dialog.alertDialog(document, {
+			title: "二次切分校验失败",
+			message: `切分后字数 (${sumChars}) 与原文 (${origText.length}) 偏差过大，已自动拦截以保护原文完整性。`
+		});
 		return false;
 	}
 
 	const path = String(tiddler["tidme.breadcrumb"] || tiddler.caption || tiddler.title || "");
-	const parts = path.split(" › ");
+	const parts = path.split(ns.CRUMB_SEP);
 	const rawShort = (parts.pop() || path).replace(/ \(\d+\)$/, "");
-	const baseBreadcrumb = parts.length ? parts.join(" › ") : r.bookTitle;
+	const baseBreadcrumb = parts.length ? parts.join(ns.CRUMB_SEP) : r.bookTitle;
 
 	const newTiddlers = subChunks.map((chunk, idx) => {
 		const subCap = `${rawShort} (${chunk.title || (idx + 1)})`;
-		const subTitle = `${r.bookTitle} › ${subCap}`;
+		const subTitle = `${r.bookTitle}${ns.CRUMB_SEP}${subCap}`;
 		return {
 			...tiddler,
 			title: subTitle,
 			caption: subCap,
 			text: chunk.text,
-			"tidme.breadcrumb": `${baseBreadcrumb} › ${subCap}`,
+			"tidme.breadcrumb": `${baseBreadcrumb}${ns.CRUMB_SEP}${subCap}`,
 			_renamed: true
 		};
 	});
@@ -132,7 +130,6 @@ async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any):
 /** 单本书的预览卡片（P1）：标题行 + 状态 + 可在线微调大纲（改短/删/增） */
 function buildRow(
 	doc: Document,
-	token: string,
 	resultOrErr: { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean },
 	wiki: any
 ): HTMLElement {
@@ -142,7 +139,6 @@ function buildRow(
 		card.classList.add("tm-import-file-card-err");
 		card.appendChild(el(doc, "div", "tm-import-file-head",
 			`✘ ${resultOrErr.fileName} — ${err}`));
-		card.dataset.token = token;
 		return card;
 	}
 	const r = resultOrErr.result!;
@@ -208,7 +204,7 @@ function buildRow(
 					"tidme.doc": r.docId,
 					"tidme.kind": "topic",
 					"tidme.subkind": "section",
-					"tidme.breadcrumb": `${r.bookTitle} › ${tVal}`
+					"tidme.breadcrumb": `${r.bookTitle}${ns.CRUMB_SEP}${tVal}`
 				};
 				if (insertAfterIdx === -1) {
 					r.tiddlers.splice(1, 0, newTiddler);
@@ -249,12 +245,12 @@ function buildRow(
 			const cleanTitleFn = pipeline.cleanTitle || ((x: string) => x);
 			for (const t of allSections) {
 				const path = String(t["tidme.breadcrumb"] || t.caption || t.title || "");
-				const parts = path.split(" › ");
+				const parts = path.split(ns.CRUMB_SEP);
 				const rawShort = parts.pop() || path;
 				const cleaned = cleanTitleFn(rawShort);
 				if (cleaned && cleaned !== rawShort) {
 					parts.push(cleaned);
-					t["tidme.breadcrumb"] = parts.join(" › ");
+					t["tidme.breadcrumb"] = parts.join(ns.CRUMB_SEP);
 					t.caption = cleaned;
 					// 重建 namespace title：用 docRoot + paths.sectionLeaf(caption, id)
 					// 保留稳定 id 避免覆盖/重切分时撞名；docRoot 已在 emitTiddlers 时写入 t["tidme.docpage"]
@@ -274,7 +270,7 @@ function buildRow(
 		const tree = el(doc, "div", "tm-import-tree", "");
 		allSections.forEach((t, idx) => {
 			const path = String(t["tidme.breadcrumb"] || t.caption || t.title || "");
-			const parts = path.split(" › ");
+			const parts = path.split(ns.CRUMB_SEP);
 			const shortTitle = parts.pop() || path;
 			const level = Math.max(0, parts.length - 1);
 			const isMerged = t["tidme.merged"] === "yes";
@@ -306,7 +302,7 @@ function buildRow(
 					const newShort = editIn.value.trim();
 					if (newShort && newShort !== shortTitle) {
 						parts.push(newShort);
-						const newPath = parts.join(" › ");
+						const newPath = parts.join(ns.CRUMB_SEP);
 						t["tidme.breadcrumb"] = newPath;
 						t.caption = newShort;
 						// 重建 namespace title：docRoot + sectionLeaf(caption, id) —— 稳定 id 保证唯一
@@ -371,7 +367,6 @@ function buildRow(
 
 	renderTree();
 
-	card.dataset.token = token;
 	return card;
 }
 
@@ -507,7 +502,7 @@ function makeFileWidget(): WidgetCtor {
 				}
 				// 重绘预览区
 				rowsBox.textContent = "";
-				for (const [token, item] of pending) rowsBox.appendChild(buildRow(doc, token, item, this.wiki));
+				for (const [, item] of pending) rowsBox.appendChild(buildRow(doc, item, this.wiki));
 				refreshActions();
 				this.wiki.addTiddler({ title: "$:/temp/tidme-import/last-created", text: String(created) });
 				this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-done" });
@@ -522,13 +517,11 @@ function makeFileWidget(): WidgetCtor {
 			});
 			btnClear.addEventListener("click", () => {
 				pending.clear();
-				results.clear();
 				rowsBox.textContent = "";
 				refreshActions();
 			});
 
 			const handleFiles = async (files: File[]) => {
-				console.log("[tidme-import] 收到文件:", files.map((f) => f.name));
 				const accepted = files.filter((f) => /\.(epub|md|markdown|txt)$/i.test(f.name));
 				if (!accepted.length) {
 					this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-unsupported" });
@@ -543,7 +536,6 @@ function makeFileWidget(): WidgetCtor {
 				for (const file of accepted) {
 					try {
 						const bytes = new Uint8Array(await file.arrayBuffer());
-						console.log("[tidme-import] 开始解析:", file.name, bytes.length, "bytes");
 						// SM 对齐：导入时按所选档位批量设定优先级（同批随机分散 ±8）
 						const result = await pipeline.runImport(bytes, file.name, {
 							...getOptions(this.wiki),
@@ -551,19 +543,18 @@ function makeFileWidget(): WidgetCtor {
 							// 同名书 folder 唯一化探测（A1）：folder 已被其它 docId 占用 → 导入时加 ~docId 后缀
 							folderOccupied: (base: string) => docOps.docFolderOwner(this.wiki, base)
 						}) as ImportResult;
-						console.log("[tidme-import] 解析成功:", result.bookTitle, result.sectionCount, "节");
 						// 重复导入检测：同 docId 已在库中
 						const docId = result.docId;
 						const existing = this.wiki.filterTiddlers(`[has[tidme.doc]]`).filter((t: string) => {
 							return this.wiki.getTiddler(t)?.fields["tidme.doc"] === docId && t !== result.bookTitle;
 						}).length;
-						const token = cacheResult(result);
+						const token = makeToken();
 						totalSections += result.sectionCount;
 						pending.set(token, { result, fileName: file.name, duplicate: existing > 0 });
-						rowsBox.appendChild(buildRow(doc, token, { result, fileName: file.name, duplicate: existing > 0 }, this.wiki));
+						rowsBox.appendChild(buildRow(doc, { result, fileName: file.name, duplicate: existing > 0 }, this.wiki));
 					} catch (err: any) {
 						console.error("[tidme-import] 解析失败:", file.name, err);
-						rowsBox.appendChild(buildRow(doc, "e" + Date.now().toString(36), { error: String(err.message || err), fileName: file.name }, this.wiki));
+						rowsBox.appendChild(buildRow(doc, { error: String(err.message || err), fileName: file.name }, this.wiki));
 					}
 				}
 				// 漏斗摘要（P1 措辞：已安全存档，随时可学）

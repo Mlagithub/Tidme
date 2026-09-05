@@ -79,6 +79,12 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
+// src/tidme/core/ns.ts
+var NS_BOOKS = "Tidme/Books/";
+var NS_DECKS = "Tidme/Decks/";
+var NS_DECKS_SCATTER = NS_DECKS + "\u6563\u5361";
+var CRUMB_SEP = " \u203A ";
+
 // src/tidme/core/ids.ts
 var _encoder = null;
 function getEncoder() {
@@ -130,7 +136,7 @@ async function makeDocId(meta) {
   return "d" + await shortHash(basis, 8);
 }
 async function makeSectionId(docId, breadcrumb, ordinal) {
-  const basis = [docId, breadcrumb.join(" \u203A "), String(ordinal)].join("|");
+  const basis = [docId, breadcrumb.join(CRUMB_SEP), String(ordinal)].join("|");
   return "s" + await shortHash(basis, 12);
 }
 
@@ -1083,10 +1089,10 @@ function bookRoot(bookTitle, _docId) {
   const slug = slugify(bookTitle) || "untitled";
   if (RESERVED.has(slug.toLowerCase()))
     throw new Error("bookRoot: reserved book title: " + slug);
-  return "Tidme/Books/" + slug;
+  return NS_BOOKS + slug;
 }
 function bookCardsRoot(bookTitle, _docId) {
-  return "Tidme/Decks/" + (slugify(bookTitle) || "untitled");
+  return NS_DECKS + (slugify(bookTitle) || "untitled");
 }
 function deckSubsetPath(bookTitle, docId, purpose = "\u590D\u4E60\u672C\u4E66") {
   const root = bookCardsRoot(bookTitle, docId);
@@ -1215,7 +1221,7 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
       const trail = [docTitle, ...s.trail].map((t) => String(t || "").trim()).filter(Boolean);
       const id = yield makeSectionId(docId, trail, s.ordinal);
       const hash = yield contentFingerprint(s.text);
-      const joined = trail.join(" \u203A ");
+      const joined = trail.join(CRUMB_SEP);
       const capText = s.title || trail[trail.length - 1] || "";
       const title = joinPath(docRoot, sectionLeaf(capText, id));
       cards.push(__spreadValues(__spreadValues(__spreadProps(__spreadValues(__spreadValues({

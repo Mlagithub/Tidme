@@ -25,6 +25,8 @@ paths.ts — tiddler 命名空间路径生成（M3 章节隔离）
 经调用方 folderOccupied 探测真实占用后追加）；本模块为纯函数，不做状态探测。
 */
 
+import { NS_BOOKS, NS_DECKS } from "./ns.ts";
+
 // 保留 TW 系统 tiddler 段
 const RESERVED = new Set([
 	"index", "default", "new", "edit", "config", "settings", "state"
@@ -64,12 +66,12 @@ export function joinPath(...parts: (string | undefined | null)[]): string {
 export function bookRoot(bookTitle: string, _docId?: string): string {
 	const slug = slugify(bookTitle) || "untitled";
 	if (RESERVED.has(slug.toLowerCase())) throw new Error("bookRoot: reserved book title: " + slug);
-	return "Tidme/Books/" + slug;
+	return NS_BOOKS + slug;
 }
 
 /** 知识型卡片根：Tidme/Decks/<bookSlug>（挖空/问答统一进这里；与 bookRoot 平行） */
 export function bookCardsRoot(bookTitle: string, _docId?: string): string {
-	return "Tidme/Decks/" + (slugify(bookTitle) || "untitled");
+	return NS_DECKS + (slugify(bookTitle) || "untitled");
 }
 
 /** 子集牌组路径：Tidme/Decks/<bookSlug>[/~<docId>]/<用途> */

@@ -9,7 +9,6 @@
         "dev/manual/fr-FR": "tiddlywiki-plugin-dev dev --wiki ./wiki/manual/fr-FR --exclude [prefix[$:/tidme/languages/]!prefix[$:/tidme/languages/fr-FR]]",
         "reset": "rimraf ./**/node_modules",
         "clean": "rimraf dist",
-        "prepare": "husky install",
         "update": "npm-check-updates -u",
         "new": "tiddlywiki-plugin-dev new",
         "dev/website/index": "tiddlywiki-plugin-dev dev --wiki ./wiki/website/index --exclude [prefix[$:/plugins/keepone/tidme/]]",
@@ -39,19 +38,6 @@
     "engines": {
         "node": ">=16"
     },
-    "husky": {
-        "hooks": {
-            "pre-commit": "lint-staged"
-        }
-    },
-    "lint-staged": {
-        "*.{ts,tsx}": [
-            "node --max_old_space_size=8192 ./node_modules/eslint/bin/eslint.js --fix --color --cache --quiet"
-        ],
-        "*.{js,jsx,mjs,mjsx,cjs,cjsx}": [
-            "node --max_old_space_size=8192 ./node_modules/eslint/bin/eslint.js --fix --color --cache --quiet"
-        ]
-    },
     "repository": {
         "type": "git",
         "url": "https://github.com/oflg/Tidme.git"
@@ -80,8 +66,8 @@
         "@codemirror/state": "^6.7.2",
         "@codemirror/view": "^6.43.10",
         "codemirror": "^6.0.2",
-        "fsrs.js": "latest",
-        "tiddlywiki": "latest"
+        "fsrs.js": "1.2.0",
+        "tiddlywiki": "5.3.3"
     },
     "devDependencies": {
         "@modern-js/tsconfig": "^2.43.0",

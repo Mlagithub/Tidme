@@ -22,6 +22,7 @@ const icons = require("$:/plugins/keepone/tidme/core/icons.js");
 const dom = require("$:/plugins/keepone/tidme/core/dom.js");
 const display = require("$:/plugins/keepone/tidme/core/display.js");
 const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 type View = "all" | "inqueue" | "done" | "suspended" | "overdue";
@@ -139,7 +140,7 @@ function isDescendantOf(wiki: any, child: Card, parent: Card): boolean {
 	if (child.title === parent.title) return false;
 	const parentCrumb = crumbOf(parent);
 	const childCrumb = crumbOf(child);
-	if (childCrumb.startsWith(parentCrumb + " › ")) return true;
+	if (childCrumb.startsWith(parentCrumb + ns.CRUMB_SEP)) return true;
 	let p = String(child.fields["tidme.parent"] || "");
 	while (p) {
 		if (p === parent.title) return true;
@@ -152,9 +153,12 @@ function isDescendantOf(wiki: any, child: Card, parent: Card): boolean {
 function docNameOf(c: Card): string {
 	const key = String(c.fields["tidme.doc"] || c.fields["tidme.parent"] || "");
 	if (!key) return "未分组";
-	const first = crumbOf(c).split(" › ")[0] || key;
+	const first = crumbOf(c).split(ns.CRUMB_SEP)[0] || key;
 	// 语义名回退：内部路径名去前缀显示（$:/Deck/IELTS_3 → IELTS_3；$:/Today → Today）
-	return (first || key).replace(/^\$:\/Deck\//, "").replace(/^\$:\//, "");
+	let name = first || key;
+	if (name.startsWith(ns.DECK_PREFIX)) name = name.slice(ns.DECK_PREFIX.length);
+	else if (name.startsWith("$:/")) name = name.slice(3);
+	return name;
 }
 
 function docGroupsOf(cards: Card[]): [string, Card[]][] {
@@ -164,11 +168,7 @@ function docGroupsOf(cards: Card[]): [string, Card[]][] {
 		if (!m.has(key)) m.set(key, []);
 		m.get(key)!.push(c);
 	}
-	return [...m.entries()].sort((a, b) => {
-		const na = docNameOf(a[1][0]);
-		const nb = docNameOf(b[1][0]);
-		return na < nb ? -1 : na > nb ? 1 : 0;
-	});
+	return [...m.entries()].sort(cmpStr<[string, Card[]]>((entry) => docNameOf(entry[1][0])));
 }
 
 function collectAll(ctx: Ctx) {
@@ -255,6 +255,27 @@ function emptyEl(doc: Document, text: string, icon = "🗂"): HTMLElement {
 	return e;
 }
 
+/** 字符串键比较器（pa<pb?-1:pa>pb?1:0 的唯一实现） */
+function cmpStr<T>(keyOf: (t: T) => string): (a: T, b: T) => number {
+	return (a, b) => {
+		const ka = keyOf(a);
+		const kb = keyOf(b);
+		return ka < kb ? -1 : ka > kb ? 1 : 0;
+	};
+}
+
+/** 三态分组复选框绑定：按 items 选中数计算 checked/indeterminate，登记进 groupCbUpdaters 随全局选中联动 */
+function bindTriStateCb(ctx: Ctx, cb: HTMLInputElement, items: Card[]): void {
+	const { st } = ctx;
+	const update = () => {
+		const selCount = items.filter((c) => st.selected.has(c.title)).length;
+		cb.checked = items.length > 0 && selCount === items.length;
+		cb.indeterminate = selCount > 0 && selCount < items.length;
+	};
+	update();
+	st.groupCbUpdaters.push(update);
+}
+
 // ---------- 行构建 ----------
 
 /** 卡片行通用操作：读（移出队列）/ 回（恢复）+ 删除 */
@@ -302,7 +323,7 @@ function appendRowBase(ctx: Ctx, row: HTMLElement, c: Card, cb: HTMLInputElement
 		row.appendChild(el(doc, "span", "tm-cm-pri", `p${String(pri).padStart(2, "0")}`));
 	}
 	const link = el(doc, "a", "tc-tiddlylink tm-cm-link",
-		String(c.fields["tidme.breadcrumb"] || c.title).split(" › ").pop() || c.title);
+		String(c.fields["tidme.breadcrumb"] || c.title).split(ns.CRUMB_SEP).pop() || c.title);
 	link.href = "#";
 	link.title = crumbOf(c);
 	link.addEventListener("click", (e: Event) => {
@@ -355,13 +376,7 @@ function docDetails(ctx: Ctx, view: string, key: string, docCards: Card[]): HTML
 	const groupCb = doc.createElement("input");
 	groupCb.type = "checkbox";
 	groupCb.className = "tm-cm-group-cb";
-	const updateDocGroupCb = () => {
-		const docSelCount = docCards.filter((c) => st.selected.has(c.title)).length;
-		groupCb.checked = docCards.length > 0 && docSelCount === docCards.length;
-		groupCb.indeterminate = docSelCount > 0 && docSelCount < docCards.length;
-	};
-	updateDocGroupCb();
-	st.groupCbUpdaters.push(updateDocGroupCb);
+	bindTriStateCb(ctx, groupCb, docCards);
 	groupCb.addEventListener("click", (e) => e.stopPropagation());
 	groupCb.addEventListener("change", () => {
 		for (const c of docCards) {
@@ -374,11 +389,7 @@ function docDetails(ctx: Ctx, view: string, key: string, docCards: Card[]): HTML
 
 	dsum.appendChild(el(doc, "span", "tm-cm-doc-title", `${docNameOf(docCards[0])}（${docCards.length}）`));
 	dd.appendChild(dsum);
-	const sorted = [...docCards].sort((a, b) => {
-		const pa = crumbOf(a);
-		const pb = crumbOf(b);
-		return pa < pb ? -1 : pa > pb ? 1 : 0;
-	});
+	const sorted = [...docCards].sort(cmpStr(crumbOf));
 	for (const c of sorted) renderCardRow(ctx, dd, c);
 	return dd;
 }
@@ -411,13 +422,7 @@ function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
 		const deckCb = doc.createElement("input");
 		deckCb.type = "checkbox";
 		deckCb.className = "tm-cm-group-cb";
-		const updateDeckCb = () => {
-			const deckSelCount = deckCards.filter((c) => st.selected.has(c.title)).length;
-			deckCb.checked = deckCards.length > 0 && deckSelCount === deckCards.length;
-			deckCb.indeterminate = deckSelCount > 0 && deckSelCount < deckCards.length;
-		};
-		updateDeckCb();
-		st.groupCbUpdaters.push(updateDeckCb);
+		bindTriStateCb(ctx, deckCb, deckCards);
 		deckCb.addEventListener("click", (e) => e.stopPropagation());
 		deckCb.addEventListener("change", () => {
 			for (const c of deckCards) {
@@ -446,13 +451,7 @@ function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
 	const orphanCb = doc.createElement("input");
 	orphanCb.type = "checkbox";
 	orphanCb.className = "tm-cm-group-cb";
-	const updateOrphanCb = () => {
-		const orphanSelCount = orphans.filter((c) => st.selected.has(c.title)).length;
-		orphanCb.checked = orphans.length > 0 && orphanSelCount === orphans.length;
-		orphanCb.indeterminate = orphanSelCount > 0 && orphanSelCount < orphans.length;
-	};
-	updateOrphanCb();
-	st.groupCbUpdaters.push(updateOrphanCb);
+	bindTriStateCb(ctx, orphanCb, orphans);
 	orphanCb.addEventListener("click", (e) => e.stopPropagation());
 	orphanCb.addEventListener("change", () => {
 		for (const c of orphans) {
@@ -477,7 +476,7 @@ function renderCardRow(ctx: Ctx, parentEl: HTMLElement, c: Card) {
 	const { doc, st } = ctx;
 	st.renderedCardTitles.push(c.title);
 	const row = el(doc, "div", "tm-cm-card");
-	const depth = Math.max(0, crumbOf(c).split(" › ").length - 1);
+	const depth = Math.max(0, crumbOf(c).split(ns.CRUMB_SEP).length - 1);
 	row.style.paddingLeft = `${depth * 0.9}em`;
 	const cb = doc.createElement("input");
 	cb.type = "checkbox";
@@ -495,8 +494,8 @@ function cmpCards(ctx: Ctx): (a: Card, b: Card) => number {
 	return (a, b) => {
 		let r = 0;
 		if (st.sortKey === "mixed") {
-			const sorted = sched.sortPriorityMixedQueue([a, b], "hybrid");
-			r = sorted[0] === a ? -1 : 1;
+			// 混合排序判序唯一实现 = scheduler.comparePriorityMixed（勿再对二元数组整体排序）
+			r = sched.comparePriorityMixed(a, b, "hybrid");
 		} else if (st.sortKey === "priority") {
 			const pa = Number(a.fields["tidme.priority"] ?? 99);
 			const pb = Number(b.fields["tidme.priority"] ?? 99);
@@ -506,13 +505,9 @@ function cmpCards(ctx: Ctx): (a: Card, b: Card) => number {
 			const db = String(b.fields.state || "0") === "2" ? sched.parseTwDate(b.fields.due).getTime() : Infinity;
 			r = da - db;
 		} else if (st.sortKey === "deck") {
-			const da = decksOf(st, a).map((d) => d.caption).join("·");
-			const db = decksOf(st, b).map((d) => d.caption).join("·");
-			r = da < db ? -1 : da > db ? 1 : 0;
+			r = cmpStr((c: Card) => decksOf(st, c).map((d) => d.caption).join("·"))(a, b);
 		} else {
-			const pa = crumbOf(a);
-			const pb = crumbOf(b);
-			r = pa < pb ? -1 : pa > pb ? 1 : 0;
+			r = cmpStr(crumbOf)(a, b);
 		}
 		return st.sortAsc ? r : -r;
 	};
@@ -933,10 +928,8 @@ function makeCardManager(): WidgetCtor {
 		refresh(changedTiddlers: Record<string, any>) {
 			const ctx = this._ctx;
 			if (!ctx) return false;
-			let need = false;
-			for (const title of Object.keys(changedTiddlers || {})) {
-				if (reactive.isTidmeDataChange(ctx.wiki, title)) { need = true; break; }
-			}
+			// 刷新：唯一机制（TW 原生 refresh 嗅探 + core/reactive 谓词）
+			const need = reactive.hasRelevantChange(ctx.wiki, changedTiddlers);
 			if (need) render(ctx);
 			return need;
 		}

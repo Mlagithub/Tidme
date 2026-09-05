@@ -197,38 +197,50 @@ export type QueueSortMode = "priority-first" | "due-first" | "hybrid";
  * - due-first（到期优先）：due 越早越在前面，相同时按优先级升序。
  * - hybrid（混合加权得分）：score = priority - overdueDays * weight * 10（逾期越久加权越优先），综合排序。
  */
+/**
+ * 混合队列统一判序（负数 = a 在前）：priority-first / due-first / hybrid。
+ * sortPriorityMixedQueue 与外部单对比较（如管理器列表排序）共用此定义，勿再对二元数组整体排序。
+ */
+export function comparePriorityMixed(
+	a: CardLike,
+	b: CardLike,
+	mode: QueueSortMode = "hybrid",
+	overdueWeight = 0.5
+): number {
+	const now = Date.now();
+	const pa = normalizePriority(a.fields["tidme.priority"]);
+	const pb = normalizePriority(b.fields["tidme.priority"]);
+	const da = parseTwDate(a.fields.due, new Date(0)).getTime();
+	const db = parseTwDate(b.fields.due, new Date(0)).getTime();
+
+	if (mode === "priority-first") {
+		if (pa !== pb) return pa - pb;
+		return da - db;
+	}
+
+	if (mode === "due-first") {
+		if (da !== db) return da - db;
+		return pa - pb;
+	}
+
+	// hybrid 模式：逾期天数抵扣 priority（使高逾期的低优先卡也能被调度，但不打破整体优先级框架）
+	// 无 due = 视为 now（score 0）—— 不应伪装成"逾期多年"排到队首
+	const overMs = (d: number) => (d === 0 ? 0 : Math.max(0, (now - d) / 86400000));
+	const daysA = overMs(da);
+	const daysB = overMs(db);
+	const scoreA = pa - daysA * overdueWeight * 10;
+	const scoreB = pb - daysB * overdueWeight * 10;
+	if (Math.abs(scoreA - scoreB) > 0.001) return scoreA - scoreB;
+	return pa - pb || da - db;
+}
+
+/** 优先级混合队列排序（判序唯一实现 = comparePriorityMixed） */
 export function sortPriorityMixedQueue<T extends CardLike>(
 	cards: T[],
 	mode: QueueSortMode = "hybrid",
 	overdueWeight = 0.5
 ): T[] {
-	const now = Date.now();
-	return [...cards].sort((a, b) => {
-		const pa = normalizePriority(a.fields["tidme.priority"]);
-		const pb = normalizePriority(b.fields["tidme.priority"]);
-		const da = parseTwDate(a.fields.due, new Date(0)).getTime();
-		const db = parseTwDate(b.fields.due, new Date(0)).getTime();
-
-		if (mode === "priority-first") {
-			if (pa !== pb) return pa - pb;
-			return da - db;
-		}
-
-		if (mode === "due-first") {
-			if (da !== db) return da - db;
-			return pa - pb;
-		}
-
-		// hybrid 模式：逾期天数抵扣 priority（使高逾期的低优先卡也能被调度，但不打破整体优先级框架）
-		// 无 due = 视为 now（score 0）—— 不应伪装成"逾期多年"排到队首
-		const overMs = (d: number) => (d === 0 ? 0 : Math.max(0, (now - d) / 86400000));
-		const daysA = overMs(da);
-		const daysB = overMs(db);
-		const scoreA = pa - daysA * overdueWeight * 10;
-		const scoreB = pb - daysB * overdueWeight * 10;
-		if (Math.abs(scoreA - scoreB) > 0.001) return scoreA - scoreB;
-		return pa - pb || da - db;
-	});
+	return [...cards].sort((a, b) => comparePriorityMixed(a, b, mode, overdueWeight));
 }
 
 /**

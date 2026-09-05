@@ -9,11 +9,14 @@ core/deck.ts — 牌组实体（M2：唯一读写入口）
 - 高层参数（DeckConfig）→ 低层字段由 configToFields 依据 $:/Deck/default
   模板生成（state_learn/due/new、order_*、p、actions…），页面不再手填；
 - 成员唯一来源 = card 过滤器（deckCards 求值）。
-本模块纯 wiki 操作，无 DOM、不 require 其它 core 模块（防环）。
+本模块纯 wiki 操作，无 DOM；仅引用零依赖的 core/ns 常量（防环）。
 */
 
+declare function require(module: string): any;
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
+
 export const DECK_TAG = "$:/tags/TidmeDeck";
-export const DEFAULT_DECK = "$:/Deck/default";
+export const DEFAULT_DECK = ns.DECK_PREFIX + "default";
 
 export interface DeckConfig {
 	/** 牌组名（不含 $:/Deck/ 前缀；slug 化落标题） */
@@ -44,12 +47,12 @@ export interface Deck {
 /** 名称 → 标题（sanitize：防路径/系统段注入）。合法完整标题（$:/Deck/…、Tidme/Decks/…）原样通过。 */
 export function titleOf(name: string): string {
 	const raw = String(name || "").trim();
-	if (raw.startsWith("$:/Deck/") || raw.startsWith("Tidme/Decks/")) return raw;
+	if (raw.startsWith(ns.DECK_PREFIX) || raw.startsWith(ns.NS_DECKS)) return raw;
 	const clean = raw
 		.replace(/[\\/:*?"<>|$\[\]]/g, "-")
 		.replace(/[\s]+/g, "-");
 	if (!clean || clean === "-") throw new Error("deck: 无效牌组名: " + name);
-	return "$:/Deck/" + clean;
+	return ns.DECK_PREFIX + clean;
 }
 
 /** 全部牌组标题（shadow+普通；含 default） */
@@ -64,7 +67,7 @@ export function getDeck(wiki: any, nameOrTitle: string): Deck | null {
 	const title = titleOf(nameOrTitle); // 含 "/" 视为完整标题
 	const t = wiki.getTiddler(title);
 	if (!t) return null;
-	const name = title.startsWith("$:/Deck/") ? title.slice("$:/Deck/".length) : (title.split("/").pop() || title);
+	const name = title.startsWith(ns.DECK_PREFIX) ? title.slice(ns.DECK_PREFIX.length) : (title.split("/").pop() || title);
 	return { title, name, fields: t.fields || {} };
 }
 

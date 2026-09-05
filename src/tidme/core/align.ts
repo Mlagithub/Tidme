@@ -12,6 +12,7 @@ align.ts — 重切分对齐（G2 / roadmap S6）
 */
 
 import { contentFingerprint, normalizeText } from "./ids.ts";
+import { CRUMB_SEP } from "./ns.ts";
 
 export interface AlignCard { title: string; fields: Record<string, any> }
 
@@ -28,12 +29,12 @@ export interface AlignResult {
 
 /** breadcrumb（含文档前缀）→ 匹配 key：剥离文档标题前缀 */
 export function cardKey(breadcrumb: string, docTitle: string): string {
-	const parts = String(breadcrumb || "").split(" › ").map((s) => s.trim()).filter(Boolean);
+	const parts = String(breadcrumb || "").split(CRUMB_SEP).map((s) => s.trim()).filter(Boolean);
 	// 文档标题可能是唯一化后缀（如 "书名 ~2"），前缀匹配即可
 	if (docTitle && parts.length && (parts[0] === docTitle || parts[0].startsWith(docTitle + " "))) {
-		return parts.slice(1).join(" › ");
+		return parts.slice(1).join(CRUMB_SEP);
 	}
-	return parts.join(" › ");
+	return parts.join(CRUMB_SEP);
 }
 
 /**

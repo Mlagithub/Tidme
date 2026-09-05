@@ -617,17 +617,17 @@ test("study 视图: 评分条始终可见（不随 folded 隐藏）", () => {
 	assert.ok(!study.includes('text="hide"'), "评分条不再被 hide reveal 包裹（folded=hide 时也可见）");
 });
 
-test("workflow: 开始复习 startStudy 直达默认牌组第一张在队卡", () => {
+test("workflow: 开始学习 startGlobalLearning 直达默认牌组第一张在队卡", () => {
 	const wf = tw.modules.execute("$:/plugins/keepone/tidme/review/widgets/workflow.js");
 	const deckEngine = tw.modules.execute("$:/plugins/keepone/tidme/core/deck-engine.js");
-	// 用与 startStudy 相同的队列组合器计算期望的第一张卡
+	// 用与 startGlobalLearning 相同的队列组合器计算期望的第一张卡
 	const df = wiki.getTiddler("$:/Deck/default").fields;
 	const expected = wiki.filterTiddlers(deckEngine.composeDeckFilters("$:/Deck/default", df).queue)[0];
 	assert.ok(expected, "默认牌组应有在队卡");
 
 	const events = [];
 	const fakeWidget = { dispatchEvent: (e) => events.push(e) };
-	wf.startStudy(wiki, fakeWidget);
+	wf.startGlobalLearning(wiki, fakeWidget);
 
 	const studyList = wiki.getTiddler("$:/Deck/default/study");
 	assert.ok(studyList, "学习会话 tiddler 已写入");
@@ -640,7 +640,7 @@ test("workflow: 开始复习 startStudy 直达默认牌组第一张在队卡", (
 	// 无在队卡 → 恭喜分支（不导航、不写 study list）
 	const empty = { filterTiddlers: () => [], getTiddler: () => null };
 	const ev2 = [];
-	wf.startStudy(empty, { dispatchEvent: (e) => ev2.push(e) });
+	wf.startGlobalLearning(empty, { dispatchEvent: (e) => ev2.push(e) });
 	assert.ok(!ev2.some((e) => e.type === "tm-navigate"), "空队列不导航");
 	assert.ok(ev2.some((e) => e.type === "tm-notify"), "空队列弹恭喜");
 });

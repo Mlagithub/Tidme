@@ -16,6 +16,7 @@ const icons = require("$:/plugins/keepone/tidme/core/icons.js");
 const display = require("$:/plugins/keepone/tidme/core/display.js");
 const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
 const paths = require("$:/plugins/keepone/tidme/core/paths.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 // 共享 DOM/徽章/文档节查询（实现收敛于 core/dom、core/display、core/doc-ops）
@@ -142,7 +143,7 @@ function makeReadingList(): any {
 				const docDone = docAll.filter((t) => sched.isCardDone(wiki.getTiddler(t)?.fields)).length;
 				// 真实 doc tiddler title（命名空间路径，folder 冲突时含 ~docId 后缀）：
 				// 按 docId 查真实文档页（B1），不再由书名+docId 重算（slug 规则一变即失配）
-				const bookTitle = g.cards[0].breadcrumb.split(" › ")[0] || "";
+				const bookTitle = g.cards[0].breadcrumb.split(ns.CRUMB_SEP)[0] || "";
 				const docTiddlerTitle = docOps.docPageOfDoc(wiki, g.doc)
 					|| (bookTitle ? paths.bookRoot(bookTitle, g.doc) : "");
 				const docLabel = bookTitle || g.doc;
