@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { collectButtons, collectText, fakeDocument, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
 import { makeBookFixture } from '../helpers/fixtures.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
+import { FUTURE, PAST, twDate } from '../helpers/tw-date.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-wgt-rev-' });
 const parseMod = mod('import/parse.js');
@@ -223,4 +224,78 @@ test('workflow: $:/Decks 工作流中心（全局交错学习流 + 阅读目标�
   // 全无 → 阅读列表页
   const emptyWiki = { filterTiddlers: () => [], getTiddler: () => null };
   assert.equal(wf.globalReadingTarget(emptyWiki), '$:/plugins/keepone/tidme/import/ui/reading-list', '全无跳阅读列表');
+});
+
+// ---------- 继续阅读目标（globalReadingTarget：续读点出队顺延 + 真实队列口径） ----------
+
+test('workflow: 继续阅读目标 —— 续读点卡已读/忽略/搁置时按本书顺序顺延到下一张在队卡', () => {
+  const wf = mod('review/widgets/workflow.js');
+  const mk = (title, order, extra = {}) =>
+    wiki.addTiddler({
+      title,
+      'tidme.kind': 'topic',
+      'tidme.subkind': 'section',
+      'tidme.doc': 'dseq',
+      'tidme.order': order,
+      'tidme.breadcrumb': `书 › ${title}`,
+      state: '0',
+      due: twDate(),
+      text: 'x',
+      ...extra,
+    });
+  mk('顺延S1', '000001', { 'tidme.done': 'yes' });
+  mk('顺延S2', '000002', { 'tidme.ignored': 'yes' });
+  mk('顺延S3', '000003', { 'tidme.suspended': 'yes' });
+  mk('顺延S4', '000004');
+  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/global', text: '顺延S1' });
+  assert.equal(wf.globalReadingTarget(wiki), '顺延S4', '已读/忽略/搁置的续读点不回跳，按本书顺序顺延');
+});
+
+test('workflow: 继续阅读目标 —— 续读点所在文档读完时回退全局阅读队列', () => {
+  const wf = mod('review/widgets/workflow.js');
+  const mk = (title, order, extra = {}) =>
+    wiki.addTiddler({
+      title,
+      'tidme.kind': 'topic',
+      'tidme.subkind': 'section',
+      'tidme.doc': 'dfin',
+      'tidme.order': order,
+      'tidme.breadcrumb': `书 › ${title}`,
+      state: '2',
+      due: twDate(),
+      text: 'x',
+      ...extra,
+    });
+  mk('读完S1', '000001', { 'tidme.done': 'yes' });
+  mk('读完S2', '000002', { 'tidme.done': 'yes' });
+  wiki.addTiddler({
+    title: '他书待读卡',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'dother',
+    'tidme.order': '000001',
+    'tidme.priority': '5',
+    state: '0',
+    due: twDate(),
+  });
+  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/global', text: '读完S1' });
+  assert.equal(wf.globalReadingTarget(wiki), '他书待读卡', '本书读完 → 落入全局队列（不再跳回已读卡）');
+});
+
+test('workflow: 继续阅读目标 —— 无续读点时当前可读卡优先于高优先级未来排期卡', () => {
+  const wf = mod('review/widgets/workflow.js');
+  reset(); // 丢弃标准书夹具，隔离优先级对比
+  wiki.deleteTiddler('$:/state/tidme-import/readpoint/global');
+  wiki.addTiddler({ title: '高优未来', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '5', due: FUTURE(), state: '0' });
+  wiki.addTiddler({ title: '低优可读', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '90', due: PAST(), state: '0' });
+  assert.equal(wf.globalReadingTarget(wiki), '低优可读', '真实队列口径：当前可读（due≤now）优先，而非单纯 priority');
+});
+
+test('workflow: 继续阅读目标 —— 全部未来排期时回退排序第一张（允许显式打开）', () => {
+  const wf = mod('review/widgets/workflow.js');
+  reset();
+  wiki.deleteTiddler('$:/state/tidme-import/readpoint/global');
+  wiki.addTiddler({ title: '未来卡乙', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '50', due: FUTURE(), state: '0' });
+  wiki.addTiddler({ title: '未来卡甲', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '5', due: FUTURE(), state: '0' });
+  assert.equal(wf.globalReadingTarget(wiki), '未来卡甲');
 });

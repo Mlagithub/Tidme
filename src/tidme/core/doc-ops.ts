@@ -1,5 +1,5 @@
 /*
-core/doc-ops.ts — 文档/卡片运维操作（文档查询、删除阅读材料、折叠态）
+core/doc-ops.ts — 文档/卡片运维操作（文档查询、删除阅读材料、折叠态、阅读入口目标）
 只依赖 wiki 对象与 core/session（常量），不渲染 DOM。
 跨 core 模块引用一律显式 require（避免 esbuild 内联复制）。
 */
@@ -8,6 +8,7 @@ declare function require(module: string): any;
 const session = require('$:/plugins/keepone/tidme/core/session.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 
 export const READPOINT_PREFIX = '$:/state/tidme-import/readpoint/';
 /** 全局续读点（最近打开的阅读卡；section-bar 写、workflow「开始阅读」读） */
@@ -126,6 +127,35 @@ export function sectionsOfDoc(wiki: any, docId: string): string[] {
         f['tidme.kind'] === 'topic' &&
         String(f['tidme.subkind'] || '') !== 'extract';
     });
+}
+
+/**
+ * 全局阅读入口目标（「今天」继续阅读 / 工作流开始阅读共用）：
+ * 1) 全局续读点指向的卡仍在队（未读/未忽略/未搁置）→ 返回续读点（用户显式位置）；
+ * 2) 续读点卡已出队 → 按本书阅读顺序顺延到下一张在队卡（接着读，而非跳回已读内容）；
+ * 3) 无/失效续读点或本书已读完 → 真实阅读队列第一张：当前可读（isDueNow）优先，
+ *    排序同阅读列表（优先级 → due → 阅读顺序）；全部未来排期时回退排序第一张（允许显式打开）；
+ * 4) 队列空 → 阅读列表页。
+ */
+export function globalReadingTarget(wiki: any): string {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return ns.PAGE_READING_LIST;
+  const g = String(wiki.getTiddler(GLOBAL_READPOINT)?.fields?.text || '').trim();
+  if (g && wiki.getTiddler(g)) {
+    const f = wiki.getTiddler(g).fields || {};
+    if (!sched.isCardDone(f) && f['tidme.suspended'] !== 'yes') return g;
+    // 续读点卡已出队：按本书阅读顺序顺延到下一张在队卡；本书读完则落入全局队列
+    const docId = String(f['tidme.doc'] || '');
+    if (docId) {
+      const next = sched.nextSchedulable(sectionsOfDoc(wiki, docId), g, (t: string) => {
+        const nf = wiki.getTiddler(t)?.fields;
+        return !!nf && !sched.isCardDone(nf) && nf['tidme.suspended'] !== 'yes';
+      });
+      if (next) return next;
+    }
+  }
+  const queue = sched.sortTopicQueue(sched.collectTopicQueue(wiki));
+  const readable = queue.find((c: any) => sched.isDueNow(c.fields));
+  return (readable || queue[0])?.title || ns.PAGE_READING_LIST;
 }
 
 /**

@@ -40,31 +40,14 @@ interface TopicCard {
   fields: Record<string, any>;
 }
 
+/** 收集与排序唯一产地 = core/scheduler（collectTopicQueue / sortTopicQueue）；本文件只做分组与渲染 */
 function collectTopicCards(wiki: any): TopicCard[] {
-  return wiki.filterTiddlers(topicQueueFilter())
-    .map((t: string) => {
-      const f = wiki.getTiddler(t)?.fields || {};
-      return {
-        title: t,
-        kind: String(f['tidme.subkind'] || ''),
-        priority: sched.normalizePriority(f['tidme.priority']),
-        due: sched.parseTwDate(f.due, new Date(0)),
-        order: String(f['tidme.order'] || f['tidme.breadcrumb'] || t),
-        doc: String(f['tidme.doc'] || ''),
-        breadcrumb: String(f['tidme.breadcrumb'] || t),
-        fields: f,
-      };
-    })
-    .filter((c: TopicCard) => !sched.isCardDone(c.fields));
+  return sched.collectTopicQueue(wiki);
 }
 
 /** 组内排序：优先级（0 最高）→ due（早的在前，topic 被动重读）→ 阅读顺序 */
 function sortTopicCards(cards: TopicCard[]): TopicCard[] {
-  return [...cards].sort((a, b) =>
-    a.priority - b.priority ||
-    a.due.getTime() - b.due.getTime() ||
-    String(a.order).localeCompare(String(b.order))
-  );
+  return sched.sortTopicQueue(cards);
 }
 
 /** 按文档分组（组间按文档名；无 doc 的散卡收进「未分组」） */

@@ -38,6 +38,41 @@ export function docItemsFilter(docId: string): string {
   return `[all[shadows+tiddlers]tidme.doc[${docId}]tidme.kind[item]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]]`;
 }
 
+/**
+ * 阅读队列快照：TOPIC_QUEUE_FILTER 求值 + 排序字段预解析（priority/due/order）。
+ * 出队三态（done/ignored/suspended）由过滤器排除，此处再兜底一次
+ * （shadow 覆盖写回等边缘下过滤器与字段可能不一致）。wiki 为注入参数，无 $tw 全局依赖。
+ */
+export function collectTopicQueue(wiki: any): Record<string, any>[] {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
+  return wiki
+    .filterTiddlers(TOPIC_QUEUE_FILTER)
+    .map((t: string) => {
+      const f = wiki.getTiddler(t)?.fields || {};
+      return {
+        title: t,
+        fields: f,
+        kind: String(f['tidme.subkind'] || ''),
+        priority: normalizePriority(f['tidme.priority']),
+        due: parseTwDate(f.due, new Date(0)),
+        order: String(f['tidme.order'] || f['tidme.breadcrumb'] || t),
+        doc: String(f['tidme.doc'] || ''),
+        breadcrumb: String(f['tidme.breadcrumb'] || t),
+      };
+    })
+    .filter((c: Record<string, any>) => !isCardDone(c.fields) && c.fields['tidme.suspended'] !== 'yes');
+}
+
+/** 阅读队列排序（阅读列表 / 继续阅读入口共用）：优先级（0 最高）→ due（早在前，被动重读）→ 阅读顺序 */
+export function sortTopicQueue(cards: Record<string, any>[]): Record<string, any>[] {
+  return [...cards].sort(
+    (a, b) =>
+      a.priority - b.priority ||
+      (a.due?.getTime() ?? 0) - (b.due?.getTime() ?? 0) ||
+      String(a.order).localeCompare(String(b.order)),
+  );
+}
+
 /** 归一化优先级：非法值回默认 50 */
 export function normalizePriority(v: unknown): number {
   if (typeof v === 'number' && Number.isFinite(v)) return Math.max(0, Math.min(100, Math.round(v)));

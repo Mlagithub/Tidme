@@ -8,67 +8,66 @@ widgets/workflow.ts — $:/Decks 工作流中心：开始学习按钮
 */
 
 declare function require(module: string): any;
-const dom = require("$:/plugins/keepone/tidme/core/dom.js");
-const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
-const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
-const icons = require("$:/plugins/keepone/tidme/core/icons.js");
-const sessionMod = require("$:/plugins/keepone/tidme/core/session.js");
-const ns = require("$:/plugins/keepone/tidme/core/ns.js");
-const Widget = require("$:/core/modules/widgets/widget.js").widget;
+const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
+const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
+const icons = require('$:/plugins/keepone/tidme/core/icons.js');
+const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const DEFAULT_DECK = deckMod.DEFAULT_DECK;
 
 // 共享 DOM 工具（实现收敛于 core/dom）
 const el = dom.el;
 
-const QUEUE_MODE_TIDDLER = "$:/config/Tidme/QueueMode";
+const QUEUE_MODE_TIDDLER = '$:/config/Tidme/QueueMode';
 
 /** 队列选项：$:/config/Tidme/QueueMode 存在 = 混入阅读材料（"strict"=宏观三段式，其余=4:1 交错）；
  *  不存在（默认）= 纯知识卡复习流，阅读材料不打断（阅读走阅读列表/文档页/继续阅读）。 */
-function queueOptions(wiki: any): { mode: "interleaved" | "strict"; topics: boolean } {
-	const m = String(wiki?.getTiddlerText?.(QUEUE_MODE_TIDDLER, "") || "").trim();
-	if (m === "") return { mode: "interleaved", topics: false };
-	return { mode: m === "strict" ? "strict" : "interleaved", topics: true };
+function queueOptions(wiki: any): { mode: 'interleaved' | 'strict'; topics: boolean } {
+  const m = String(wiki?.getTiddlerText?.(QUEUE_MODE_TIDDLER, '') || '').trim();
+  if (m === '') return { mode: 'interleaved', topics: false };
+  return { mode: m === 'strict' ? 'strict' : 'interleaved', topics: true };
 }
 
 function makeWorkflow(): any {
-	class WorkflowWidget extends Widget {
-		render(parent: any, nextSibling: any) {
-			this.parentDomNode = parent;
-			this.computeAttributes();
-			this.execute();
-			const doc = this.document;
-			const wiki = this.wiki;
-			const root = el(doc, "div", "tm-decks-actions");
-			this.domNodes.push(root);
+  class WorkflowWidget extends Widget {
+    render(parent: any, nextSibling: any) {
+      this.parentDomNode = parent;
+      this.computeAttributes();
+      this.execute();
+      const doc = this.document;
+      const wiki = this.wiki;
+      const root = el(doc, 'div', 'tm-decks-actions');
+      this.domNodes.push(root);
 
-			const learnBtn = icons.iconButton(doc, "tm-btn tm-btn--primary tm-workflow-btn-hero", "study", "开始学习");
-			learnBtn.title = "复习全部到期/新知识卡（挖空/问答）：按 FSRS 到期与新卡顺序连续学习，不混入阅读材料；勾选下方选项可把到期阅读材料也加入（SM 交错）";
-			learnBtn.addEventListener("click", () => startGlobalLearning(wiki, this));
-			root.appendChild(learnBtn);
+      const learnBtn = icons.iconButton(doc, 'tm-btn tm-btn--primary tm-workflow-btn-hero', 'study', '开始学习');
+      learnBtn.title = '复习全部到期/新知识卡（挖空/问答）：按 FSRS 到期与新卡顺序连续学习，不混入阅读材料；勾选下方选项可把到期阅读材料也加入（SM 交错）';
+      learnBtn.addEventListener('click', () => startGlobalLearning(wiki, this));
+      root.appendChild(learnBtn);
 
-			// 可选项：把到期/待读阅读材料（topic）混入学习流（SM 交错；默认纯知识卡）
-			const modeRow = el(doc, "div", "tm-decks-mode");
-			const modeCheck = doc.createElement("input");
-			modeCheck.type = "checkbox";
-			modeCheck.checked = queueOptions(wiki).topics;
-			modeCheck.title = "勾选后：到期/待读的阅读材料（节卡/摘录）会按 4:1 交错进学习流（SuperMemo 精神）；不勾选则学习流只含知识卡，阅读从阅读列表/文档页进入";
-			modeRow.appendChild(modeCheck);
-			const modeLabel = el(doc, "span", "tm-import-muted",
-				"到期阅读材料也加入学习流（交错）");
-			modeLabel.title = modeCheck.title;
-			modeRow.appendChild(modeLabel);
-			modeCheck.addEventListener("change", () => {
-				// 勾选 → 写 QueueMode（含 topic 交错）；取消 → 删 tiddler（纯知识卡）
-				if (modeCheck.checked) wiki.addTiddler({ title: QUEUE_MODE_TIDDLER, text: "interleaved" });
-				else wiki.deleteTiddler(QUEUE_MODE_TIDDLER);
-			});
-			root.appendChild(modeRow);
+      // 可选项：把到期/待读阅读材料（topic）混入学习流（SM 交错；默认纯知识卡）
+      const modeRow = el(doc, 'div', 'tm-decks-mode');
+      const modeCheck = doc.createElement('input');
+      modeCheck.type = 'checkbox';
+      modeCheck.checked = queueOptions(wiki).topics;
+      modeCheck.title = '勾选后：到期/待读的阅读材料（节卡/摘录）会按 4:1 交错进学习流（SuperMemo 精神）；不勾选则学习流只含知识卡，阅读从阅读列表/文档页进入';
+      modeRow.appendChild(modeCheck);
+      const modeLabel = el(doc, 'span', 'tm-import-muted', '到期阅读材料也加入学习流（交错）');
+      modeLabel.title = modeCheck.title;
+      modeRow.appendChild(modeLabel);
+      modeCheck.addEventListener('change', () => {
+        // 勾选 → 写 QueueMode（含 topic 交错）；取消 → 删 tiddler（纯知识卡）
+        if (modeCheck.checked) wiki.addTiddler({ title: QUEUE_MODE_TIDDLER, text: 'interleaved' });
+        else wiki.deleteTiddler(QUEUE_MODE_TIDDLER);
+      });
+      root.appendChild(modeRow);
 
-			parent.insertBefore(root, nextSibling);
-		}
-	}
-	return WorkflowWidget as any;
+      parent.insertBefore(root, nextSibling);
+    }
+  }
+  return WorkflowWidget as any;
 }
 
 /**
@@ -78,45 +77,40 @@ function makeWorkflow(): any {
  * 3. 导航到首张学习卡（或在无到期任务时发射庆祝粒子）
  */
 function startGlobalLearning(wiki: any, widget: any): void {
-	const deckEngine = require("$:/plugins/keepone/tidme/core/deck-engine.js");
-	const { mode, topics } = queueOptions(wiki);
-	const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), { mode, topics });
+  const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
+  const { mode, topics } = queueOptions(wiki);
+  const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), { mode, topics });
 
-	if (!queue || queue.length === 0) {
-		widget.dispatchEvent({ type: "tm-confetti-launch" });
-		widget.dispatchEvent({ type: "tm-confetti-launch", originY: 0.6, spread: 70, delay: 300 });
-		widget.dispatchEvent({ type: "tm-confetti-launch", originY: 0.55, spread: 30, delay: 600 });
-		widget.dispatchEvent({ type: "tm-notify", param: ns.NOTIFY_CONGRATULATION });
-		return;
-	}
+  if (!queue || queue.length === 0) {
+    widget.dispatchEvent({ type: 'tm-confetti-launch' });
+    widget.dispatchEvent({ type: 'tm-confetti-launch', originY: 0.6, spread: 70, delay: 300 });
+    widget.dispatchEvent({ type: 'tm-confetti-launch', originY: 0.55, spread: 30, delay: 600 });
+    widget.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_CONGRATULATION });
+    return;
+  }
 
-	const first = queue[0];
-	sessionMod.setSession(wiki, {
-		list: queue,
-		currentIndex: "0",
-		mode: mode === "strict" ? "global-strict" : topics ? "global-interleaved" : "items-only"
-	});
+  const first = queue[0];
+  sessionMod.setSession(wiki, {
+    list: queue,
+    currentIndex: '0',
+    mode: mode === 'strict' ? 'global-strict' : topics ? 'global-interleaved' : 'items-only',
+  });
 
-	// <deck>/study 会话列表（fsrs4tw 契约后缀见 core/session）
-	wiki.addTiddler({ title: DEFAULT_DECK + sessionMod.DECK_STUDY_SUFFIX, list: queue });
-	// 首卡折叠态统一走 core/doc-ops.prepareCardFold（item → hide/show，按所属 deck card_unfold）
-	docOps.prepareCardFold(wiki, first);
+  // <deck>/study 会话列表（fsrs4tw 契约后缀见 core/session）
+  wiki.addTiddler({ title: DEFAULT_DECK + sessionMod.DECK_STUDY_SUFFIX, list: queue });
+  // 首卡折叠态统一走 core/doc-ops.prepareCardFold（item → hide/show，按所属 deck card_unfold）
+  docOps.prepareCardFold(wiki, first);
 
-	widget.dispatchEvent({ type: "tm-navigate", navigateTo: first });
+  widget.dispatchEvent({ type: 'tm-navigate', navigateTo: first });
 }
 
 /** 开始阅读目标（开始学习按钮外的"开始阅读"语义）：
  *  全局续读点（最近读过）→ 第一张待读 topic → 阅读列表页 */
 function globalReadingTarget(wiki: any): string {
-	const g = String(wiki.getTiddler(docOps.GLOBAL_READPOINT)?.fields?.text || "");
-	if (g && wiki.getTiddler(g)) return g;
-	const first = wiki.filterTiddlers(
-		"[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]sort[priority]first[]]"
-	)[0];
-	if (first) return first;
-	return ns.PAGE_READING_LIST;
+  // 阅读入口决策收敛 core/doc-ops（续读点出队顺延 + 真实队列口径），本文件只保留入口
+  return docOps.globalReadingTarget(wiki);
 }
 
-exports["tidme-workflow"] = makeWorkflow();
+exports['tidme-workflow'] = makeWorkflow();
 exports.globalReadingTarget = globalReadingTarget;
 exports.startGlobalLearning = startGlobalLearning;
