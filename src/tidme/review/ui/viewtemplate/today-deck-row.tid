@@ -1,6 +1,7 @@
 title: $:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row
 
 <!-- 「今天」页牌组行：名称（链到牌组详情）+ 三计数徽章；拖拽排序由 list-tagged-draggable 提供 -->
+<!-- !!同步守护：本 $let 的过滤器组合与 core/deck-engine.composeDeckFilters 保持同构（JS 侧唯一真源）；修改任一侧须同步 review/ui/ViewTemplate/{deck,tiddler,today-deck-row}.tid 三处模板 -->
 <$let
     deckTiddler=<<currentTiddler>>
     filter_learn=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]`

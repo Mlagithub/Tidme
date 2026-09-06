@@ -141,6 +141,252 @@ async function makeSectionId(docId, breadcrumb, ordinal) {
   return "s" + await shortHash(basis, 12);
 }
 
+// src/tidme/import/parse/chunker.ts
+var DEFAULTS = { maxChars: 4e3, minChars: 600 };
+function cleanOptions(options = {}) {
+  const out = {};
+  if (Number.isFinite(options.maxChars) && options.maxChars > 0)
+    out.maxChars = options.maxChars;
+  if (Number.isFinite(options.minChars) && options.minChars >= 0)
+    out.minChars = options.minChars;
+  return out;
+}
+function escapeHtml(text) {
+  return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+var charsOf = (blocks) => blocks.reduce((n, b) => n + normalizeText(b.text).length, 0);
+function serializeChildren(el) {
+  const ser = new XMLSerializer();
+  let out = "";
+  for (const c of Array.from(el.childNodes || []))
+    out += ser.serializeToString(c);
+  return out;
+}
+var WRAP_TAGS = /* @__PURE__ */ new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "figcaption", "caption", "div"]);
+function blockHtml(block) {
+  if (typeof block.virtualHtml === "string")
+    return block.virtualHtml;
+  try {
+    if (block.el) {
+      const inner = serializeChildren(block.el);
+      let tag = String(block.tag || "p").toLowerCase();
+      if (!WRAP_TAGS.has(tag))
+        tag = "p";
+      if (inner.trim())
+        return `<${tag}>${inner}</${tag}>`;
+    }
+  } catch (e) {
+  }
+  return `<p>${escapeHtml(normalizeText(block.text))}</p>`;
+}
+function splitSentences(text, maxLen) {
+  const sentences = String(text).match(/[^。！？!?；;\n]+[。！？!?；;]*/g) || [String(text)];
+  const out = [];
+  let cur = "";
+  for (const s of sentences) {
+    if (s.length > maxLen) {
+      if (cur) {
+        out.push(cur);
+        cur = "";
+      }
+      for (let i = 0; i < s.length; i += maxLen)
+        out.push(s.slice(i, i + maxLen));
+      continue;
+    }
+    if (cur && cur.length + s.length > maxLen) {
+      out.push(cur);
+      cur = s;
+    } else
+      cur += s;
+  }
+  if (cur)
+    out.push(cur);
+  return out;
+}
+function partitionBlocks(blocks, maxChars) {
+  const parts = [];
+  let cur = { htmlParts: [], textParts: [], chars: 0 };
+  let hardSplitCount = 0;
+  const flush = () => {
+    if (cur.htmlParts.length || cur.textParts.length) {
+      parts.push(cur);
+      cur = { htmlParts: [], textParts: [], chars: 0 };
+    }
+  };
+  for (const b of blocks) {
+    const t = normalizeText(b.text);
+    if (!t)
+      continue;
+    if (b.atomic) {
+      flush();
+      parts.push({ htmlParts: [blockHtml(b)], textParts: [t], chars: t.length });
+      continue;
+    }
+    if (t.length > maxChars) {
+      flush();
+      for (const piece of splitSentences(t, maxChars)) {
+        parts.push({ htmlParts: [`<p>${escapeHtml(piece)}</p>`], textParts: [piece], chars: piece.length });
+        hardSplitCount++;
+      }
+      continue;
+    }
+    if (cur.chars && cur.chars + t.length > maxChars)
+      flush();
+    cur.htmlParts.push(blockHtml(b));
+    cur.textParts.push(t);
+    cur.chars += t.length;
+  }
+  flush();
+  return { parts, hardSplitCount };
+}
+function buildTree(blocks) {
+  const roots = [];
+  const stack = [{ level: 0, children: roots }];
+  let current = null;
+  const preamble = [];
+  for (const b of blocks) {
+    if (b.isHeading) {
+      while (stack.length > 1 && stack[stack.length - 1].level >= b.level)
+        stack.pop();
+      const parent = stack[stack.length - 1];
+      const node = { level: b.level, text: b.text, blocks: [], children: [] };
+      parent.children.push(node);
+      stack.push({ level: b.level, children: node.children });
+      current = node;
+    } else {
+      (current ? current.blocks : preamble).push(b);
+    }
+  }
+  return { roots, preamble };
+}
+function collectLeaves(nodes, trail = [], out = []) {
+  for (const n of nodes) {
+    const path = [...trail, n.text || ""];
+    if (!n.children.length)
+      out.push({ node: n, trail: path });
+    else {
+      if (n.blocks.length)
+        out.push({ node: { level: n.level, text: n.text, blocks: n.blocks, children: [] }, trail: path });
+      collectLeaves(n.children, path, out);
+    }
+  }
+  return out;
+}
+function deriveSection(sec) {
+  if (sec.parts && sec.parts.length) {
+    sec.html = sec.parts.map((p) => (p.title ? `<p><strong>${escapeHtml(p.title)}</strong></p>
+` : "") + p.html).join("\n");
+    sec.text = sec.parts.map((p) => (p.title ? "\u3010" + p.title + "\u3011" : "") + p.text).join("\n");
+    sec.chars = sec.parts.reduce((n, p) => n + p.chars, 0);
+  }
+  return sec;
+}
+function finalizeSections(sections) {
+  sections.forEach((sec, i) => {
+    deriveSection(sec);
+    sec.ordinal = i;
+  });
+  return sections;
+}
+function applySizeRules(leaves, cfg, stats) {
+  const expanded = [];
+  for (const leaf of leaves) {
+    const title = leaf.trail[leaf.trail.length - 1] || "";
+    const blocks = leaf.node.blocks.filter((b) => normalizeText(b.text));
+    const html = blocks.map(blockHtml).join("\n\n");
+    const text = blocks.map((b) => normalizeText(b.text)).join("\n");
+    const total = charsOf(blocks);
+    expanded.push({
+      level: leaf.node.level,
+      title,
+      trail: leaf.trail,
+      html,
+      text,
+      chars: total,
+      parts: [{ html, text, chars: total }]
+    });
+  }
+  const result = [];
+  for (const sec of expanded) {
+    const canMergeIntoPrev = result.length && sec.chars < cfg.minChars && result[result.length - 1].chars + sec.chars <= cfg.maxChars;
+    if (canMergeIntoPrev) {
+      const prev = result[result.length - 1];
+      prev.parts.push({ title: sec.title || void 0, html: sec.html, text: sec.text, chars: sec.chars });
+      prev.chars += sec.chars;
+      prev.merged = true;
+      continue;
+    }
+    result.push(sec);
+  }
+  return result.map(deriveSection);
+}
+function makeBreadcrumb(parts) {
+  return parts.map((p) => String(p || "").replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+function chunkFile(p, statsOut = {}) {
+  const cfg = __spreadValues(__spreadValues({}, DEFAULTS), cleanOptions(p.options || {}));
+  statsOut.hardSplitCount = statsOut.hardSplitCount || 0;
+  const blocks = p.blocks || [];
+  const crumbBase = Array.isArray(p.fileBreadcrumb) ? p.fileBreadcrumb.filter(Boolean) : [];
+  const headings = blocks.filter((b) => b.isHeading);
+  if (!headings.length) {
+    const fallbackTitle = crumbBase[crumbBase.length - 1] || String(p.fileName || "").replace(/.*\//, "").replace(/\.[a-z0-9]+$/i, "") || "\u6B63\u6587";
+    const level = Math.max(2, Math.min(6, crumbBase.length + 1));
+    const { parts, hardSplitCount } = partitionBlocks(blocks, cfg.maxChars);
+    statsOut.hardSplitCount += hardSplitCount;
+    return parts.map((part, idx) => {
+      const html = part.htmlParts.join("\n\n");
+      const text = part.textParts.join("\n");
+      return {
+        level,
+        title: idx === 0 ? fallbackTitle : "",
+        trail: makeBreadcrumb([...crumbBase, idx === 0 ? fallbackTitle : ""]),
+        html,
+        text,
+        chars: part.chars,
+        isContinuation: idx > 0,
+        parts: [{ html, text, chars: part.chars }]
+      };
+    });
+  }
+  const { roots, preamble } = buildTree(blocks);
+  const leaves = collectLeaves(roots);
+  if (preamble.some((b) => normalizeText(b.text))) {
+    leaves.unshift({ node: { level: headings[0].level, text: "\u524D\u8A00", blocks: preamble, children: [] }, trail: [...crumbBase, "\u524D\u8A00"] });
+  }
+  const processed = applySizeRules(leaves, cfg, statsOut);
+  return processed.map((sec) => __spreadValues({
+    level: Math.max(2, Math.min(6, sec.level)),
+    title: sec.title || "",
+    trail: makeBreadcrumb(sec.trail),
+    html: sec.html,
+    text: sec.text,
+    chars: sec.chars,
+    merged: !!sec.merged,
+    isContinuation: !!sec.isContinuation
+  }, sec.parts ? { parts: sec.parts } : {}));
+}
+function chunkBook(files, options = {}) {
+  const stats = { hardSplitCount: 0, sections: 0 };
+  const sections = [];
+  for (const f of files) {
+    const secs = chunkFile({ blocks: f.blocks, fileBreadcrumb: f.fileBreadcrumb, fileName: f.fileName, options }, stats);
+    secs.forEach((s, i) => sections.push(__spreadProps(__spreadValues({}, s), { file: f.fileName, orderInFile: i })));
+  }
+  sections.forEach((s, idx) => {
+    s.ordinal = idx;
+    if (s.isContinuation) {
+      const base = s.trail.length ? s.trail[s.trail.length - 1] : "\u7EED";
+      s.trail = [...s.trail.slice(0, -1), `${base} (\u7EED)`];
+    }
+    if (!s.title)
+      s.title = s.trail[s.trail.length - 1] || "\u7EED";
+  });
+  const final = finalizeSections(sections);
+  stats.sections = final.length;
+  return { sections: final, stats };
+}
+
 // src/tidme/import/parse/epub.ts
 var _JSZip = null;
 function JSZipLib() {
@@ -461,374 +707,6 @@ function collectBlocks(doc) {
   return rows;
 }
 
-// src/tidme/import/parse/smart-merge.ts
-var SENTENCE_END = /[。！？；：…!?;:"“”‘’（）)]\s*$/;
-var BLOCK_BREAK = /* @__PURE__ */ new Set(["div", "body", "blockquote", "td", "li", "dd", "dt", "tr"]);
-var NEW_BLOCK_PATTERNS = [
-  /^\s*第[一二三四五六七八九十百千0-9]+[章节篇部卷]/,
-  /^\s*[一二三四五六七八九十百]+\s*[、.．]/,
-  /^\s*（[一二三四五六七八九十百]+）/,
-  /^\s*\d+\s*[、.．]/,
-  /^\s*\d+(\.\d+)+/,
-  /^\s*[—\-–]\s*\S/,
-  /^\s*[A-Z][A-Z0-9\s]{0,24}$/
-];
-function localName2(node) {
-  return String(node && (node.localName || node.tagName) || "").toLowerCase();
-}
-function getText2(node) {
-  let out = "";
-  const walk = (n) => {
-    for (const c of Array.from(n.childNodes || [])) {
-      if (c.nodeType === 3)
-        out += c.nodeValue || "";
-      else if (c.nodeType === 1)
-        walk(c);
-    }
-  };
-  walk(node);
-  return out;
-}
-function smartMergeParagraphs(doc) {
-  const body = doc.getElementsByTagName("body")[0] || doc.documentElement;
-  if (!body)
-    return false;
-  const isNewBlock = (text) => {
-    const t = (text || "").trim();
-    if (!t)
-      return true;
-    if (t.length <= 20 && !/[。！？；：!?;]$/.test(t))
-      return true;
-    for (const re of NEW_BLOCK_PATTERNS)
-      if (re.test(t))
-        return true;
-    return false;
-  };
-  const textOf = (node) => getText2(node).replace(/\s+/g, " ").trim();
-  const stripTrailingHyphen = (node) => {
-    const kids = node.childNodes;
-    for (let i = kids.length - 1; i >= 0; i--) {
-      const c = kids[i];
-      if (c.nodeType === 3) {
-        c.nodeValue = c.nodeValue.replace(/\s*-\s*$/, "");
-        return;
-      }
-      if (c.nodeType === 1) {
-        stripTrailingHyphen(c);
-        return;
-      }
-    }
-  };
-  let changed = false;
-  const mergeWalk = (parent) => {
-    const kids = Array.from(parent.childNodes || []);
-    for (const c of kids) {
-      if (c.nodeType === 1 && BLOCK_BREAK.has(localName2(c)))
-        mergeWalk(c);
-    }
-    let i = 0;
-    while (i < kids.length) {
-      const c = kids[i];
-      if (c.nodeType !== 1 || localName2(c) !== "p") {
-        i++;
-        continue;
-      }
-      const seq = [kids[i]];
-      let j = i + 1;
-      while (j < kids.length) {
-        const k = kids[j];
-        if (k.nodeType === 1 && localName2(k) === "p") {
-          seq.push(k);
-          j++;
-          continue;
-        }
-        if (k.nodeType === 3 && /^\s*$/.test(k.nodeValue || "")) {
-          j++;
-          continue;
-        }
-        break;
-      }
-      if (seq.length < 2) {
-        i = j;
-        continue;
-      }
-      let current = seq[0];
-      let curText = textOf(current);
-      for (let k = 1; k < seq.length; k++) {
-        const p = seq[k];
-        const t = textOf(p);
-        if (!t)
-          continue;
-        if (SENTENCE_END.test(curText) || isNewBlock(t) || isNewBlock(curText)) {
-          current = p;
-          curText = t;
-          continue;
-        }
-        const lastChar = curText.slice(-1);
-        const firstChar = t[0] || "";
-        if (lastChar === "-")
-          stripTrailingHyphen(current);
-        else if (/[a-zA-Z0-9]/.test(lastChar) && /[a-zA-Z0-9]/.test(firstChar))
-          current.appendChild(doc.createTextNode(" "));
-        while (p.firstChild)
-          current.appendChild(p.firstChild);
-        p.parentNode.removeChild(p);
-        curText = textOf(current);
-        changed = true;
-      }
-      i = j;
-    }
-  };
-  mergeWalk(body);
-  return changed;
-}
-
-// src/tidme/import/parse/chunker.ts
-var DEFAULTS = { maxChars: 4e3, minChars: 600 };
-function cleanOptions(options = {}) {
-  const out = {};
-  if (Number.isFinite(options.maxChars) && options.maxChars > 0)
-    out.maxChars = options.maxChars;
-  if (Number.isFinite(options.minChars) && options.minChars >= 0)
-    out.minChars = options.minChars;
-  return out;
-}
-function escapeHtml(text) {
-  return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-}
-var charsOf = (blocks) => blocks.reduce((n, b) => n + normalizeText(b.text).length, 0);
-function serializeChildren(el) {
-  const ser = new XMLSerializer();
-  let out = "";
-  for (const c of Array.from(el.childNodes || []))
-    out += ser.serializeToString(c);
-  return out;
-}
-var WRAP_TAGS = /* @__PURE__ */ new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "figcaption", "caption", "div"]);
-function blockHtml(block) {
-  if (typeof block.virtualHtml === "string")
-    return block.virtualHtml;
-  try {
-    if (block.el) {
-      const inner = serializeChildren(block.el);
-      let tag = String(block.tag || "p").toLowerCase();
-      if (!WRAP_TAGS.has(tag))
-        tag = "p";
-      if (inner.trim())
-        return `<${tag}>${inner}</${tag}>`;
-    }
-  } catch (e) {
-  }
-  return `<p>${escapeHtml(normalizeText(block.text))}</p>`;
-}
-function splitSentences(text, maxLen) {
-  const sentences = String(text).match(/[^。！？!?；;\n]+[。！？!?；;]*/g) || [String(text)];
-  const out = [];
-  let cur = "";
-  for (const s of sentences) {
-    if (s.length > maxLen) {
-      if (cur) {
-        out.push(cur);
-        cur = "";
-      }
-      for (let i = 0; i < s.length; i += maxLen)
-        out.push(s.slice(i, i + maxLen));
-      continue;
-    }
-    if (cur && cur.length + s.length > maxLen) {
-      out.push(cur);
-      cur = s;
-    } else
-      cur += s;
-  }
-  if (cur)
-    out.push(cur);
-  return out;
-}
-function partitionBlocks(blocks, maxChars) {
-  const parts = [];
-  let cur = { htmlParts: [], textParts: [], chars: 0 };
-  let hardSplitCount = 0;
-  const flush = () => {
-    if (cur.htmlParts.length || cur.textParts.length) {
-      parts.push(cur);
-      cur = { htmlParts: [], textParts: [], chars: 0 };
-    }
-  };
-  for (const b of blocks) {
-    const t = normalizeText(b.text);
-    if (!t)
-      continue;
-    if (b.atomic) {
-      flush();
-      parts.push({ htmlParts: [blockHtml(b)], textParts: [t], chars: t.length });
-      continue;
-    }
-    if (t.length > maxChars) {
-      flush();
-      for (const piece of splitSentences(t, maxChars)) {
-        parts.push({ htmlParts: [`<p>${escapeHtml(piece)}</p>`], textParts: [piece], chars: piece.length });
-        hardSplitCount++;
-      }
-      continue;
-    }
-    if (cur.chars && cur.chars + t.length > maxChars)
-      flush();
-    cur.htmlParts.push(blockHtml(b));
-    cur.textParts.push(t);
-    cur.chars += t.length;
-  }
-  flush();
-  return { parts, hardSplitCount };
-}
-function buildTree(blocks) {
-  const roots = [];
-  const stack = [{ level: 0, children: roots }];
-  let current = null;
-  const preamble = [];
-  for (const b of blocks) {
-    if (b.isHeading) {
-      while (stack.length > 1 && stack[stack.length - 1].level >= b.level)
-        stack.pop();
-      const parent = stack[stack.length - 1];
-      const node = { level: b.level, text: b.text, blocks: [], children: [] };
-      parent.children.push(node);
-      stack.push({ level: b.level, children: node.children });
-      current = node;
-    } else {
-      (current ? current.blocks : preamble).push(b);
-    }
-  }
-  return { roots, preamble };
-}
-function collectLeaves(nodes, trail = [], out = []) {
-  for (const n of nodes) {
-    const path = [...trail, n.text || ""];
-    if (!n.children.length)
-      out.push({ node: n, trail: path });
-    else {
-      if (n.blocks.length)
-        out.push({ node: { level: n.level, text: n.text, blocks: n.blocks, children: [] }, trail: path });
-      collectLeaves(n.children, path, out);
-    }
-  }
-  return out;
-}
-function deriveSection(sec) {
-  if (sec.parts && sec.parts.length) {
-    sec.html = sec.parts.map((p) => (p.title ? `<p><strong>${escapeHtml(p.title)}</strong></p>
-` : "") + p.html).join("\n");
-    sec.text = sec.parts.map((p) => (p.title ? "\u3010" + p.title + "\u3011" : "") + p.text).join("\n");
-    sec.chars = sec.parts.reduce((n, p) => n + p.chars, 0);
-  }
-  return sec;
-}
-function finalizeSections(sections) {
-  sections.forEach((sec, i) => {
-    deriveSection(sec);
-    sec.ordinal = i;
-  });
-  return sections;
-}
-function applySizeRules(leaves, cfg, stats) {
-  const expanded = [];
-  for (const leaf of leaves) {
-    const title = leaf.trail[leaf.trail.length - 1] || "";
-    const blocks = leaf.node.blocks.filter((b) => normalizeText(b.text));
-    const html = blocks.map(blockHtml).join("\n\n");
-    const text = blocks.map((b) => normalizeText(b.text)).join("\n");
-    const total = charsOf(blocks);
-    expanded.push({
-      level: leaf.node.level,
-      title,
-      trail: leaf.trail,
-      html,
-      text,
-      chars: total,
-      parts: [{ html, text, chars: total }]
-    });
-  }
-  const result = [];
-  for (const sec of expanded) {
-    const canMergeIntoPrev = result.length && sec.chars < cfg.minChars && result[result.length - 1].chars + sec.chars <= cfg.maxChars;
-    if (canMergeIntoPrev) {
-      const prev = result[result.length - 1];
-      prev.parts.push({ title: sec.title || void 0, html: sec.html, text: sec.text, chars: sec.chars });
-      prev.chars += sec.chars;
-      prev.merged = true;
-      continue;
-    }
-    result.push(sec);
-  }
-  return result.map(deriveSection);
-}
-function makeBreadcrumb(parts) {
-  return parts.map((p) => String(p || "").replace(/\s+/g, " ").trim()).filter(Boolean);
-}
-function chunkFile(p, statsOut = {}) {
-  const cfg = __spreadValues(__spreadValues({}, DEFAULTS), cleanOptions(p.options || {}));
-  statsOut.hardSplitCount = statsOut.hardSplitCount || 0;
-  const blocks = p.blocks || [];
-  const crumbBase = Array.isArray(p.fileBreadcrumb) ? p.fileBreadcrumb.filter(Boolean) : [];
-  const headings = blocks.filter((b) => b.isHeading);
-  if (!headings.length) {
-    const fallbackTitle = crumbBase[crumbBase.length - 1] || String(p.fileName || "").replace(/.*\//, "").replace(/\.[a-z0-9]+$/i, "") || "\u6B63\u6587";
-    const level = Math.max(2, Math.min(6, crumbBase.length + 1));
-    const { parts, hardSplitCount } = partitionBlocks(blocks, cfg.maxChars);
-    statsOut.hardSplitCount += hardSplitCount;
-    return parts.map((part, idx) => {
-      const html = part.htmlParts.join("\n\n");
-      const text = part.textParts.join("\n");
-      return {
-        level,
-        title: idx === 0 ? fallbackTitle : "",
-        trail: makeBreadcrumb([...crumbBase, idx === 0 ? fallbackTitle : ""]),
-        html,
-        text,
-        chars: part.chars,
-        isContinuation: idx > 0,
-        parts: [{ html, text, chars: part.chars }]
-      };
-    });
-  }
-  const { roots, preamble } = buildTree(blocks);
-  const leaves = collectLeaves(roots);
-  if (preamble.some((b) => normalizeText(b.text))) {
-    leaves.unshift({ node: { level: headings[0].level, text: "\u524D\u8A00", blocks: preamble, children: [] }, trail: [...crumbBase, "\u524D\u8A00"] });
-  }
-  const processed = applySizeRules(leaves, cfg, statsOut);
-  return processed.map((sec) => __spreadValues({
-    level: Math.max(2, Math.min(6, sec.level)),
-    title: sec.title || "",
-    trail: makeBreadcrumb(sec.trail),
-    html: sec.html,
-    text: sec.text,
-    chars: sec.chars,
-    merged: !!sec.merged,
-    isContinuation: !!sec.isContinuation
-  }, sec.parts ? { parts: sec.parts } : {}));
-}
-function chunkBook(files, options = {}) {
-  const stats = { hardSplitCount: 0, sections: 0 };
-  const sections = [];
-  for (const f of files) {
-    const secs = chunkFile({ blocks: f.blocks, fileBreadcrumb: f.fileBreadcrumb, fileName: f.fileName, options }, stats);
-    secs.forEach((s, i) => sections.push(__spreadProps(__spreadValues({}, s), { file: f.fileName, orderInFile: i })));
-  }
-  sections.forEach((s, idx) => {
-    s.ordinal = idx;
-    if (s.isContinuation) {
-      const base = s.trail.length ? s.trail[s.trail.length - 1] : "\u7EED";
-      s.trail = [...s.trail.slice(0, -1), `${base} (\u7EED)`];
-    }
-    if (!s.title)
-      s.title = s.trail[s.trail.length - 1] || "\u7EED";
-  });
-  const final = finalizeSections(sections);
-  stats.sections = final.length;
-  return { sections: final, stats };
-}
-
 // src/tidme/import/parse/ingest-text.ts
 function escapeHtml2(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -1056,6 +934,128 @@ function decodeBytes(bytes) {
       return new TextDecoder().decode(bytes);
     }
   }
+}
+
+// src/tidme/import/parse/smart-merge.ts
+var SENTENCE_END = /[。！？；：…!?;:"“”‘’（）)]\s*$/;
+var BLOCK_BREAK = /* @__PURE__ */ new Set(["div", "body", "blockquote", "td", "li", "dd", "dt", "tr"]);
+var NEW_BLOCK_PATTERNS = [
+  /^\s*第[一二三四五六七八九十百千0-9]+[章节篇部卷]/,
+  /^\s*[一二三四五六七八九十百]+\s*[、.．]/,
+  /^\s*（[一二三四五六七八九十百]+）/,
+  /^\s*\d+\s*[、.．]/,
+  /^\s*\d+(\.\d+)+/,
+  /^\s*[—\-–]\s*\S/,
+  /^\s*[A-Z][A-Z0-9\s]{0,24}$/
+];
+function localName2(node) {
+  return String(node && (node.localName || node.tagName) || "").toLowerCase();
+}
+function getText2(node) {
+  let out = "";
+  const walk = (n) => {
+    for (const c of Array.from(n.childNodes || [])) {
+      if (c.nodeType === 3)
+        out += c.nodeValue || "";
+      else if (c.nodeType === 1)
+        walk(c);
+    }
+  };
+  walk(node);
+  return out;
+}
+function smartMergeParagraphs(doc) {
+  const body = doc.getElementsByTagName("body")[0] || doc.documentElement;
+  if (!body)
+    return false;
+  const isNewBlock = (text) => {
+    const t = (text || "").trim();
+    if (!t)
+      return true;
+    if (t.length <= 20 && !/[。！？；：!?;]$/.test(t))
+      return true;
+    for (const re of NEW_BLOCK_PATTERNS)
+      if (re.test(t))
+        return true;
+    return false;
+  };
+  const textOf = (node) => getText2(node).replace(/\s+/g, " ").trim();
+  const stripTrailingHyphen = (node) => {
+    const kids = node.childNodes;
+    for (let i = kids.length - 1; i >= 0; i--) {
+      const c = kids[i];
+      if (c.nodeType === 3) {
+        c.nodeValue = c.nodeValue.replace(/\s*-\s*$/, "");
+        return;
+      }
+      if (c.nodeType === 1) {
+        stripTrailingHyphen(c);
+        return;
+      }
+    }
+  };
+  let changed = false;
+  const mergeWalk = (parent) => {
+    const kids = Array.from(parent.childNodes || []);
+    for (const c of kids) {
+      if (c.nodeType === 1 && BLOCK_BREAK.has(localName2(c)))
+        mergeWalk(c);
+    }
+    let i = 0;
+    while (i < kids.length) {
+      const c = kids[i];
+      if (c.nodeType !== 1 || localName2(c) !== "p") {
+        i++;
+        continue;
+      }
+      const seq = [kids[i]];
+      let j = i + 1;
+      while (j < kids.length) {
+        const k = kids[j];
+        if (k.nodeType === 1 && localName2(k) === "p") {
+          seq.push(k);
+          j++;
+          continue;
+        }
+        if (k.nodeType === 3 && /^\s*$/.test(k.nodeValue || "")) {
+          j++;
+          continue;
+        }
+        break;
+      }
+      if (seq.length < 2) {
+        i = j;
+        continue;
+      }
+      let current = seq[0];
+      let curText = textOf(current);
+      for (let k = 1; k < seq.length; k++) {
+        const p = seq[k];
+        const t = textOf(p);
+        if (!t)
+          continue;
+        if (SENTENCE_END.test(curText) || isNewBlock(t) || isNewBlock(curText)) {
+          current = p;
+          curText = t;
+          continue;
+        }
+        const lastChar = curText.slice(-1);
+        const firstChar = t[0] || "";
+        if (lastChar === "-")
+          stripTrailingHyphen(current);
+        else if (/[a-zA-Z0-9]/.test(lastChar) && /[a-zA-Z0-9]/.test(firstChar))
+          current.appendChild(doc.createTextNode(" "));
+        while (p.firstChild)
+          current.appendChild(p.firstChild);
+        p.parentNode.removeChild(p);
+        curText = textOf(current);
+        changed = true;
+      }
+      i = j;
+    }
+  };
+  mergeWalk(body);
+  return changed;
 }
 
 // src/tidme/core/paths.ts
@@ -1292,7 +1292,16 @@ function runSplit(input) {
       { maxChars: input.maxChars, minChars: input.minChars }
     );
     const metaWithFormat = __spreadProps(__spreadValues({}, meta), { __format: format });
-    const { tiddlers, warnings } = yield emitTiddlers(docId, metaWithFormat, bookTitle, sections, input.bag || "default", input.autoDeck !== false, input.priority, input.folderOccupied);
+    const { tiddlers, warnings } = yield emitTiddlers(
+      docId,
+      metaWithFormat,
+      bookTitle,
+      sections,
+      input.bag || "default",
+      input.autoDeck !== false,
+      input.priority,
+      input.folderOccupied
+    );
     return {
       bookTitle,
       docId,
