@@ -50,6 +50,10 @@ test/
 行为结果（wiki 状态 / due / 队列内容）> 渲染文本（`includes` 只作冒烟兜底）> ~~实现细节（禁止）~~。
 UI 文案断言能改为"触发动作 → 断言 tiddler 字段变化"的一律改写。
 
+**跨 realm 陷阱**：TW 在 Node 下经 vm 沙箱 boot，`wiki.filterTiddlers(...)` 的数组与
+widget/core 返回的对象原型来自沙箱 realm——`assert.deepEqual(x, [...])` 会因原型不同而失败。
+一律先展开/逐字段：`assert.deepEqual([...out], ["A"])`；对象逐字段 `assert.equal(o.k, v)`。
+
 ## 运行
 
 ```bash
