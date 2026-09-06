@@ -57,7 +57,7 @@
   "author": "oflg",
   "license": "MIT",
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,cjs,mjs,json,md}": "dprint fmt"
+    "*.{ts,tsx,js,jsx,cjs,mjs,json,md}": "dprint fmt --allow-no-files"
   },
   "bugs": {
     "url": "https://github.com/oflg/Tidme/issues"

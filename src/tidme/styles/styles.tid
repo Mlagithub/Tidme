@@ -1991,16 +1991,30 @@ body.tc-body-dark .tmc-study-bar,
 	display: inline-flex; align-items: center;
 	padding: 4px 10px; border-radius: var(--tm-radius-xs);
 	color: var(--tm-text-2); font-size: 0.9em;
+	/* 不透明底色（亮/暗写死，原因同 .tm-section-bar：var() 可能被 wikify 破坏导致透出正文） */
+	background-color: #ffffff;
 	border: 1px dashed var(--tm-border);
 }
 .tm-sec-more-summary::-webkit-details-marker { display: none; }
 .tm-sec-more[open] .tm-sec-more-summary { color: var(--tm-text-1); border-style: solid; }
+[data-tme-dark] .tm-sec-more-summary,
+body.tc-body-dark .tm-sec-more-summary,
+[data-theme="dark"] .tm-sec-more-summary {
+	background-color: #1e293b;
+}
 .tm-sec-more-box {
 	position: absolute; top: calc(100% + 4px); left: 0; z-index: 1000;
 	display: flex; flex-direction: column; gap: 2px; min-width: 200px;
-	padding: 6px; background: var(--tm-surface);
+	padding: 6px;
+	/* 菜单浮在正文之上，底色同样写死保证不透明 */
+	background-color: #ffffff;
 	border: 1px solid var(--tm-border); border-radius: var(--tm-radius-sm);
 	box-shadow: var(--tm-shadow-lg);
+}
+[data-tme-dark] .tm-sec-more-box,
+body.tc-body-dark .tm-sec-more-box,
+[data-theme="dark"] .tm-sec-more-box {
+	background-color: #1e293b;
 }
 .tm-sec-more-box .tm-sec-btn { text-align: left; border: none; box-shadow: none; }
 
