@@ -150,6 +150,31 @@ test('doc-resume: 摘录收件箱聚合（加工标注）', () => {
   });
   const root2 = renderWidget(wiki, sectionBar, 'doc-resume', { variables: { currentTiddler: F.docTitle } });
   assert.ok(collectText(root2).includes('已挖空'), '有子挖空的摘录显示已挖空');
+  // 问答卡也在收件箱（回归：subkind qa 曾被过滤，形成的问答在文档页不可见）
+  wiki.addTiddler({
+    title: childCloze.replace(/--cloze$/, '--qa'),
+    state: '0',
+    'tidme.doc': extFields['tidme.doc'],
+    'tidme.parent': extExtractTitle,
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
+    'tidme.breadcrumb': `${extFields['tidme.breadcrumb']} › 问答`,
+  });
+  const root3 = renderWidget(wiki, sectionBar, 'doc-resume', { variables: { currentTiddler: F.docTitle } });
+  const text3 = collectText(root3);
+  assert.ok(text3.includes('摘录/挖空/问答'), '收件箱标题含问答');
+  assert.ok(text3.includes('问'), '问答卡出现问标记');
+  // 收件箱默认展开（此前折叠导致形成了也看不见；fake DOM 无法模拟折叠，直接断言 open 属性）
+  const findBox = (node) => {
+    if (String(node.className || '').includes('tm-doc-derived')) return node;
+    for (const c of node.childNodes || []) {
+      const f = findBox(c);
+      if (f) return f;
+    }
+    return null;
+  };
+  const box = findBox(root3);
+  assert.ok(box && box.open === true, '收件箱默认展开');
 });
 
 test('section-bar: 摘录卡加工按钮（✂ 挖空）', () => {

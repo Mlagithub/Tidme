@@ -1093,15 +1093,18 @@ function appendDocDoneSection(doc: Document, wiki: any, wrap: HTMLElement, all: 
   wrap.appendChild(doneBox);
 }
 
-/** 摘录收件箱：聚合本书全部摘录/挖空卡（加工路径：可回原文、挖空、删除）。
- *  分类：subkind extract/cloze（摘录=阅读材料待加工；挖空=测试卡） */
+/** 摘录收件箱：聚合本书全部摘录/挖空/问答卡（加工路径：可回原文、挖空、删除）。
+ *  分类：subkind extract/cloze/qa（摘录=阅读材料待加工；挖空/问答=测试卡）。
+ *  默认展开——这些是文档页的核心产出，折叠会让「形成了却看不见」。 */
 function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLElement, docId: string) {
   const derived = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${docId}]!is[draft]]`)
     .map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }))
-    .filter((c: any) => c.fields['tidme.subkind'] === 'extract' || c.fields['tidme.subkind'] === 'cloze');
+    .filter((c: any) => ['extract', 'cloze', 'qa'].includes(String(c.fields['tidme.subkind'] || '')));
   if (!derived.length) return;
   const box = el(doc, 'details', 'tm-doc-derived');
-  const summary = el(doc, 'summary', 'tm-import-muted', `摘录/挖空（${derived.length}）—— 摘录可挖空成卡片`);
+  // 默认展开：摘录/问答是文档页的核心产出，折叠会让「形成了却看不见」（此前默认折叠）
+  box.open = true;
+  const summary = el(doc, 'summary', 'tm-import-muted', `摘录/挖空/问答（${derived.length}）—— 摘录可挖空成卡片`);
   box.appendChild(summary);
   const sorted = [...derived].sort((a: any, b: any) => {
     const pa = String(a.fields['tidme.breadcrumb'] || a.title);
@@ -1119,7 +1122,7 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
   for (const c of sorted) {
     const tr = el(doc, 'tr', 'tm-doc-done-row');
     const kindTd = el(doc, 'td', '', '');
-    const kindMark = c.fields['tidme.subkind'] === 'cloze' ? '挖' : '摘';
+    const kindMark = c.fields['tidme.subkind'] === 'cloze' ? '挖' : c.fields['tidme.subkind'] === 'qa' ? '问' : '摘';
     kindTd.appendChild(el(doc, 'span', 'tm-cb-kind', kindMark));
     tr.appendChild(kindTd);
     tr.appendChild(el(doc, 'td', 'tm-cb-name', display.displayTitle(c.fields, c.title)));
