@@ -28,7 +28,6 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const READPOINT_PREFIX = docOps.READPOINT_PREFIX;
-const GLOBAL_READPOINT = docOps.GLOBAL_READPOINT;
 
 import { TidmeLiveEditor } from '../../editor/codemirror-editor';
 import { cleanContaminatedHtmlToWikiText } from '../../editor/wikitext-parser';
@@ -98,6 +97,7 @@ const openCardModal = cardModal.openCardModal;
 // 续读点读写唯一实现 = core/doc-ops（与 deleteDocContent 的清理共用同一解析）
 const parseReadPoint = docOps.parseReadPoint;
 const saveReadPoint = docOps.saveReadPoint;
+const saveGlobalReadPoint = docOps.saveGlobalReadPoint;
 const clearReadPoint = docOps.clearReadPoint;
 
 function currentDocId(win: any): string | null {
@@ -448,7 +448,7 @@ function makeSectionBar(): WidgetCtor {
 
       // 全局续读点（最近打开的阅读卡）：仅在条栏挂载时写一次。
       // 勿移回 build()——refresh 重建同样走 build，渲染路径不允许携带写库副作用。
-      this.wiki.addTiddler({ title: GLOBAL_READPOINT, text: title });
+      saveGlobalReadPoint(this.wiki, title);
 
       this.build();
 

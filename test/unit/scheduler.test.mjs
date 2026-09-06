@@ -211,22 +211,27 @@ test('parseTwDate: 17 位 TW 日期串（UTC 语义，与 $tw.utils.parseDate �
 
 test('collectTopicQueue: 队列快照（出队卡兜底过滤 + 排序字段预解析）', () => {
   const fields = {
-    甲: { 'tidme.subkind': 'section', 'tidme.priority': '30', due: T(48), 'tidme.order': '000002', 'tidme.doc': 'd1', 'tidme.breadcrumb': '书 › 甲' },
+    甲: { 'tidme.subkind': 'section', 'tidme.priority': '30', due: '20270101000000000', 'tidme.order': '000002', 'tidme.doc': 'd1', 'tidme.breadcrumb': '书 › 甲' },
     乙: { 'tidme.subkind': 'section', 'tidme.done': 'yes' },
     丙: { 'tidme.subkind': 'extract', 'tidme.suspended': 'yes' },
-    丁: { 'tidme.subkind': 'section', 'tidme.priority': '10', due: T(-1), 'tidme.order': '000001' },
+    丁: { 'tidme.subkind': 'section', 'tidme.priority': '10', due: '20260101000000000', 'tidme.order': '000001' },
   };
   const wiki = { filterTiddlers: () => ['甲', '乙', '丙', '丁'], getTiddler: (t) => ({ fields: fields[t] }) };
   const cards = sched.collectTopicQueue(wiki);
   assert.deepEqual(cards.map((c) => c.title), ['甲', '丁'], '已读/搁置兜底排除（过滤器之外的第二道网）');
   const jia = cards.find((c) => c.title === '甲');
   assert.equal(jia.priority, 30, 'priority 归一化预解析');
-  assert.equal(jia.due.getTime(), sched.parseTwDate(T(48)).getTime(), 'due 预解析为 Date');
+  assert.equal(jia.due.getTime(), sched.parseTwDate('20270101000000000').getTime(), 'due 预解析为 Date');
   assert.equal(jia.order, '000002');
 });
 
 test('sortTopicQueue: 优先级（0 最高）→ due（早在前）→ 阅读顺序', () => {
   const mk = (title, priority, due, order) => ({ title, priority, due: sched.parseTwDate(due), order });
-  const cards = [mk('B', 50, T(1), '000002'), mk('A', 10, T(48), '000003'), mk('C', 50, T(1), '000001'), mk('D', 50, T(-1), '000004')];
+  const cards = [
+    mk('B', 50, '20270101000000000', '000002'),
+    mk('A', 10, '20270201000000000', '000003'),
+    mk('C', 50, '20270101000000000', '000001'),
+    mk('D', 50, '20260101000000000', '000004'),
+  ];
   assert.deepEqual(sched.sortTopicQueue(cards).map((c) => c.title), ['A', 'D', 'C', 'B'], '优先级分组内按 due，再按阅读顺序');
 });

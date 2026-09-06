@@ -55,13 +55,40 @@ export function parseReadPoint(wiki: any, doc: string): { t: string; s: string }
 /** 写续读点（text = JSON {t,s}） */
 export function saveReadPoint(wiki: any, doc: string, rp: { t: string; s: string }): void {
   if (!wiki || !doc || !rp || !rp.t) return;
-  wiki.addTiddler({ title: READPOINT_PREFIX + doc, type: 'application/json', text: JSON.stringify(rp) });
+  // modified 供「最近阅读」类 UI 作最近打开时间排序
+  wiki.addTiddler({ title: READPOINT_PREFIX + doc, type: 'application/json', text: JSON.stringify(rp), modified: new Date() });
 }
 
 /** 清除续读点 */
 export function clearReadPoint(wiki: any, doc: string): void {
   if (!wiki || !doc) return;
   wiki.deleteTiddler(READPOINT_PREFIX + doc);
+}
+
+/** 写全局续读点（最近打开的阅读卡）；modified 供「最近阅读」排序，唯一写入口 */
+export function saveGlobalReadPoint(wiki: any, title: string): void {
+  if (!wiki || !title) return;
+  wiki.addTiddler({ title: GLOBAL_READPOINT, text: title, modified: new Date() });
+}
+
+/**
+ * 单本书的阅读入口目标（最近阅读行内「继续」用；与全局入口同一定位口径）：
+ * 该书续读点仍在队（未读/未忽略/未搁置）→ 续读点卡；
+ * 否则按本书阅读顺序（tidme.order）取第一张在队卡；
+ * 本书无可读卡 → 返回空串（调用方回退文档页）。
+ */
+export function docReadingTarget(wiki: any, docId: string): string {
+  if (!wiki || !docId) return '';
+  const rp = parseReadPoint(wiki, docId);
+  if (rp && wiki.getTiddler(rp.t)) {
+    const f = wiki.getTiddler(rp.t).fields || {};
+    if (!sched.isCardDone(f) && f['tidme.suspended'] !== 'yes') return rp.t;
+  }
+  const first = sectionsOfDoc(wiki, docId).find((t: string) => {
+    const f = wiki.getTiddler(t)?.fields;
+    return !!f && !sched.isCardDone(f) && f['tidme.suspended'] !== 'yes';
+  });
+  return first || '';
 }
 
 /**

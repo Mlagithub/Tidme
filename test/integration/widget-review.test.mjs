@@ -299,3 +299,110 @@ test('workflow: 继续阅读目标 —— 全部未来排期时回退排序第�
   wiki.addTiddler({ title: '未来卡甲', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '5', due: FUTURE(), state: '0' });
   assert.equal(wf.globalReadingTarget(wiki), '未来卡甲');
 });
+
+// ---------- 单本书阅读入口（docReadingTarget：最近阅读行内「继续」与全局入口同源） ----------
+
+test('doc-ops: docReadingTarget —— 续读点在队返回续读点；出队/缺失时按本书顺序取第一张在队卡', () => {
+  const docOps = mod('core/doc-ops.js');
+  const mk = (title, order, extra = {}) =>
+    wiki.addTiddler({
+      title,
+      'tidme.kind': 'topic',
+      'tidme.subkind': 'section',
+      'tidme.doc': 'dtgt',
+      'tidme.order': order,
+      'tidme.breadcrumb': `书 › ${title}`,
+      state: '0',
+      due: twDate(),
+      text: 'x',
+      ...extra,
+    });
+  mk('定位S1', '000001', { 'tidme.done': 'yes' });
+  mk('定位S2', '000002');
+  // 续读点指向已读卡 → 本书顺序第一张在队卡
+  docOps.saveReadPoint(wiki, 'dtgt', { t: '定位S1', s: '' });
+  assert.equal(docOps.docReadingTarget(wiki, 'dtgt'), '定位S2');
+  // 续读点在队 → 返回续读点本身
+  docOps.saveReadPoint(wiki, 'dtgt', { t: '定位S2', s: '' });
+  assert.equal(docOps.docReadingTarget(wiki, 'dtgt'), '定位S2');
+  // 无续读点 → 第一张在队卡
+  docOps.clearReadPoint(wiki, 'dtgt');
+  assert.equal(docOps.docReadingTarget(wiki, 'dtgt'), '定位S2');
+});
+
+test('doc-ops: docReadingTarget —— 续读点被忽略/搁置视为出队；全书读完返回空串', () => {
+  const docOps = mod('core/doc-ops.js');
+  const mk = (title, order, extra = {}) =>
+    wiki.addTiddler({
+      title,
+      'tidme.kind': 'topic',
+      'tidme.subkind': 'section',
+      'tidme.doc': 'dtgt2',
+      'tidme.order': order,
+      'tidme.breadcrumb': `书 › ${title}`,
+      state: '0',
+      due: twDate(),
+      text: 'x',
+      ...extra,
+    });
+  mk('忽略S1', '000001', { 'tidme.ignored': 'yes' });
+  mk('搁置S2', '000002', { 'tidme.suspended': 'yes' });
+  mk('可读S3', '000003');
+  docOps.saveReadPoint(wiki, 'dtgt2', { t: '忽略S1', s: '' });
+  assert.equal(docOps.docReadingTarget(wiki, 'dtgt2'), '可读S3', '被忽略的续读点出队，顺延到第一张在队卡');
+  // 全部出队 → 空串（调用方回退文档页）
+  docOps.saveReadPoint(wiki, 'dtgt2', { t: '可读S3', s: '' });
+  const f = wiki.getTiddler('可读S3').fields;
+  wiki.addTiddler({ ...f, title: '可读S3', 'tidme.done': 'yes' });
+  assert.equal(docOps.docReadingTarget(wiki, 'dtgt2'), '');
+});
+
+test('doc-ops: 续读点写入携带 modified（最近阅读排序的时间源）', () => {
+  const docOps = mod('core/doc-ops.js');
+  docOps.saveReadPoint(wiki, 'dmod', { t: '某卡', s: '' });
+  const m = wiki.getTiddler('$:/state/tidme-import/readpoint/dmod')?.fields?.modified;
+  assert.ok(m && !Number.isNaN(new Date(m).getTime()), 'per-doc 续读点带 modified');
+  docOps.saveGlobalReadPoint(wiki, '某卡');
+  const g = wiki.getTiddler('$:/state/tidme-import/readpoint/global');
+  assert.equal(g?.fields?.text, '某卡');
+  assert.ok(g?.fields?.modified && !Number.isNaN(new Date(g.fields.modified).getTime()), '全局续读点带 modified');
+});
+
+test('today-recent: 最近阅读按最近打开排序，全局续读点所属书置顶（与主 CTA 同书）', () => {
+  const docOps = mod('core/doc-ops.js');
+  const todayMod = mod('review/widgets/today.js');
+  reset(); // 丢弃标准书夹具，自建两本可控的书
+  const mkBook = (docId, bookLabel, prefix) => {
+    wiki.addTiddler({ title: `Tidme/Books/${bookLabel}`, tags: ['tidme-import-doc'], 'tidme.doc': docId });
+    wiki.addTiddler({
+      title: `${prefix}1`,
+      'tidme.kind': 'topic',
+      'tidme.subkind': 'section',
+      'tidme.doc': docId,
+      'tidme.order': '000001',
+      'tidme.breadcrumb': `${bookLabel} › 一`,
+      state: '0',
+      due: twDate(),
+    });
+    wiki.addTiddler({
+      title: `${prefix}2`,
+      'tidme.kind': 'topic',
+      'tidme.subkind': 'section',
+      'tidme.doc': docId,
+      'tidme.order': '000002',
+      'tidme.breadcrumb': `${bookLabel} › 二`,
+      state: '0',
+      due: twDate(),
+    });
+  };
+  mkBook('docA', '书甲', '甲节');
+  mkBook('docB', '书乙', '乙节');
+  // 书甲：续读点写于一小时前；书乙：全局续读点（最近打开）
+  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/docA', type: 'application/json', text: JSON.stringify({ t: '甲节1' }), modified: new Date(Date.now() - 3600000) });
+  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/global', text: '乙节1', modified: new Date() });
+  // 主 CTA 与列表第一行同书：全局续读点在队 → 目标即乙节1（书乙）
+  assert.equal(docOps.globalReadingTarget(wiki), '乙节1');
+  const root = renderWidget(wiki, todayMod, 'tidme-today-recent');
+  const text = collectText(root);
+  assert.ok(text.indexOf('书乙') < text.indexOf('书甲'), '最近打开的书排在前（乙先于甲）');
+});

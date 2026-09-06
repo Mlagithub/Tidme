@@ -15,6 +15,7 @@ const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dom = require('$:/plugins/keepone/tidme/core/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
+const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
 const workflow = require('$:/plugins/keepone/tidme/review/widgets/workflow.js');
@@ -142,7 +143,18 @@ function makeTodayRecent(): WidgetCtor {
 
       container.appendChild(el(doc, 'div', 'tm-today-section-title', '最近阅读'));
       const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
-      const rows: { title: string; label: string; done: number; total: number }[] = [];
+      // 最近打开时间：全局续读点所属书置顶（每次打开阅读卡都会刷新全局续读点）；
+      // 其余书回退各自续读点的写入时间（制卡/设续读点时更新）
+      const globalFields = wiki.getTiddler(docOps.GLOBAL_READPOINT)?.fields || {};
+      const globalCard = wiki.getTiddler(String(globalFields.text || ''));
+      const globalDoc = String(globalCard?.fields?.['tidme.doc'] || '');
+      const globalTime = globalFields.modified ? new Date(globalFields.modified).getTime() : 0;
+      const lastOpen = (docId: string): number => {
+        if (docId && docId === globalDoc) return globalTime;
+        const m = wiki.getTiddler(docOps.READPOINT_PREFIX + docId)?.fields?.modified;
+        return m ? new Date(m).getTime() : 0;
+      };
+      const rows: { title: string; label: string; done: number; total: number; last: number }[] = [];
       for (const d of docs) {
         const docId = wiki.getTiddler(d)?.fields['tidme.doc'];
         if (!docId) continue;
@@ -151,9 +163,9 @@ function makeTodayRecent(): WidgetCtor {
         if (!total) continue;
         const done = secs.filter((t: string) => sched.isCardDone(wiki.getTiddler(t)?.fields)).length;
         const f = wiki.getTiddler(d)?.fields || {};
-        rows.push({ title: d, label: display.displayTitle(f, d), done, total });
+        rows.push({ title: d, label: display.displayTitle(f, d), done, total, last: lastOpen(String(docId)) });
       }
-      rows.sort((a, b) => (a.done / a.total) - (b.done / b.total) || b.total - a.total);
+      rows.sort((a, b) => b.last - a.last || (a.done / a.total) - (b.done / b.total) || b.total - a.total);
       const top = rows.filter((r) => r.done < r.total).slice(0, 3);
 
       if (!top.length) {
@@ -171,9 +183,10 @@ function makeTodayRecent(): WidgetCtor {
         row.appendChild(el(doc, 'span', 'tm-today-read-count', `${r.done}/${r.total}`));
         const go = el(doc, 'button', 'tm-btn tm-btn--sm', '继续');
         go.addEventListener('click', () => {
-          const first = wiki.filterTiddlers(`[tidme.doc[${wiki.getTiddler(r.title)?.fields['tidme.doc']}]tidme.kind[topic]!tidme.subkind[extract]]`)
-            .find((t: string) => !sched.isCardDone(wiki.getTiddler(t)?.fields));
-          this.dispatchEvent({ type: 'tm-navigate', navigateTo: first || r.title });
+          // 定位口径与全局入口同源（core/doc-ops）：该书续读点在队 → 续读点；否则本书顺序第一张在队卡
+          const docId = String(wiki.getTiddler(r.title)?.fields['tidme.doc'] || '');
+          const target = docOps.docReadingTarget(wiki, docId) || r.title;
+          this.dispatchEvent({ type: 'tm-navigate', navigateTo: target });
         });
         row.appendChild(go);
         container.appendChild(row);
