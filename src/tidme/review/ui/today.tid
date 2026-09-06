@@ -6,7 +6,6 @@ type: text/vnd.tiddlywiki
 
 <div class="tm-today-header">
 <div class="tm-today-sub">增量学习驾驶舱——系统替你安排，你只管推进</div>
-<$tidme-theme-toggle/>
 </div>
 
 <$tidme-today-hero/>
