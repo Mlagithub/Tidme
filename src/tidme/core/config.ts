@@ -77,6 +77,24 @@ export function writeSemanticSplit(wiki: any, patch: Record<string, any>): void 
   wiki.addTiddler({ title: semMod.SEMANTIC_SPLIT_CONFIG_TITLE, type: 'application/json', text: JSON.stringify(next) });
 }
 
+// ---------- 复习日志保留 ----------
+
+/** 复习日志保留天数默认值（启动调度器按此修剪旧条目；0 = 永久保留） */
+export const LOG_RETENTION_DEFAULT_DAYS = 90;
+export const LOG_RETENTION_TITLE = '$:/config/Tidme/LogRetention';
+
+export function readLogRetentionDays(wiki: any): number {
+  const raw = Number(wiki.getTiddlerText?.(LOG_RETENTION_TITLE, ''));
+  if (!Number.isFinite(raw) || raw < 0) return LOG_RETENTION_DEFAULT_DAYS;
+  return Math.floor(raw);
+}
+
+export function writeLogRetentionDays(wiki: any, days: number): void {
+  if (!wiki) return;
+  const n = Math.max(0, Math.floor(Number(days) || 0));
+  wiki.addTiddler({ title: LOG_RETENTION_TITLE, text: String(n) });
+}
+
 // ---------- 默认牌组参数 ----------
 
 export function readDefaultDeckParams(wiki: any): Record<string, any> {

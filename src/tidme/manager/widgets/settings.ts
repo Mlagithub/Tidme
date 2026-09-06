@@ -127,6 +127,12 @@ function makeSettings(): any {
         numberInput(Number(ap.maxOverdueThreshold), 0, 9999, 1, (v) => config.writeAutoPostpone(wiki, { maxOverdueThreshold: v })),
         '逾期卡超过该数量才触发顺延（0 = 无门槛）',
       );
+      row(
+        schedule,
+        '复习日志保留天数',
+        numberInput(config.readLogRetentionDays(wiki), 0, 3650, 1, (v) => config.writeLogRetentionDays(wiki, v)),
+        '超过该天数的复习日志启动时自动清理（0 = 永久保留）',
+      );
 
       // —— 记忆参数（默认牌组 FSRS） ——
       const memory = section('记忆参数', '默认牌组 FSRS');

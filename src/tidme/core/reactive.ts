@@ -46,7 +46,9 @@ export function hasRelevantChange(wiki: any, changedTiddlers: Record<string, any
  */
 export function isCardDataChange(wiki: any, title: string): boolean {
   if (title.startsWith(docOps.READPOINT_PREFIX)) return true;
-  if (title.startsWith(ns.DECK_PREFIX)) return !title.includes('/log/') && !title.includes('/study');
+  if (title.startsWith(ns.DECK_PREFIX)) {
+    return !title.endsWith(ns.DECK_LOG_SUFFIX) && !title.includes('/log/') && !title.includes('/study');
+  }
   if (title.startsWith('Tidme/')) {
     const f = wiki.getTiddler(title)?.fields;
     return !f || f['tidme.kind'] !== undefined;

@@ -51,10 +51,17 @@ export function booksToDecksRoot(title: string): string | null {
     : null;
 }
 
-/** fsrs4tw 复习日志契约：<deck>/log/<YYYYMMDD>（data map，键 = 卡 title） */
-export function isDeckLogTitle(title: string, dateKey?: string): boolean {
-  if (!title.startsWith(DECK_PREFIX) || !/\/log\/\d{8}$/.test(title)) return false;
-  return dateKey === undefined || title.endsWith(dateKey);
+/** 复习日志契约（按文件）：<deck>/log —— 单个 data tiddler（type application/json），
+ *  键 = 17 位复习时刻（YYYY0MM0DD0hh0mm0ssXXX），值 = review_log JSON。
+ *  旧版按天（<deck>/log/<YYYYMMDD>）由启动调度器迁移合并进本文件并删除旧 tiddler。 */
+export const DECK_LOG_SUFFIX = '/log';
+
+export function deckLogTitle(deck: string): string {
+  return deck + DECK_LOG_SUFFIX;
+}
+
+export function isDeckLogTitle(title: string): boolean {
+  return title.startsWith(DECK_PREFIX) && title.endsWith(DECK_LOG_SUFFIX);
 }
 
 /** 今日日期键（UTC，YYYYMMDD）——日志 tiddler 命名与统计口径共用 */

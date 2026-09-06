@@ -27,14 +27,16 @@ const el = dom.el;
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
-/** 今日复习卡数：遍历全部牌组当日日志条目（<deck>/log/<YYYYMMDD> 契约见 core/ns） */
+/** 今日复习卡数：遍历全部牌组日志单文件，按今天的日期前缀计数（契约见 core/ns） */
 function todayReviewCount(wiki: any): number {
   const key = ns.todayKey();
   let n = 0;
   for (const lt of wiki.filterTiddlers(`[prefix[${ns.DECK_PREFIX}]]`)) {
-    if (!ns.isDeckLogTitle(lt, key)) continue;
+    if (!ns.isDeckLogTitle(lt)) continue;
     const data = wiki.getTiddlerData(lt);
-    if (data && typeof data === 'object') n += Object.keys(data).length;
+    if (data && typeof data === 'object') {
+      for (const k of Object.keys(data)) if (String(k).startsWith(key)) n += 1;
+    }
   }
   return n;
 }
@@ -205,3 +207,4 @@ function makeTodayRecent(): WidgetCtor {
 
 exports['tidme-today-hero'] = makeTodayHero();
 exports['tidme-today-recent'] = makeTodayRecent();
+exports.todayReviewCount = todayReviewCount; // 供测试/复用

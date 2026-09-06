@@ -189,6 +189,7 @@ export function deleteDeck(wiki: any, nameOrTitle: string, opts: { alsoCards?: b
     }
   }
   wiki.deleteTiddler(deck.title);
+  wiki.deleteTiddler(ns.deckLogTitle(deck.title)); // 复习日志随牌组删除
   return removed;
 }
 

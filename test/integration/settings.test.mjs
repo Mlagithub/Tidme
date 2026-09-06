@@ -70,7 +70,7 @@ test('settings: 设置页渲染 —— 三分区与关键控件；页面挂载 w
   assert.ok(String(page.fields.text).includes('tidme-settings'), '页面挂载设置 widget');
   const { root } = renderSettings();
   const text = collectText(root);
-  for (const key of ['复习调度', '记忆参数', '语义切分', '出题顺序', '每日自动顺延', '目标记忆率', 'API Key']) {
+  for (const key of ['复习调度', '记忆参数', '语义切分', '出题顺序', '每日自动顺延', '复习日志保留天数', '目标记忆率', 'API Key']) {
     assert.ok(text.includes(key), `设置页包含：${key}`);
   }
   assert.ok(!text.includes('立即顺延'), '高频操作（立即顺延）保留在牌组页，不集中到设置页');

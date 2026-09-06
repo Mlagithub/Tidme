@@ -6,7 +6,7 @@ stats.ts — 统计聚合（纯函数）
 - retentionFromLogs：从复习日志估算保留率（1 - Again 占比）
 - funnelCounts：漏斗（导入文档 / Section / 摘录 / 卡）
 
-review log 行格式（fsrs4tw repeat 写入 $:/Deck/<deck>/log/YYYY0MMDD，index=时间）：
+review log 行格式（repeat 写入 $:/Deck/<deck>/log 单文件，键 = 17 位复习时刻）：
   { rating: 1-4, elapsed_days, scheduled_days, review, state }
 */
 

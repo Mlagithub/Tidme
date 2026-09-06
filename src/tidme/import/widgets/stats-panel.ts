@@ -44,9 +44,9 @@ function makeStatsPanel(): WidgetCtor {
         // 漏斗只消费卡片与文档页（[!is[system]] 会把状态/配置/临时 tiddler 全部载入）
         const all = cardLikes('[all[shadows+tiddlers]!is[draft]has[tidme.kind]] [all[shadows+tiddlers]!is[draft]tag[tidme-import-doc]]');
         const funnel = stats.funnelCounts(all);
-        // log tiddler title 形如 $:/Deck/<deck>/log/YYYY0MM0DD（repeat.tid 写入），用 prefix + JS 后过滤匹配
+        // log tiddler title 形如 $:/Deck/<deck>/log（repeat.tid 写入，单文件），用 prefix + JS 后过滤匹配
         const logTitles = wiki.filterTiddlers('[all[shadows+tiddlers]prefix[$:/Deck/]]')
-          .filter((t: string) => /\/log\/\d{8}$/.test(t));
+          .filter((t: string) => /\/log$/.test(t));
         const entries: any[] = [];
         for (const lt of logTitles) {
           const data = wiki.getTiddlerData(lt);
