@@ -10,6 +10,7 @@ title: $:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row
 >
 <div class="tm-today-deck-row">
 <$link to=<<deckTiddler>>><span class="tm-today-deck-name"><$wikify name="deckCaption" text={{{ [<deckTiddler>get[caption]] ~[<deckTiddler>split[/]last[]] }}} mode="inline" output="text"><<deckCaption>></$wikify></span></$link>
+<$list filter="[<deckTiddler>prefix[$:/Deck/default]]"><span class="tm-badge tm-badge-scope" title="兜底视图：包含全部在队测试卡（其它牌组的卡也计入此行计数，进度共享）">全部</span></$list>
 <span class="tm-today-deck-counts">
 <span class="tm-badge tm-badge-learn"><$text text={{$:/language/tidme/learn}}/> <$count filter="[subfilter<filter_learn>]"/></span>
 <span class="tm-badge tm-badge-due"><$text text={{$:/language/tidme/due}}/> <$count filter="[subfilter<filter_due>]"/></span>

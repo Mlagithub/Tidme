@@ -3,8 +3,6 @@ caption: 快捷键与用法
 type: text/vnd.tiddlywiki
 tags: [[Tidme Manual]]
 
-! 快捷键与用法（对标 SuperMemo Read Toolbar）
-
 |!快捷键 |!功能 |!说明 |
 |[[Alt+X]] |摘录制卡 |把选中文字生成一张摘录卡（继承本文档溯源字段）|
 |[[Alt+Z]] |挖空制卡 |把选中文字在原句中挖空，生成挖空卡|

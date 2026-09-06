@@ -126,6 +126,26 @@ export function configToFields(wiki: any, cfg: DeckConfig): Record<string, any> 
   return fields;
 }
 
+/** 创建牌组前的成员预览：card 过滤器命中的卡数，及与其它牌组成员的重叠数。
+ * 牌组是筛选视图而非容器——同一张卡会出现在所有匹配它的牌组里（进度共享），
+ * 预览让重叠在创建前可见。过滤器无法求值时 hits 返回 -1（表单提示检查语法）。
+ * selfTitle 传入时从重叠统计中排除该牌组自身（编辑场景）。 */
+export function previewMembership(wiki: any, card: string, selfTitle?: string): { hits: number; overlap: number } {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function' || !card || !card.trim()) return { hits: 0, overlap: 0 };
+  let hits: string[];
+  try {
+    hits = wiki.filterTiddlers(card);
+  } catch {
+    return { hits: -1, overlap: 0 };
+  }
+  const others = new Set<string>();
+  for (const d of listDecks(wiki)) {
+    if (selfTitle && d === selfTitle) continue;
+    for (const c of deckCards(wiki, d)) others.add(c);
+  }
+  return { hits: hits.length, overlap: hits.filter((t) => others.has(t)).length };
+}
+
 /** 默认成员过滤器：全部在队 item + 无 kind 手动卡（与 default deck 一致） */
 export const DEFAULT_CARD_FILTER = '[all[shadows+tiddlers]tidme.kind[item]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]] ' +
   '[all[shadows+tiddlers]!has[tidme.kind]has[state]has[due]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]]';

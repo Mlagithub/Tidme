@@ -6,7 +6,7 @@ widget-manager.test.mjs — 管理侧 widget（queue-ops / stats-panel / card-ma
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { collectButtons, collectText, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
+import { collectButtons, collectText, fakeDocument, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
 import { makeBookFixture } from '../helpers/fixtures.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
@@ -168,4 +168,44 @@ test('deck-ui: 新建牌组折叠表单渲染（tm 风格）；默认牌组删�
   // deck-delete：普通（不存在的）牌组也禁用
   const delMissing = renderWidget(wiki, deckUi, 'deck-delete', { attributes: { deck: '$:/Deck/不存在' } });
   assert.equal(collectButtons(delMissing)[0]?.getAttribute('disabled'), 'true', '不存在牌组删除禁用');
+});
+
+// ---------- 牌组视图语义（筛选视图而非容器：重叠可见、角色标注） ----------
+
+test('deck: previewMembership —— 命中数与跨牌组重叠数（创建前预览）', () => {
+  const deckMod = mod('core/deck.js');
+  wiki.addTiddler({ title: '预览甲', 'tidme.kind': 'item', 'tidme.subkind': 'qa', state: '0', due: '20261231000000000', text: 'x' });
+  wiki.addTiddler({ title: '预览乙', 'tidme.kind': 'item', 'tidme.subkind': 'qa', state: '0', due: '20261231000000000', text: 'x' });
+  deckMod.createDeck(wiki, { name: '词书X', card: '[all[]match[预览甲]] [all[]match[预览乙]]' });
+  const r = deckMod.previewMembership(wiki, '[all[]match[预览甲]] [all[]match[预览乙]]');
+  assert.equal(r.hits, 2);
+  assert.equal(r.overlap, 2, '两张都与既有牌组（default 兜底）重叠');
+  deckMod.createDeck(wiki, { name: '词书Y', card: '[all[]match[预览甲]]' });
+  const r2 = deckMod.previewMembership(wiki, '[all[]match[预览丙]]');
+  assert.deepEqual([r2.hits, r2.overlap], [0, 0], '无命中即无重叠');
+});
+
+test('deck-ui: 新建牌组成员预览 —— 默认来源改为自定义过滤器，命中数创建前可见', () => {
+  const root = renderWidget(wiki, deckUi, 'deck-create');
+  const text = collectText(root);
+  assert.ok(text.includes('自定义过滤器'), '默认来源 = 自定义过滤器（不再默认全库）');
+  assert.ok(text.includes('通常无需另建'), '全库测试卡选项保留但标注与默认牌组相同');
+  assert.ok(text.includes('命中'), '成员命中预览创建前可见');
+});
+
+test('today-deck-row: Default 牌组行带兜底视图徽章，用户牌组不带', () => {
+  const deckMod = mod('core/deck.js');
+  // 注意：{{模板}} 转插会把 currentTiddler 覆盖为模板自身——必须解析模板文本并以父变量传牌组
+  const tplText = wiki.getTiddler('$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row').fields.text;
+  const renderRow = (deckTitle) => {
+    const parent = wiki.makeWidget({ tree: [] }, { document: fakeDocument });
+    parent.setVariable('currentTiddler', deckTitle);
+    const w = wiki.makeWidget(wiki.parseText('text/vnd.tiddlywiki', tplText, {}), { parentWidget: parent, document: fakeDocument });
+    const root = fakeDocument.createElement('div');
+    w.render(root);
+    return collectText(root);
+  };
+  assert.ok(renderRow('$:/Deck/default').includes('全部'), 'Default 行带兜底视图徽章');
+  const userDeck = deckMod.createDeck(wiki, { name: '行徽章书', card: '[all[]match[预览甲]]' });
+  assert.ok(!renderRow(userDeck).includes('全部'), '用户牌组行不带兜底徽章');
 });

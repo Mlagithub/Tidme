@@ -1984,6 +1984,11 @@ body.tc-body-dark .tmc-study-bar,
 .tm-today-read-count { color: var(--tm-text-2); font-size: 0.86em; }
 .tm-today-empty { color: var(--tm-text-2); padding: 14px; border: 1px dashed var(--tm-border); border-radius: var(--tm-radius-sm); }
 
+/* ===== 牌组视图语义（Today 牌组行角色徽章 + 新建牌组成员预览） ===== */
+.tm-badge-scope { color: var(--tm-text-2); background: var(--tm-surface-3); }
+.tm-decks-preview { color: var(--tm-text-2); font-size: 0.85em; padding: 2px 0 4px; }
+.tm-today-section > .tm-today-sub { margin: 0 0 6px; }
+
 /* ===== 条栏「更多」菜单（低频调控收进下拉） ===== */
 .tm-sec-more { position: relative; display: inline-block; }
 .tm-sec-more-summary {
