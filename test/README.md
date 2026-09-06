@@ -27,7 +27,7 @@ test/
 | `helpers/tw-date.mjs`   | `twDate(d)` / `T(offsetHours)` / `PAST()` / `FUTURE()`：17 位 TW UTC 日期串                                                           |
 | `helpers/fake-dom.mjs`  | widget 渲染冒烟的假 DOM：`renderWidget(wiki, mod, name, opts)`、`collectText`、`collectButtons`、`fakeDocument`。陷阱备忘见文件头注释 |
 | `helpers/jsdom-env.mjs` | 导入解析 bundle 无头运行：`loadImportBundle()`、`installDom()`、`fixtureEpubPath()`                                                   |
-| `helpers/fixtures.mjs`  | `makeItem` / `makeTopic` / `importMarkdown`：最小造数 builder                                                                         |
+| `helpers/fixtures.mjs`  | `importMarkdown` / `makeBookFixture`：导入落库与标准书夹具                                                                            |
 
 测试对象是 **bin 产物**（与 dev/发布一致），改动 src 后先 `npm run build:plugins`。
 
@@ -44,9 +44,9 @@ test/
    - 允许注入：DOMParser/jszip（走 helpers）、网络/LLM（`httpFn`）、widget DOM（fake-dom）；
    - 废止：对 bin 产物做子串断言；测试内复刻生产组合逻辑（应 import 生产实现）。
 5. **测试独立**：文件级由 node:test 进程隔离保证；文件内 L2 测试一律
-   `test.beforeEach(reset)`（`reset` 清非系统 tiddler；注意 `$:/` 前缀与 shadow 不会被清）。
-   禁止依赖同文件前序用例留下的数据。共享 fixture 的渲染冒烟文件（browser）拆分前
-   暂不 reset，拆分时改为按组件重建 fixture。
+   `test.beforeEach(reset)`（`reset` 默认清非系统 tiddler；`$:/` 前缀残留需显式
+   `reset({ alsoSystem: ["$:/Deck/"] })` 清扫，plugin shadow 删除后查询时重现）。
+   禁止依赖同文件前序用例留下的数据。
 
 ## 断言偏好
 

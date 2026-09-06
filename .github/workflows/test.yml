@@ -25,8 +25,5 @@ jobs:
       - name: Build plugins (bin)
         run: node tools/build-plugins.cjs
 
-      - name: Tests (unit + integration + pipeline + e2e)
-        run: npm test
-
-      - name: Coverage report
+      - name: Tests (unit + integration + e2e) + coverage
         run: npm run test:coverage

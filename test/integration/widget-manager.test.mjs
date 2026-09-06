@@ -23,6 +23,13 @@ function renderWidget(wiki, mod_, name, opts = {}) {
   return renderWidgetBase(wiki, mod_, name, opts).root;
 }
 
+function collectElementsByClass(node, className, out = []) {
+  if (!node) return out;
+  if (node.className && String(node.className).includes(className)) out.push(node);
+  for (const c of node.childNodes || []) collectElementsByClass(c, className, out);
+  return out;
+}
+
 let F; // 标准书夹具引用（docTitle/sectionTitle/extractTitle/clozeTitle）
 test.beforeEach(async () => {
   reset();
@@ -72,13 +79,6 @@ test('card-manager: 批量选择交互与全选', () => {
   const text = collectText(root);
   assert.ok(text.includes('已选'), '已选信息应在工具条展示');
 });
-
-function collectElementsByClass(node, className, out = []) {
-  if (!node) return out;
-  if (node.className && String(node.className).includes(className)) out.push(node);
-  for (const c of node.childNodes || []) collectElementsByClass(c, className, out);
-  return out;
-}
 
 test('card-manager: doneFields 置 tidme.done，restoreCard 可逆恢复（kind 决定归属）', () => {
   const done = cardManager.doneFields({ title: '节', 'tidme.kind': 'topic', state: '0' });

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
-const { wiki, mod } = bootPlugin({ prefix: 'tidme-bin-core-' });
+const { mod } = bootPlugin({ prefix: 'tidme-bin-core-' });
 const sched = mod('core/scheduler.js');
 const parseMod = mod('import/parse.js');
 const sem = mod('core/server/semantic-split');
