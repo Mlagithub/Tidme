@@ -11,10 +11,18 @@ const PDFJS_VERSION = '3.11.174';
 const PDFJS_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`;
 const PDFJS_WORKER_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
 
+let libOverride: any = null;
+
+/** 注入外部 pdf.js 库（测试用：Node 侧 pdfjs-dist legacy 与 CDN 构建同 API） */
+export function setPdfJsLib(lib: any): void {
+  libOverride = lib;
+}
+
 let libPromise: Promise<any> | null = null;
 
 /** 按需注入 pdf.js <script> 并配置 worker；全局只加载一次 */
 export function ensurePdfJs(): Promise<any> {
+  if (libOverride) return Promise.resolve(libOverride);
   const existing = (globalThis as any).pdfjsLib;
   if (existing) return Promise.resolve(existing);
   if (!libPromise) {
@@ -77,10 +85,11 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return out;
 }
 
-/** 字节 → pdf.js 文档对象 */
+/** 字节 → pdf.js 文档对象。传副本：pdf.js 可能转移底层 buffer（detach），
+ *  调用方（导入流程的 base64 编码）需要保留可用数据。 */
 export async function loadPdfBytes(bytes: Uint8Array): Promise<any> {
   const lib = await ensurePdfJs();
-  return lib.getDocument({ data: bytes }).promise;
+  return lib.getDocument({ data: bytes.slice() }).promise;
 }
 
 /** dest（字符串命名目标或数组 [ref, {x,y}]）→ 页码（1 起）；无法解析返回 0 */

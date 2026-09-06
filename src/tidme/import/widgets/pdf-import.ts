@@ -22,6 +22,9 @@ export async function importPdfFile(
   widget: any,
 ): Promise<{ docTitle: string; pages: number }> {
   const bytes = new Uint8Array(await file.arrayBuffer());
+  // 先编码 base64：pdf.js getDocument 默认会把底层 buffer 转移给 Worker（detach），
+  // 之后再编码会得到空串 → 二进制落库为空
+  const dataB64 = pdfjsMod.bytesToBase64(bytes);
   const pdf = await pdfjsMod.loadPdfBytes(bytes);
   const numPages = Number(pdf.numPages) || 0;
 
@@ -39,7 +42,7 @@ export async function importPdfFile(
   const bookTitle = String(file.name || '').replace(/\.pdf$/i, '');
   const r = await pdfOps.createPdfBook(wiki, {
     bookTitle,
-    dataB64: pdfjsMod.bytesToBase64(bytes),
+    dataB64,
     sections: ranges.map((s) => ({ title: s.title, startPage: s.startPage, endPage: s.endPage })),
   });
 

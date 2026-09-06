@@ -83,6 +83,7 @@
     "jszip": "^3.10.1",
     "lint-staged": "^15.2.0",
     "npm-check-updates": "^16.14.12",
+    "pdfjs-dist": "^3.11.174",
     "postcss": "^8.4.32",
     "rimraf": "^5.0.5",
     "semantic-release": "latest",
