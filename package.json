@@ -29,14 +29,13 @@
         "semantic-release": "semantic-release",
         "build:plugins": "node tools/build-plugins.cjs",
         "build:plugins:dev": "node tools/build-plugins.cjs --dev",
-        "test:study": "node tools/study-flow-test.cjs --clean",
+        "test:study": "node tools/study-flow-test.cjs",
         "test:unit": "node --test",
         "test": "npm run test:unit && npm run test:study",
-        "build:fixture": "node tools/make-fixture.mjs tools/fixtures/demo.epub",
-        "test:pipeline": "node tools/pipeline-headless.mjs tools/fixtures/demo.epub"
+        "build:fixture": "node tools/make-fixture.mjs tools/fixtures/demo.epub"
     },
     "engines": {
-        "node": ">=16"
+        "node": ">=22"
     },
     "repository": {
         "type": "git",

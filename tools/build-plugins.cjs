@@ -5,7 +5,7 @@ build-plugins.cjs — 编译 src/ 下全部插件为 bin/$__<plugin>.json
 与 dev 模式一致的插件 tiddler，落盘为 TiddlyWiki tiddler 文件格式（`$:/` → `$__`，`/` → `_`），
 供无头测试（tools/study-flow-test.cjs 等）、CI 与 Tiddlyhost 部署（bin/thost-uploader）使用。
 
-附带产出 bin/pipeline.cjs（esbuild bundle 的导入管线），供 tools/pipeline-headless.mjs 使用。
+附带产出 bin/pipeline.cjs（esbuild bundle 的导入管线），供 test/pipeline.test.mjs 与 test/split.test.mjs 使用。
 
 用法：node tools/build-plugins.cjs [--dev]
   --dev  不压缩（开发/调试）
@@ -46,7 +46,7 @@ function tiddlerFileName(title) {
 		console.log(`built ${p.title} -> ${name} (${json.length} bytes)`);
 	}
 
-	// 附带：导入管线 bundle（pipeline-headless 的输入）——用 esbuild JS API，避免 npx 子进程残留
+	// 附带：导入管线 bundle（无头管线测试的输入）——用 esbuild JS API，避免 npx 子进程残留
 	// $:/plugins/keepone/tidme/core/* 通过 onResolve 内联进 bundle（无头测试不依赖 TW 运行时）；import/* 保持外部（jszip）
 	const esbuild = require("esbuild");
 	const coreResolvePlugin = {

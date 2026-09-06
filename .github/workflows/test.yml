@@ -25,7 +25,7 @@ jobs:
       - name: Build plugins (bin)
         run: node tools/build-plugins.cjs
 
-      - name: Unit tests (pipeline headless)
+      - name: Unit tests (node --test)
         run: npm run test:unit
 
       - name: Study flow regression
