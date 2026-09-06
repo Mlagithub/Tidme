@@ -10,6 +10,7 @@ widgets/reading-list.ts — 阅读列表（topic 队列，统一阅读入口）
 
 declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dom = require('$:/plugins/keepone/tidme/core/dom.js');
 const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
 const icons = require('$:/plugins/keepone/tidme/core/icons.js');

@@ -84,7 +84,7 @@ async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any):
   }
 
   const origText = String(tiddler.text || '').trim();
-  const subChunks: Array<{ title: string; text: string; chars: number }> = await sem.splitSectionText(origText, aiCfg);
+  const subChunks: Array<{ title: string; text: string; chars: number }> = await semMod.splitSectionText(origText, aiCfg);
   if (!subChunks || subChunks.length <= 1) return false;
 
   // 100% 字数与原文完整性校验
