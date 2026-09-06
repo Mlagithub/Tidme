@@ -2,7 +2,7 @@
 import-epub.test.mjs — EPUB 导入解析集成测试（node:test）
 
 测试对象是导入解析 bundle（辅助功能：电子书/文档 → tiddler，非渐进学习流程本身）。
-依赖 bin/pipeline.cjs（先运行 tools/build-plugins.cjs）与 tools/fixtures/demo.epub（tools/make-fixture.mjs）。
+依赖 bin/parse.cjs（先运行 tools/build-plugins.cjs）与 tools/fixtures/demo.epub（tools/make-fixture.mjs）。
 断言：EPUB 解析 → 大纲切分 → 确定性 ID → tiddler 落库的关键性质。
 */
 import assert from 'node:assert/strict';

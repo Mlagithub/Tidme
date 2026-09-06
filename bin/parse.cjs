@@ -54,7 +54,7 @@ var __async = (__this, __arguments, generator) => {
   });
 };
 
-// src/tidme/import/pipeline/main.ts
+// src/tidme/import/parse/main.ts
 var main_exports = {};
 __export(main_exports, {
   IMPORT_BAG_TITLE: () => IMPORT_BAG_TITLE,
@@ -141,7 +141,7 @@ async function makeSectionId(docId, breadcrumb, ordinal) {
   return "s" + await shortHash(basis, 12);
 }
 
-// src/tidme/import/pipeline/epub.ts
+// src/tidme/import/parse/epub.ts
 var _JSZip = null;
 function JSZipLib() {
   if (!_JSZip)
@@ -461,7 +461,7 @@ function collectBlocks(doc) {
   return rows;
 }
 
-// src/tidme/import/pipeline/smart-merge.ts
+// src/tidme/import/parse/smart-merge.ts
 var SENTENCE_END = /[。！？；：…!?;:"“”‘’（）)]\s*$/;
 var BLOCK_BREAK = /* @__PURE__ */ new Set(["div", "body", "blockquote", "td", "li", "dd", "dt", "tr"]);
 var NEW_BLOCK_PATTERNS = [
@@ -583,7 +583,7 @@ function smartMergeParagraphs(doc) {
   return changed;
 }
 
-// src/tidme/import/pipeline/chunker.ts
+// src/tidme/import/parse/chunker.ts
 var DEFAULTS = { maxChars: 4e3, minChars: 600 };
 function cleanOptions(options = {}) {
   const out = {};
@@ -829,7 +829,7 @@ function chunkBook(files, options = {}) {
   return { sections: final, stats };
 }
 
-// src/tidme/import/pipeline/ingest-text.ts
+// src/tidme/import/parse/ingest-text.ts
 function escapeHtml2(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -1168,7 +1168,7 @@ function afactorForText(chars) {
   return 1.3;
 }
 
-// src/tidme/import/pipeline/split.ts
+// src/tidme/import/parse/split.ts
 function cleanTitle(title) {
   let t = String(title || "").trim();
   if (!t)
@@ -1307,7 +1307,7 @@ function runSplit(input) {
   });
 }
 
-// src/tidme/import/pipeline/main.ts
+// src/tidme/import/parse/main.ts
 function importEpubBytes(bytes, fileName, options) {
   return __async(this, null, function* () {
     const book = yield readEpubBytes(bytes);
