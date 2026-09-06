@@ -11,7 +11,6 @@ master 分支走 semantic-release。
 - `src/tidme/review` 复习流（filters/buttons/ViewTemplate）；`manager` 卡片管理 UI；`editor` CodeMirror 集成
 - `src/zh-Hans`、`src/fr-FR` 语言包 **git 子模块**（常未初始化，缺失是正常现象）
 - `test/` 分层测试（见下）；`tools/` 构建脚本；`bin/` 构建产物（**git 跟踪，改源码后重建并提交**）
-- `doc/architecture.md` 架构单一参考（改核心代码前必读）；`doc/test-plan.md` 测试计划
 
 ## 常用命令
 
@@ -33,7 +32,7 @@ Node ≥22（类型剥离直跑 .ts）；本机 node 由 fnm 管理。CI = build
 4. 同一概念全库只有一份实现；过滤器组合统一走 core/deck-engine，调度统一走 core/scheduler
 5. 导入解析叫 **parse**，不要叫 pipeline（易与渐进学习流程混淆）
 
-## 测试约定（test/README.md 为完整规范）
+## 测试约定
 
 - 分层：`unit/` 直测 TS 源码；`integration/` boot 真实 TW + bin 产物；`e2e/` 真实 TiddlyWeb / 学习流
 - 用例基线**只增不减**（当前 237）；五条黄金法则：AAA / 一测一概念 / 命名即文档 / 谨慎 Mock / 测试独立
@@ -50,4 +49,5 @@ Node ≥22（类型剥离直跑 .ts）；本机 node 由 fnm 管理。CI = build
   不要跑全库 `dprint check` 期望干净，也不要一次性全库 fmt 污染 diff
 - 17 位 TW UTC 日期串（`yyyymmddhhmmssmmm`）用 `test/helpers/tw-date.mjs` 的 twDate/parseTwDate，
   生产侧唯一实现在 core/schema.ts
-- 历史文档（doc/*_plan.md、审计报告）记录当时状态，不要回头改；活文档只有 architecture.md 与 test/README.md
+- 代码注释自包含：不引用计划/设计类文档，不使用 M1/G4 式路线图编号，直接描述行为与理由
+- 仓库中的计划/里程碑类 markdown 是历史记录，可能滞后，勿作为现状依据；现状以代码与本文件为准
