@@ -77,6 +77,44 @@ export function writeSemanticSplit(wiki: any, patch: Record<string, any>): void 
   wiki.addTiddler({ title: semMod.SEMANTIC_SPLIT_CONFIG_TITLE, type: 'application/json', text: JSON.stringify(next) });
 }
 
+// ---------- 全局学习流（「开始学习」的队列构成） ----------
+
+export const QUEUE_MIX_DEFAULT = '4:1';
+const QUEUE_MODE_TITLE = '$:/config/Tidme/QueueMode';
+const QUEUE_MIX_TITLE = '$:/config/Tidme/QueueMix';
+const QUEUE_ORDERS = ['due-new', 'new-due', 'random'];
+
+/** 队列选项：QueueMode（''=纯测试卡 / interleaved=交错 / strict=三段式）+ QueueMix（item:topic 交错的本地化调节，
+ *  SuperMemo 以统一优先级队列自然混合 topic/item，无独立比例旋钮）。读取合并默认值。 */
+export function readQueueOptions(wiki: any): { topics: boolean; mode: 'interleaved' | 'strict'; itemRatio: number; topicRatio: number } {
+  const m = String(wiki.getTiddlerText?.(QUEUE_MODE_TITLE, '') || '').trim();
+  const topics = m !== '';
+  const mode: 'interleaved' | 'strict' = topics && m === 'strict' ? 'strict' : 'interleaved';
+  const mm = /^(\d+)\s*[:：]\s*(\d+)$/.exec(String(wiki.getTiddlerText?.(QUEUE_MIX_TITLE, '') || '').trim());
+  return {
+    topics,
+    mode,
+    itemRatio: mm ? Math.max(1, Number(mm[1])) : 4,
+    topicRatio: mm ? Math.max(1, Number(mm[2])) : 1,
+  };
+}
+
+export function writeQueueOptions(
+  wiki: any,
+  patch: { topics?: boolean; mode?: 'interleaved' | 'strict'; itemRatio?: number; topicRatio?: number },
+): void {
+  if (!wiki) return;
+  const cur = readQueueOptions(wiki);
+  const topics = patch.topics ?? cur.topics;
+  const mode: 'interleaved' | 'strict' = patch.mode ?? cur.mode;
+  wiki.addTiddler({ title: QUEUE_MODE_TITLE, text: topics ? (mode === 'strict' ? 'strict' : 'interleaved') : '' });
+  if (patch.itemRatio !== undefined || patch.topicRatio !== undefined) {
+    const ir = Math.max(1, Math.floor(Number(patch.itemRatio ?? cur.itemRatio) || 4));
+    const tr = Math.max(1, Math.floor(Number(patch.topicRatio ?? cur.topicRatio) || 1));
+    wiki.addTiddler({ title: QUEUE_MIX_TITLE, text: `${ir}:${tr}` });
+  }
+}
+
 // ---------- 复习日志保留 ----------
 
 /** 复习日志保留天数默认值（启动调度器按此修剪旧条目；0 = 永久保留） */
@@ -111,6 +149,7 @@ export function readDefaultDeckParams(wiki: any): Record<string, any> {
     leech_threshold: Number(f.leech_threshold ?? 8),
     request_retention: Number(p.request_retention ?? 0.9),
     maximum_interval: Number(p.maximum_interval ?? 365),
+    learn_random: String(f.random_learn || '') === 'yes',
   };
 }
 
@@ -125,6 +164,11 @@ export function writeDefaultDeckParams(wiki: any, patch: Record<string, any>): v
   if (patch.leech_threshold !== undefined) {
     const n = Number(patch.leech_threshold);
     if (Number.isFinite(n)) fields.leech_threshold = String(Math.max(1, Math.floor(n)));
+  }
+  if (patch.learn_random !== undefined) {
+    // 学习步随机（对齐 SuperMemo 的 Randomize final drill）：重写 state_learn 消费方读取的标记字段
+    if (patch.learn_random) fields.random_learn = 'yes';
+    else delete fields.random_learn;
   }
   if (patch.request_retention !== undefined || patch.maximum_interval !== undefined) {
     let p: Record<string, any> = {};

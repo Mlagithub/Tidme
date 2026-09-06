@@ -12,7 +12,9 @@ title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/tiddler
     unfold_action={{{ [<deckTiddler>get[unfold_action]else{$:/Deck/default!!unfold_action}] }}}
     leech_threshold={{{ [<deckTiddler>get[leech_threshold]else{$:/Deck/default!!leech_threshold}] }}}
     leech_action={{{ [<deckTiddler>get[leech_action]else{$:/Deck/default!!leech_action}] }}}
-    filter_learn=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]`
+    filter_learn_due=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]`
+    filter_learn_random=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sortrandom[]]`
+    filter_learn=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[subfilter{$(deckTiddler)$!!random_learn}match[yes]then<filter_learn_random>else<filter_learn_due>]`
     filter_due=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_due}] +[subfilter{$(deckTiddler)$!!order_due}]`
     filter_new=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_new}] +[subfilter{$(deckTiddler)$!!order_new}]`
     filter_unfold=`[subfilter{$(deckTiddler)$!!card_unfold}]`

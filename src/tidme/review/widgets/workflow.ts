@@ -14,22 +14,13 @@ const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const icons = require('$:/plugins/keepone/tidme/core/icons.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const config = require('$:/plugins/keepone/tidme/core/config.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const DEFAULT_DECK = deckMod.DEFAULT_DECK;
 
 // 共享 DOM 工具（实现收敛于 core/dom）
 const el = dom.el;
-
-const QUEUE_MODE_TIDDLER = '$:/config/Tidme/QueueMode';
-
-/** 队列选项：$:/config/Tidme/QueueMode 存在 = 混入阅读材料（"strict"=宏观三段式，其余=4:1 交错）；
- *  不存在（默认）= 纯知识卡复习流，阅读材料不打断（阅读走阅读列表/文档页/继续阅读）。 */
-function queueOptions(wiki: any): { mode: 'interleaved' | 'strict'; topics: boolean } {
-  const m = String(wiki?.getTiddlerText?.(QUEUE_MODE_TIDDLER, '') || '').trim();
-  if (m === '') return { mode: 'interleaved', topics: false };
-  return { mode: m === 'strict' ? 'strict' : 'interleaved', topics: true };
-}
 
 function makeWorkflow(): any {
   class WorkflowWidget extends Widget {
@@ -43,26 +34,9 @@ function makeWorkflow(): any {
       this.domNodes.push(root);
 
       const learnBtn = icons.iconButton(doc, 'tm-btn tm-btn--primary tm-workflow-btn-hero', 'study', '开始学习');
-      learnBtn.title = '复习全部到期/新知识卡（挖空/问答）：按 FSRS 到期与新卡顺序连续学习，不混入阅读材料；勾选下方选项可把到期阅读材料也加入（SM 交错）';
+      learnBtn.title = '复习全部到期/新知识卡（挖空/问答）；阅读材料的混入与交错比在「设置」页配置';
       learnBtn.addEventListener('click', () => startGlobalLearning(wiki, this));
       root.appendChild(learnBtn);
-
-      // 可选项：把到期/待读阅读材料（topic）混入学习流（SM 交错；默认纯知识卡）
-      const modeRow = el(doc, 'div', 'tm-decks-mode');
-      const modeCheck = doc.createElement('input');
-      modeCheck.type = 'checkbox';
-      modeCheck.checked = queueOptions(wiki).topics;
-      modeCheck.title = '勾选后：到期/待读的阅读材料（节卡/摘录）会按 4:1 交错进学习流（SuperMemo 精神）；不勾选则学习流只含知识卡，阅读从阅读列表/文档页进入';
-      modeRow.appendChild(modeCheck);
-      const modeLabel = el(doc, 'span', 'tm-import-muted', '到期阅读材料也加入学习流（交错）');
-      modeLabel.title = modeCheck.title;
-      modeRow.appendChild(modeLabel);
-      modeCheck.addEventListener('change', () => {
-        // 勾选 → 写 QueueMode（含 topic 交错）；取消 → 删 tiddler（纯知识卡）
-        if (modeCheck.checked) wiki.addTiddler({ title: QUEUE_MODE_TIDDLER, text: 'interleaved' });
-        else wiki.deleteTiddler(QUEUE_MODE_TIDDLER);
-      });
-      root.appendChild(modeRow);
 
       parent.insertBefore(root, nextSibling);
     }
@@ -78,8 +52,14 @@ function makeWorkflow(): any {
  */
 function startGlobalLearning(wiki: any, widget: any): void {
   const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
-  const { mode, topics } = queueOptions(wiki);
-  const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), { mode, topics });
+  // 队列构成与交错比唯一收口 = core/config（设置页配置；topic 混入 + item:topic 交错比）
+  const opts = config.readQueueOptions(wiki);
+  const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), {
+    mode: opts.mode,
+    topics: opts.topics,
+    itemRatio: opts.itemRatio,
+    topicRatio: opts.topicRatio,
+  });
 
   if (!queue || queue.length === 0) {
     widget.dispatchEvent({ type: 'tm-confetti-launch' });
@@ -93,7 +73,7 @@ function startGlobalLearning(wiki: any, widget: any): void {
   sessionMod.setSession(wiki, {
     list: queue,
     currentIndex: '0',
-    mode: mode === 'strict' ? 'global-strict' : topics ? 'global-interleaved' : 'items-only',
+    mode: opts.mode === 'strict' ? 'global-strict' : opts.topics ? 'global-interleaved' : 'items-only',
   });
 
   // <deck>/study 会话列表（fsrs4tw 契约后缀见 core/session）

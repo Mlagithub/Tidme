@@ -105,12 +105,38 @@ function makeSettings(): any {
       // —— 复习调度（默认牌组 + 自动顺延） ——
       const ap = config.readAutoPostpone(wiki);
       const deckParams = config.readDefaultDeckParams(wiki);
+      const queueOpts = config.readQueueOptions(wiki);
+      const queueMixText = `${queueOpts.itemRatio}:${queueOpts.topicRatio}`;
       const schedule = section('复习调度', '默认牌组 · 自动顺延');
       row(
         schedule,
         '出题顺序',
         select(deckParams.order, [['due-new', '到期优先'], ['new-due', '新卡优先'], ['random', '随机']], (v) => config.writeDefaultDeckParams(wiki, { order: v })),
         '学习队列里到期卡与新卡的交错方式',
+      );
+      row(
+        schedule,
+        '学习流构成',
+        select(queueOpts.topics ? (queueOpts.mode === 'strict' ? 'strict' : 'interleaved') : 'items', [['items', '纯测试卡（不混入）'], ['interleaved', '混入阅读材料并交错'], [
+          'strict',
+          '混入但三段式',
+        ]], (v) => config.writeQueueOptions(wiki, { topics: v !== 'items', mode: v === 'strict' ? 'strict' : 'interleaved' })),
+        '「开始学习」的队列构成；阅读材料=节卡/摘录',
+      );
+      row(
+        schedule,
+        '交错比（测试:阅读）',
+        select(queueMixText, [['4:1', '4:1（默认）'], ['3:1', '3:1'], ['2:1', '2:1'], ['1:1', '1:1']], (v) => {
+          const parts = v.split(':');
+          config.writeQueueOptions(wiki, { itemRatio: Number(parts[0]), topicRatio: Number(parts[1]) });
+        }),
+        '混入阅读材料时，每 N 张测试卡插入 1 张阅读卡（SuperMemo 靠统一优先级自然混合，此为本地化调节）',
+      );
+      row(
+        schedule,
+        '随机打乱学习步',
+        checkbox(deckParams.learn_random === true, (v) => config.writeDefaultDeckParams(wiki, { learn_random: v })),
+        '对应 SuperMemo 的 Randomize final drill：学习中的卡默认按到期前置，开启后改为随机顺序',
       );
       row(schedule, '每日自动顺延', checkbox(ap.enable === true, (v) => config.writeAutoPostpone(wiki, { enable: v })), '启动时与每小时自动顺延低优先级逾期卡，防队列积压');
       row(

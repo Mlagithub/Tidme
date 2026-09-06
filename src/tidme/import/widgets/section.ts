@@ -41,7 +41,13 @@ import { cleanContaminatedHtmlToWikiText } from '../../editor/wikitext-parser';
  * - sectionBar：section-bar 实例（唯一写入方）——划词 frameTitle 回退 _title、保存指示器。
  * - docId：最近打开的阅读文档（section-bar / doc-resume 写）——currentDocId 的最后回退。
  */
-const active: { dispatch: any; body: any; sectionBar: any; docId: string } = { dispatch: null, body: null, sectionBar: null, docId: '' };
+const active: { dispatch: any; body: any; sectionBar: any; docId: string; navActions: { prev: (() => void) | null; next: (() => void) | null; title: string } | null } = {
+  dispatch: null,
+  body: null,
+  sectionBar: null,
+  docId: '',
+  navActions: null,
+};
 
 /** 当前可用 wiki：派发源 widget 优先，回退全局 $tw.wiki（浏览器热键路径） */
 function activeWiki(): any {
@@ -370,6 +376,8 @@ if (typeof document !== 'undefined') {
     'ctrl+f7': (e) => e.ctrlKey && !e.shiftKey && e.key === 'F7',
     'alt+f7': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'F7',
     'shift+ctrl+f7': (e) => e.ctrlKey && e.shiftKey && e.key === 'F7',
+    arrowleft: (e) => e.key === 'ArrowLeft' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey,
+    arrowright: (e) => e.key === 'ArrowRight' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey,
   };
   const ACTIONS: Record<string, () => void> = {
     'alt+x': () => actionExtract(document.defaultView || globalThis),
@@ -379,13 +387,23 @@ if (typeof document !== 'undefined') {
     'alt+f7': () => actionGotoReadPoint(document.defaultView || globalThis),
     'shift+ctrl+f7': () => actionClearReadPoint(document.defaultView || globalThis),
   };
+  const fireNav = (dir: 'prev' | 'next') => {
+    const barTitle = active.sectionBar?._title;
+    if (!barTitle) return;
+    // 仅当该卡仍在故事（页面打开）时响应，避免陈旧导航
+    const inStory = activeWiki().filterTiddlers('[list[$:/StoryList]]').indexOf(barTitle) !== -1;
+    if (!inStory) return;
+    if (dir === 'prev') active.navActions?.prev?.();
+    else active.navActions?.next?.();
+  };
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     const tag = String((e.target as any)?.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || (e.target as any)?.isContentEditable) return;
     for (const key of Object.keys(KEYMAP)) {
       if (KEYMAP[key](e)) {
         e.preventDefault();
-        ACTIONS[key]();
+        if (key === 'arrowleft' || key === 'arrowright') fireNav(key === 'arrowleft' ? 'prev' : 'next');
+        else ACTIONS[key]();
         return;
       }
     }
@@ -753,6 +771,12 @@ function makeSectionBar(): WidgetCtor {
       btnRow.appendChild(mkBtn('', 'nav', '下一节', !schedNext, () => {
         if (schedNext) gotoNextDoc();
       }, 'chevron-right'));
+      // ←/→ 方向键的落点：注册当前卡的上一节/下一节（键入时校验本卡仍在故事中）
+      active.navActions = {
+        title,
+        prev: prev ? () => gotoSection(prev) : null,
+        next: schedNext ? () => gotoNextDoc() : null,
+      };
 
       sep();
 

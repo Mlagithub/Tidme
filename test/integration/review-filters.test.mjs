@@ -89,3 +89,19 @@ test('sortrandom: 空输入 → 空输出', () => {
   const out = wiki.filterTiddlers('+[sortrandom[]]');
   assert.deepEqual([...out], []);
 });
+
+test('sortrandom: Fisher-Yates 均匀性（12 张卡 × 3000 次，各元素各位置频次 3σ 内）', () => {
+  const titles = Array.from({ length: 12 }, (_, i) => `随机卡${i}`);
+  wiki.addTiddler({ title: 'SortRandomPool', list: titles, text: '' });
+  const counts = Array.from({ length: 12 }, () => Array(12).fill(0));
+  for (let s = 0; s < 3000; s++) {
+    const out = wiki.filterTiddlers('[list[SortRandomPool]] +[sortrandom[]]');
+    for (let pos = 0; pos < 12; pos++) counts[titles.indexOf(out[pos])][pos] += 1;
+  }
+  const expected = 3000 / 12;
+  for (let e = 0; e < 12; e++) {
+    for (let p = 0; p < 12; p++) {
+      assert.ok(Math.abs(counts[e][p] - expected) <= 90, `随机卡${e} 在位置${p} 出现 ${counts[e][p]} 次（期望≈250±90，偏差过大=洗牌有偏）`);
+    }
+  }
+});

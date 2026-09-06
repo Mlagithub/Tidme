@@ -37,7 +37,10 @@ export interface DeckFilters {
 /** 组合 deck 过滤器（deckTitle 已插值，可直接被 subfilter 求值） */
 export function composeDeckFilters(deckTitle: string, fields: DeckFields = {}): DeckFilters {
   const d = deckTitle;
-  const learn = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_learn}sort[due]]`;
+  // 学习步随机开关（默认牌组 random_learn 字段，对齐 SuperMemo 的 Randomize final drill）：
+  // 关 = 学习中的卡按到期前置；开 = 学习中的卡均匀随机
+  const learnSort = String(fields.random_learn || '') === 'yes' ? ' +[sortrandom[]]' : 'sort[due]';
+  const learn = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_learn}${learnSort}]`;
   const due = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_due}subfilter{${d}!!order_due}]`;
   const newly = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_new}subfilter{${d}!!order_new}]`;
   const unfold = `[subfilter{${d}!!card_unfold}]`;
