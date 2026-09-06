@@ -41,7 +41,8 @@ function makeStatsPanel(): WidgetCtor {
 
         const decks = deckMod.listDecks(wiki);
         const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
-        const all = cardLikes('[!is[system]]');
+        // 漏斗只消费卡片与文档页（[!is[system]] 会把状态/配置/临时 tiddler 全部载入）
+        const all = cardLikes('[all[shadows+tiddlers]!is[draft]has[tidme.kind]] [all[shadows+tiddlers]!is[draft]tag[tidme-import-doc]]');
         const funnel = stats.funnelCounts(all);
         // log tiddler title 形如 $:/Deck/<deck>/log/YYYY0MM0DD（repeat.tid 写入），用 prefix + JS 后过滤匹配
         const logTitles = wiki.filterTiddlers('[all[shadows+tiddlers]prefix[$:/Deck/]]')
@@ -218,10 +219,13 @@ function makeStatsPanel(): WidgetCtor {
       this.domNodes.push(wrap);
     }
     refresh(changedTiddlers: Record<string, any>) {
+      // 面板读复习日志（保留率），保持宽谓词；重建合并到宏任务（评分链路连写 4+ tiddler）
       const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
       if (need && this._wrap && this._wrap.parentNode) {
-        this._wrap.textContent = '';
-        this._build?.();
+        return reactive.rebuildSoon(() => {
+          this._wrap.textContent = '';
+          this._build?.();
+        });
       }
       return need;
     }

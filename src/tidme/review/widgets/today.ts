@@ -110,8 +110,9 @@ function makeTodayHero(): WidgetCtor {
 
     refresh(changedTiddlers: Record<string, any>) {
       if (!this._container) return false;
+      // 反馈条读牌组日志（宽谓词）；重建合并到宏任务（评分链路连写 4+ tiddler）
       const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
-      if (need) this.build();
+      if (need) return reactive.rebuildSoon(() => this.build());
       return need;
     }
   }
@@ -156,14 +157,12 @@ function makeTodayRecent(): WidgetCtor {
       };
       const rows: { title: string; label: string; done: number; total: number; last: number }[] = [];
       for (const d of docs) {
-        const docId = wiki.getTiddler(d)?.fields['tidme.doc'];
+        const docId = String(wiki.getTiddler(d)?.fields['tidme.doc'] || '');
         if (!docId) continue;
-        const secs = wiki.filterTiddlers(`[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]]`);
-        const total = secs.length;
-        if (!total) continue;
-        const done = secs.filter((t: string) => sched.isCardDone(wiki.getTiddler(t)?.fields)).length;
+        const prog = docOps.sectionsProgressByDoc(wiki).get(docId);
+        if (!prog || !prog.total) continue;
         const f = wiki.getTiddler(d)?.fields || {};
-        rows.push({ title: d, label: display.displayTitle(f, d), done, total, last: lastOpen(String(docId)) });
+        rows.push({ title: d, label: display.displayTitle(f, d), done: prog.done, total: prog.total, last: lastOpen(docId) });
       }
       rows.sort((a, b) => b.last - a.last || (a.done / a.total) - (b.done / b.total) || b.total - a.total);
       const top = rows.filter((r) => r.done < r.total).slice(0, 3);
@@ -195,8 +194,9 @@ function makeTodayRecent(): WidgetCtor {
 
     refresh(changedTiddlers: Record<string, any>) {
       if (!this._container) return false;
+      // 反馈条读牌组日志（宽谓词）；重建合并到宏任务（评分链路连写 4+ tiddler）
       const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
-      if (need) this.build();
+      if (need) return reactive.rebuildSoon(() => this.build());
       return need;
     }
   }

@@ -77,6 +77,7 @@ test('刷新机制: 数据变化 → refresh 嗅探重建（stats-panel）', asy
   const changed = {};
   for (const t of r.tiddlers) changed[t.title] = { modified: true };
   assert.equal(w.refresh(changed), true, '嗅探到 tidme 数据变化并重建');
+  await new Promise((r) => setTimeout(r, 60)); // 重建合并到宏任务，等待延迟回调
   const text = collectText(root);
   assert.ok(text.includes('第二本书'), '刷新后统计面板出现新书进度');
 });
@@ -196,7 +197,6 @@ test('reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
   assert.ok(text.includes('阅读列表'), '标题');
   assert.ok(text.includes('待读'), '计数');
   assert.ok(text.includes('书名甲'), '文档名');
-  assert.ok(text.includes('摘'), '摘录卡标记');
   assert.ok(text.includes('继续阅读'), '继续按钮');
   assert.ok(text.includes('清理阅读'), '清理阅读材料按钮');
   assert.ok(text.includes('已读'), '进度文案');

@@ -1,122 +1,12 @@
-/*
-widgets/reading-list.ts — 阅读列表（topic 队列，统一阅读入口）
-
-- 全库未读 topic 卡（kind=topic 阅读材料：节卡/摘录）按文档分组
-- 组内排序：优先级（0 最高）→ due → 阅读顺序（tidme.order）——"按 due 被动重读"
-- 每文档组：进度（已读/总数）+ 进度条 + 「▶ 继续」跳到第一未读节
-- 空态引导导入中心；事件总线即时刷新
-- 复习流（item）不在此页——默认牌组 / 「复习本书」
-*/
-
-declare function require(module: string): any;
-const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
-const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
-const icons = require('$:/plugins/keepone/tidme/core/icons.js');
-const display = require('$:/plugins/keepone/tidme/core/display.js');
-const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
-const paths = require('$:/plugins/keepone/tidme/core/paths.js');
-const ns = require('$:/plugins/keepone/tidme/core/ns.js');
-const Widget = require('$:/core/modules/widgets/widget.js').widget;
-
-// 共享 DOM/徽章/文档节查询（实现收敛于 core/dom、core/display、core/doc-ops）
-const el = dom.el;
-const badgeOf = display.badgeOf;
-const sectionsOfDoc = docOps.sectionsOfDoc;
-
-/** 阅读列表过滤（topic 队列）：全库 kind=topic 卡，未搁置/未完成。
- * 忽略（tidme.ignored）与已读（tidme.done）自动出列；item 卡不在此页。
- * 过滤器唯一产地 = core/scheduler.TOPIC_QUEUE_FILTER（勿在此手拼）。 */
-const topicQueueFilter = () => sched.TOPIC_QUEUE_FILTER;
-
-interface TopicCard {
-  title: string;
-  kind: string; // subkind：section/extract
-  priority: number;
-  due: Date;
-  order: string;
-  doc: string;
-  breadcrumb: string;
-  fields: Record<string, any>;
-}
-
-/** 收集与排序唯一产地 = core/scheduler（collectTopicQueue / sortTopicQueue）；本文件只做分组与渲染 */
-function collectTopicCards(wiki: any): TopicCard[] {
-  return sched.collectTopicQueue(wiki);
-}
-
-/** 组内排序：优先级（0 最高）→ due（早的在前，topic 被动重读）→ 阅读顺序 */
-function sortTopicCards(cards: TopicCard[]): TopicCard[] {
-  return sched.sortTopicQueue(cards);
-}
-
-/** 按文档分组（组间按文档名；无 doc 的散卡收进「未分组」） */
-function groupByDoc(cards: TopicCard[]): { doc: string; cards: TopicCard[] }[] {
-  const m = new Map<string, TopicCard[]>();
-  for (const c of cards) {
-    const key = c.doc || '未分组';
-    if (!m.has(key)) m.set(key, []);
-    m.get(key)!.push(c);
-  }
-  return [...m.entries()]
-    .map(([doc, cs]) => ({ doc, cards: sortTopicCards(cs) }))
-    .sort((a, b) => String(a.doc).localeCompare(String(b.doc), 'zh'));
-}
-
-function makeReadingList(): any {
-  class ReadingListWidget extends Widget {
-    _root: any = null;
-    _bound = false;
-    _compact = false;
-
-    render(parent: any, nextSibling: any) {
-      this.parentDomNode = parent;
-      this.computeAttributes();
-      this.execute();
-      this._compact = this.getAttribute('compact') === 'yes';
-      const wrap = el(this.document, 'div', 'tm-reading-list' + (this._compact ? ' tm-rl-compact' : ''));
-      this._root = wrap;
-      this.build();
-      parent.insertBefore(wrap, nextSibling);
-      this.domNodes.push(wrap);
-    }
-
-    build() {
-      const doc = this.document;
-      const wiki = this.wiki;
-      const root = this._root;
-      const compact = this._compact;
-      root.textContent = '';
-
-      const groups = groupByDoc(collectTopicCards(wiki));
-      const total = groups.reduce((n, g) => n + g.cards.length, 0);
-
-      // 页头：标题 + 计数（compact：侧边栏精简）
-      const head = el(doc, 'div', 'tm-rl-head');
-      head.appendChild(el(doc, 'div', 'tm-rl-title', '阅读列表'));
-      head.appendChild(el(doc, 'div', 'tm-rl-sub', `${groups.length} 篇文档 · ${total} 张待读`));
-      if (!compact) {
-        head.appendChild(el(doc, 'div', 'tm-rl-sub', '按优先级和到期时间排序'));
-      }
-      root.appendChild(head);
-
-      if (!groups.length) {
-        const empty = el(doc, 'div', 'tm-empty');
-        empty.appendChild(el(doc, 'div', '', '没有待读材料。'));
-        if (!compact) {
-          const link = el(doc, 'a', 'tc-tiddlylink', '→ 去导入中心导入新内容');
-          link.href = '#';
-          link.addEventListener('click', (ev: Event) => {
-            ev.preventDefault();
-            this.dispatchEvent({ type: 'tm-navigate', navigateTo: ns.PAGE_IMPORT_CENTER });
-          });
-          empty.appendChild(link);
-        }
-        root.appendChild(empty);
-        return;
-      }
-
-      for (const g of groups) {
+# -*- coding: utf-8 -*-
+# 修复 reading-list 半改区域 + today.ts 进度聚合
+f = "src/tidme/import/widgets/reading-list.ts"
+s = open(f, encoding="utf-8", newline="").read()
+start = s.find("      for (const g of groups) {")
+end_marker = "\n\n    refresh(changedTiddlers"
+end = s.find(end_marker)
+assert start != -1 and end != -1 and start < end, (start, end)
+correct = """      for (const g of groups) {
         const det = el(doc, 'details', 'tm-rl-doc');
         // 文档组默认折叠（两本书也不占长页面）；summary = 名 + 进度 + 继续阅读
         const docAll = sectionsOfDoc(wiki, g.doc);
@@ -244,26 +134,47 @@ function makeReadingList(): any {
           det.appendChild(scrollBox);
         };
         if ((det as any).open) renderTable();
-        else {det.addEventListener('toggle', () => {
-            if ((det as any).open) renderTable();
-          });}
+        else det.addEventListener('toggle', () => { if ((det as any).open) renderTable(); });
       }
-    }
+"""
+s = s[:start] + correct + s[end:]
+open(f, "w", encoding="utf-8", newline="").write(s)
 
-    refresh(changedTiddlers: Record<string, any>) {
-      // 即时刷新：卡片/续读点/文档页变化 → 重建（精化谓词：复习日志与会话写入不重建）
-      if (!this._root) return false;
-      if (!reactive.hasCardDataChange(this.wiki, changedTiddlers)) return false;
-      return reactive.rebuildSoon(() => this.build());
-    }
-  }
-  return ReadingListWidget as any;
-}
-
-exports['reading-list'] = makeReadingList();
-
-// 供单元测试/复用
-exports.topicQueueFilter = topicQueueFilter;
-exports.collectTopicCards = collectTopicCards;
-exports.sortTopicCards = sortTopicCards;
-exports.groupByDoc = groupByDoc;
+# today.ts：最近阅读进度聚合（单次扫描）——两个 widget 的 refresh 均改为合并重建
+f = "src/tidme/review/widgets/today.ts"
+s = open(f, encoding="utf-8", newline="").read()
+old = """      const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
+      const rows: { title: string; label: string; done: number; total: number; last: number }[] = [];
+      for (const d of docs) {
+        const docId = wiki.getTiddler(d)?.fields['tidme.doc'];
+        if (!docId) continue;
+        const secs = wiki.filterTiddlers(`[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]]`);
+        const total = secs.length;
+        if (!total) continue;
+        const done = secs.filter((t: string) => sched.isCardDone(wiki.getTiddler(t)?.fields)).length;
+        const f = wiki.getTiddler(d)?.fields || {};
+        rows.push({ title: d, label: display.displayTitle(f, d), done, total, last: lastOpen(String(docId)) });
+      }"""
+new = """      const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
+      const progress = docOps.sectionsProgressByDoc(wiki);
+      const rows: { title: string; label: string; done: number; total: number; last: number }[] = [];
+      for (const d of docs) {
+        const docId = String(wiki.getTiddler(d)?.fields['tidme.doc'] || '');
+        if (!docId) continue;
+        const prog = progress.get(docId);
+        if (!prog || !prog.total) continue;
+        const f = wiki.getTiddler(d)?.fields || {};
+        rows.push({ title: d, label: display.displayTitle(f, d), done: prog.done, total: prog.total, last: lastOpen(docId) });
+      }"""
+assert s.count(old) == 1, f"today rows: {s.count(old)}"
+s = s.replace(old, new)
+old2 = """      const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
+      if (need) this.build();
+      return need;"""
+assert s.count(old2) == 2, f"today refresh: {s.count(old2)}"
+s = s.replace(old2, """      // 反馈条读牌组日志（宽谓词）；重建合并到宏任务（评分链路连写 4+ tiddler）
+      const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
+      if (need) return reactive.rebuildSoon(() => this.build());
+      return need;""")
+open(f, "w", encoding="utf-8", newline="").write(s)
+print("ok: reading-list region fixed + today.ts patched")

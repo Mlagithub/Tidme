@@ -14,6 +14,25 @@ export const READPOINT_PREFIX = '$:/state/tidme-import/readpoint/';
 /** 全局续读点（最近打开的阅读卡；section-bar 写、workflow「开始阅读」读） */
 export const GLOBAL_READPOINT = READPOINT_PREFIX + 'global';
 
+/** 各书的章节进度（一次全库扫描按书聚合；口径与 sectionsOfDoc 一致：topic 且非摘录）。
+ * 供「最近阅读」等聚合视图使用——避免每书一次全库扫描（书多时 O(书数×全库)）。 */
+export function sectionsProgressByDoc(wiki: any): Map<string, { done: number; total: number }> {
+  const agg = new Map<string, { done: number; total: number }>();
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return agg;
+  const secs = wiki.filterTiddlers('[has[tidme.doc]nsort[tidme.order]]');
+  for (const t of secs) {
+    const f = wiki.getTiddler(t)?.fields;
+    if (!f) continue;
+    if (f['tidme.kind'] !== 'topic' || String(f['tidme.subkind'] || '') === 'extract') continue;
+    const docId = String(f['tidme.doc'] || '');
+    const a = agg.get(docId) || { done: 0, total: 0 };
+    a.total += 1;
+    if (sched.isCardDone(f)) a.done += 1;
+    agg.set(docId, a);
+  }
+  return agg;
+}
+
 /** 某 book folder（Tidme/Books/<slug>）下第一张带 tidme.doc 的卡所属 docId（无占用返回 null）——同名书冲突探测 */
 export function docFolderOwner(wiki: any, baseFolder: string): string | null {
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return null;

@@ -180,8 +180,8 @@ function docGroupsOf(cards: Card[]): [string, Card[]][] {
 
 function collectAll(ctx: Ctx) {
   const { wiki, st } = ctx;
+  // 两个 run 按 tidme.kind 互斥（item / 无 kind 手动卡），TW 按标题去重，无需再过滤
   st.allCards = wiki.filterTiddlers(CARD_FILTER)
-    .filter((t: string, i: number, arr: string[]) => arr.indexOf(t) === i)
     .map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
   // card/card_exclude 各求值一次：strict = loose − exclude（省去 strict 内部对 card 的二次求值）
   st.deckInfos = deckMod.listDecks(wiki).map((deck: string) => {
@@ -441,9 +441,19 @@ function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
 
     ds.appendChild(el(doc, 'strong', '', ` ${d.caption}（${deckCards.length}）`));
     details.appendChild(ds);
-    for (const [docKey, docCards] of docGroupsOf(deckCards)) {
-      details.appendChild(docDetails(ctx, 'deck', d.title + '/' + docKey, docCards));
-    }
+    // 文档分组按需渲染：折叠的牌组不建行（大库下省掉不可见 DOM），首次展开时补建
+    let docGroupsRendered = false;
+    const renderDocGroups = () => {
+      if (docGroupsRendered) return;
+      docGroupsRendered = true;
+      for (const [docKey, docCards] of docGroupsOf(deckCards)) {
+        details.appendChild(docDetails(ctx, 'deck', d.title + '/' + docKey, docCards));
+      }
+    };
+    if (details.open) renderDocGroups();
+    else {details.addEventListener('toggle', () => {
+        if (details.open) renderDocGroups();
+      });}
     treeBox.appendChild(details);
   }
   // 未入组：不被任何牌组命中的卡（已读/搁置/手动散卡）
@@ -471,9 +481,18 @@ function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
   os.appendChild(el(doc, 'strong', '', ` 未入组（${orphans.length}）`));
   os.title = '不属于任何牌组队列的卡片：已读、搁置或手动创建的散卡';
   ob.appendChild(os);
-  for (const [docKey, docCards] of docGroupsOf(orphans)) {
-    ob.appendChild(docDetails(ctx, 'deck', '__orphan__/' + docKey, docCards));
-  }
+  let orphansRendered = false;
+  const renderOrphanGroups = () => {
+    if (orphansRendered) return;
+    orphansRendered = true;
+    for (const [docKey, docCards] of docGroupsOf(orphans)) {
+      ob.appendChild(docDetails(ctx, 'deck', '__orphan__/' + docKey, docCards));
+    }
+  };
+  if (ob.open) renderOrphanGroups();
+  else {ob.addEventListener('toggle', () => {
+      if (ob.open) renderOrphanGroups();
+    });}
   treeBox.appendChild(ob);
 }
 
@@ -945,10 +964,9 @@ function makeCardManager(): WidgetCtor {
     refresh(changedTiddlers: Record<string, any>) {
       const ctx = this._ctx;
       if (!ctx) return false;
-      // 刷新：唯一机制（TW 原生 refresh 嗅探 + core/reactive 谓词）
-      const need = reactive.hasRelevantChange(ctx.wiki, changedTiddlers);
-      if (need) render(ctx);
-      return need;
+      // 刷新：列表类精化谓词（复习日志/会话写入不重建列表）+ 合并重建（评分链路连写 4+ tiddler）
+      if (!reactive.hasCardDataChange(ctx.wiki, changedTiddlers)) return false;
+      return reactive.rebuildSoon(() => render(ctx));
     }
   }
   return CardManagerWidget as any;

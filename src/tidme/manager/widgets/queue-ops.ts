@@ -120,9 +120,10 @@ function makeQueueOps(): WidgetCtor {
       this.domNodes.push(wrap);
     }
     refresh(changedTiddlers: Record<string, any>) {
-      const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
-      if (need && this._renderList) this._renderList();
-      return need;
+      // 列表类精化谓词：复习日志/会话写入不重建队列；重建合并到宏任务
+      if (!reactive.hasCardDataChange(this.wiki, changedTiddlers)) return false;
+      if (this._renderList) return reactive.rebuildSoon(() => this._renderList?.());
+      return false;
     }
   }
   return QueueOpsWidget as any;
