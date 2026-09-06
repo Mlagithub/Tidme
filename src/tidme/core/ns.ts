@@ -23,22 +23,22 @@ wikitext 侧仍是字面量；改名必须人工同步两侧（grep 全仓核对
 */
 
 /** 阅读材料命名空间（文档页 + 节卡 + 摘录卡） */
-export const NS_BOOKS = "Tidme/Books/";
+export const NS_BOOKS = 'Tidme/Books/';
 
 /** 知识卡命名空间（挖空/问答/散卡；与 Books 平行镜像） */
-export const NS_DECKS = "Tidme/Decks/";
+export const NS_DECKS = 'Tidme/Decks/';
 
 /** 无来源散卡桶（普通笔记上挖空/问答的落点） */
-export const NS_DECKS_SCATTER = NS_DECKS + "散卡";
+export const NS_DECKS_SCATTER = NS_DECKS + '散卡';
 
 /** 面包屑层级分隔符（tidme.breadcrumb / 显示层共用） */
-export const CRUMB_SEP = " › ";
+export const CRUMB_SEP = ' › ';
 
 /** fsrs4tw 牌组标题前缀（$:/Deck/<name>，学习循环运行时依赖） */
-export const DECK_PREFIX = "$:/Deck/";
+export const DECK_PREFIX = '$:/Deck/';
 
 /** 卡折叠态 tiddler 前缀（<prefix><title> = "show"/"hide"，fsrs4tw reveal 语义） */
-export const FOLDED_STATE_PREFIX = "$:/state/folded/";
+export const FOLDED_STATE_PREFIX = '$:/state/folded/';
 
 /**
  * Books → Decks 镜像推导：某阅读材料的测试卡（挖空/问答）所在牌组目录根。
@@ -46,46 +46,47 @@ export const FOLDED_STATE_PREFIX = "$:/state/folded/";
  * 非 Books 来源返回 null（调用方走散卡桶等兜底）。
  */
 export function booksToDecksRoot(title: string): string | null {
-	return title.startsWith(NS_BOOKS)
-		? NS_DECKS + title.slice(NS_BOOKS.length)
-		: null;
+  return title.startsWith(NS_BOOKS)
+    ? NS_DECKS + title.slice(NS_BOOKS.length)
+    : null;
 }
 
 /** fsrs4tw 复习日志契约：<deck>/log/<YYYYMMDD>（data map，键 = 卡 title） */
 export function isDeckLogTitle(title: string, dateKey?: string): boolean {
-	if (!title.startsWith(DECK_PREFIX) || !/\/log\/\d{8}$/.test(title)) return false;
-	return dateKey === undefined || title.endsWith(dateKey);
+  if (!title.startsWith(DECK_PREFIX) || !/\/log\/\d{8}$/.test(title)) return false;
+  return dateKey === undefined || title.endsWith(dateKey);
 }
 
 /** 今日日期键（UTC，YYYYMMDD）——日志 tiddler 命名与统计口径共用 */
 export function todayKey(now = new Date()): string {
-	return now.toISOString().slice(0, 10).replace(/-/g, "");
+  return now.toISOString().slice(0, 10).replace(/-/g, '');
 }
 
 // ---------- 本插件 UI 页面地址（tm-navigate 目标；.tid 引用见头部跨端契约清单） ----------
 
-export const PAGE_TODAY = "$:/Today";
-export const PAGE_READING_LIST = "$:/plugins/keepone/tidme/import/ui/reading-list";
-export const PAGE_IMPORT_CENTER = "$:/plugins/keepone/tidme/import/ui/import-center";
-export const PAGE_CARD_MANAGER = "$:/plugins/keepone/tidme/manager/ui/card-manager";
-export const PAGE_IMPORT_STATS = "$:/plugins/keepone/tidme/import/ui/stats";
-export const PAGE_HELP_SHORTCUTS = "$:/plugins/keepone/tidme/import/ui/help-shortcuts";
+export const PAGE_TODAY = '$:/Today';
+export const PAGE_READING_LIST = '$:/plugins/keepone/tidme/import/ui/reading-list';
+export const PAGE_IMPORT_CENTER = '$:/plugins/keepone/tidme/import/ui/import-center';
+export const PAGE_CARD_MANAGER = '$:/plugins/keepone/tidme/manager/ui/card-manager';
+export const PAGE_IMPORT_STATS = '$:/plugins/keepone/tidme/import/ui/stats';
+export const PAGE_HELP_SHORTCUTS = '$:/plugins/keepone/tidme/import/ui/help-shortcuts';
+export const PAGE_SETTINGS = '$:/plugins/keepone/tidme/manager/ui/settings';
 
 // ---------- 通知面板地址（tm-notify param / $tw.notifier.display） ----------
 
-export const NOTIFY_EXTRACT = "$:/plugins/keepone/tidme/import/ui/notify-extract";
-export const NOTIFY_CLOZE = "$:/plugins/keepone/tidme/import/ui/notify-cloze";
-export const NOTIFY_READPOINT = "$:/plugins/keepone/tidme/import/ui/notify-readpoint";
-export const NOTIFY_SELECT_FIRST = "$:/plugins/keepone/tidme/import/ui/notify-select-first";
-export const NOTIFY_EXTRACT_NOTE = "$:/plugins/keepone/tidme/import/ui/notify-extract-note";
-export const NOTIFY_SECTION_DONE = "$:/plugins/keepone/tidme/import/ui/notify-section-done";
-export const NOTIFY_LATER = "$:/plugins/keepone/tidme/import/ui/notify-later";
-export const NOTIFY_DONE = "$:/plugins/keepone/tidme/import/ui/notify-done";
-export const NOTIFY_UNSUPPORTED = "$:/plugins/keepone/tidme/import/ui/notify-unsupported";
-export const NOTIFY_CONGRATULATION = "$:/plugins/keepone/tidme/review/notify/congratulation";
-export const NOTIFY_STUDY_ENDED = "$:/plugins/keepone/tidme/review/notify/study-ended";
+export const NOTIFY_EXTRACT = '$:/plugins/keepone/tidme/import/ui/notify-extract';
+export const NOTIFY_CLOZE = '$:/plugins/keepone/tidme/import/ui/notify-cloze';
+export const NOTIFY_READPOINT = '$:/plugins/keepone/tidme/import/ui/notify-readpoint';
+export const NOTIFY_SELECT_FIRST = '$:/plugins/keepone/tidme/import/ui/notify-select-first';
+export const NOTIFY_EXTRACT_NOTE = '$:/plugins/keepone/tidme/import/ui/notify-extract-note';
+export const NOTIFY_SECTION_DONE = '$:/plugins/keepone/tidme/import/ui/notify-section-done';
+export const NOTIFY_LATER = '$:/plugins/keepone/tidme/import/ui/notify-later';
+export const NOTIFY_DONE = '$:/plugins/keepone/tidme/import/ui/notify-done';
+export const NOTIFY_UNSUPPORTED = '$:/plugins/keepone/tidme/import/ui/notify-unsupported';
+export const NOTIFY_CONGRATULATION = '$:/plugins/keepone/tidme/review/notify/congratulation';
+export const NOTIFY_STUDY_ENDED = '$:/plugins/keepone/tidme/review/notify/study-ended';
 
 // ---------- 跨端导入契约 ----------
 
 /** 同步目标桶的临时配置 tiddler（浏览器 import widgets ↔ 服务端 importer 共用） */
-export const IMPORT_BAG_TITLE = "$:/temp/tidme-import/bag";
+export const IMPORT_BAG_TITLE = '$:/temp/tidme-import/bag';

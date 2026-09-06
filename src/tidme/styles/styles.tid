@@ -2035,3 +2035,20 @@ body.tc-body-dark .tm-sec-more-box,
 .tm-cm-bar-row { flex-wrap: wrap; row-gap: 6px; }
 .tm-cm-bar-group { padding: 0 10px; border-right: 1px dashed var(--tm-border); }
 .tm-cm-bar-group:last-child { border-right: none; padding-right: 0; }
+
+/* ===== 设置页（选项集中配置；骨架与「今天」页同源） ===== */
+.tm-set-body { display: flex; flex-direction: column; }
+.tm-set-row { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-bottom: 1px dashed var(--tm-border); }
+.tm-set-row:last-child { border-bottom: none; }
+.tm-set-label { min-width: 9.5em; color: var(--tm-text-1); font-weight: 500; }
+.tm-set-input {
+	font-family: var(--tm-font); font-size: 0.92em; color: var(--tm-text-1);
+	background: var(--tm-surface); border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-xs); padding: 5px 8px;
+}
+.tm-set-input:focus { outline: none; border-color: var(--tm-accent); }
+.tm-set-input[type='checkbox'] { width: 16px; height: 16px; padding: 0; accent-color: var(--tm-accent); }
+.tm-set-input[type='number'] { width: 7em; }
+.tm-set-input[type='password'], .tm-set-input[type='text'] { flex: 1; min-width: 12em; }
+select.tm-set-input { padding: 4px 6px; }
+.tm-set-hint { color: var(--tm-text-2); font-size: 0.85em; flex: 1; text-align: right; }

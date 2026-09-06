@@ -1,0 +1,17 @@
+title: $:/plugins/keepone/tidme/manager/ui/settings
+caption: 设置
+type: text/vnd.tiddlywiki
+
+<div class="tm-today">
+
+<div class="tm-today-header">
+<div class="tm-today-title">设置</div>
+<div class="tm-today-sub">Tidme 选项集中配置——每次操作都要调整的高频参数保留在各功能页</div>
+<$tidme-theme-toggle/>
+</div>
+
+<$tidme-settings/>
+
+<$tidme-nav/>
+
+</div>

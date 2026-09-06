@@ -7,46 +7,47 @@ widgets/nav.ts — 页面间导航条（Tidme 主页面切换 + 分隔线 + 当�
 */
 
 declare function require(module: string): any;
-const dom = require("$:/plugins/keepone/tidme/core/dom.js");
-const ns = require("$:/plugins/keepone/tidme/core/ns.js");
-const Widget = require("$:/core/modules/widgets/widget.js").widget;
+const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const NAV: [string, string][] = [
-	[ns.PAGE_TODAY, "今天"],
-	[ns.PAGE_READING_LIST, "阅读"],
-	[ns.PAGE_IMPORT_CENTER, "导入"],
-	[ns.PAGE_CARD_MANAGER, "管理"],
-	[ns.PAGE_IMPORT_STATS, "统计"]
+  [ns.PAGE_TODAY, '今天'],
+  [ns.PAGE_READING_LIST, '阅读'],
+  [ns.PAGE_IMPORT_CENTER, '导入'],
+  [ns.PAGE_CARD_MANAGER, '管理'],
+  [ns.PAGE_IMPORT_STATS, '统计'],
+  [ns.PAGE_SETTINGS, '设置'],
 ];
 
 // 共享 DOM 工具（实现收敛于 core/dom）
 const el = dom.el;
 
 function makeNav(): any {
-	class NavWidget extends Widget {
-		render(parent: any, nextSibling: any) {
-			this.parentDomNode = parent;
-			this.computeAttributes();
-			this.execute();
-			const doc = this.document;
-			const root = el(doc, "nav", "tm-nav");
-			this.domNodes.push(root);
+  class NavWidget extends Widget {
+    render(parent: any, nextSibling: any) {
+      this.parentDomNode = parent;
+      this.computeAttributes();
+      this.execute();
+      const doc = this.document;
+      const root = el(doc, 'nav', 'tm-nav');
+      this.domNodes.push(root);
 
-			const current = this.getVariable("currentTiddler") || this.getVariable("currentTiddlerTitle") || "";
-			for (const [title, label] of NAV) {
-				const a = el(doc, "a", "tm-nav-item" + (current === title ? " tm-nav-active" : ""), label);
-				a.href = "#";
-				a.addEventListener("click", (e: Event) => {
-					e.preventDefault();
-					this.dispatchEvent({ type: "tm-navigate", navigateTo: title });
-				});
-				root.appendChild(a);
-			}
+      const current = this.getVariable('currentTiddler') || this.getVariable('currentTiddlerTitle') || '';
+      for (const [title, label] of NAV) {
+        const a = el(doc, 'a', 'tm-nav-item' + (current === title ? ' tm-nav-active' : ''), label);
+        a.href = '#';
+        a.addEventListener('click', (e: Event) => {
+          e.preventDefault();
+          this.dispatchEvent({ type: 'tm-navigate', navigateTo: title });
+        });
+        root.appendChild(a);
+      }
 
-			parent.insertBefore(root, nextSibling);
-		}
-	}
-	return NavWidget as any;
+      parent.insertBefore(root, nextSibling);
+    }
+  }
+  return NavWidget as any;
 }
 
-exports["tidme-nav"] = makeNav();
+exports['tidme-nav'] = makeNav();

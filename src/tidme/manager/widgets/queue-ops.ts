@@ -9,6 +9,7 @@ widgets/queue-ops.ts — 牌组批量操作
 
 declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const config = require('$:/plugins/keepone/tidme/core/config.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const icons = require('$:/plugins/keepone/tidme/core/icons.js');
 const dom = require('$:/plugins/keepone/tidme/core/dom.js');
@@ -40,32 +41,13 @@ function makeQueueOps(): WidgetCtor {
       wrap.appendChild(el(doc, 'h3', '', '牌组批量操作（优先级调度）'));
       wrap.appendChild(el(doc, 'div', 'tm-import-muted', '顺延=due+7d（低优先级积压）· 提前=今天复习 · 忽略=移出队列 · 搁置=暂停（deck.card 已排除）· 遗忘=回新卡'));
 
-      // 手动触发 auto-postpone（浏览器端启动时 + 每小时自动执行，此处为手动兜底 + 开关）
+      // 手动触发 auto-postpone（启动与每小时自动执行；开关与参数在「设置」页集中配置）
       const autoRow = el(doc, 'div', 'tm-import-actions', '');
       const autoStatus = el(doc, 'span', 'tm-import-muted', '');
-      const readCfg = (): any => {
-        try {
-          return JSON.parse(wiki.getTiddlerText(sched.AUTOPOSTPONE_CONFIG_TITLE, '{}') || '{}');
-        } catch {
-          return {};
-        }
-      };
-      // 每日自动顺延开关（写入 $:/config/Tidme/AutoPostpone.enable）
-      const autoCheck = doc.createElement('input');
-      autoCheck.type = 'checkbox';
-      autoCheck.checked = readCfg().enable === true;
-      autoCheck.title = '开启后：启动时与每小时自动顺延低优先级逾期卡（浏览器与 TiddlyWeb 服务端通用），保护高优先级复习卡';
-      autoCheck.addEventListener('change', () => {
-        const cfg = readCfg();
-        cfg.enable = autoCheck.checked;
-        wiki.addTiddler({ title: sched.AUTOPOSTPONE_CONFIG_TITLE, type: 'application/json', text: JSON.stringify(cfg) });
-      });
-      autoRow.appendChild(autoCheck);
-      autoRow.appendChild(el(doc, 'label', 'tm-import-muted', '每日自动顺延（auto-postpone）'));
       const runAuto = icons.iconButton(doc, 'tm-btn tm-btn--primary', 'zap', '立即顺延（auto-postpone）');
-      runAuto.title = '手动触发：低优先级逾期卡顺延 postponeDays 天，保留 top N 高优先级（配置见 $:/config/Tidme/AutoPostpone）';
+      runAuto.title = '手动触发：低优先级逾期卡顺延 postponeDays 天，保留 top N 高优先级（开关与参数在「设置」页）';
       runAuto.addEventListener('click', () => {
-        const cfg = readCfg();
+        const cfg = config.readAutoPostpone(wiki);
         const cards = wiki.filterTiddlers('[all[shadows+tiddlers]!is[draft]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]has[due]]')
           .map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
         const result = sched.autoPostpone(cards, cfg);

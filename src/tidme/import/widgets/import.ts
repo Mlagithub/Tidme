@@ -16,6 +16,7 @@ const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
 const icons = require('$:/plugins/keepone/tidme/core/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const semMod = require('$:/plugins/keepone/tidme/core/server/semantic-split');
+const config = require('$:/plugins/keepone/tidme/core/config.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 interface ImportResult {
@@ -67,18 +68,8 @@ function bytesToBase64(bytes: Uint8Array): string {
 const el = dom.el;
 
 function getSemanticSplitConfig(wiki: any): any {
-  const t = wiki.getTiddler(semMod.SEMANTIC_SPLIT_CONFIG_TITLE);
-  if (!t) return {};
-  let cfg: any = {};
-  if (t.fields.text) {
-    try {
-      cfg = JSON.parse(t.fields.text);
-    } catch {}
-  }
-  if (t.fields.apiKey) cfg.apiKey = String(t.fields.apiKey).trim();
-  if (t.fields.baseUrl) cfg.baseUrl = String(t.fields.baseUrl).trim();
-  if (t.fields.model) cfg.model = String(t.fields.model).trim();
-  return cfg;
+  // 唯一实现 = core/config.readSemanticSplit（text JSON + 字段覆盖历史兼容）
+  return config.readSemanticSplit(wiki);
 }
 
 /** 纯 LLM 语义二次切分：严格基于原文字符偏移切割，确保 100% 字数完整性 */
@@ -87,7 +78,7 @@ async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any):
   if (!aiCfg.apiKey) {
     await dialog.alertDialog(document, {
       title: '缺少 API Key',
-      message: '请先在【控制面板 ➔ Tidme Import ➔ 配置】中输入并保存 API Key，然后再执行二次切分！',
+      message: '请先在【设置 ➔ 语义切分】中填写 API Key，然后再执行二次切分！',
     });
     return false;
   }
