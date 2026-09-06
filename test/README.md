@@ -57,6 +57,10 @@ UI 文案断言能改为"触发动作 → 断言 tiddler 字段变化"的一律�
 widget/core 返回的对象原型来自沙箱 realm——`assert.deepEqual(x, [...])` 会因原型不同而失败。
 一律先展开/逐字段：`assert.deepEqual([...out], ["A"])`；对象逐字段 `assert.equal(o.k, v)`。
 
+**源码文本断言**：对 src 源文件做 includes 断言时（契约防护用），引号风格不算契约——
+dprint `preferSingle` 会改写引号。匹配字符串字面量一律用引号无关正则：
+`/querySelector\(['"]\.foo['"]\)/`。
+
 ## 运行
 
 ```bash
