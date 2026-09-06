@@ -1,5 +1,5 @@
 /*
-widgets/split.ts — M2 切分入口组件（M4 加优先级三档；G1 加预览干预）
+widgets/split.ts — 切分入口组件（优先级三档 + 预览干预）
 
 - <$paste-split/> 粘贴切分：textarea → runSplit → 写库
 - <$inbox-split/> 剪藏收件箱：列出 tidme-inbox tiddler，逐条/批量切分
@@ -28,7 +28,7 @@ function provenanceOf(wiki: any, title: string): Record<string, string> {
 }
 
 /** 执行切分并写库：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签）。
- * 对齐写库统一走 core/import-commit（G2：未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档）。 */
+ * 对齐写库统一走 core/import-commit（未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档）。 */
 async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number) {
   const t = wiki.getTiddler(title);
   if (!t) throw new Error('源 tiddler 不存在');

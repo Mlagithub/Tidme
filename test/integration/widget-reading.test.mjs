@@ -41,8 +41,8 @@ test('section-bar: 两行布局 + 统一按钮风格', () => {
   assert.ok(String(rows[0].className).includes('tm-section-info'), '第一行=信息（面包屑/位置/剩余）');
   assert.ok(String(rows[1].className).includes('tm-section-btns'), '第二行=按钮');
   assert.ok(collectText(rows[0]).includes('剩'), '信息行含剩余待学');
-  assert.ok(collectText(rows[0]).includes('p'), '信息行含优先级（G2）');
-  assert.ok(collectText(rows[1]).includes('优先↑') && collectText(rows[1]).includes('优先↓'), 'G2 优先级快速调整按钮');
+  assert.ok(collectText(rows[0]).includes('p'), '信息行含优先级');
+  assert.ok(collectText(rows[1]).includes('优先↑') && collectText(rows[1]).includes('优先↓'), '优先级快速调整按钮');
   const btns = collectButtons(rows[1]);
   assert.ok(btns.length >= 6, '按钮行含导航/续读点/生命周期/制卡/帮助按钮');
   for (const b of btns) {
@@ -63,10 +63,10 @@ test('section-bar: 即时刷新（本文档卡变化 → 重建）', () => {
   assert.ok(text2.includes('已读'), '重建后显示已读状态');
   assert.ok(text2.includes('重新加入'), '重建后显示重新加入按钮');
   assert.ok(!text2.includes('已读"'), '旧已读按钮消失');
-  assert.ok(text2.includes('更多'), 'M6 分层：低频调控收进「更多」菜单');
+  assert.ok(text2.includes('更多'), '低频调控收进「更多」菜单');
 });
 
-test('刷新机制: 数据变化 → refresh 嗅探重建（stats-panel，M5 唯一机制）', async () => {
+test('刷新机制: 数据变化 → refresh 嗅探重建（stats-panel）', async () => {
   const statsPanel = mod('import/widgets/stats-panel.js');
   // 先渲染统计面板
   const { root, w } = renderWidgetEx(wiki, statsPanel, 'stats-panel');
@@ -89,15 +89,15 @@ test('doc-resume: 子集复习按钮（复习本书）', () => {
   const root = renderWidget(wiki, sectionBar, 'doc-resume', { variables: { currentTiddler: F.docTitle } });
   const text = collectText(root);
   assert.ok(text.includes('继续阅读'), '继续阅读按钮');
-  assert.ok(text.includes('复习本书'), '子集复习按钮（G7）');
+  assert.ok(text.includes('复习本书'), '子集复习按钮');
   assert.ok(text.includes('清理阅读材料'), '清理阅读材料按钮');
   assert.ok(text.includes('已读'), '进度文案');
 });
 
-test('import-file: 服务端后台处理选项（G10）', () => {
+test('import-file: 服务端后台处理选项', () => {
   const root = renderWidget(wiki, importFile, 'import-file');
   const text = collectText(root);
-  assert.ok(text.includes('服务端后台处理'), '服务端处理选项（G10）');
+  assert.ok(text.includes('服务端后台处理'), '服务端处理选项');
 });
 
 test('align: 重复导入（A）——同内容再导入不覆盖 SRS 进度', async () => {
@@ -127,12 +127,12 @@ test('align: 重复导入（A）——同内容再导入不覆盖 SRS 进度', a
   assert.equal(after.reps, '5', 'SRS reps 保留');
 });
 
-test('doc-resume: 摘录收件箱聚合（G4/W3 加工标注）', () => {
+test('doc-resume: 摘录收件箱聚合（加工标注）', () => {
   const root = renderWidget(wiki, sectionBar, 'doc-resume', { variables: { currentTiddler: F.docTitle } });
   const text = collectText(root);
   assert.ok(text.includes('摘录/挖空'), '摘录聚合区标题');
   assert.ok(text.includes('摘'), '摘录 kind 标记');
-  assert.ok(text.includes('可挖空'), '无子挖空的摘录显示可挖空（W3）');
+  assert.ok(text.includes('可挖空'), '无子挖空的摘录显示可挖空');
   assert.ok(text.includes('回原文'), '回原文操作');
   // 给摘录卡加一个子挖空 → 已挖空（命名空间化：进 decks 目录）
   const extExtractTitle = wiki.filterTiddlers('[tidme.subkind[extract]]')[0];
@@ -148,7 +148,7 @@ test('doc-resume: 摘录收件箱聚合（G4/W3 加工标注）', () => {
     'tidme.breadcrumb': `${extFields['tidme.breadcrumb']} › 挖空`,
   });
   const root2 = renderWidget(wiki, sectionBar, 'doc-resume', { variables: { currentTiddler: F.docTitle } });
-  assert.ok(collectText(root2).includes('已挖空'), '有子挖空的摘录显示已挖空（W3）');
+  assert.ok(collectText(root2).includes('已挖空'), '有子挖空的摘录显示已挖空');
 });
 
 test('section-bar: 摘录卡加工按钮（✂ 挖空）', () => {
@@ -156,11 +156,11 @@ test('section-bar: 摘录卡加工按钮（✂ 挖空）', () => {
   assert.ok(extractTitle, '测试数据应有摘录卡');
   const root = renderWidget(wiki, sectionBar, 'section-bar', { variables: { currentTiddler: extractTitle } });
   const text = collectText(root);
-  assert.ok(text.includes('挖空'), '摘录卡显示挖空加工按钮（G4）');
+  assert.ok(text.includes('挖空'), '摘录卡显示挖空加工按钮');
   assert.ok(text.includes('源自'), '来源链接');
 });
 
-test('section-bar: 忽略按钮（G3）', () => {
+test('section-bar: 忽略按钮', () => {
   const title = wiki.filterTiddlers('[has[tidme.kind]tidme.kind[topic]tidme.subkind[section]!has[tidme.done]]')[0];
   const root = renderWidget(wiki, sectionBar, 'section-bar', { variables: { currentTiddler: title } });
   const text = collectText(root);

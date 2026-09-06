@@ -103,7 +103,7 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
                   resolve();
                 });
             };
-            // 语义切分（M6-T2）：仅 md/txt 无结构散文，LLM 断点插虚拟标题；失败静默回退
+            // 语义切分：仅 md/txt 无结构散文，LLM 断点插虚拟标题；失败静默回退
             if (/\.(md|markdown|txt)$/.test(lower)) {
               var semCfg = {};
               try {

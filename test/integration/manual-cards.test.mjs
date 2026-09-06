@@ -1,5 +1,5 @@
 /*
-manual-cards.test.mjs — M3 手动制卡触发点测试
+manual-cards.test.mjs — 手动制卡触发点测试
 
 - selection 共享工具（划词定位/选区信息，假 DOM 节点）
 - 全局划词气泡 pick-bubble 模块装载

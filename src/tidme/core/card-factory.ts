@@ -1,12 +1,12 @@
 /*
-core/card-factory.ts — 派生卡字段工厂（M3 第一步：从 section.ts 原文迁入，行为不变）
+core/card-factory.ts — 派生卡字段工厂（从 section.ts 迁入，行为不变）
 
 - buildExtract / buildCloze / buildQA：阅读制卡（摘录/挖空/问答）的字段构建唯一实现；
-  后续全局手动制卡（M3 触发点矩阵）直接复用本工厂
+  后续全局手动制卡各触发点直接复用本工厂
 - parseAnchor / processedSnippets / cleanProcessedText：锚点解析与 SM 对齐
   'Delete processed text' 的加工清理
 - commitCard：制卡统一写库口（addTiddler + CARD_CREATED + item 折叠预备）
-- M3 泛化：摘录只属于阅读材料——父卡无 tidme.doc 时 buildExtract 返回 null
+- 摘录只属于阅读材料——父卡无 tidme.doc 时 buildExtract 返回 null
   （普通笔记直接挖空/问答，item 卡由缺省牌组自动收录）
 - 纯字段构建 + 指定 wiki 写入；不做 DOM（划词气泡/弹窗留在调用方 widget）
 FSRS 初始字段直接取 core/schema（不再绕 import/parse）；跨 core 模块引用
@@ -36,7 +36,7 @@ export function parseAnchor(raw: any): { section: string; snippet: string } | nu
  * 派生卡命名空间解析：从父卡 title 的实际位置派生（folder 冲突时可能带 ~docId 后缀，slug 重算会错位）。
  * - 摘录：与父卡同目录，叶段 += "--extract"
  * - 挖空/问答（阅读材料来源）：目录 Books→Decks 镜像，叶段 += "--cloze"/"--qa"
- * - 普通笔记（非 Tidme/Books 来源，M6）：统一收进 Tidme/Decks/散卡/<笔记名>--<类型>
+ * - 普通笔记（非 Tidme/Books 来源）：统一收进 Tidme/Decks/散卡/<笔记名>--<类型>
  *   （item 类卡片全部入 Decks 命名空间，不再散落在来源目录） */
 export function derivedCardBase(pf: Record<string, any>, parentTitle: string, kind: 'extract' | 'cloze' | 'qa'): string {
   const leaf = paths.leafIdOf(parentTitle);
@@ -98,7 +98,7 @@ function derivedCardFields(opts: {
     'tidme.source': pf['tidme.source'] || '',
     'tidme.author': pf['tidme.author'] || '',
     'tidme.format': pf['tidme.format'] || '',
-    // G4：派生卡继承父卡优先级（SM 摘录/挖空继承文章优先）
+    // 派生卡继承父卡优先级（SM 摘录/挖空继承文章优先）
     ...(pf['tidme.priority'] !== undefined ? { 'tidme.priority': String(pf['tidme.priority']) } : {}),
     // SM 对齐：派生卡继承父卡 A-Factor（摘录/挖空作为独立材料沿用父文章的展期节奏）
     ...(pf['tidme.afactor'] !== undefined ? { 'tidme.afactor': String(pf['tidme.afactor']) } : {}),
@@ -108,7 +108,7 @@ function derivedCardFields(opts: {
 /** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用）。
  * 分类对齐 SuperMemo：摘录 = Topic（阅读材料），kind=topic/subkind=extract，
  * 进阅读列表（阅读流）。要成为测试卡：在摘录上挖空 → item（cloze）。
- * M3 泛化：父卡无 tidme.doc（普通笔记）→ 返回 null（摘录不属于笔记；改用挖空/问答）。 */
+ * 父卡无 tidme.doc（普通笔记）→ 返回 null（摘录不属于笔记；改用挖空/问答）。 */
 export function buildExtract(wiki: any, parentTitle: string, selection: string): Record<string, any> | null {
   const pf = wiki.getTiddler(parentTitle)?.fields || {};
   if (!pf['tidme.doc']) return null;
@@ -213,7 +213,7 @@ export function cleanProcessedText(wiki: any, title: string): number {
 }
 
 /**
- * 制卡统一写库口（M3）：addTiddler + CARD_CREATED 事件 + item 折叠态预备。
+ * 制卡统一写库口：addTiddler + CARD_CREATED 事件 + item 折叠态预备。
  * 阅读划词与未来的全局制卡入口共用，禁止各自拼写库与事件顺序。
  * @returns 是否已写库（draft 为空/被拒时 false）
  */

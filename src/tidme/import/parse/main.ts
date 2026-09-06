@@ -164,7 +164,7 @@ export async function runImport(bytes: Uint8Array, fileName: string, options: Im
 }
 
 /**
- * M3：在同一文档的有序节列表中计算相邻节。
+ * 在同一文档的有序节列表中计算相邻节。
  * @param orderedTitles 已按阅读顺序排列的节标题
  * @param current 当前节标题
  */

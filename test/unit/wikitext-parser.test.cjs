@@ -59,7 +59,7 @@ test('WikiText Parser — Clean Contaminated HTML', () => {
   assert.equal(cleaned, "真心即本心\n\n真心是''真性''之子");
 });
 
-// === 边界与组合（T3 补盲区） ===
+// === 边界与组合 ===
 
 test('parseLineWikiText: 空串与无标记纯文本不产生 token', () => {
   assert.deepEqual(parseLineWikiText('', 0), [], '空串');

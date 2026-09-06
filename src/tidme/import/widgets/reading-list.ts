@@ -9,15 +9,15 @@ widgets/reading-list.ts — 阅读列表（topic 队列，统一阅读入口）
 */
 
 declare function require(module: string): any;
-const sched = require("$:/plugins/keepone/tidme/core/scheduler.js");
-const dom = require("$:/plugins/keepone/tidme/core/dom.js");
-const dialog = require("$:/plugins/keepone/tidme/core/dialog.js");
-const icons = require("$:/plugins/keepone/tidme/core/icons.js");
-const display = require("$:/plugins/keepone/tidme/core/display.js");
-const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
-const paths = require("$:/plugins/keepone/tidme/core/paths.js");
-const ns = require("$:/plugins/keepone/tidme/core/ns.js");
-const Widget = require("$:/core/modules/widgets/widget.js").widget;
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
+const icons = require('$:/plugins/keepone/tidme/core/icons.js');
+const display = require('$:/plugins/keepone/tidme/core/display.js');
+const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
+const paths = require('$:/plugins/keepone/tidme/core/paths.js');
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 // 共享 DOM/徽章/文档节查询（实现收敛于 core/dom、core/display、core/doc-ops）
 const el = dom.el;
@@ -30,249 +30,260 @@ const sectionsOfDoc = docOps.sectionsOfDoc;
 const topicQueueFilter = () => sched.TOPIC_QUEUE_FILTER;
 
 interface TopicCard {
-	title: string;
-	kind: string; // subkind：section/extract
-	priority: number;
-	due: Date;
-	order: string;
-	doc: string;
-	breadcrumb: string;
-	fields: Record<string, any>;
+  title: string;
+  kind: string; // subkind：section/extract
+  priority: number;
+  due: Date;
+  order: string;
+  doc: string;
+  breadcrumb: string;
+  fields: Record<string, any>;
 }
 
 function collectTopicCards(wiki: any): TopicCard[] {
-	return wiki.filterTiddlers(topicQueueFilter())
-		.map((t: string) => {
-			const f = wiki.getTiddler(t)?.fields || {};
-			return {
-				title: t,
-				kind: String(f["tidme.subkind"] || ""),
-				priority: sched.normalizePriority(f["tidme.priority"]),
-				due: sched.parseTwDate(f.due, new Date(0)),
-				order: String(f["tidme.order"] || f["tidme.breadcrumb"] || t),
-				doc: String(f["tidme.doc"] || ""),
-				breadcrumb: String(f["tidme.breadcrumb"] || t),
-				fields: f
-			};
-		})
-		.filter((c: TopicCard) => !sched.isCardDone(c.fields));
+  return wiki.filterTiddlers(topicQueueFilter())
+    .map((t: string) => {
+      const f = wiki.getTiddler(t)?.fields || {};
+      return {
+        title: t,
+        kind: String(f['tidme.subkind'] || ''),
+        priority: sched.normalizePriority(f['tidme.priority']),
+        due: sched.parseTwDate(f.due, new Date(0)),
+        order: String(f['tidme.order'] || f['tidme.breadcrumb'] || t),
+        doc: String(f['tidme.doc'] || ''),
+        breadcrumb: String(f['tidme.breadcrumb'] || t),
+        fields: f,
+      };
+    })
+    .filter((c: TopicCard) => !sched.isCardDone(c.fields));
 }
 
 /** 组内排序：优先级（0 最高）→ due（早的在前，topic 被动重读）→ 阅读顺序 */
 function sortTopicCards(cards: TopicCard[]): TopicCard[] {
-	return [...cards].sort((a, b) =>
-		a.priority - b.priority ||
-		a.due.getTime() - b.due.getTime() ||
-		String(a.order).localeCompare(String(b.order))
-	);
+  return [...cards].sort((a, b) =>
+    a.priority - b.priority ||
+    a.due.getTime() - b.due.getTime() ||
+    String(a.order).localeCompare(String(b.order))
+  );
 }
 
 /** 按文档分组（组间按文档名；无 doc 的散卡收进「未分组」） */
 function groupByDoc(cards: TopicCard[]): { doc: string; cards: TopicCard[] }[] {
-	const m = new Map<string, TopicCard[]>();
-	for (const c of cards) {
-		const key = c.doc || "未分组";
-		if (!m.has(key)) m.set(key, []);
-		m.get(key)!.push(c);
-	}
-	return [...m.entries()]
-		.map(([doc, cs]) => ({ doc, cards: sortTopicCards(cs) }))
-		.sort((a, b) => String(a.doc).localeCompare(String(b.doc), "zh"));
+  const m = new Map<string, TopicCard[]>();
+  for (const c of cards) {
+    const key = c.doc || '未分组';
+    if (!m.has(key)) m.set(key, []);
+    m.get(key)!.push(c);
+  }
+  return [...m.entries()]
+    .map(([doc, cs]) => ({ doc, cards: sortTopicCards(cs) }))
+    .sort((a, b) => String(a.doc).localeCompare(String(b.doc), 'zh'));
 }
 
-
 function makeReadingList(): any {
-	class ReadingListWidget extends Widget {
-		_root: any = null;
-		_bound = false;
-		_compact = false;
+  class ReadingListWidget extends Widget {
+    _root: any = null;
+    _bound = false;
+    _compact = false;
 
-		render(parent: any, nextSibling: any) {
-			this.parentDomNode = parent;
-			this.computeAttributes();
-			this.execute();
-			this._compact = this.getAttribute("compact") === "yes";
-			const wrap = el(this.document, "div", "tm-reading-list" + (this._compact ? " tm-rl-compact" : ""));
-			this._root = wrap;
-			this.build();
-			parent.insertBefore(wrap, nextSibling);
-			this.domNodes.push(wrap);
-		}
+    render(parent: any, nextSibling: any) {
+      this.parentDomNode = parent;
+      this.computeAttributes();
+      this.execute();
+      this._compact = this.getAttribute('compact') === 'yes';
+      const wrap = el(this.document, 'div', 'tm-reading-list' + (this._compact ? ' tm-rl-compact' : ''));
+      this._root = wrap;
+      this.build();
+      parent.insertBefore(wrap, nextSibling);
+      this.domNodes.push(wrap);
+    }
 
-		build() {
-			const doc = this.document;
-			const wiki = this.wiki;
-			const root = this._root;
-			const compact = this._compact;
-			root.textContent = "";
+    build() {
+      const doc = this.document;
+      const wiki = this.wiki;
+      const root = this._root;
+      const compact = this._compact;
+      root.textContent = '';
 
-			const groups = groupByDoc(collectTopicCards(wiki));
-			const total = groups.reduce((n, g) => n + g.cards.length, 0);
+      const groups = groupByDoc(collectTopicCards(wiki));
+      const total = groups.reduce((n, g) => n + g.cards.length, 0);
 
-			// 页头：标题 + 计数（compact：侧边栏精简）
-			const head = el(doc, "div", "tm-rl-head");
-			head.appendChild(el(doc, "div", "tm-rl-title", "阅读列表"));
-			head.appendChild(el(doc, "div", "tm-rl-sub",
-				`${groups.length} 篇文档 · ${total} 张待读`));
-			if (!compact) {
-				head.appendChild(el(doc, "div", "tm-rl-sub", "按优先级和到期时间排序"));
+      // 页头：标题 + 计数（compact：侧边栏精简）
+      const head = el(doc, 'div', 'tm-rl-head');
+      head.appendChild(el(doc, 'div', 'tm-rl-title', '阅读列表'));
+      head.appendChild(el(doc, 'div', 'tm-rl-sub', `${groups.length} 篇文档 · ${total} 张待读`));
+      if (!compact) {
+        head.appendChild(el(doc, 'div', 'tm-rl-sub', '按优先级和到期时间排序'));
+      }
+      root.appendChild(head);
 
-			}
-			root.appendChild(head);
+      if (!groups.length) {
+        const empty = el(doc, 'div', 'tm-empty');
+        empty.appendChild(el(doc, 'div', '', '没有待读材料。'));
+        if (!compact) {
+          const link = el(doc, 'a', 'tc-tiddlylink', '→ 去导入中心导入新内容');
+          link.href = '#';
+          link.addEventListener('click', (ev: Event) => {
+            ev.preventDefault();
+            this.dispatchEvent({ type: 'tm-navigate', navigateTo: ns.PAGE_IMPORT_CENTER });
+          });
+          empty.appendChild(link);
+        }
+        root.appendChild(empty);
+        return;
+      }
 
-			if (!groups.length) {
-				const empty = el(doc, "div", "tm-empty");
-				empty.appendChild(el(doc, "div", "", "没有待读材料。"));
-				if (!compact) {
-					const link = el(doc, "a", "tc-tiddlylink", "→ 去导入中心导入新内容");
-					link.href = "#";
-					link.addEventListener("click", (ev: Event) => {
-						ev.preventDefault();
-						this.dispatchEvent({ type: "tm-navigate", navigateTo: ns.PAGE_IMPORT_CENTER });
-					});
-					empty.appendChild(link);
-				}
-				root.appendChild(empty);
-				return;
-			}
+      for (const g of groups) {
+        const det = el(doc, 'details', 'tm-rl-doc');
+        // 文档组默认折叠（两本书也不占长页面）；summary = 名 + 进度 + 继续阅读
+        const docAll = sectionsOfDoc(wiki, g.doc);
+        const docDone = docAll.filter((t) => sched.isCardDone(wiki.getTiddler(t)?.fields)).length;
+        // 真实 doc tiddler title（命名空间路径，folder 冲突时含 ~docId 后缀）：
+        // 按 docId 查真实文档页（B1），不再由书名+docId 重算（slug 规则一变即失配）
+        const bookTitle = g.cards[0].breadcrumb.split(ns.CRUMB_SEP)[0] || '';
+        const docTiddlerTitle = docOps.docPageOfDoc(wiki, g.doc) ||
+          (bookTitle ? paths.bookRoot(bookTitle, g.doc) : '');
+        const docLabel = bookTitle || g.doc;
 
-			for (const g of groups) {
-				const det = el(doc, "details", "tm-rl-doc");
-				// 文档组默认折叠（两本书也不占长页面）；summary = 名 + 进度 + 继续阅读
-				const docAll = sectionsOfDoc(wiki, g.doc);
-				const docDone = docAll.filter((t) => sched.isCardDone(wiki.getTiddler(t)?.fields)).length;
-				// 真实 doc tiddler title（命名空间路径，folder 冲突时含 ~docId 后缀）：
-				// 按 docId 查真实文档页（B1），不再由书名+docId 重算（slug 规则一变即失配）
-				const bookTitle = g.cards[0].breadcrumb.split(ns.CRUMB_SEP)[0] || "";
-				const docTiddlerTitle = docOps.docPageOfDoc(wiki, g.doc)
-					|| (bookTitle ? paths.bookRoot(bookTitle, g.doc) : "");
-				const docLabel = bookTitle || g.doc;
+        const sum = el(doc, 'summary', 'tm-rl-doc-head');
+        const name = el(doc, 'a', 'tc-tiddlylink tm-rl-doc-name', docLabel);
+        name.href = '#';
+        name.title = docTiddlerTitle ? `打开文档页：${docLabel}` : `文档页已删除（仅剩摘录/手动内容）`;
+        name.addEventListener('click', (e: Event) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (docTiddlerTitle) this.dispatchEvent({ type: 'tm-navigate', navigateTo: docTiddlerTitle });
+        });
+        sum.appendChild(name);
 
-				const sum = el(doc, "summary", "tm-rl-doc-head");
-				const name = el(doc, "a", "tc-tiddlylink tm-rl-doc-name", docLabel);
-				name.href = "#";
-				name.title = docTiddlerTitle ? `打开文档页：${docLabel}` : `文档页已删除（仅剩摘录/手动内容）`;
-				name.addEventListener("click", (e: Event) => {
-					e.preventDefault(); e.stopPropagation();
-					if (docTiddlerTitle) this.dispatchEvent({ type: "tm-navigate", navigateTo: docTiddlerTitle });
-				});
-				sum.appendChild(name);
+        sum.appendChild(el(doc, 'span', 'tm-rl-doc-count', `${g.cards.length} 张待读`));
+        if (!compact && docAll.length) {
+          sum.appendChild(el(doc, 'span', 'tm-rl-doc-prog', `${docDone}/${docAll.length} 节已读`));
+          const barWrap = el(doc, 'span', 'tm-stat-bar tm-rl-doc-bar', '');
+          const bar = el(doc, 'span', 'tm-stat-bar-fill', '');
+          bar.style.width = `${Math.round((docDone / docAll.length) * 100)}%`;
+          barWrap.appendChild(bar);
+          sum.appendChild(barWrap);
+        }
 
-				sum.appendChild(el(doc, "span", "tm-rl-doc-count", `${g.cards.length} 张待读`));
-				if (!compact && docAll.length) {
-					sum.appendChild(el(doc, "span", "tm-rl-doc-prog", `${docDone}/${docAll.length} 节已读`));
-					const barWrap = el(doc, "span", "tm-stat-bar tm-rl-doc-bar", "");
-					const bar = el(doc, "span", "tm-stat-bar-fill", "");
-					bar.style.width = `${Math.round((docDone / docAll.length) * 100)}%`;
-					barWrap.appendChild(bar);
-					sum.appendChild(barWrap);
-				}
+        // 继续阅读跳到第一张"当前可读"卡（scheduler.isDueNow，与 section-bar/doc-resume 一致）；
+        // 全部未来排期时退回第一张（允许显式打开）
+        const firstUnread = g.cards.find((c) => sched.isDueNow(c.fields)) || g.cards[0];
+        const cont = el(doc, 'button', 'tm-btn', '▶ 继续阅读');
+        cont.title = '从本组第一张待读卡开始';
+        cont.addEventListener('click', (e: Event) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.dispatchEvent({ type: 'tm-navigate', navigateTo: firstUnread.title });
+        });
+        sum.appendChild(cont);
 
-				// D3：继续阅读跳到第一张"当前可读"卡（scheduler.isDueNow，与 section-bar/doc-resume 一致）；
-				// 全部未来排期时退回第一张（允许显式打开）
-				const firstUnread = g.cards.find((c) => sched.isDueNow(c.fields)) || g.cards[0];
-				const cont = el(doc, "button", "tm-btn", "▶ 继续阅读");
-				cont.title = "从本组第一张待读卡开始";
-				cont.addEventListener("click", (e: Event) => {
-					e.preventDefault(); e.stopPropagation();
-					this.dispatchEvent({ type: "tm-navigate", navigateTo: firstUnread.title });
-				});
-				sum.appendChild(cont);
-
-				// 删除阅读材料（文档页 + 节卡/大纲新节）；摘录/挖空/问答/手动散卡等知识产物保留
-				const del = icons.iconButton(doc, "tm-btn tm-rl-del", "trash", "清理阅读");
-				del.title = "删除本书阅读材料（文档页 + 全部普通节卡）；已提取的知识（摘录/挖空/问答）保留在复习流";
-				del.addEventListener("click", async (e: Event) => {
-					e.preventDefault(); e.stopPropagation();
-					if (await dialog.confirmDialog(doc, {
-						title: "清理阅读材料",
-						message: `删除《${docLabel}》的阅读材料？
+        // 删除阅读材料（文档页 + 节卡/大纲新节）；摘录/挖空/问答/手动散卡等知识产物保留
+        const del = icons.iconButton(doc, 'tm-btn tm-rl-del', 'trash', '清理阅读');
+        del.title = '删除本书阅读材料（文档页 + 全部普通节卡）；已提取的知识（摘录/挖空/问答）保留在复习流';
+        del.addEventListener('click', async (e: Event) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (
+            await dialog.confirmDialog(doc, {
+              title: '清理阅读材料',
+              message: `删除《${docLabel}》的阅读材料？
 
 将删除文档页与全部普通节卡（含大纲手动插入的新节）。
 已提取的知识（摘录/挖空/问答/手动卡）会保留，不受影响。
 此操作不可恢复。`,
-						confirmLabel: "删除", danger: true
-					})) {
-						const n = docOps.deleteDocContent(wiki, g.doc);
-						if (n === 0) await dialog.alertDialog(doc, { message: "没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。" });
-					}
-				});
-				sum.appendChild(del);
-				det.appendChild(sum);
+              confirmLabel: '删除',
+              danger: true,
+            })
+          ) {
+            const n = docOps.deleteDocContent(wiki, g.doc);
+            if (n === 0) await dialog.alertDialog(doc, { message: '没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。' });
+          }
+        });
+        sum.appendChild(del);
+        det.appendChild(sum);
 
-				// 卡片表格（列式紧凑，避免竖排条目拉长页面；compact 只留 类型/标题 两列）
-				const table = el(doc, "table", "tm-rl-table");
-				const thead = el(doc, "thead", "");
-				const htr = el(doc, "tr", "");
-				htr.appendChild(el(doc, "th", "", ""));
-				htr.appendChild(el(doc, "th", "", "卡片"));
-				if (!compact) {
-					htr.appendChild(el(doc, "th", "", "优先"));
-					htr.appendChild(el(doc, "th", "", "状态"));
-				}
-				thead.appendChild(htr);
-				table.appendChild(thead);
-				const tbody = el(doc, "tbody", "");
-				for (const c of g.cards) {
-					const tr = el(doc, "tr", "tm-rl-row");
-					const kindTd = el(doc, "td", "", "");
-					const mark = el(doc, "span",
-						c.kind === "extract" ? "tm-rl-kind tm-rl-kind-extract" : "tm-rl-kind",
-						c.kind === "extract" ? "摘" : "节");
-					mark.title = c.kind === "extract" ? "摘录卡（阅读材料）" : "节卡（阅读单元）";
-					kindTd.appendChild(mark);
-					tr.appendChild(kindTd);
+        // 卡片表格（列式紧凑，避免竖排条目拉长页面；compact 只留 类型/标题 两列）
+        const table = el(doc, 'table', 'tm-rl-table');
+        const thead = el(doc, 'thead', '');
+        const htr = el(doc, 'tr', '');
+        htr.appendChild(el(doc, 'th', '', ''));
+        htr.appendChild(el(doc, 'th', '', '卡片'));
+        if (!compact) {
+          htr.appendChild(el(doc, 'th', '', '优先'));
+          htr.appendChild(el(doc, 'th', '', '状态'));
+        }
+        thead.appendChild(htr);
+        table.appendChild(thead);
+        const tbody = el(doc, 'tbody', '');
+        for (const c of g.cards) {
+          const tr = el(doc, 'tr', 'tm-rl-row');
+          const kindTd = el(doc, 'td', '', '');
+          const mark = el(doc, 'span', c.kind === 'extract' ? 'tm-rl-kind tm-rl-kind-extract' : 'tm-rl-kind', c.kind === 'extract' ? '摘' : '节');
+          mark.title = c.kind === 'extract' ? '摘录卡（阅读材料）' : '节卡（阅读单元）';
+          kindTd.appendChild(mark);
+          tr.appendChild(kindTd);
 
-					const titleTd = el(doc, "td", "", "");
-					const titleLink = el(doc, "a", "tc-tiddlylink tm-rl-title", display.displayTitle(c.fields, c.title));
-					titleLink.href = "#";
-					titleLink.title = "打开阅读";
-					titleLink.addEventListener("click", (e: Event) => {
-						e.preventDefault(); e.stopPropagation();
-						this.dispatchEvent({ type: "tm-navigate", navigateTo: c.title });
-					});
-					titleTd.appendChild(titleLink);
-					tr.appendChild(titleTd);
+          const titleTd = el(doc, 'td', '', '');
+          const titleLink = el(doc, 'a', 'tc-tiddlylink tm-rl-title', display.displayTitle(c.fields, c.title));
+          titleLink.href = '#';
+          titleLink.title = '打开阅读';
+          titleLink.addEventListener('click', (e: Event) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.dispatchEvent({ type: 'tm-navigate', navigateTo: c.title });
+          });
+          titleTd.appendChild(titleLink);
+          tr.appendChild(titleTd);
 
-					if (!compact) {
-						const priTd = el(doc, "td", "tm-rl-pri", `P${c.priority}`);
-						priTd.title = `优先级 ${c.priority}（0 最高）`;
-						tr.appendChild(priTd);
-						const dueTd = el(doc, "td", "", "");
-						// 状态徽章统一走 core/display.badgeOf（本页已过滤 done/suspended，无 ✓/⏸ 分支）
-						const bd = badgeOf(c.fields);
-						dueTd.appendChild(el(doc, "span", `tm-badge ${bd.cls}`, bd.text));
-						tr.appendChild(dueTd);
-					}
+          if (!compact) {
+            const priTd = el(doc, 'td', 'tm-rl-pri', `P${c.priority}`);
+            priTd.title = `优先级 ${c.priority}（0 最高）`;
+            tr.appendChild(priTd);
+            const dueTd = el(doc, 'td', '', '');
+            // 状态徽章统一走 core/display.badgeOf（本页已过滤 done/suspended，无 ✓/⏸ 分支）
+            const bd = badgeOf(c.fields);
+            dueTd.appendChild(el(doc, 'span', `tm-badge ${bd.cls}`, bd.text));
+            tr.appendChild(dueTd);
+          }
 
-					tbody.appendChild(tr);
-				}
-				table.appendChild(tbody);
-				const scrollBox = el(doc, "div", "tm-scroll");
-				scrollBox.appendChild(table);
-				det.appendChild(scrollBox);
-				root.appendChild(det);
-			}
-		}
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        const scrollBox = el(doc, 'div', 'tm-scroll');
+        scrollBox.appendChild(table);
+        det.appendChild(scrollBox);
+        root.appendChild(det);
+      }
+    }
 
-		refresh(changedTiddlers: Record<string, any>) {
-			// 即时刷新：任何 topic/衍生卡变化 → 重建列表
-			if (!this._root) return false;
-			let need = false;
-			for (const title of Object.keys(changedTiddlers || {})) {
-				if (title.startsWith(docOps.READPOINT_PREFIX)) { need = true; break; }
-				const f = this.wiki.getTiddler(title)?.fields;
-				if (!f) continue;
-				if (f["tidme.kind"]) { need = true; break; }
-			}
-			if (need) { this.build(); return true; }
-			return false;
-		}
-	}
-	return ReadingListWidget as any;
+    refresh(changedTiddlers: Record<string, any>) {
+      // 即时刷新：任何 topic/衍生卡变化 → 重建列表
+      if (!this._root) return false;
+      let need = false;
+      for (const title of Object.keys(changedTiddlers || {})) {
+        if (title.startsWith(docOps.READPOINT_PREFIX)) {
+          need = true;
+          break;
+        }
+        const f = this.wiki.getTiddler(title)?.fields;
+        if (!f) continue;
+        if (f['tidme.kind']) {
+          need = true;
+          break;
+        }
+      }
+      if (need) {
+        this.build();
+        return true;
+      }
+      return false;
+    }
+  }
+  return ReadingListWidget as any;
 }
 
-exports["reading-list"] = makeReadingList();
+exports['reading-list'] = makeReadingList();
 
 // 供单元测试/复用
 exports.topicQueueFilter = topicQueueFilter;

@@ -12,7 +12,7 @@ const { mod } = bootPlugin({ prefix: 'tidme-display-' });
 const display = mod('core/display.js');
 
 test('badgeOf: 出队/学习/到期/新卡的徽章优先级', () => {
-  // 返回对象来自 TW vm 沙箱 realm，逐字段断言（勿 deepEqual，见 test/README.md）
+  // 返回对象来自 TW vm 沙箱 realm，逐字段断言（勿对整个对象 deepEqual）
   let b = display.badgeOf({ 'tidme.suspended': 'yes' });
   assert.equal(b.text, '⏸', '搁置最优先');
   assert.equal(b.cls, 'tm-badge-suspended');

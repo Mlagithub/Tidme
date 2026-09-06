@@ -1,5 +1,5 @@
 /*
-tw-boot.mjs — L2 集成测试唯一的 TW 无头环境入口（test/README.md §隔离）
+tw-boot.mjs — L2 集成测试唯一的 TW 无头环境入口
 
 职责：加载 bin 插件产物 → 在临时空目录 boot 隔离 TW 实例 → 提供 execute/reset。
 约定：

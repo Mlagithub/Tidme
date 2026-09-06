@@ -132,7 +132,7 @@ async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any):
   return true;
 }
 
-/** 单本书的预览卡片（P1）：标题行 + 状态 + 可在线微调大纲（改短/删/增） */
+/** 单本书的预览卡片：标题行 + 状态 + 可在线微调大纲（改短/删/增） */
 function buildRow(
   doc: Document,
   resultOrErr: { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean },
@@ -415,7 +415,7 @@ function makeFileWidget(): WidgetCtor {
       const btnImport = el(doc, 'button', 'tm-btn tm-btn--primary', '✔ 全部导入');
       const btnClear = el(doc, 'button', 'tm-btn', '清除');
 
-      // G10 服务端处理选项（TiddlyWeb）：大文件上传 → 服务端后台解析，不阻塞页面
+      // 服务端处理选项（TiddlyWeb）：大文件上传 → 服务端后台解析，不阻塞页面
       const serverRow = el(doc, 'div', 'tm-import-server-row', '');
       const serverCheck = doc.createElement('input');
       serverCheck.type = 'checkbox';
@@ -441,7 +441,7 @@ function makeFileWidget(): WidgetCtor {
       prioRow.appendChild(el(doc, 'span', 'tm-import-muted', '（0 最高 · 同批随机分散 ±8）'));
       const pending = new Map<string, { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean }>();
 
-      // G10 服务端上传：建 pending tiddler（server importer 契约）→ 轮询状态
+      // 服务端上传：建 pending tiddler（server importer 契约）→ 轮询状态
       const serverUpload = (file: File) => {
         const row = el(doc, 'div', 'tm-import-row', '');
         row.appendChild(el(doc, 'strong', '', file.name));
@@ -548,7 +548,7 @@ function makeFileWidget(): WidgetCtor {
           this.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_UNSUPPORTED });
           return;
         }
-        // G10 服务端处理模式：上传 → 后台解析（不预览、不阻塞）
+        // 服务端处理模式：上传 → 后台解析（不预览、不阻塞）
         if (serverCheck.checked) {
           for (const file of accepted) serverUpload(file);
           return;
@@ -578,7 +578,7 @@ function makeFileWidget(): WidgetCtor {
             rowsBox.appendChild(buildRow(doc, { error: String(err.message || err), fileName: file.name }, this.wiki));
           }
         }
-        // 漏斗摘要（P1 措辞：已安全存档，随时可学）
+        // 漏斗摘要（措辞：已安全存档，随时可学）
         if (totalSections > 0) {
           rowsBox.appendChild(el(doc, 'div', 'tm-import-summary tm-import-muted', `—— 本次共入库 ${totalSections} 节，已安全存档并进入默认牌堆，随时可学。`));
         }

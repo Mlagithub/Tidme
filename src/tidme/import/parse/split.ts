@@ -1,12 +1,12 @@
 /*
-split.ts — 通用切分器（M2 核心）
+split.ts — 通用切分器
 
 对任意 markdown / wikitext / HTML / TXT 文本执行：
   格式识别 → Block 流 → 大纲树切分 → 确定性 ID → tiddler 落库（含自动 deck）
 产物即标准 TW 导入格式；节卡带 kind=topic（阅读材料）。
 
 docId 由源标题派生（同一 tiddler 重切分 ID 稳定；标题唯一性由 TW 保证）。
-G1 干预（挂账）：overrides API 在 chunker 层（applyOverrides，有测试）；UI 接入前 runSplit 不线程此参数。
+预览干预（挂账）：overrides API 在 chunker 层（applyOverrides，有测试）；UI 接入前 runSplit 不透传此参数。
 */
 
 import { contentFingerprint, makeDocId, makeSectionId, normalizeText } from '$:/plugins/keepone/tidme/core/ids';
@@ -48,10 +48,10 @@ export interface SplitInput {
   minChars?: number;
   /** 是否自动创建按文档 deck（默认 true；分类重构后 topic 不走牌组，此参数已无实际作用，保留兼容） */
   autoDeck?: boolean;
-  /** 卡片优先级 0–100（0 最高；默认 50；M4） */
+  /** 卡片优先级 0–100（0 最高；默认 50） */
   priority?: number;
   /**
-   * G1 干预（挂账）：overrides 解析 API 已实现（chunker.applyOverrides，有测试），
+   * 预览干预（挂账）：overrides 解析 API 已实现（chunker.applyOverrides，有测试），
    * 但导入预览 UI 走 _deleted/_renamed 标记，未经 runSplit 传入——UI 接入时在此恢复参数。
    */
   /**

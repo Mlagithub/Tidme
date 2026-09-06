@@ -2,5 +2,5 @@ title: $:/plugins/keepone/tidme/review/ui/study-mode
 tags: $:/tags/PageTemplate
 code-body: yes
 
-<!-- 学习模式条（M5）：会话激活时常驻底部 pill——进度 + 结束学习；可见性由 widget 嗅探会话变化 -->
+<!-- 学习模式条：会话激活时常驻底部 pill——进度 + 结束学习；可见性由 widget 嗅探会话变化 -->
 <$tidme-study-mode-bar/>

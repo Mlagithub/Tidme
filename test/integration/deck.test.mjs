@@ -1,5 +1,5 @@
 /*
-deck.test.mjs — 牌组子系统（core/deck）单元测试（M2，node:test）
+deck.test.mjs — 牌组子系统（core/deck）单元测试（node:test）
 
 覆盖：创建/重复/读取/更新/成员求值（strict/loose/exclude）/subset 标记与
 完整标题/删除语义（默认保留卡 vs 连卡）/default 保护/configToFields 低层字段。

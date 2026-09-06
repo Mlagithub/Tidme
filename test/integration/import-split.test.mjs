@@ -145,7 +145,7 @@ test('split: EPUB3 nav-only 书籍按 nav 目录切分', async () => {
   assert.ok(trails.some((t) => t.includes('第一章 起点')), `面包屑应来自 nav: ${JSON.stringify(trails.slice(0, 3))}`);
 });
 
-// ---------- G1 预览干预 ----------
+// ---------- 预览干预 ----------
 
 const INTERVENE_SAMPLE = `# 第一章
 
@@ -170,7 +170,7 @@ function sectionsOf(r) {
   }));
 }
 
-test('G1: 默认短节全部并入（merged 容器含 parts 子节边界）', async () => {
+test('默认短节全部并入（merged 容器含 parts 子节边界）', async () => {
   const r = await importBundle.runSplit({ text: INTERVENE_SAMPLE, title: '干预测试', type: 'text/markdown' });
   const secs = sectionsOf(r);
   assert.equal(secs.length, 1, '三短节全部并入 → 1 节');

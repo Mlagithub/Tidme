@@ -1,9 +1,9 @@
 /*
-widgets/section.ts — M3 阅读闭环组件 v3.2（Phase B）
+widgets/section.ts — 阅读闭环组件 v3.2
 
 条栏两行布局（信息与按钮分离，全部按钮统一 tm-sec-btn 风格）：
 - 第一行（信息）：面包屑 · 位置 X/Y · 本书剩 N 张待学 · 已读状态
-- 第二行（按钮，M6 分层）：◀ ▶ ｜ 续读点 ｜ 已读/稍后/提前/忽略 ｜ 制卡 摘录 挖空 ｜ 更多(优先/A-Factor/清提取/删除) ｜ 学习数据 ｜ ？
+- 第二行（按钮）：◀ ▶ ｜ 续读点 ｜ 已读/稍后/提前/忽略 ｜ 制卡 摘录 挖空 ｜ 更多(优先/A-Factor/清提取/删除) ｜ 学习数据 ｜ ？
 即时刷新：refresh 检测本文档任何卡 / 本卡 / 续读点变化 → 重建条栏。
 全局快捷键：Alt+X 摘录 · Alt+Z 挖空 · Ctrl+F7 设续读点 · Alt+F7 跳转 · Shift+Ctrl+F7 清除
 衍生卡（摘录/挖空）显示迷你生命周期条（完成 / 删除）。
@@ -53,7 +53,7 @@ function activeWiki(): any {
 const el = dom.el;
 /** 某文档的全部正文章节（排除摘录等衍生卡） */
 const sectionsOfDoc = docOps.sectionsOfDoc;
-// 制卡与加工的唯一实现 = core/card-factory（M3 迁入）；本文件只保留 DOM/事件壳
+// 制卡与加工的唯一实现 = core/card-factory；本文件只保留 DOM/事件壳
 const parseAnchor = factory.parseAnchor;
 const processedSnippets = factory.processedSnippets;
 const cleanProcessedText = factory.cleanProcessedText;
@@ -284,7 +284,7 @@ function actionExtract(win: any) {
     notify('select-first');
     return;
   }
-  // M3：摘录只属于阅读材料——普通笔记（无 tidme.doc）不提供摘录
+  // 摘录只属于阅读材料——普通笔记（无 tidme.doc）不提供摘录
   if (!commitCardAndReadPoint(win, tt, buildExtract(activeWiki(), tt, selected), selected, 'extract')) {
     notify('extract-note');
   }
@@ -587,7 +587,7 @@ function makeSectionBar(): WidgetCtor {
         sessionMod.removeFromSession(wiki, targetTitle);
       };
       /**
-       * 调度判定（D3 统一走 core/scheduler）：
+       * 调度判定（统一走 core/scheduler）：
        * 未完成/未忽略/未搁置且 due ≤ now（sched.isDueNow）——
        * 顺延/评分写出的未来排期卡不被"下一张/已读后推进"提前重放。
        */
@@ -813,7 +813,7 @@ function makeSectionBar(): WidgetCtor {
       btnRow.appendChild(clozeBtn);
       btnRow.appendChild(qaBtn);
 
-      // —— 低频调控收进「更多」菜单（M6 分层：主行只留高频动作） ——
+      // —— 低频调控收进「更多」菜单（主行只留高频动作） ——
       const more = el(doc, 'details', 'tm-sec-more');
       more.appendChild(el(doc, 'summary', 'tm-sec-more-summary', '更多'));
       const moreBox = el(doc, 'div', 'tm-sec-more-box');
@@ -962,9 +962,9 @@ function makeSectionBar(): WidgetCtor {
   return SectionBarWidget as any;
 }
 
-/** 文档页横幅区：进度（大数字 + 进度条）+ 继续阅读 + 复习本书（G7 子集牌组）+ 清理阅读材料 */
+/** 文档页横幅区：进度（大数字 + 进度条）+ 继续阅读 + 复习本书（子集牌组）+ 清理阅读材料 */
 function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElement, title: string, docId: string, all: string[]) {
-  // 进度横幅（P1 卡片化）：大数字 + 进度条 + 主按钮
+  // 进度横幅（卡片化）：大数字 + 进度条 + 主按钮
   const done = all.filter((x) => sched.isCardDone(wiki.getTiddler(x)?.fields)).length;
   const left = all.length - done;
   const banner = el(doc, 'div', 'tm-doc-banner');
@@ -987,7 +987,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
   btn.addEventListener('click', () => {
     const rp = parseReadPoint(wiki, docId);
     const list = all.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields));
-    // D3：优先跳到续读点（须当前可读），否则第一张 due≤now 的卡；全未来排期退回 list[0]
+    // 优先跳到续读点（须当前可读），否则第一张 due≤now 的卡；全未来排期退回 list[0]
     const readable = list.filter((x) => sched.isDueNow(wiki.getTiddler(x)?.fields));
     const target = (rp && readable.includes(rp.t) ? rp.t : null) || readable[0] || list[0];
     if (target) {
@@ -999,7 +999,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
   banner.appendChild(actions);
   wrap.appendChild(banner);
 
-  // G7 子集复习：按本书强制复习 item（临时子集 deck → 复用 fsrs4tw 学习流）。
+  // 子集复习：按本书强制复习 item（临时子集 deck → 复用 fsrs4tw 学习流）。
   // 分类对齐 SuperMemo：只测本书测试卡（item），节卡与摘录（topic）走阅读流。
   const itemFilter = docItemFilter(wiki, docId);
   const inQueueCount = wiki.filterTiddlers(itemFilter).length;
@@ -1025,7 +1025,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
       else deckMod.createDeck(wiki, cfg);
       widget.dispatchEvent({ type: 'tm-navigate', navigateTo: deckTitle });
     });
-    // 并入横幅右侧操作区（P1）
+    // 并入横幅右侧操作区
     const bannerActions = wrap.querySelector('.tm-doc-banner-actions');
     if (bannerActions) bannerActions.appendChild(subsetBtn);
     else wrap.appendChild(subsetBtn);
@@ -1093,7 +1093,7 @@ function appendDocDoneSection(doc: Document, wiki: any, wrap: HTMLElement, all: 
   wrap.appendChild(doneBox);
 }
 
-/** G4 摘录收件箱：聚合本书全部摘录/挖空卡（加工路径：可回原文、挖空、删除）。
+/** 摘录收件箱：聚合本书全部摘录/挖空卡（加工路径：可回原文、挖空、删除）。
  *  分类：subkind extract/cloze（摘录=阅读材料待加工；挖空=测试卡） */
 function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLElement, docId: string) {
   const derived = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${docId}]!is[draft]]`)
@@ -1123,7 +1123,7 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
     kindTd.appendChild(el(doc, 'span', 'tm-cb-kind', kindMark));
     tr.appendChild(kindTd);
     tr.appendChild(el(doc, 'td', 'tm-cb-name', display.displayTitle(c.fields, c.title)));
-    // W3：摘录加工状态（可挖空/已挖空）
+    // 摘录加工状态（可挖空/已挖空）
     const stateTd = el(doc, 'td', '', '');
     if (c.fields['tidme.subkind'] === 'extract') {
       const hasCloze = clozeChildrenOf(c.title) > 0;

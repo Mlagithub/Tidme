@@ -170,7 +170,7 @@ export interface RawSection {
   file?: string;
   orderInFile?: number;
   ordinal?: number;
-  /** 分段明细（G1 干预边界）：parts[0]=自身内容；parts[1..]=并入的子节（title 有值 = 以标题开头） */
+  /** 分段明细：parts[0]=自身内容；parts[1..]=并入的子节（title 有值 = 以标题开头） */
   parts?: SectionPart[];
 }
 
@@ -193,8 +193,8 @@ function deriveSection(sec: RawSection): RawSection {
 }
 
 /**
- * 产物收尾：由 parts 派生 html/text/chars 并重排 ordinal（原 G1 applyOverrides 的公共尾段；
- * 干预机制已移除——YAGNI，导入预览走 _deleted/_renamed + cleanTitle，见 architecture.md W6）。
+ * 产物收尾：由 parts 派生 html/text/chars 并重排 ordinal（applyOverrides 的公共尾段；
+ * 干预机制已移除——YAGNI，导入预览走 _deleted/_renamed + cleanTitle）。
  */
 function finalizeSections(sections: RawSection[]): RawSection[] {
   sections.forEach((sec, i) => {

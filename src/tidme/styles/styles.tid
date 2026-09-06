@@ -39,7 +39,7 @@ type: text/css
 .tm-toast--ok { border-color: #22c55e; color: #15803d; }
 .tm-toast--err { border-color: var(--tm-danger); color: var(--tm-danger); }
 
-/* 统计面板（P1：指标卡 / 表格 / 进度条 / 漏斗横条） */
+/* 统计面板（指标卡 / 表格 / 进度条 / 漏斗横条） */
 .tm-stat-cards {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(7em, 1fr));
@@ -130,7 +130,7 @@ type: text/css
 	font-weight: 600;
 }
 
-/* 导入中心文件卡片（P1） */
+/* 导入中心文件卡片 */
 .tm-import-file-card {
 	border: 1px solid var(--tm-border);
 	border-radius: var(--tm-radius);
@@ -196,7 +196,7 @@ type: text/css
 	opacity: 0.6;
 }
 
-/* 文档页进度横幅（P1 卡片化） */
+/* 文档页进度横幅（卡片化） */
 /* ===== 页面间导航条（分隔线 + 当前页高亮） ===== */
 .tm-nav {
 	display: flex;
@@ -315,7 +315,7 @@ type: text/css
 	gap: 0.5em;
 	margin-top: 0.5em;
 }
-/* G10 服务端后台处理选项 */
+/* 服务端后台处理选项 */
 .tm-import-server-row {
 	display: flex;
 	align-items: center;
@@ -810,7 +810,7 @@ mark.tm-readpoint {
 }
 .tm-doc-done-row:hover, .tm-doc-derived .tm-doc-done-row:hover { background: var(--tm-surface-2); }
 
-/* M3 阅读态排版：Section 卡展开正文（与 section-bar 同帧时生效） */
+/* 阅读态排版：Section 卡展开正文（与 section-bar 同帧时生效） */
 /* topic 类型 tiddler 正文由 <$section-body/> 独占渲染，隐藏 TiddlyWiki 默认 body 防止重复 */
 .tc-tiddler-frame:has(.tm-section-bar) .tc-tiddler-body {
 	display: none !important;
@@ -821,7 +821,7 @@ mark.tm-readpoint {
 	background: #d8ecff;
 	box-shadow: 0 0 0 2px #d8ecff;
 }
-/* ===== W2 阅读列表（topic 队列页，卡片化） ===== */
+/* ===== 阅读列表（topic 队列页，卡片化） ===== */
 .tm-reading-list {
 	display: flex;
 	flex-direction: column;
@@ -936,7 +936,7 @@ mark.tm-readpoint {
 .tm-rl-compact .tm-rl-table th, .tm-rl-compact .tm-rl-table td { padding: 3px 8px; }
 
 
-/* W3 摘录加工状态标注（文档页聚合区） */
+/* 摘录加工状态标注（文档页聚合区） */
 .tm-cb-state {
 	flex: none;
 	font-size: 0.72em;
@@ -1365,7 +1365,7 @@ mark.tm-readpoint {
 	opacity: 0.65;
 	min-width: 4em;
 }
-/* 卡片列表真表格（P2） */
+/* 卡片列表真表格 */
 .tm-cm-table {
 	border-collapse: collapse;
 	width: 100%;
@@ -1459,7 +1459,7 @@ mark.tm-readpoint {
 .tm-cm-edit-row input[type="number"] {
 	width: 12em;
 }
-/* 牌组批量操作卡片（P2） */
+/* 牌组批量操作卡片 */
 .tm-queue-card {
 	border: 1px solid var(--tm-text-2);
 	border-radius: var(--tm-radius);
@@ -1914,7 +1914,7 @@ body.tc-body-dark .tmc-study-bar,
 	line-height: 1.3;
 }
 
-/* ===== 学习模式条（M5：会话激活时常驻；固定底部居中，不占文档流） ===== */
+/* ===== 学习模式条（会话激活时常驻；固定底部居中，不占文档流） ===== */
 .tm-study-mode {
 	position: fixed;
 	left: 50%;
@@ -1936,7 +1936,7 @@ body.tc-body-dark .tmc-study-bar,
 .tm-study-mode-progress { font-weight: 600; }
 .tm-study-mode .tm-btn--primary { padding: 4px 14px; }
 
-/* ===== 今天页（M6 主入口：决策中枢） ===== */
+/* ===== 今天页（主入口：决策中枢） ===== */
 .tm-today { max-width: 860px; margin: 0 auto; padding: 8px 4px; }
 .tm-today-header { display: flex; align-items: baseline; gap: var(--tm-gap-lg); margin-bottom: var(--tm-gap-xl); }
 .tm-today-title { font-size: 1.6em; font-weight: 700; color: var(--tm-text-1); }
@@ -1984,7 +1984,7 @@ body.tc-body-dark .tmc-study-bar,
 .tm-today-read-count { color: var(--tm-text-2); font-size: 0.86em; }
 .tm-today-empty { color: var(--tm-text-2); padding: 14px; border: 1px dashed var(--tm-border); border-radius: var(--tm-radius-sm); }
 
-/* ===== 条栏「更多」菜单（M6 分层：低频调控收进下拉） ===== */
+/* ===== 条栏「更多」菜单（低频调控收进下拉） ===== */
 .tm-sec-more { position: relative; display: inline-block; }
 .tm-sec-more-summary {
 	list-style: none; cursor: pointer; user-select: none;
@@ -2004,7 +2004,7 @@ body.tc-body-dark .tmc-study-bar,
 }
 .tm-sec-more-box .tm-sec-btn { text-align: left; border: none; box-shadow: none; }
 
-/* ===== M6 微调：复习卡面净化 + 评分键紧凑化 + 批量条分组 ===== */
+/* ===== 微调：复习卡面净化 + 评分键紧凑化 + 批量条分组 ===== */
 
 /* 复习卡面净化：内部元数据不上卡面（路径/FSRS 副行/内部标签；信息保留在编辑态与管理器） */
 .tc-tiddler-frame:has(.tmc-study-bar) > span > a.tc-tiddlylink { display: none; }

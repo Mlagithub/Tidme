@@ -2,7 +2,7 @@
 widget-manager.test.mjs — 管理侧 widget（queue-ops / stats-panel / card-manager / deck-ui）
 
 每用例 reset + 重建标准书夹具（helpers/fixtures.makeBookFixture），测试间零共享状态。
-断言为渲染冒烟（结构/关键文案）；交互升级见 doc/test-plan.md T4。
+断言为渲染冒烟（结构/关键文案）。
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -48,7 +48,7 @@ test('queue-ops: 每牌组渲染批量操作按钮（只剩默认牌组）', () 
   const text = collectText(root);
   assert.ok(text.includes('顺延7d'), '应有顺延按钮');
   assert.ok(text.includes('遗忘'), '应有遗忘按钮');
-  assert.ok(text.includes('立即顺延'), '应有手动 auto-postpone 按钮（G8）');
+  assert.ok(text.includes('立即顺延'), '应有手动 auto-postpone 按钮');
 });
 
 test('stats-panel: 渲染负载/文档进度/漏斗', () => {
@@ -66,7 +66,7 @@ test('card-manager: 渲染视图过滤/树/批量工具条', () => {
   assert.ok(text.includes('全部'), '应有视图过滤');
   assert.ok(text.includes('顺延7d'), '应有批量操作');
   assert.ok(text.includes('顺延过载'), '应有顺延过载按钮');
-  assert.ok(text.includes('优先↑') && text.includes('设高'), 'G3 批量优先级操作');
+  assert.ok(text.includes('优先↑') && text.includes('设高'), '批量优先级操作');
   assert.ok(text.includes('书名甲'), '应含文档');
   assert.ok(text.includes('小节乙'), '应含节');
 });

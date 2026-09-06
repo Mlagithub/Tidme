@@ -2,5 +2,5 @@ title: $:/plugins/keepone/tidme/import/ui/pick-bubble
 tags: $:/tags/PageTemplate
 code-body: yes
 
-<!-- 全局划词气泡（M3）：任意条目查看态选中文本 → 挖空/问答制卡；阅读材料由 section-bar 气泡负责 -->
+<!-- 全局划词气泡：任意条目查看态选中文本 → 挖空/问答制卡；阅读材料由 section-bar 气泡负责 -->
 <$tidme-pick-bubble/>

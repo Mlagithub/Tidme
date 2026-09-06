@@ -3,7 +3,7 @@ build-plugins.cjs — 编译 src/ 下全部插件为 bin/$__<plugin>.json
 
 用 tiddlywiki-plugin-dev 的 packup.rebuild（esbuild 编译 .ts/.tsx、压缩、Tailwind）产出
 与 dev 模式一致的插件 tiddler，落盘为 TiddlyWiki tiddler 文件格式（`$:/` → `$__`，`/` → `_`），
-供无头测试（tools/study-flow-test.cjs 等）、CI 与 Tiddlyhost 部署（bin/thost-uploader）使用。
+供 test/ 无头测试、CI 与 Tiddlyhost 部署（bin/thost-uploader）使用。
 
 附带产出 bin/parse.cjs（esbuild bundle 的导入解析），供 test/integration/import-epub.test.mjs 与 import-split.test.mjs 使用。
 
