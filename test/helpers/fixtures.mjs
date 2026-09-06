@@ -38,3 +38,33 @@ export async function importMarkdown(wiki, pipelineMod, markdown, { title = "导
 	for (const t of r.tiddlers) wiki.addTiddler(t);
 	return r;
 }
+
+/**
+ * 标准书夹具「书名甲」：一书两节（markdown 切分）+ 1 摘录卡（topic）+ 1 挖空卡（item）。
+ * title 由确定性 ID 派生，reset+重建后引用不变。返回关键 title 引用。
+ */
+export async function makeBookFixture(wiki, pipelineMod) {
+	const r = await importMarkdown(wiki, pipelineMod, "# 书名甲\n\n第一章正文。\n\n## 小节乙\n\n第二节正文。", { title: "书名甲" });
+	const section = r.tiddlers.find((x) => x["tidme.kind"] === "topic");
+	const docTitle = r.tiddlers[0].title;
+	const sectionTitle = section.title;
+	// 摘录留在书目录（拍平）：<bookRoot>/<sectionId>--extract
+	const extractTitle = section.title + "--extract";
+	// 知识卡进 decks 命名空间：<Tidme/Decks/<书>/<sectionId>--cloze
+	const clozeTitle = section.title.replace(/^Tidme\/Books\//, "Tidme/Decks/") + "--cloze";
+	wiki.addTiddler({
+		title: extractTitle, caption: "摘",
+		text: "<blockquote>第一章的摘录</blockquote>",
+		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "topic", "tidme.subkind": "extract",
+		"tidme.breadcrumb": `${section["tidme.breadcrumb"]} › 摘录`, "tidme.source": "书名甲",
+		"tidme.format": "markdown", state: "0", due: "20261231000000000"
+	});
+	wiki.addTiddler({
+		title: clozeTitle, caption: "首都",
+		text: "",
+		"tidme.doc": r.docId, "tidme.parent": section.title, "tidme.kind": "item", "tidme.subkind": "cloze",
+		"tidme.breadcrumb": `${section["tidme.breadcrumb"]} › 挖空`, "tidme.source": "书名甲",
+		"tidme.format": "markdown", state: "0", due: "20261231000000000"
+	});
+	return { docId: r.docId, docTitle, sectionTitle, extractTitle, clozeTitle };
+}
