@@ -6,29 +6,11 @@ pipeline.test.mjs — 导入管线单元测试（node:test）
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import path from "node:path";
+import { loadPipelineBundle, fixtureEpubPath } from "../helpers/jsdom-env.mjs";
 
-const require_ = createRequire(import.meta.url);
-const { JSDOM } = require_("jsdom");
-const { window } = new JSDOM("<!doctype html><html><body></body></html>");
-globalThis.DOMParser = window.DOMParser;
-globalThis.XMLSerializer = window.XMLSerializer;
-globalThis.Node = window.Node;
-
-const Module = await import("node:module");
-const origLoad = Module.default._load;
-Module.default._load = function (request, parent, isMain) {
-	if (request === "$:/plugins/keepone/tidme/import/jszip") return require_("jszip");
-	return origLoad.call(this, request, parent, isMain);
-};
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const pipeline = (await import(pathToFileURL(path.join(here, "../bin/pipeline.cjs")).href)).default;
-const fixturePath = path.join(here, "../tools/fixtures/demo.epub");
-const bytes = new Uint8Array(readFileSync(fixturePath));
+const pipeline = await loadPipelineBundle();
+const bytes = new Uint8Array(readFileSync(fixtureEpubPath()));
 
 function stripTime(tiddlers) {
 	return tiddlers.map((t) => {

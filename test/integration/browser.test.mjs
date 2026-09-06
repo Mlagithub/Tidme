@@ -6,76 +6,18 @@ boot TW + 插件，造一张文档/卡片数据，渲染 queue-ops / stats-panel
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
+import { fakeDocument, collectText, collectButtons, renderWidget as renderWidgetBase } from "../helpers/fake-dom.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
+// 本文件 34 个用例共享 before() 造的一本书数据（渲染冒烟以读为主），
+// 尚未按组件拆分重建 fixture（见 doc/test-plan.md T2），故不加 beforeEach(reset)。
+const { tw, wiki, mod } = bootPlugin({ prefix: "tidme-browser-" });
 
-function fakeElement(tag = "div") {
-	const e = {
-		nodeType: 1, tagName: String(tag).toUpperCase(), childNodes: [], children: [],
-		style: {}, attributes: {}, parentNode: null, innerHTML: "", _text: "",
-		setAttribute(k, v) { this.attributes[k] = v; },
-		getAttribute(k) { return this.attributes[k]; },
-		appendChild(c) { this.childNodes.push(c); this.children.push(c); c.parentNode = this; return c; },
-		insertBefore(c) { this.childNodes.push(c); this.children.push(c); c.parentNode = this; return c; },
-		removeChild(c) { this.childNodes = this.childNodes.filter((x) => x !== c); this.children = this.children.filter((x) => x !== c); return c; },
-		addEventListener() {}, removeEventListener() {}, dispatchEvent() {},
-		classList: { add() {}, remove() {}, contains() { return false; }, toggle() {} },
-		hasAttribute() { return false; }, ownerDocument: null,
-		querySelector() { return null; }, querySelectorAll() { return []; },
-		setAttributeNS() {}, getBoundingClientRect() { return { top: 0, left: 0 }; },
-		focus() {}, scrollIntoView() {}, replaceChildren() {}
-	};
-	// textContent 赋值需像真实 DOM：空串清空子节点（widget rebuild 依赖此行为）
-	Object.defineProperty(e, "textContent", {
-		get() { return e._text; },
-		set(v) {
-			e._text = v;
-			if (v === "" || v === undefined) { e.childNodes = []; e.children = []; }
-		}
-	});
-	return e;
-}
-
-/** 递归收集 DOM 文本（fake 不自动聚合 textContent） */
-function collectText(node) {
-	if (!node) return "";
-	let out = node.textContent || "";
-	for (const c of node.childNodes || []) out += collectText(c);
-	return out;
-}
-
-const fakeDocument = {
-	createElement: (t) => fakeElement(t),
-	createElementNS: (ns, t) => fakeElement(t),
-	createTextNode: (text) => { const e = fakeElement("#text"); e.textContent = String(text); return e; },
-	body: fakeElement("body"), title: "fake",
-	querySelector: () => null, querySelectorAll: () => [], getElementById: () => null,
-	createRange: () => ({ setStart() {}, setEnd() {}, surroundContents() {} }),
-	defaultView: null
-};
-
-let wiki, tw, queueOps, statsPanel, cardManager, sectionBar, importFile, deckUi;
+let queueOps, statsPanel, cardManager, sectionBar, importFile, deckUi;
 let docTitle, sectionTitle, extractTitle, clozeTitle; // 命名空间化后的固定 tiddler title 引用
 test.before(async () => {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-browser-"));
-	tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	wiki = tw.wiki;
 	// 造数据：一本书 + 2 节 + 1 摘录 + 1 挖空 + 自动 deck
-	const pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
+	const pipeline = mod("import/pipeline.js");
 	const r = await pipeline.runSplit({ text: "# 书名甲\n\n第一章正文。\n\n## 小节乙\n\n第二节正文。", title: "书名甲", type: "text/markdown", minChars: 0 });
 	for (const t of r.tiddlers) wiki.addTiddler(t);
 	const section = r.tiddlers.find((x) => x["tidme.kind"] === "topic");
@@ -101,47 +43,19 @@ test.before(async () => {
 		"tidme.breadcrumb": `${section["tidme.breadcrumb"]} › 挖空`, "tidme.source": "书名甲",
 		"tidme.format": "markdown", state: "0", due: "20261231000000000"
 	});
-	queueOps = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/queue-ops.js");
-	statsPanel = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/stats-panel.js");
-	cardManager = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/card-manager.js");
-	sectionBar = tw.modules.execute("$:/plugins/keepone/tidme/import/widgets/section.js");
-	deckUi = tw.modules.execute("$:/plugins/keepone/tidme/manager/widgets/deck-ui.js");
+	queueOps = mod("manager/widgets/queue-ops.js");
+	statsPanel = mod("import/widgets/stats-panel.js");
+	cardManager = mod("manager/widgets/card-manager.js");
+	sectionBar = mod("import/widgets/section.js");
+	deckUi = mod("manager/widgets/deck-ui.js");
 });
 
-function renderWidgetEx(mod, name, opts = {}) {
-	const root = fakeElement("div");
-	// TW 的 getVariable 只从 parentWidget.variables 链读取（变量存储格式为 {value,...} 对象）
-	const vars = {};
-	for (const [k, v] of Object.entries(opts.variables || {})) {
-		vars[k] = { value: v, params: [], isMacroDefinition: false, isFunctionDefinition: false, isProcedureDefinition: false, isWidgetDefinition: false, configTrimWhiteSpace: false };
-	}
-	// 属性需带 type（computeAttribute 只认 string/filtered/indirect/macro/substituted）
-	const attrs = {};
-	for (const [k, v] of Object.entries(opts.attributes || {})) {
-		attrs[k] = typeof v === "object" && v !== null ? v : { type: "string", value: String(v) };
-	}
-	const parentWidget = {
-		variables: vars,
-		getAncestorCount: () => 0,
-		getVariable: () => ""
-	};
-	const w = new mod[name]({ attributes: attrs }, {
-		wiki, document: fakeDocument, parentWidget, variables: {}
-	});
-	w.render(root, null);
-	return { root, w };
+// 薄适配：保持测试体原有 renderWidget(mod, name, opts) 签名，内部走共享 fake-dom helper
+function renderWidgetEx(mod_, name, opts = {}) {
+	return renderWidgetBase(wiki, mod_, name, opts);
 }
-
-function renderWidget(mod, name, opts = {}) {
-	return renderWidgetEx(mod, name, opts).root;
-}
-
-/** 递归收集 button 元素（fake 不提供 querySelectorAll） */
-function collectButtons(node, out = []) {
-	if (!node) return out;
-	if (String(node.tagName) === "BUTTON") out.push(node);
-	for (const c of node.childNodes || []) collectButtons(c, out);
-	return out;
+function renderWidget(mod_, name, opts = {}) {
+	return renderWidgetEx(mod_, name, opts).root;
 }
 
 test("queue-ops: 每牌组渲染批量操作按钮（只剩默认牌组）", () => {

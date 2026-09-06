@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseLineWikiText, cleanContaminatedHtmlToWikiText } = require("../src/tidme/editor/wikitext-parser.ts");
+const { parseLineWikiText, cleanContaminatedHtmlToWikiText } = require("../../src/tidme/editor/wikitext-parser.ts");
 
 test("WikiText Parser — Headings", () => {
 	const tokens = parseLineWikiText("! 标题一", 0);

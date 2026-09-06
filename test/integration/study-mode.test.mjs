@@ -7,36 +7,17 @@ study-mode.test.mjs — 学习模式条与统一结束学习（M5 Wave 1）
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
-
-let wiki, tw, session, reactive, modeBar;
+const { wiki, mod, reset } = bootPlugin({ prefix: "tidme-mode-" });
+let session, reactive, modeBar;
 test.before(() => {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-mode-"));
-	tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	wiki = tw.wiki;
-	session = tw.modules.execute("$:/plugins/keepone/tidme/core/session.js");
-	reactive = tw.modules.execute("$:/plugins/keepone/tidme/core/reactive.js");
-	modeBar = tw.modules.execute("$:/plugins/keepone/tidme/review/widgets/study-mode.js");
+	session = mod("core/session.js");
+	reactive = mod("core/reactive.js");
+	modeBar = mod("review/widgets/study-mode.js");
 });
 
-test.beforeEach(() => {
-	for (const t of wiki.filterTiddlers("[!is[system]]")) wiki.deleteTiddler(t);
-});
+test.beforeEach(reset);
 
 /** 造一张牌组 + 全局会话 + 牌组会话 + 临时项的完整激活态 */
 function setupActive() {

@@ -6,16 +6,9 @@ scheduler.test.mjs — core 调度体系单元测试（node:test）
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { T, PAST, FUTURE } from "../helpers/tw-date.mjs";
 
-const sched = await import("../src/tidme/core/scheduler.ts");
-
-const T = (offsetHours) => {
-	const d = new Date(Date.now() + offsetHours * 3600000);
-	const p = (n, l = 2) => String(n).padStart(l, "0");
-	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
-};
-const PAST = () => T(-48); // 48 小时前（逾期）
-const FUTURE = () => T(48);
+const sched = await import("../../src/tidme/core/scheduler.ts");
 
 test("normalizePriority: 边界与非法值", () => {
 	assert.equal(sched.normalizePriority(0), 0);

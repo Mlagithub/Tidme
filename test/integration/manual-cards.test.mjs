@@ -14,28 +14,15 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
-
-let wiki, tw;
-test.before(() => {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-manual-"));
-	tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	wiki = tw.wiki;
-});
+// tw.modules.execute 在测试体内直接使用，故保留 tw
+const { tw, wiki } = bootPlugin({ prefix: "tidme-manual-" });
 
 // === selection 共享工具（纯函数，假 DOM 节点） ===
 
-const selection = await import("../src/tidme/import/widgets/selection.ts");
+const selection = await import("../../src/tidme/import/widgets/selection.ts");
 
 function fakeNode(attrs = {}, parent = null) {
 	return {
@@ -135,7 +122,7 @@ test("migrate-manual-cards: 预览不改盘，--apply 补 kind/subkind 并写回
 	fs.writeFileSync(path.join(tiddlersDir, "legacy-cloze.tid"), legacyCloze);
 	fs.writeFileSync(path.join(tiddlersDir, "legacy-qa.tid"), legacyQa);
 
-	const tool = path.resolve(here, "../tools/migrate-manual-cards.cjs");
+	const tool = path.resolve(here, "../../tools/migrate-manual-cards.cjs");
 	const run = (extra) => execFileSync(process.execPath, [tool, wikiDir, ...extra], { encoding: "utf8" });
 
 	// 预览：不改盘
@@ -162,10 +149,10 @@ test("migrate-manual-cards: 预览不改盘，--apply 补 kind/subkind 并写回
 });
 
 test("气泡类名契约: section-bar 只管理自己的 tm-section-bubble，与全局 pick-bubble 不互删", () => {
-	const src = fs.readFileSync(path.resolve(here, "../src/tidme/import/widgets/section.ts"), "utf8");
+	const src = fs.readFileSync(path.resolve(here, "../../src/tidme/import/widgets/section.ts"), "utf8");
 	assert.ok(src.includes('querySelector(".tm-section-bubble")'), "section-bar 应只查询自己的气泡类");
 	assert.ok(!src.includes('querySelector(".tm-selection-bubble")'), "不得按共享类名查询（会误删全局气泡）");
-	const pick = fs.readFileSync(path.resolve(here, "../src/tidme/import/widgets/pick-bubble.ts"), "utf8");
+	const pick = fs.readFileSync(path.resolve(here, "../../src/tidme/import/widgets/pick-bubble.ts"), "utf8");
 	assert.ok(pick.includes("tm-pick-bubble"), "全局气泡独立类名");
 	assert.ok(pick.includes("tm-selection-bubble"), "保留共享样式类");
 });

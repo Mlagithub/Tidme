@@ -6,36 +6,17 @@ docItemFilter 曾把 ITEM_FILTER 拼出第二个 run（并集），把全库 ite
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
-
-let wiki, tw, pipeline, commitMod, sched;
+const { wiki, mod, reset } = bootPlugin({ prefix: "tidme-commit-" });
+let pipeline, commitMod, sched;
 test.before(() => {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-commit-"));
-	tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	wiki = tw.wiki;
-	pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
-	commitMod = tw.modules.execute("$:/plugins/keepone/tidme/core/import-commit.js");
-	sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
+	pipeline = mod("import/pipeline.js");
+	commitMod = mod("core/import-commit.js");
+	sched = mod("core/scheduler.js");
 });
 
-test.beforeEach(() => {
-	for (const t of wiki.filterTiddlers("[!is[system]]")) wiki.deleteTiddler(t);
-});
+test.beforeEach(reset);
 
 function sectionTitles(docId) {
 	return wiki.filterTiddlers(`[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]nsort[tidme.order]]`);

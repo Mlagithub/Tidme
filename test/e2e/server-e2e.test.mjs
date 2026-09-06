@@ -1,42 +1,20 @@
 /*
-server-e2e.test.mjs — 服务端 E2E 测试（G16，补全三层测试的第三层）
+server-e2e.test.mjs — 服务端 E2E 测试
 
 起真实 TiddlyWiki 服务端（TiddlyWeb）实例：
 1. HTTP API：PUT 建卡 → GET 验证 → 队列过滤 → 评分写回后队列变化
 2. 后台导入任务：pending tiddler → 服务端 importer 启动扫描 → 文档/卡生成
-（开发计划横切工程：①单元 ②headless ③server E2E）
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
+import { installDom } from "../helpers/jsdom-env.mjs";
 
-const require_ = createRequire(import.meta.url);
-const { JSDOM } = require_("jsdom");
-const { window } = new JSDOM("<!doctype html>");
-globalThis.DOMParser = window.DOMParser;
-globalThis.XMLSerializer = window.XMLSerializer;
-globalThis.Node = window.Node;
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
+installDom();
 
 function bootWiki() {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-e2e-"));
-	const tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	return { tw, tmp };
+	// 每个用例独立 boot（随机临时目录 + bin 插件产物），起真实 TiddlyWeb 前置
+	return bootPlugin({ prefix: "tidme-e2e-" });
 }
 
 function waitListening(httpServer, timeoutMs = 5000) {

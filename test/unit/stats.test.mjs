@@ -3,14 +3,9 @@ stats.test.mjs — core 统计聚合单元测试（node:test）
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { T } from "../helpers/tw-date.mjs";
 
-const stats = await import("../src/tidme/core/stats.ts");
-
-const T = (offsetHours) => {
-	const d = new Date(Date.now() + offsetHours * 3600000);
-	const p = (n, l = 2) => String(n).padStart(l, "0");
-	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
-};
+const stats = await import("../../src/tidme/core/stats.ts");
 
 test("deckLoad: new/learn/due/overdue 分类（未来排期的 state2 不计 due）", () => {
 	const cards = [

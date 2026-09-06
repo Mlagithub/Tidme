@@ -11,39 +11,21 @@ queue.test.mjs — 全局学习队列（deck-engine composeGlobalLearningQueue�
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
+import { twDate } from "../helpers/tw-date.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
-
-let wiki;
+const { wiki, mod, reset } = bootPlugin({ prefix: "tidme-queue-" });
 let deckEngine;
 let sched;
 let sessionMod;
 test.before(() => {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-queue-"));
-	const tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	wiki = tw.wiki;
-	deckEngine = tw.modules.execute("$:/plugins/keepone/tidme/core/deck-engine.js");
-	sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
-	sessionMod = tw.modules.execute("$:/plugins/keepone/tidme/core/session.js");
+	deckEngine = mod("core/deck-engine.js");
+	sched = mod("core/scheduler.js");
+	sessionMod = mod("core/session.js");
 });
-
-function twDate(d) {
-	const p = (n, l = 2) => String(n).padStart(l, "0");
-	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
-}
 
 function mkCard(title, opts = {}) {
 	const now = new Date();
@@ -61,11 +43,7 @@ function mkCard(title, opts = {}) {
 	});
 }
 
-test.beforeEach(() => {
-	// 清空非系统 tiddler（保留插件与默认牌组）
-	const all = wiki.filterTiddlers("[!is[system]]");
-	for (const t of all) wiki.deleteTiddler(t);
-});
+test.beforeEach(reset);
 
 test("默认（无 opts）：纯知识卡队列 —— topic 阅读材料不入队", () => {
 	mkCard("item到期", { kind: "item", state: "2", due: new Date(Date.now() - 3600000) });
@@ -143,7 +121,7 @@ test("调度: 学习步（state 1/3）due 未到不入 learn 队列", () => {
 });
 
 test("调度: deck-engine 过滤器不包含损坏的 <now> 格式（回归防护）", () => {
-	const src = fs.readFileSync(path.resolve(here, "../src/tidme/core/deck-engine.ts"), "utf8");
+	const src = fs.readFileSync(path.resolve(here, "../../src/tidme/core/deck-engine.ts"), "utf8");
 	assert.ok(!src.includes("[UTC]YYYY0MMDD0hh0mm0ss0XXX"), "不得使用损坏的日期格式（被 parse 为未来日期）");
 	assert.ok(src.includes("[UTC]YYYY0MM0DD0hh0mm0ssXXX"), "使用 TW 核心 UTC 格式");
 });

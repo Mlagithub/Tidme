@@ -10,9 +10,9 @@ fsrs 服务经 study-flow-test（全 TW 环境）回归验证。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const ids = await import("../src/tidme/core/ids.ts");
-const schema = await import("../src/tidme/core/schema.ts");
-const deckEngine = await import("../src/tidme/core/deck-engine.ts");
+const ids = await import("../../src/tidme/core/ids.ts");
+const schema = await import("../../src/tidme/core/schema.ts");
+const deckEngine = await import("../../src/tidme/core/deck-engine.ts");
 
 test("ids: docId 只由元数据派生且确定", async () => {
 	const meta = { title: "书A", creator: "作者", language: "zh" };

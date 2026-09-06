@@ -6,46 +6,23 @@ title 唯一稳定；过滤仍然基于字段；老前缀消费者不受影响�
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
+import { twDate } from "../helpers/tw-date.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
-
-let wiki, tw, pipeline, paths, factoryMod, docOps, display, align, sched;
+// tw.utils（generateTiddlerFileInfo）在测试体内直接使用，故保留 tw
+const { tw, wiki, mod, reset } = bootPlugin({ prefix: "tidme-ns-" });
+let pipeline, paths, factoryMod, docOps, display, align, sched;
 test.before(() => {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-ns-"));
-	tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	wiki = tw.wiki;
-	pipeline = tw.modules.execute("$:/plugins/keepone/tidme/import/pipeline.js");
-	paths = tw.modules.execute("$:/plugins/keepone/tidme/core/paths.js");
-	factoryMod = tw.modules.execute("$:/plugins/keepone/tidme/core/card-factory.js");
-	docOps = tw.modules.execute("$:/plugins/keepone/tidme/core/doc-ops.js");
-	display = tw.modules.execute("$:/plugins/keepone/tidme/core/display.js");
-	align = tw.modules.execute("$:/plugins/keepone/tidme/core/align.js");
-	sched = tw.modules.execute("$:/plugins/keepone/tidme/core/scheduler.js");
+	pipeline = mod("import/pipeline.js");
+	paths = mod("core/paths.js");
+	factoryMod = mod("core/card-factory.js");
+	docOps = mod("core/doc-ops.js");
+	display = mod("core/display.js");
+	align = mod("core/align.js");
+	sched = mod("core/scheduler.js");
 });
 
-function twDate(d = new Date()) {
-	const p = (n, l = 2) => String(n).padStart(l, "0");
-	return d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + p(d.getUTCMilliseconds(), 3);
-}
-
-test.beforeEach(() => {
-	// 清除用户 tiddler 保留插件/系统（除 Tidme namespace shadow 外）
-	for (const t of wiki.filterTiddlers("[!is[system]]")) wiki.deleteTiddler(t);
-});
+test.beforeEach(reset);
 
 // === 单元：纯函数 ===
 

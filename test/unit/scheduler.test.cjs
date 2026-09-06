@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { composeGlobalLearningQueue } = require("../src/tidme/core/deck-engine.ts");
+const { composeGlobalLearningQueue } = require("../../src/tidme/core/deck-engine.ts");
 
 test("composeGlobalLearningQueue — topics:true 交错比例（mock 求值器）", () => {
 	const mockEvaluate = (filter) => {

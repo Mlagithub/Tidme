@@ -6,38 +6,20 @@ deck.test.mjs — 牌组子系统（core/deck）单元测试（M2，node:test）
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
+import { twDate } from "../helpers/tw-date.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
-
-let wiki, deckMod;
+const { wiki, mod, reset } = bootPlugin({ prefix: "tidme-deck-" });
+let deckMod;
 test.before(() => {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-deck-"));
-	const tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	wiki = tw.wiki;
-	deckMod = tw.modules.execute("$:/plugins/keepone/tidme/core/deck.js");
+	deckMod = mod("core/deck.js");
 });
 
-function twDate(d = new Date()) {
-	const p = (n, l = 2) => String(n).padStart(l, "0");
-	return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
-}
 function mkItem(title) {
 	wiki.addTiddler({ title, "tidme.kind": "item", state: "0", due: twDate(), caption: title, text: "x" });
 }
+
+test.beforeEach(reset);
 
 test("deck: 创建/读取/枚举；重复创建抛错", () => {
 	const t = deckMod.createDeck(wiki, { name: "词书A", caption: "词汇A", card: "[all[]match[itemX]]" });

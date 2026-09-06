@@ -7,34 +7,17 @@ section.test.mjs — 阅读闭环字段构建器单元测试（node:test）
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import TiddlyWiki from "tiddlywiki";
+import { bootPlugin } from "../helpers/tw-boot.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = path.resolve(here, "../bin");
-const plugins = ["$__plugins_keepone_tidme", "$__tidme_languages_zh-Hans"]
-	.map((n) => path.join(pluginDir, n + ".json"))
-	.filter((f) => fs.existsSync(f))
-	.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-if (!plugins.length) throw new Error("缺少 bin 产物，先运行 node tools/build-plugins.cjs");
-
-let wiki;
-let tw;
+const { wiki, mod, reset } = bootPlugin({ prefix: "tidme-section-" });
 let sectionMod; // = core/card-factory（测试目标即唯一实现）
 let deckMod;
 test.before(() => {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tidme-section-"));
-	const tw = TiddlyWiki.TiddlyWiki();
-	tw.preloadTiddlerArray(plugins);
-	tw.boot.argv = [tmp];
-	tw.boot.boot();
-	wiki = tw.wiki;
-	sectionMod = tw.modules.execute("$:/plugins/keepone/tidme/core/card-factory.js");
-	deckMod = tw.modules.execute("$:/plugins/keepone/tidme/core/deck.js");
+	sectionMod = mod("core/card-factory.js");
+	deckMod = mod("core/deck.js");
 });
+
+test.beforeEach(reset);
 
 test("buildExtract: parent 链 + anchor 记录", () => {
 	wiki.addTiddler({ title: "书 › 第一章", "tidme.doc": "d12345678", "tidme.breadcrumb": "书 › 第一章", "tidme.source": "书", "tidme.format": "epub", "tidme.priority": "30", text: "正文" });
