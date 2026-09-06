@@ -15,8 +15,8 @@ import type { ChunkOptions } from "./chunker";
 import { decodeBytes, sniffFormat } from "./ingest-text";
 import { emitTiddlers, runSplit } from "./split";
 
-/** 同步目标桶的临时配置 tiddler（浏览器 import widgets 与服务端 importer 共用） */
-export const IMPORT_BAG_TITLE = "$:/temp/tidme-import/bag";
+/** 同步目标桶的临时配置 tiddler（浏览器 import widgets 与服务端 importer 共用；唯一产地 = core/ns） */
+export { IMPORT_BAG_TITLE } from "$:/plugins/keepone/tidme/core/ns";
 
 export { runSplit, cleanTitle } from "./split";
 export { makeSectionId, makeDocId, contentFingerprint } from "$:/plugins/keepone/tidme/core/ids";

@@ -13,6 +13,7 @@ const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
 const deckMod = require("$:/plugins/keepone/tidme/core/deck.js");
 const icons = require("$:/plugins/keepone/tidme/core/icons.js");
 const sessionMod = require("$:/plugins/keepone/tidme/core/session.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const DEFAULT_DECK = deckMod.DEFAULT_DECK;
@@ -85,7 +86,7 @@ function startGlobalLearning(wiki: any, widget: any): void {
 		widget.dispatchEvent({ type: "tm-confetti-launch" });
 		widget.dispatchEvent({ type: "tm-confetti-launch", originY: 0.6, spread: 70, delay: 300 });
 		widget.dispatchEvent({ type: "tm-confetti-launch", originY: 0.55, spread: 30, delay: 600 });
-		widget.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/review/notify/congratulation" });
+		widget.dispatchEvent({ type: "tm-notify", param: ns.NOTIFY_CONGRATULATION });
 		return;
 	}
 
@@ -113,7 +114,7 @@ function globalReadingTarget(wiki: any): string {
 		"[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]sort[priority]first[]]"
 	)[0];
 	if (first) return first;
-	return "$:/plugins/keepone/tidme/import/ui/reading-list";
+	return ns.PAGE_READING_LIST;
 }
 
 exports["tidme-workflow"] = makeWorkflow();

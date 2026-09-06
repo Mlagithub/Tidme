@@ -84,6 +84,7 @@ var NS_BOOKS = "Tidme/Books/";
 var NS_DECKS = "Tidme/Decks/";
 var NS_DECKS_SCATTER = NS_DECKS + "\u6563\u5361";
 var CRUMB_SEP = " \u203A ";
+var IMPORT_BAG_TITLE = "$:/temp/tidme-import/bag";
 
 // src/tidme/core/ids.ts
 var _encoder = null;
@@ -1307,7 +1308,6 @@ function runSplit(input) {
 }
 
 // src/tidme/import/pipeline/main.ts
-var IMPORT_BAG_TITLE = "$:/temp/tidme-import/bag";
 function importEpubBytes(bytes, fileName, options) {
   return __async(this, null, function* () {
     const book = yield readEpubBytes(bytes);

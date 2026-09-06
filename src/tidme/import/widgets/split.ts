@@ -11,6 +11,7 @@ const pipeline = require("$:/plugins/keepone/tidme/import/pipeline.js");
 const dom = require("$:/plugins/keepone/tidme/core/dom.js");
 const docOps = require("$:/plugins/keepone/tidme/core/doc-ops.js");
 const commitMod = require("$:/plugins/keepone/tidme/core/import-commit.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 // 共享 DOM 工具（实现收敛于 core/dom）
 const el = dom.el;
@@ -99,7 +100,7 @@ function makePasteSplit(): WidgetCtor {
 					});
 					if (!r.tiddlers.some((x: any) => x["tidme.kind"] === "topic")) throw new Error("未切分出任何节");
 					for (const tdl of r.tiddlers) this.wiki.addTiddler(tdl);
-					this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-done" });
+					this.dispatchEvent({ type: "tm-notify", param: ns.NOTIFY_DONE });
 					this.dispatchEvent({ type: "tm-navigate", navigateTo: r.tiddlers[0].title });
 				} catch (e: any) {
 					status.textContent = "切分失败：" + String(e.message || e);
@@ -144,7 +145,7 @@ function makeInboxSplit(): WidgetCtor {
 						btn.textContent = "…";
 						try {
 							await commitSplit(this.wiki, this, item);
-							this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-done" });
+							this.dispatchEvent({ type: "tm-notify", param: ns.NOTIFY_DONE });
 							refresh();
 						} catch (e: any) {
 							btn.textContent = "失败：" + String((e as any).message || e);

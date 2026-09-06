@@ -111,13 +111,13 @@ function currentDocId(win: any): string | null {
 
 function notify(kind: "extract" | "cloze" | "readpoint" | "select-first" | "done" | "later" | "extract-note") {
 	const map = {
-		extract: "$:/plugins/keepone/tidme/import/ui/notify-extract",
-		cloze: "$:/plugins/keepone/tidme/import/ui/notify-cloze",
-		readpoint: "$:/plugins/keepone/tidme/import/ui/notify-readpoint",
-		"select-first": "$:/plugins/keepone/tidme/import/ui/notify-select-first",
-		"extract-note": "$:/plugins/keepone/tidme/import/ui/notify-extract-note",
-		done: "$:/plugins/keepone/tidme/import/ui/notify-section-done",
-		later: "$:/plugins/keepone/tidme/import/ui/notify-later"
+		extract: ns.NOTIFY_EXTRACT,
+		cloze: ns.NOTIFY_CLOZE,
+		readpoint: ns.NOTIFY_READPOINT,
+		"select-first": ns.NOTIFY_SELECT_FIRST,
+		"extract-note": ns.NOTIFY_EXTRACT_NOTE,
+		done: ns.NOTIFY_SECTION_DONE,
+		later: ns.NOTIFY_LATER
 	} as const;
 	try { active.dispatch?.dispatchEvent({ type: "tm-notify", param: map[kind] }); } catch { /* ignore */ }
 }
@@ -844,7 +844,7 @@ function makeSectionBar(): WidgetCtor {
 			}));
 
 			btnRow.appendChild(mkBtn("", "help", "快捷键与用法帮助", false, () => {
-				this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/plugins/keepone/tidme/import/ui/help-shortcuts" });
+				this.dispatchEvent({ type: "tm-navigate", navigateTo: ns.PAGE_HELP_SHORTCUTS });
 			}, "info-button"));
 
 			root.appendChild(btnRow);
@@ -990,8 +990,8 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
 此操作不可恢复。`,
 			confirmLabel: "删除", danger: true
 		})) {
-			docOps.deleteDocContent(wiki, docId);
-			widget.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/plugins/keepone/tidme/import/ui/reading-list" });
+						docOps.deleteDocContent(wiki, docId);
+						widget.dispatchEvent({ type: "tm-navigate", navigateTo: ns.PAGE_READING_LIST });
 		}
 	});
 	const cleanActions = wrap.querySelector(".tm-doc-banner-actions");

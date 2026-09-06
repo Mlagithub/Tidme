@@ -28,6 +28,9 @@ interface ImportResult {
 	warnings: string[];
 }
 
+/** 导入临时区（$:/temp/tidme-import/*：会话级选项/待导队列/服务端 pending 契约；bag 见 ns.IMPORT_BAG_TITLE） */
+const TEMP_IMPORT = "$:/temp/tidme-import/";
+
 /** 预览条目 token：仅作 pending Map 键与 DOM 标识；产物生命周期随 pending，不另设模块级缓存 */
 function makeToken(): string {
 	return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -42,8 +45,8 @@ function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: str
 	// 语义切分配置唯一读取口 = getSemanticSplitConfig（text JSON + apiKey/baseUrl/model 字段覆盖）
 	const hasCfg = wiki.getTiddler(semMod.SEMANTIC_SPLIT_CONFIG_TITLE);
 	return {
-		maxChars: num("$:/temp/tidme-import/max"),
-		minChars: num("$:/temp/tidme-import/min"),
+		maxChars: num(TEMP_IMPORT + "max"),
+		minChars: num(TEMP_IMPORT + "min"),
 		bag: bag || "default", // TiddlyWeb server 版同步目标桶
 		semanticSplitCfg: hasCfg ? getSemanticSplitConfig(wiki) : null
 	};
@@ -436,7 +439,7 @@ function makeFileWidget(): WidgetCtor {
 				rowsBox.appendChild(row);
 				file.arrayBuffer().then((buf) => {
 					const b64 = bytesToBase64(new Uint8Array(buf));
-					const title = `$:/temp/tidme-import/pending/${Date.now()}-${file.name.replace(/[\\/:*?"<>|]/g, "_")}`;
+					const title = `${TEMP_IMPORT}pending/${Date.now()}-${file.name.replace(/[\\/:*?"<>|]/g, "_")}`;
 					this.wiki.addTiddler({
 						title,
 						tags: ["tidme-pending-import"],
@@ -504,8 +507,8 @@ function makeFileWidget(): WidgetCtor {
 				rowsBox.textContent = "";
 				for (const [, item] of pending) rowsBox.appendChild(buildRow(doc, item, this.wiki));
 				refreshActions();
-				this.wiki.addTiddler({ title: "$:/temp/tidme-import/last-created", text: String(created) });
-				this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-done" });
+				this.wiki.addTiddler({ title: TEMP_IMPORT + "last-created", text: String(created) });
+				this.dispatchEvent({ type: "tm-notify", param: ns.NOTIFY_DONE });
 				if (updated || archived) {
 					rowsBox.appendChild(el(doc, "div", "tm-import-summary tm-import-muted",
 						`—— 对齐：新增 ${created} · 更新 ${updated} · 归档 ${archived}（SRS 进度保留）`));
@@ -524,7 +527,7 @@ function makeFileWidget(): WidgetCtor {
 			const handleFiles = async (files: File[]) => {
 				const accepted = files.filter((f) => /\.(epub|md|markdown|txt)$/i.test(f.name));
 				if (!accepted.length) {
-					this.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-unsupported" });
+					this.dispatchEvent({ type: "tm-notify", param: ns.NOTIFY_UNSUPPORTED });
 					return;
 				}
 				// G10 服务端处理模式：上传 → 后台解析（不预览、不阻塞）

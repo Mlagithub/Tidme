@@ -32,6 +32,7 @@ commitCard），不改写编辑器文本。
 		if (!selected) return;
 		var wiki = editWidget.wiki;
 		var factory = require("$:/plugins/keepone/tidme/core/card-factory.js");
+		var ns = require("$:/plugins/keepone/tidme/core/ns.js");
 		var parentTitle = exports.resolveParent(wiki, editWidget.editTitle);
 
 		var finish = function (draft) {
@@ -39,7 +40,7 @@ commitCard），不改写编辑器文本。
 			factory.commitCard(wiki, draft, editWidget);
 			try {
 				if ($tw && $tw.notifier && $tw.notifier.display) {
-					$tw.notifier.display("$:/plugins/keepone/tidme/import/ui/notify-cloze");
+					$tw.notifier.display(ns.NOTIFY_CLOZE);
 				}
 			} catch (e) { /* 无头/无 document 环境忽略通知 */ }
 		};

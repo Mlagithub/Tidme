@@ -13,6 +13,7 @@ declare function require(module: string): any;
 const factory = require("$:/plugins/keepone/tidme/core/card-factory.js");
 const selMod = require("$:/plugins/keepone/tidme/import/widgets/selection.js");
 const cardModal = require("$:/plugins/keepone/tidme/import/widgets/card-modal.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
@@ -54,7 +55,7 @@ function bindGlobal(widget: any) {
 	const makeCard = (draft: Record<string, any> | null) => {
 		if (!draft) return;
 		factory.commitCard(widget.wiki, draft, widget);
-		try { widget.dispatchEvent({ type: "tm-notify", param: "$:/plugins/keepone/tidme/import/ui/notify-cloze" }); } catch { /* ignore */ }
+		try { widget.dispatchEvent({ type: "tm-notify", param: ns.NOTIFY_CLOZE }); } catch { /* ignore */ }
 		try { win.getSelection?.()?.removeAllRanges(); } catch { /* ignore */ }
 		removeBubble(doc);
 	};

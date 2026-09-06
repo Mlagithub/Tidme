@@ -64,6 +64,7 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 					}
 
 					var pipeline = require("$:/plugins/keepone/tidme/import/pipeline.js");
+					var ns = require("$:/plugins/keepone/tidme/core/ns.js");
 					var lower = fileName.toLowerCase();
 					var needsDom = lower.endsWith(".epub") || /\.html?$/.test(lower);
 					// 仅 epub/html 需要 DOMParser（TW 沙箱默认无；可经 __tidmeDomShim 预置）
@@ -78,7 +79,7 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 					if (lower.endsWith(".epub") || /\.(md|markdown|txt|html?)$/.test(lower)) {
 						// 落库执行器（runImport → 写库 → 标记 done/error）
 						var doImport = function (importBytes) {
-							var opts = { bag: $tw.wiki.getTiddlerText("$:/temp/tidme-import/bag", "") || "default" };
+							var opts = { bag: $tw.wiki.getTiddlerText(ns.IMPORT_BAG_TITLE, "") || "default" };
 							var pri = t.fields["tidme.priority"];
 							if (pri !== undefined && pri !== "") opts.priority = Number(pri);
 							pipeline.runImport(importBytes, fileName, opts)

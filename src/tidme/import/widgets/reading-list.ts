@@ -128,7 +128,7 @@ function makeReadingList(): any {
 					link.href = "#";
 					link.addEventListener("click", (ev: Event) => {
 						ev.preventDefault();
-						this.dispatchEvent({ type: "tm-navigate", navigateTo: "$:/plugins/keepone/tidme/import/ui/import-center" });
+						this.dispatchEvent({ type: "tm-navigate", navigateTo: ns.PAGE_IMPORT_CENTER });
 					});
 					empty.appendChild(link);
 				}
@@ -260,7 +260,7 @@ function makeReadingList(): any {
 			if (!this._root) return false;
 			let need = false;
 			for (const title of Object.keys(changedTiddlers || {})) {
-				if (title.startsWith("$:/state/tidme-import/readpoint/")) { need = true; break; }
+				if (title.startsWith(docOps.READPOINT_PREFIX)) { need = true; break; }
 				const f = this.wiki.getTiddler(title)?.fields;
 				if (!f) continue;
 				if (f["tidme.kind"]) { need = true; break; }

@@ -14,13 +14,14 @@ declare function require(module: string): any;
 const session = require("$:/plugins/keepone/tidme/core/session.js");
 const reactive = require("$:/plugins/keepone/tidme/core/reactive.js");
 const dom = require("$:/plugins/keepone/tidme/core/dom.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const el = dom.el;
 
-/** 结束后返回的页面（Wave 3a 上线今天页后改指 $:/Today） */
-const EXIT_TARGET = "$:/Today";
-const NOTIFY_ENDED = "$:/plugins/keepone/tidme/review/notify/study-ended";
+/** 结束后返回的页面（今天页）+ 结束通知 */
+const EXIT_TARGET = ns.PAGE_TODAY;
+const NOTIFY_ENDED = ns.NOTIFY_STUDY_ENDED;
 
 /** 结束学习：统一清场 + 导航 + 通知（导出供测试/复用；widget 只需提供 wiki/dispatchEvent） */
 function endStudy(widget: any) {

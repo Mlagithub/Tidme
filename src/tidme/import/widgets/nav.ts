@@ -8,14 +8,15 @@ widgets/nav.ts — 页面间导航条（Tidme 主页面切换 + 分隔线 + 当�
 
 declare function require(module: string): any;
 const dom = require("$:/plugins/keepone/tidme/core/dom.js");
+const ns = require("$:/plugins/keepone/tidme/core/ns.js");
 const Widget = require("$:/core/modules/widgets/widget.js").widget;
 
 const NAV: [string, string][] = [
-	["$:/Today", "今天"],
-	["$:/plugins/keepone/tidme/import/ui/reading-list", "阅读"],
-	["$:/plugins/keepone/tidme/import/ui/import-center", "导入"],
-	["$:/plugins/keepone/tidme/manager/ui/card-manager", "管理"],
-	["$:/plugins/keepone/tidme/import/ui/stats", "统计"]
+	[ns.PAGE_TODAY, "今天"],
+	[ns.PAGE_READING_LIST, "阅读"],
+	[ns.PAGE_IMPORT_CENTER, "导入"],
+	[ns.PAGE_CARD_MANAGER, "管理"],
+	[ns.PAGE_IMPORT_STATS, "统计"]
 ];
 
 // 共享 DOM 工具（实现收敛于 core/dom）
