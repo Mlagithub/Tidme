@@ -16,6 +16,7 @@ const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
 const icons = require('$:/plugins/keepone/tidme/core/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const semMod = require('$:/plugins/keepone/tidme/core/server/semantic-split');
+const pdfImport = require('$:/plugins/keepone/tidme/import/widgets/pdf-import.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
@@ -391,7 +392,7 @@ function makeFileWidget(): WidgetCtor {
       const input = doc.createElement('input');
       input.type = 'file';
       input.multiple = true;
-      input.accept = '.epub,.md,.markdown,.txt';
+      input.accept = '.epub,.pdf,.md,.markdown,.txt';
       input.style.display = 'none';
       const hint = el(doc, 'div', 'tm-import-hint', '或者：直接将文件拖拽到此页面的任意位置即可导入。');
 
@@ -534,19 +535,32 @@ function makeFileWidget(): WidgetCtor {
       });
 
       const handleFiles = async (files: File[]) => {
-        const accepted = files.filter((f) => /\.(epub|md|markdown|txt)$/i.test(f.name));
+        const accepted = files.filter((f) => /\.(epub|pdf|md|markdown|txt)$/i.test(f.name));
         if (!accepted.length) {
           this.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_UNSUPPORTED });
           return;
         }
-        // 服务端处理模式：上传 → 后台解析（不预览、不阻塞）
+        // PDF：浏览器内直传入库（pdf.js 解析 + 阅读器），不经服务端与预览行
+        const importLocalPdf = async (file: File) => {
+          const r = await pdfImport.importPdfFile(this.wiki, file, this);
+          rowsBox.appendChild(el(doc, 'div', 'tm-import-summary tm-import-muted', `—— PDF《${r.docTitle.split('/').pop()}》已导入（${r.pages} 页），从文档页继续。`));
+          this.dispatchEvent({ type: 'tm-navigate', navigateTo: r.docTitle });
+        };
+        // 服务端处理模式：上传 → 后台解析（不预览、不阻塞；PDF 仅本地处理）
         if (serverCheck.checked) {
-          for (const file of accepted) serverUpload(file);
+          for (const file of accepted) {
+            if (/\.pdf$/i.test(file.name)) await importLocalPdf(file);
+            else serverUpload(file);
+          }
           return;
         }
         let totalSections = 0;
         for (const file of accepted) {
           try {
+            if (/\.pdf$/i.test(file.name)) {
+              await importLocalPdf(file);
+              continue;
+            }
             const bytes = new Uint8Array(await file.arrayBuffer());
             // SM 对齐：导入时按所选档位批量设定优先级（同批随机分散 ±8）
             const result = await parse.runImport(bytes, file.name, {

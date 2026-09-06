@@ -160,6 +160,26 @@ function makeSettings(): any {
         '超过该天数的复习日志启动时自动清理（0 = 永久保留）',
       );
 
+      // —— PDF 导入与 LLM-OCR ——
+      const pdfOpts = config.readPdfOptions(wiki);
+      const ocr = config.readOcrConfig(wiki);
+      const pdfSection = section('PDF 与 OCR', '导入 · 扫描页识别');
+      row(
+        pdfSection,
+        'PDF 导入方式',
+        select(pdfOpts.split, [['outline', '按大纲切分（无大纲则整本）'], ['none', '整本不切分']], (v) => config.writePdfOptions(wiki, { split: v as 'outline' | 'none' })),
+        '仅对后续导入生效；阅读器内可随时翻页',
+      );
+      row(
+        pdfSection,
+        '启用 LLM-OCR',
+        checkbox(ocr.enable === true, (v) => config.writeOcrConfig(wiki, { enable: v })),
+        '扫描版 PDF 页面转图片后用视觉模型转写为 Markdown（需支持图片输入的模型）',
+      );
+      row(pdfSection, 'OCR 模型', textInput(String(ocr.model || ''), 'text', (v) => config.writeOcrConfig(wiki, { model: v })));
+      row(pdfSection, 'OCR Base URL', textInput(String(ocr.baseUrl || ''), 'text', (v) => config.writeOcrConfig(wiki, { baseUrl: v })), '留空 = https://api.openai.com/v1');
+      row(pdfSection, 'OCR API Key', textInput(String(ocr.apiKey || ''), 'password', (v) => config.writeOcrConfig(wiki, { apiKey: v })), '留空 = 复用「语义切分」的 API Key');
+
       // —— 记忆参数（默认牌组 FSRS） ——
       const memory = section('记忆参数', '默认牌组 FSRS');
       row(

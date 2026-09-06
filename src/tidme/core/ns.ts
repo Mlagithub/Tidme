@@ -25,6 +25,9 @@ wikitext 侧仍是字面量；改名必须人工同步两侧（grep 全仓核对
 /** 阅读材料命名空间（文档页 + 节卡 + 摘录卡） */
 export const NS_BOOKS = 'Tidme/Books/';
 
+/** PDF 二进制命名空间（type application/pdf 的原文件） */
+export const NS_PDFS = 'Tidme/PDFs/';
+
 /** 知识卡命名空间（挖空/问答/散卡；与 Books 平行镜像） */
 export const NS_DECKS = 'Tidme/Decks/';
 

@@ -128,6 +128,9 @@ export function deleteDocContent(wiki: any, docId: string): number {
     // 阅读材料：文档页 + topic 节卡（subkind!==extract → 摘录保留；kind=item/无 kind 保留）
     if (isDocPage(f)) {
       targets.add(t);
+      // PDF：二进制与 OCR 转写页同属阅读材料，级联清理
+      if (f['tidme.pdf']) targets.add(String(f['tidme.pdf']));
+      for (const o of wiki.filterTiddlers(`[all[shadows+tiddlers]prefix[${t}/ocr-p]]`)) targets.add(o);
       continue;
     }
     if (f['tidme.kind'] === 'topic' && String(f['tidme.subkind'] || 'section') !== 'extract') targets.add(t);
