@@ -9,10 +9,13 @@
 test/
   helpers/        共享基建（唯一一份，禁止在测试文件里手写第二份 setup）
   unit/           L1 纯单元：import src 直测 TS 源码（快，不依赖构建产物）
-  integration/    L2 插件集成：boot 真实 TW + bin 插件产物 + modules.execute
-  pipeline/       L3 导入管线：bin/pipeline.cjs + jsdom + epub fixture
-  e2e/            L4 无头 E2E：真实 TiddlyWeb / 全业务流
+  integration/    L2 构建产物集成：boot 真实 TW + bin 插件产物（多数）；
+                  导入解析 bundle 走 jsdom + epub fixture（import-epub / import-split）
+  e2e/            L3 无头 E2E：真实 TiddlyWeb / 全业务流
 ```
+
+命名注意：导入解析（EPUB/Markdown → tiddler）是**辅助功能**，不是渐进学习流程本身——
+不要用 "pipeline" 指代它（易与学习流水线混淆）；测试文件按被测物命名（import-epub / import-split）。
 
 `node --test` 从仓库根递归发现 `*.test.{mjs,cjs,js}`；新文件放进对应层即可。
 
@@ -23,7 +26,7 @@ test/
 | `helpers/tw-boot.mjs`   | `bootPlugin({langs?, prefix?, preload?})` → `{tw, wiki, tmp, mod(p), reset()}`。L2/L4 唯一 boot 入口                                  |
 | `helpers/tw-date.mjs`   | `twDate(d)` / `T(offsetHours)` / `PAST()` / `FUTURE()`：17 位 TW UTC 日期串                                                           |
 | `helpers/fake-dom.mjs`  | widget 渲染冒烟的假 DOM：`renderWidget(wiki, mod, name, opts)`、`collectText`、`collectButtons`、`fakeDocument`。陷阱备忘见文件头注释 |
-| `helpers/jsdom-env.mjs` | 导入管线无头运行：`loadPipelineBundle()`、`installDom()`、`fixtureEpubPath()`                                                         |
+| `helpers/jsdom-env.mjs` | 导入解析 bundle 无头运行：`loadImportBundle()`、`installDom()`、`fixtureEpubPath()`                                                   |
 | `helpers/fixtures.mjs`  | `makeItem` / `makeTopic` / `importMarkdown`：最小造数 builder                                                                         |
 
 测试对象是 **bin 产物**（与 dev/发布一致），改动 src 后先 `npm run build:plugins`。
@@ -57,8 +60,8 @@ widget/core 返回的对象原型来自沙箱 realm——`assert.deepEqual(x, [.
 ## 运行
 
 ```bash
-npm run build:plugins   # 先构建 bin（L2/L3/L4 依赖）
-npm test                # 全部层：unit + integration + pipeline + e2e（node --test）
+npm run build:plugins   # 先构建 bin（L2/L3 依赖）
+npm test                # 全部层：unit + integration + e2e（node --test）
 npm run test:coverage   # 同上 + 覆盖率报告
 ```
 
