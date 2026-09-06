@@ -18,13 +18,13 @@ test/
 
 ## helpers 一览
 
-| 模块 | 用途 |
-|---|---|
-| `helpers/tw-boot.mjs` | `bootPlugin({langs?, prefix?, preload?})` → `{tw, wiki, tmp, mod(p), reset()}`。L2/L4 唯一 boot 入口 |
-| `helpers/tw-date.mjs` | `twDate(d)` / `T(offsetHours)` / `PAST()` / `FUTURE()`：17 位 TW UTC 日期串 |
-| `helpers/fake-dom.mjs` | widget 渲染冒烟的假 DOM：`renderWidget(wiki, mod, name, opts)`、`collectText`、`collectButtons`、`fakeDocument`。陷阱备忘见文件头注释 |
-| `helpers/jsdom-env.mjs` | 导入管线无头运行：`loadPipelineBundle()`、`installDom()`、`fixtureEpubPath()` |
-| `helpers/fixtures.mjs` | `makeItem` / `makeTopic` / `importMarkdown`：最小造数 builder |
+| 模块                    | 用途                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `helpers/tw-boot.mjs`   | `bootPlugin({langs?, prefix?, preload?})` → `{tw, wiki, tmp, mod(p), reset()}`。L2/L4 唯一 boot 入口                                  |
+| `helpers/tw-date.mjs`   | `twDate(d)` / `T(offsetHours)` / `PAST()` / `FUTURE()`：17 位 TW UTC 日期串                                                           |
+| `helpers/fake-dom.mjs`  | widget 渲染冒烟的假 DOM：`renderWidget(wiki, mod, name, opts)`、`collectText`、`collectButtons`、`fakeDocument`。陷阱备忘见文件头注释 |
+| `helpers/jsdom-env.mjs` | 导入管线无头运行：`loadPipelineBundle()`、`installDom()`、`fixtureEpubPath()`                                                         |
+| `helpers/fixtures.mjs`  | `makeItem` / `makeTopic` / `importMarkdown`：最小造数 builder                                                                         |
 
 测试对象是 **bin 产物**（与 dev/发布一致），改动 src 后先 `npm run build:plugins`。
 
@@ -58,5 +58,9 @@ widget/core 返回的对象原型来自沙箱 realm——`assert.deepEqual(x, [.
 
 ```bash
 npm run build:plugins   # 先构建 bin（L2/L3/L4 依赖）
-npm test                # test:unit（node --test）+ test:study（无头学习流回归）
+npm test                # 全部层：unit + integration + pipeline + e2e（node --test）
+npm run test:coverage   # 同上 + 覆盖率报告
 ```
+
+学习流转 E2E 在 `e2e/study-flow.test.mjs`（原 tools/study-flow-test.cjs，已迁入 node:test，
+队列组合改用生产实现 composeDeckFilters）。

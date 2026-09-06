@@ -13,7 +13,7 @@
     "./*.js",
     "packages/*/.*.js"
   ],
-  "excludes": ["**/node_modules", "**/*-lock.json"],
+  "excludes": ["**/node_modules", "**/*-lock.json", "**/bin/**", "**/dist/**", "**/wiki/**"],
   "plugins": [
     "https://plugins.dprint.dev/typescript-0.84.4.wasm",
     "https://plugins.dprint.dev/json-0.17.2.wasm",
