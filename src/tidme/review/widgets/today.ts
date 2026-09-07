@@ -13,17 +13,20 @@ declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
 const workflow = require('$:/plugins/keepone/tidme/review/widgets/workflow.js');
-const icons = require('$:/plugins/keepone/tidme/core/icons.js');
+const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
+const navigateTo = dom.navigateTo;
+const bindWidgetRefresh = primitives.bindWidgetRefresh;
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
@@ -98,7 +101,7 @@ function makeTodayHero(): WidgetCtor {
           'read',
           '继续阅读',
           c.toRead > 0 ? `${c.toRead} 节待读` : '暂无待读材料',
-          () => this.dispatchEvent({ type: 'tm-navigate', navigateTo: readTarget }),
+          () => navigateTo(this, readTarget),
         ),
       );
       container.appendChild(grid);
@@ -112,10 +115,9 @@ function makeTodayHero(): WidgetCtor {
 
     refresh(changedTiddlers: Record<string, any>) {
       if (!this._container) return false;
-      // 反馈条读牌组日志（宽谓词）；重建合并到宏任务（评分链路连写 4+ tiddler）
-      const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
-      if (need) return reactive.rebuildSoon(() => this.build());
-      return need;
+      return bindWidgetRefresh(this, changedTiddlers, () => this.build(), {
+        checkRelevant: reactive.hasRelevantChange,
+      });
     }
   }
   return TodayHeroWidget as any;
@@ -169,37 +171,29 @@ function makeTodayRecent(): WidgetCtor {
       rows.sort((a, b) => b.last - a.last || (a.done / a.total) - (b.done / b.total) || b.total - a.total);
       const top = rows.filter((r) => r.done < r.total).slice(0, 3);
 
-      if (!top.length) {
-        container.appendChild(el(doc, 'div', 'tm-today-empty', '暂无在读书籍——去导入中心添加材料。'));
-        return;
-      }
-      for (const r of top) {
-        const row = el(doc, 'div', 'tm-today-read-row');
-        row.appendChild(el(doc, 'span', 'tm-today-read-name', r.label));
-        const barWrap = el(doc, 'span', 'tm-progress tm-stat-bar');
-        const bar = el(doc, 'span', 'tm-progress-fill tm-stat-bar-fill', '');
-        bar.style.width = `${Math.round((r.done / r.total) * 100)}%`;
-        barWrap.appendChild(bar);
-        row.appendChild(barWrap);
-        row.appendChild(el(doc, 'span', 'tm-today-read-count', `${r.done}/${r.total}`));
-        const go = el(doc, 'button', 'tm-btn tm-btn--sm', '继续');
-        go.addEventListener('click', () => {
-          // 定位口径与全局入口同源（core/doc-ops）：该书续读点在队 → 续读点；否则本书顺序第一张在队卡
-          const docId = String(wiki.getTiddler(r.title)?.fields['tidme.doc'] || '');
-          const target = docOps.docReadingTarget(wiki, docId) || r.title;
-          this.dispatchEvent({ type: 'tm-navigate', navigateTo: target });
-        });
-        row.appendChild(go);
-        container.appendChild(row);
-      }
+      const items: any[] = top.map((r) => {
+        const docId = String(wiki.getTiddler(r.title)?.fields['tidme.doc'] || '');
+        const target = docOps.docReadingTarget(wiki, docId) || r.title;
+        return {
+          id: r.title,
+          title: r.label,
+          progress: { done: r.done, total: r.total },
+          action: {
+            label: '继续',
+            onClick: () => {
+              navigateTo(this, target);
+            },
+          },
+        };
+      });
+      primitives.renderActionList(doc, container, items, '暂无在读书籍——去导入中心添加材料。');
     }
 
     refresh(changedTiddlers: Record<string, any>) {
       if (!this._container) return false;
-      // 反馈条读牌组日志（宽谓词）；重建合并到宏任务（评分链路连写 4+ tiddler）
-      const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
-      if (need) return reactive.rebuildSoon(() => this.build());
-      return need;
+      return bindWidgetRefresh(this, changedTiddlers, () => this.build(), {
+        checkRelevant: reactive.hasRelevantChange,
+      });
     }
   }
   return TodayRecentWidget as any;

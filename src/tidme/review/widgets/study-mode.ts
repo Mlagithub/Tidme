@@ -11,13 +11,17 @@ widgets/study-mode.ts — 学习模式条（固定底部 pill；会话激活时�
 */
 
 declare function require(module: string): any;
-const session = require("$:/plugins/keepone/tidme/core/session.js");
-const reactive = require("$:/plugins/keepone/tidme/core/reactive.js");
-const dom = require("$:/plugins/keepone/tidme/core/dom.js");
-const ns = require("$:/plugins/keepone/tidme/core/ns.js");
-const Widget = require("$:/core/modules/widgets/widget.js").widget;
+const session = require('$:/plugins/keepone/tidme/core/session.js');
+const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const el = dom.el;
+const navigateTo = dom.navigateTo;
+const notify = dom.notify;
 
 /** 结束后返回的页面（今天页）+ 结束通知 */
 const EXIT_TARGET = ns.PAGE_TODAY;
@@ -25,74 +29,137 @@ const NOTIFY_ENDED = ns.NOTIFY_STUDY_ENDED;
 
 /** 结束学习：统一清场 + 导航 + 通知（导出供测试/复用；widget 只需提供 wiki/dispatchEvent） */
 function endStudy(widget: any) {
-	session.endSession(widget.wiki);
-	try {
-		widget.dispatchEvent({ type: "tm-navigate", navigateTo: EXIT_TARGET });
-		widget.dispatchEvent({ type: "tm-notify", param: NOTIFY_ENDED });
-	} catch { /* 无头环境忽略 */ }
+  session.endSession(widget.wiki);
+  try {
+    navigateTo(widget, EXIT_TARGET);
+    notify(widget, NOTIFY_ENDED);
+  } catch { /* 无头环境忽略 */ }
+}
+
+/** 获取当前学习活动卡片（优先取 widget 变量，在全局 PageTemplate 时从 $:/StoryList 嗅探） */
+function getCurrentStudyCard(wiki: any, widget: any, studyList: string[]): string {
+  const varTitle = widget.getVariable('currentTiddler');
+  if (varTitle && studyList.includes(varTitle)) {
+    return varTitle;
+  }
+  const story = wiki.getTiddler('$:/StoryList')?.fields?.list;
+  if (Array.isArray(story)) {
+    const found = studyList.find((t) => story.includes(t));
+    if (found) return found;
+  }
+  return varTitle || studyList[0] || '';
+}
+
+/** 推进学习：移出当前卡并导航到下一张（若是阅读材料自动保存续读点并置已读） */
+function advanceStudy(widget: any) {
+  const wiki = widget.wiki;
+  const study = session.getActiveStudy(wiki);
+  if (!study) return;
+  const cur = getCurrentStudyCard(wiki, widget, study.list);
+  if (cur) {
+    const f = wiki.getTiddler(cur)?.fields || {};
+    const docId = String(f['tidme.doc'] || '');
+    if (docId) {
+      docOps.saveReadPoint(wiki, docId, { t: cur, s: '' });
+    }
+    if (f['tidme.kind'] === 'topic') {
+      wiki.addTiddler(sched.doneCard(f));
+    }
+    dom.closeTiddler(widget, cur);
+  }
+  let list: string[] = Array.isArray(study.list) ? [...study.list] : [];
+  if (cur) {
+    list = list.filter((t: string) => t !== cur);
+    const sessT = wiki.getTiddler(session.SESSION_TIDDLER);
+    wiki.addTiddler({ ...(sessT?.fields || { title: session.SESSION_TIDDLER }), list });
+  }
+  if (list.length > 0) {
+    const next = list[0];
+    docOps.prepareCardFold(wiki, next);
+    navigateTo(widget, next);
+  } else {
+    widget.dispatchEvent?.({ type: 'tm-confetti-launch' });
+    notify(widget, ns.NOTIFY_CONGRATULATION);
+    endStudy(widget);
+  }
 }
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
 function makeStudyModeBar(): WidgetCtor {
-	class StudyModeBarWidget extends Widget {
-		_container: HTMLElement | null = null;
+  class StudyModeBarWidget extends Widget {
+    _container: HTMLElement | null = null;
 
-		render(parent: any, nextSibling: any) {
-			this.parentDomNode = parent;
-			this.computeAttributes();
-			this.execute();
-			const container = dom.el(this.document, "div", "tm-study-mode");
-			container.style.display = "none"; // 未激活时隐藏占位（PageTemplate 单实例）
-			this._container = container;
-			parent.insertBefore(container, nextSibling);
-			this.domNodes.push(container);
-			this.build();
-		}
+    render(parent: any, nextSibling: any) {
+      this.parentDomNode = parent;
+      this.computeAttributes();
+      this.execute();
+      const container = dom.el(this.document, 'div', 'tm-study-mode');
+      container.style.display = 'none'; // 未激活时隐藏占位（PageTemplate 单实例）
+      this._container = container;
+      parent.insertBefore(container, nextSibling);
+      this.domNodes.push(container);
+      this.build();
+    }
 
-		build() {
-			const container = this._container;
-			if (!container) return;
-			const doc = this.document;
-			container.textContent = "";
-			const study = session.getActiveStudy(this.wiki);
-			if (!study) {
-				container.style.display = "none";
-				return;
-			}
-			container.style.display = "";
-			container.appendChild(el(doc, "span", "tm-study-mode-label", "学习中"));
-			const i = study.list.indexOf(this.getVariable("currentTiddler"));
-			if (i >= 0) {
-				container.appendChild(el(doc, "span", "tm-study-mode-progress", `${i + 1}/${study.list.length}`));
-			}
-			const btn = el(doc, "button", "tm-btn tm-btn--primary", "结束学习");
-			btn.title = "结束本次学习：清空会话与排期队列，返回今天";
-			btn.addEventListener("click", () => {
-				endStudy(this);
-				this.build(); // 同步隐藏（真实环境刷新周期也会触发，这里保证确定性反馈）
-			});
-			container.appendChild(btn);
-		}
+    build() {
+      const container = this._container;
+      if (!container) return;
+      const doc = this.document;
+      container.textContent = '';
+      const study = session.getActiveStudy(this.wiki);
+      if (!study) {
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = '';
+      container.appendChild(el(doc, 'span', 'tm-study-mode-label', '学习中'));
 
-		refresh(changedTiddlers: Record<string, any>) {
-			if (!this._container) return false;
-			let need = false;
-			for (const title of Object.keys(changedTiddlers || {})) {
-				if (reactive.isSessionChange(title)) {
-					need = true;
-					break;
-				}
-			}
-			if (need) {
-				this.build();
-				return true;
-			}
-			return false;
-		}
-	}
-	return StudyModeBarWidget as any;
+      const curTitle = getCurrentStudyCard(this.wiki, this, study.list);
+      const i = study.list.indexOf(curTitle);
+      if (i >= 0) {
+        container.appendChild(el(doc, 'span', 'tm-study-mode-progress', `${i + 1}/${study.list.length}`));
+      }
+
+      const curFields = this.wiki.getTiddler(curTitle)?.fields;
+      const isReading = curFields && (curFields['tidme.kind'] === 'topic' || curFields['tidme.pdf']);
+
+      if (isReading) {
+        const advBtn = el(doc, 'button', 'tm-btn tm-study-mode-next tm-btn--primary', '读完，继续复习 ›');
+        advBtn.title = '保存当前阅读进度，继续复习后续卡片';
+        advBtn.addEventListener('click', () => {
+          advanceStudy(this);
+        });
+        container.appendChild(advBtn);
+      }
+
+      const btn = el(doc, 'button', 'tm-btn tm-study-mode-end', '结束学习');
+      btn.title = '结束本次学习：清空会话与排期队列，返回今天';
+      btn.addEventListener('click', () => {
+        endStudy(this);
+        this.build(); // 同步隐藏（真实环境刷新周期也会触发，这里保证确定性反馈）
+      });
+      container.appendChild(btn);
+    }
+
+    refresh(changedTiddlers: Record<string, any>) {
+      if (!this._container) return false;
+      let need = false;
+      for (const title of Object.keys(changedTiddlers || {})) {
+        if (reactive.isSessionChange(title) || title === '$:/StoryList') {
+          need = true;
+          break;
+        }
+      }
+      if (need) {
+        this.build();
+        return true;
+      }
+      return false;
+    }
+  }
+  return StudyModeBarWidget as any;
 }
 
-exports["tidme-study-mode-bar"] = makeStudyModeBar();
+exports['tidme-study-mode-bar'] = makeStudyModeBar();
 exports.endStudy = endStudy;

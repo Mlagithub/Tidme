@@ -17,8 +17,10 @@ widgets/pdf-reader.ts — PDF 阅读器（tidme-pdf-reader）
 import * as zoomMod from './pdf-zoom';
 
 declare function require(module: string): any;
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
+const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
 const parsePdf = require('$:/plugins/keepone/tidme/import/parse/pdf.js');
@@ -30,6 +32,131 @@ const el = dom.el;
 /** 工具栏全屏图标（内联 SVG，字体无关） */
 const FS_SVG =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/** 智能解析 PDF 上下文（二进制标题、docId、文档页标题，带路径/书名/库内候选多级回退） */
+function resolvePdfContext(
+  wiki: any,
+  currentTitle: string,
+): { pdfTitle: string; docId: string; docPageTitle: string } {
+  if (!wiki || !currentTitle) return { pdfTitle: '', docId: '', docPageTitle: '' };
+  const f = wiki.getTiddler(currentTitle)?.fields || {};
+  let docId = String(f['tidme.doc'] || '');
+  let pdfTitle = String(f['tidme.pdf'] || '');
+  let docPageTitle = '';
+
+  // 1. 若当前卡是文档页
+  if (String(f['tidme.type'] || '') === 'pdf' && !f['tidme.subkind']) {
+    docPageTitle = currentTitle;
+  }
+
+  // 2. 若无 pdfTitle，通过 docId 找文档页
+  if (!pdfTitle && docId) {
+    const docPage = docOps.docPageOfDoc(wiki, docId);
+    if (docPage) {
+      docPageTitle = docPageTitle || docPage;
+      pdfTitle = String(wiki.getTiddler(docPage)?.fields?.['tidme.pdf'] || '');
+    }
+  }
+
+  // 3. 若仍无，尝试从当前路径父级推断文档页（如 Tidme/Books/书名/01 章节 -> Tidme/Books/书名）
+  if (!docPageTitle && currentTitle.includes('/')) {
+    const parentCandidate = currentTitle.slice(0, currentTitle.lastIndexOf('/'));
+    docPageTitle = parentCandidate;
+    const parentTiddler = wiki.getTiddler(parentCandidate);
+    if (parentTiddler) {
+      if (!docId) docId = String(parentTiddler.fields['tidme.doc'] || '');
+      if (!pdfTitle) pdfTitle = String(parentTiddler.fields['tidme.pdf'] || '');
+    }
+  }
+
+  // 4. 若仍未找到有效 pdfTitle，从书名或全局库中匹配 PDF 二进制条目
+  if (!pdfTitle || !wiki.getTiddler(pdfTitle)) {
+    const breadcrumbFirst = String(f['tidme.breadcrumb'] || '').split('›')[0].trim();
+    const caption = String(f.caption || '');
+    let bookFromPath = '';
+    if (currentTitle.startsWith(ns.NS_BOOKS)) {
+      bookFromPath = currentTitle.slice(ns.NS_BOOKS.length).split('/')[0];
+    } else if (docPageTitle && docPageTitle.startsWith(ns.NS_BOOKS)) {
+      bookFromPath = docPageTitle.slice(ns.NS_BOOKS.length).split('/')[0];
+    }
+    const candidates = [breadcrumbFirst, caption, bookFromPath].filter((x) => x && x.length > 0);
+
+    for (const name of candidates) {
+      const direct = ns.NS_PDFS + name;
+      if (wiki.getTiddler(direct)) {
+        pdfTitle = direct;
+        break;
+      }
+    }
+
+    if (!pdfTitle || !wiki.getTiddler(pdfTitle)) {
+      const allPdfs = typeof wiki.filterTiddlers === 'function' ? wiki.filterTiddlers('[type[application/pdf]]') : [];
+      if (allPdfs.length === 1) {
+        pdfTitle = allPdfs[0];
+      } else if (allPdfs.length > 1) {
+        for (const p of allPdfs) {
+          const stripped = p.replace(ns.NS_PDFS, '');
+          if (candidates.some((c) => p.includes(c) || c.includes(stripped))) {
+            pdfTitle = p;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    pdfTitle,
+    docId,
+    docPageTitle: docPageTitle || (docId ? docOps.docPageOfDoc(wiki, docId) : ''),
+  };
+}
+
+/** 获取 PDF 字节数组（支持 base64、服务端懒加载 _is_skinny 轮询等待、_canonical_uri fetch） */
+async function loadPdfBytesWithWait(
+  wiki: any,
+  pdfTitle: string,
+  onStatus?: (msg: string) => void,
+): Promise<Uint8Array | null> {
+  if (!wiki || !pdfTitle) return null;
+
+  let tiddler = wiki.getTiddler(pdfTitle);
+  if (!tiddler) return null;
+
+  let b64 = wiki.getTiddlerText(pdfTitle, '');
+  // 当条目处于懒加载状态（getTiddlerText 返回 null 或 text 为空且有 _is_skinny）
+  if (b64 === null || (b64 === '' && tiddler.hasField?.('_is_skinny'))) {
+    onStatus?.('正在从服务端加载 PDF 数据…');
+    for (let i = 0; i < 50; i++) {
+      await new Promise((res) => setTimeout(res, 200));
+      b64 = wiki.getTiddlerText(pdfTitle, '');
+      tiddler = wiki.getTiddler(pdfTitle);
+      if (b64 && b64 !== '') break;
+      if (tiddler && !tiddler.hasField?.('_is_skinny') && tiddler.fields.text) {
+        b64 = tiddler.fields.text;
+        break;
+      }
+    }
+  }
+
+  // 外部链接 _canonical_uri 支持
+  if ((!b64 || b64 === '') && tiddler?.fields?._canonical_uri && typeof fetch === 'function') {
+    onStatus?.('正在请求外部 PDF 文件…');
+    const resp = await fetch(tiddler.fields._canonical_uri);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+    const buf = await resp.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  if (!b64) return null;
+
+  let cleanB64 = b64;
+  const commaIdx = b64.indexOf(',');
+  if (b64.startsWith('data:') && commaIdx !== -1) {
+    cleanB64 = b64.slice(commaIdx + 1);
+  }
+  return pdfjsMod.base64ToBytes(cleanB64);
+}
 
 function makeReader(): any {
   class PdfReaderWidget extends Widget {
@@ -75,13 +202,13 @@ function makeReader(): any {
       const wiki = this.wiki;
       const t = this.getVariable('currentTiddler') || '';
       const f = wiki.getTiddler(t)?.fields || {};
-      this._pdfTitle = String(f['tidme.pdf'] || '');
-      this._docId = String(f['tidme.doc'] || '');
+      const ctx = resolvePdfContext(wiki, t);
+      this._docId = ctx.docId;
+      this._pdfTitle = ctx.pdfTitle;
+      this._docPageTitle = ctx.docPageTitle;
       const range = parsePdf.parsePagesField(String(f['tidme.pages'] || ''));
       this._page = range.start;
       this._numPages = range.end || 0;
-      // 文档页标题（OCR 转写 tiddler 前缀）：不切分时当前卡即文档页
-      this._docPageTitle = String(f['tidme.type'] || '') === 'pdf' && !f['tidme.subkind'] ? t : docOps.docPageOfDoc(wiki, this._docId);
       this._ocrEnabled = config.readOcrConfig(wiki).enable === true;
 
       const root = el(doc, 'div', 'tm-pdf');
@@ -152,6 +279,36 @@ function makeReader(): any {
       bar.appendChild(gNav);
       bar.appendChild(gZoom);
       bar.appendChild(gTools);
+
+      const activeStudy = sessionMod.getActiveStudy(wiki);
+      if (activeStudy) {
+        const gStudy = el(doc, 'div', 'tm-pdf-bar-group tm-pdf-bar-study');
+        const nextBtn = el(doc, 'button', 'tm-pdf-btn-study-next', '✓ 读完继续 ›');
+        nextBtn.title = '保存当前阅读进度，继续复习后续卡片';
+        nextBtn.addEventListener('click', () => {
+          if (this._docId && this._page) {
+            docOps.saveReadPoint(wiki, this._docId, { t, s: `p${this._page}` });
+            wiki.addTiddler({ title: `$:/state/tidme-pdf/page/${this._docId}`, text: String(this._page) });
+          }
+          let list = Array.isArray(activeStudy.list) ? [...activeStudy.list] : [];
+          list = list.filter((x: string) => x !== t);
+          const sessT = wiki.getTiddler(sessionMod.SESSION_TIDDLER);
+          wiki.addTiddler({ ...(sessT?.fields || { title: sessionMod.SESSION_TIDDLER }), list });
+          dom.closeTiddler(this, t);
+          if (list.length > 0) {
+            const nextCard = list[0];
+            docOps.prepareCardFold(wiki, nextCard);
+            dom.navigateTo(this, nextCard);
+          } else {
+            this.dispatchEvent({ type: 'tm-confetti-launch' });
+            dom.notify(this, ns.NOTIFY_CONGRATULATION);
+            dom.navigateTo(this, ns.PAGE_TODAY);
+          }
+        });
+        gStudy.appendChild(nextBtn);
+        bar.appendChild(gStudy);
+      }
+
       root.appendChild(bar);
 
       // ── 工作区：目录抽屉 + 灰底滚动区 + 居中纸页（canvas/文本层/框选矩形）+ 悬浮提示 ──
@@ -169,6 +326,7 @@ function makeReader(): any {
       this._viewer = el(doc, 'div', 'tm-pdf-viewer');
       this._viewer.setAttribute('tabindex', '0');
       this._pageBox = el(doc, 'div', 'tm-pdf-sheet');
+      this._pageBox.style.display = 'none';
       this._canvas = doc.createElement('canvas');
       this._canvas.className = 'tm-pdf-canvas';
       this._textLayer = el(doc, 'div', 'tm-pdf-textlayer', '');
@@ -221,28 +379,51 @@ function makeReader(): any {
       parent.insertBefore(root, nextSibling);
       this.domNodes.push(root);
 
-      // 异步加载（pdf.js CDN + 二进制 tiddler）
-      (async () => {
-        try {
-          const b64 = wiki.getTiddlerText(this._pdfTitle, '');
-          if (!b64) {
-            this._status.textContent = '缺少 PDF 数据';
-            return;
-          }
-          this._pdf = await pdfjsMod.loadPdfBytes(pdfjsMod.base64ToBytes(b64));
-          this._numPages = Number(this._pdf.numPages) || 0;
-          this._total.textContent = ` / ${this._numPages}`;
-          // 起始页：节卡起始页；本书续读点页码若在范围内则恢复
-          let start = range.start;
-          if (this._docId) {
-            const saved = Number(wiki.getTiddlerText('$:/state/tidme-pdf/page/' + this._docId, ''));
-            if (Number.isFinite(saved) && saved >= 1 && saved <= this._numPages) start = saved;
-          }
-          this._setPage(start, false);
-        } catch (e: any) {
-          this._status.textContent = '加载失败：' + String(e?.message || e);
+      void this._loadPdf(range);
+    }
+
+    async _loadPdf(range?: { start: number; end: number }) {
+      const wiki = this.wiki;
+      const t = this.getVariable('currentTiddler') || '';
+      const f = wiki.getTiddler(t)?.fields || {};
+      const r = range || parsePdf.parsePagesField(String(f['tidme.pages'] || ''));
+      try {
+        const bytes = await loadPdfBytesWithWait(wiki, this._pdfTitle, (msg) => {
+          if (this._status) this._status.textContent = msg;
+        });
+        if (!bytes || bytes.length === 0) {
+          this._status.textContent = `缺少 PDF 数据（条目：${this._pdfTitle || '未找到关联 PDF'}）`;
+          return;
         }
-      })();
+        this._pdf = await pdfjsMod.loadPdfBytes(bytes);
+        this._numPages = Number(this._pdf.numPages) || 0;
+        this._total.textContent = ` / ${this._numPages}`;
+        let start = r.start;
+        if (this._docId) {
+          const saved = Number(wiki.getTiddlerText('$:/state/tidme-pdf/page/' + this._docId, ''));
+          if (Number.isFinite(saved) && saved >= 1 && saved <= this._numPages) start = saved;
+        }
+        this._setPage(start, false);
+      } catch (e: any) {
+        this._status.textContent = '加载失败：' + String(e?.message || e);
+      }
+    }
+
+    refresh(changedTiddlers: Record<string, any>) {
+      const cur = this.getVariable('currentTiddler');
+      if (cur && changedTiddlers[cur]) {
+        if (this.parentWidget && Array.isArray(this.parentWidget.children)) {
+          this.refreshSelf();
+        } else {
+          void this._loadPdf();
+        }
+        return true;
+      }
+      if (this._pdfTitle && changedTiddlers[this._pdfTitle]) {
+        void this._loadPdf();
+        return true;
+      }
+      return false;
     }
 
     destroy() {
@@ -251,7 +432,7 @@ function makeReader(): any {
       if (this._onFsChange && typeof this.document.removeEventListener === 'function') {
         this.document.removeEventListener('fullscreenchange', this._onFsChange);
       }
-      super.destroy();
+      super.destroy?.();
     }
 
     // ---------- 翻页与渲染 ----------
@@ -310,6 +491,7 @@ function makeReader(): any {
         const cssH = this._canvas.height / dpr;
         this._pageBox.style.width = `${cssW}px`;
         this._pageBox.style.height = `${cssH}px`;
+        this._pageBox.style.display = 'block';
         this._textLayer.style.width = `${cssW}px`;
         this._textLayer.style.height = `${cssH}px`;
         await this._fillTextLayer(viewport, dpr);
@@ -552,3 +734,5 @@ function makeReader(): any {
 }
 
 exports['tidme-pdf-reader'] = makeReader();
+exports.resolvePdfContext = resolvePdfContext;
+exports.loadPdfBytesWithWait = loadPdfBytesWithWait;

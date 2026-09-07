@@ -39,7 +39,39 @@ function tiddlerFileName(title) {
   const plugins = (await dev.rebuild($tw, src, [], devMode, undefined)).filter(Boolean);
   fs.rmSync(tmp, { recursive: true, force: true });
 
+  const esbuild = require('esbuild');
+
+  // 从 src/tidme/ui/base/icons.ts 提取 TW_SYSTEM_ICONS 派生系统条目（全库唯一数据源）
+  let twSystemIcons = {};
+  try {
+    const iconsCode = esbuild.buildSync({
+      entryPoints: [path.join(root, 'src/tidme/ui/base/icons.ts')],
+      bundle: false,
+      format: 'cjs',
+      write: false,
+    }).outputFiles[0].text;
+    const iconsMod = { exports: {} };
+    const fn = new Function('module', 'exports', 'require', iconsCode);
+    fn(iconsMod, iconsMod.exports, () => {});
+    twSystemIcons = iconsMod.exports.TW_SYSTEM_ICONS || {};
+  } catch (e) {
+    console.warn('提取 TW_SYSTEM_ICONS 失败:', e);
+  }
+
   for (const p of plugins) {
+    if (p.title === '$:/plugins/keepone/tidme' && twSystemIcons) {
+      const inner = JSON.parse(p.text);
+      if (inner && inner.tiddlers) {
+        for (const [title, text] of Object.entries(twSystemIcons)) {
+          inner.tiddlers[title] = {
+            title,
+            tags: '$:/tags/Image',
+            text,
+          };
+        }
+        p.text = JSON.stringify(inner);
+      }
+    }
     const name = tiddlerFileName(p.title);
     const json = JSON.stringify(p);
     fs.writeFileSync(path.join(out, name), json);
@@ -48,7 +80,6 @@ function tiddlerFileName(title) {
 
   // 附带：导入管线 bundle（无头管线测试的输入）——用 esbuild JS API，避免 npx 子进程残留
   // $:/plugins/keepone/tidme/core/* 通过 onResolve 内联进 bundle（无头测试不依赖 TW 运行时）；import/* 保持外部（jszip）
-  const esbuild = require('esbuild');
   const coreResolvePlugin = {
     name: 'tidme-core-alias',
     setup(build) {

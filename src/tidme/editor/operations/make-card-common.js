@@ -47,7 +47,7 @@ commitCard），不改写编辑器文本。
 
     if (kind === 'qa') {
       if (typeof document === 'undefined') return;
-      var modal = require('$:/plugins/keepone/tidme/import/widgets/card-modal.js');
+      var modal = require('$:/plugins/keepone/tidme/ui/components/card-modal.js');
       modal.openCardModal(document, 'qa', selected, function(res) {
         finish(factory.buildQA(wiki, parentTitle, res.question, res.answerOrCloze));
       });

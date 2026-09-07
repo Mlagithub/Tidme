@@ -8,10 +8,10 @@ widgets/workflow.ts — $:/Decks 工作流中心：开始学习按钮
 */
 
 declare function require(module: string): any;
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
-const icons = require('$:/plugins/keepone/tidme/core/icons.js');
+const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');

@@ -11,14 +11,18 @@ declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
-const icons = require('$:/plugins/keepone/tidme/core/icons.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
-// 共享 DOM/显示工具（实现收敛于 core/dom、core/display）
+// 共享 DOM/显示/组件工具（实现收敛于 ui/base/dom、ui/components/ui-primitives、core/display）
 const el = dom.el;
+const showToast = dom.showToast;
+const renderEmpty = primitives.renderEmpty;
+const bindWidgetRefresh = primitives.bindWidgetRefresh;
 const captionText = display.captionText;
 
 function makeQueueOps(): WidgetCtor {
@@ -31,12 +35,7 @@ function makeQueueOps(): WidgetCtor {
       const wiki = this.wiki;
       const wrap = el(doc, 'div', 'tm-queue-ops');
 
-      // toast 反馈
-      const toast = (msg: string, kind = '') => {
-        const t = el(doc, 'div', 'tm-toast' + (kind ? ' tm-toast--' + kind : ''), msg);
-        wrap.insertBefore(t, wrap.firstChild);
-        setTimeout(() => t.remove(), 2500);
-      };
+      const toast = (msg: string, kind: '' | 'ok' | 'err' = '') => showToast(doc, wrap, msg, kind);
 
       wrap.appendChild(el(doc, 'h3', '', '牌组批量操作（优先级调度）'));
       wrap.appendChild(el(doc, 'div', 'tm-import-muted', '顺延=due+7d（低优先级积压）· 提前=今天复习 · 忽略=移出队列 · 搁置=暂停（deck.card 已排除）· 遗忘=回新卡'));
@@ -69,10 +68,7 @@ function makeQueueOps(): WidgetCtor {
         list.textContent = '';
         const decks = deckMod.listDecks(wiki);
         if (!decks.length) {
-          const empty = el(doc, 'div', 'tm-empty', '');
-          empty.appendChild(el(doc, 'div', 'tm-empty-icon', '🃏'));
-          empty.appendChild(el(doc, 'div', '', '暂无牌组。'));
-          list.appendChild(empty);
+          list.appendChild(renderEmpty(doc, { text: '暂无牌组。', icon: '🃏' }));
           return;
         }
         for (const deck of decks) {
@@ -113,17 +109,13 @@ function makeQueueOps(): WidgetCtor {
       };
       renderList();
 
-      // 刷新：唯一机制（TW 原生 refresh 嗅探 + core/reactive 谓词）
       this._renderList = renderList;
 
       parent.insertBefore(wrap, nextSibling);
       this.domNodes.push(wrap);
     }
     refresh(changedTiddlers: Record<string, any>) {
-      // 列表类精化谓词：复习日志/会话写入不重建队列；重建合并到宏任务
-      if (!reactive.hasCardDataChange(this.wiki, changedTiddlers)) return false;
-      if (this._renderList) return reactive.rebuildSoon(() => this._renderList?.());
-      return false;
+      return bindWidgetRefresh(this, changedTiddlers, () => this._renderList?.());
     }
   }
   return QueueOpsWidget as any;

@@ -11,13 +11,15 @@ widgets/stats-panel.ts — 统计面板（指标卡 + 表格 + 漏斗横条）
 declare function require(module: string): any;
 const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
+const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
-// 共享 DOM/显示工具（实现收敛于 core/dom、core/display）
 const el = dom.el;
+const renderProgressBar = primitives.renderProgressBar;
+const bindWidgetRefresh = primitives.bindWidgetRefresh;
 const displayTitle = display.displayTitle;
 
 function sectionTitle(doc: Document, label: string): HTMLElement {
@@ -63,21 +65,14 @@ function makeStatsPanel(): WidgetCtor {
         const rt = stats.getReadTimeStats ? stats.getReadTimeStats(wiki) : { totalSeconds: 0, todaySeconds: 0, docSeconds: {} };
         const fmtDur = stats.formatDuration ? stats.formatDuration : (s: number) => `${s} 秒`;
 
-        // 0) 指标卡
-        const cards = el(doc, 'div', 'tm-stat-cards');
-        const statCard = (label: string, value: string, sub?: string) => {
-          const c = el(doc, 'div', 'tm-stat-card');
-          c.appendChild(el(doc, 'div', 'tm-stat-num', value));
-          c.appendChild(el(doc, 'div', 'tm-stat-label', label));
-          if (sub) c.appendChild(el(doc, 'div', 'tm-stat-sub', sub));
-          return c;
-        };
-        cards.appendChild(statCard('牌组', String(decks.length)));
-        cards.appendChild(statCard('文档', String(docs.length)));
-        cards.appendChild(statCard('在队卡', String(funnel.cards)));
-        cards.appendChild(statCard('复习', String(ret.reviews), ret.reviews ? `保留率 ${Math.round(ret.retention * 100)}%` : ''));
-        cards.appendChild(statCard('今日阅读', fmtDur(rt.todaySeconds), `累计 ${fmtDur(rt.totalSeconds)}`));
-        wrap.appendChild(cards);
+        // 0) 指标卡（纯化为声明式数据）
+        primitives.renderMetricCards(doc, wrap, [
+          { label: '牌组', value: String(decks.length) },
+          { label: '文档', value: String(docs.length) },
+          { label: '在队卡', value: String(funnel.cards) },
+          { label: '复习', value: String(ret.reviews), sub: ret.reviews ? `保留率 ${Math.round(ret.retention * 100)}%` : '' },
+          { label: '今日阅读', value: fmtDur(rt.todaySeconds), sub: `累计 ${fmtDur(rt.totalSeconds)}` },
+        ]);
 
         // 创建分栏网格布局
         const grid = el(doc, 'div', 'tm-stats-grid');
@@ -87,82 +82,59 @@ function makeStatsPanel(): WidgetCtor {
         grid.appendChild(sideCol);
         wrap.appendChild(grid);
 
-        // 1) 牌组负载（卡片表格）
+        // 1) 牌组负载（声明式卡片表格）
         const cardLoad = el(doc, 'div', 'tm-dashboard-card');
         cardLoad.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '牌组负载'));
-        const deckWrap = el(doc, 'div', 'tm-table-wrap');
-        const deckTable = el(doc, 'table', 'tm-table', '');
-        const thead = el(doc, 'thead', '');
-        const htr = el(doc, 'tr', '');
-        for (const h of ['牌组', '总数', '新', '学习中', '到期', '逾期']) {
-          htr.appendChild(el(doc, 'th', '', h));
-        }
-        thead.appendChild(htr);
-        deckTable.appendChild(thead);
-        const tbody = el(doc, 'tbody', '');
-        if (!decks.length) {
-          tbody.appendChild(el(doc, 'tr', '', ''));
-          const td = el(doc, 'td', 'tm-import-muted', '暂无牌组');
-          td.setAttribute('colspan', '6');
-          tbody.lastChild.appendChild(td);
-        }
-        for (const deck of decks) {
-          const cards2 = deckMod.deckCards(wiki, deck).map((t) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
+        const deckRows = decks.map((deck: string) => {
+          const cards2 = deckMod.deckCards(wiki, deck).map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
           const load = stats.deckLoad(cards2);
-          const tr = el(doc, 'tr', '');
-          tr.appendChild(el(doc, 'td', 'tm-stats-deck', deck));
-          for (const v of [load.total, load.newCount, load.learn, load.due, load.overdue]) {
-            const td = el(doc, 'td', 'tm-stats-num-cell', String(v));
-            tr.appendChild(td);
-          }
-          tbody.appendChild(tr);
-        }
-        deckTable.appendChild(tbody);
-        deckWrap.appendChild(deckTable);
-        cardLoad.appendChild(deckWrap);
+          return { deck, total: load.total, newCount: load.newCount, learn: load.learn, due: load.due, overdue: load.overdue };
+        });
+        primitives.renderTable(doc, cardLoad, {
+          columns: [
+            { key: 'deck', title: '牌组', render: (row: any) => el(doc, 'span', 'tm-stats-deck', row.deck) },
+            { key: 'total', title: '总数' },
+            { key: 'newCount', title: '新' },
+            { key: 'learn', title: '学习中' },
+            { key: 'due', title: '到期' },
+            { key: 'overdue', title: '逾期' },
+          ],
+          data: deckRows,
+          emptyText: '暂无牌组',
+        });
         mainCol.appendChild(cardLoad);
 
-        // 2) 文档进度（表格）
+        // 2) 文档进度（声明式表格）
         const cardDoc = el(doc, 'div', 'tm-dashboard-card');
         cardDoc.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '文档进度'));
-        const docWrap = el(doc, 'div', 'tm-table-wrap');
-        const docTable = el(doc, 'table', 'tm-table', '');
-        const dthead = el(doc, 'thead', '');
-        const dhtr = el(doc, 'tr', '');
-        for (const h of ['文档', '进度', '已读']) dhtr.appendChild(el(doc, 'th', '', h));
-        dthead.appendChild(dhtr);
-        docTable.appendChild(dthead);
-        const dtbody = el(doc, 'tbody', '');
-        if (!docs.length) {
-          const tr0 = el(doc, 'tr', '');
-          const td0 = el(doc, 'td', 'tm-import-muted', '暂无导入文档——导入中心导入书籍后显示进度。');
-          td0.setAttribute('colspan', '3');
-          tr0.appendChild(td0);
-          dtbody.appendChild(tr0);
-        }
+        const docRows: any[] = [];
         for (const d of docs) {
           const docId = wiki.getTiddler(d)?.fields['tidme.doc'];
           if (!docId) continue;
-          // 阅读进度口径：仅正文章节（排除摘录，与文档页 sectionsOfDoc 一致）——否则进度把摘录也计入分母
           const sections = cardLikes(`[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]]`);
           const p = stats.docProgress(sections);
-          const tr = el(doc, 'tr', '');
           const docFields = wiki.getTiddler(d)?.fields || {};
-          tr.appendChild(el(doc, 'td', 'tm-stat-doc-name', displayTitle(docFields, d)));
-          const progTd = el(doc, 'td', '', '');
-          const barWrap = el(doc, 'span', 'tm-progress tm-stat-bar');
-          const bar = el(doc, 'span', 'tm-progress-fill tm-stat-bar-fill', '');
-          bar.style.width = p.total ? `${Math.round((p.done / p.total) * 100)}%` : '0%';
-          barWrap.appendChild(bar);
-          progTd.appendChild(barWrap);
-          tr.appendChild(progTd);
-          tr.appendChild(el(doc, 'td', 'tm-import-muted', `已读 ${p.done} / ${p.total}（剩 ${p.left}）`));
-          dtbody.appendChild(tr);
+          docRows.push({
+            name: displayTitle(docFields, d),
+            done: p.done,
+            total: p.total,
+            left: p.left,
+          });
         }
-        docTable.appendChild(dtbody);
-        docWrap.appendChild(docTable);
-        docWrap.classList.add('tm-scroll');
-        cardDoc.appendChild(docWrap);
+        const docTableWrap = primitives.renderTable(doc, cardDoc, {
+          columns: [
+            { key: 'name', title: '文档', render: (row: any) => el(doc, 'span', 'tm-stat-doc-name', row.name) },
+            {
+              key: 'bar',
+              title: '进度',
+              render: (row: any) => renderProgressBar(doc, row.done, row.total),
+            },
+            { key: 'info', title: '已读', render: (row: any) => el(doc, 'span', 'tm-import-muted', `已读 ${row.done} / ${row.total}（剩 ${row.left}）`) },
+          ],
+          data: docRows,
+          emptyText: '暂无导入文档——导入中心导入书籍后显示进度。',
+        });
+        docTableWrap.classList.add('tm-scroll');
         mainCol.appendChild(cardDoc);
 
         // 3) 漏斗
@@ -219,15 +191,16 @@ function makeStatsPanel(): WidgetCtor {
       this.domNodes.push(wrap);
     }
     refresh(changedTiddlers: Record<string, any>) {
-      // 面板读复习日志（保留率），保持宽谓词；重建合并到宏任务（评分链路连写 4+ tiddler）
-      const need = reactive.hasRelevantChange(this.wiki, changedTiddlers);
-      if (need && this._wrap && this._wrap.parentNode) {
-        return reactive.rebuildSoon(() => {
+      if (!this._wrap || !this._wrap.parentNode) return false;
+      return bindWidgetRefresh(
+        this,
+        changedTiddlers,
+        () => {
           this._wrap.textContent = '';
           this._build?.();
-        });
-      }
-      return need;
+        },
+        { checkRelevant: reactive.hasRelevantChange },
+      );
     }
   }
   return StatsPanelWidget as any;

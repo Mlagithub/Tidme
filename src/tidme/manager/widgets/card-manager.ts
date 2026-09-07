@@ -17,13 +17,19 @@ Done 语义：移出队列 = 置 tidme.done（kind 决定归属：item 出默认
 declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
-const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
-const icons = require('$:/plugins/keepone/tidme/core/icons.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
+const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
+
+const showToast = dom.showToast;
+const navigateTo = dom.navigateTo;
+const renderEmpty = primitives.renderEmpty;
+const bindWidgetRefresh = primitives.bindWidgetRefresh;
 
 type View = 'all' | 'inqueue' | 'done' | 'suspended' | 'overdue';
 type Org = 'doc' | 'deck' | 'list';
@@ -201,10 +207,8 @@ function collectAll(ctx: Ctx) {
 
 // ---------- 选中状态与反馈 ----------
 
-function toast(ctx: Ctx, msg: string, kind = '') {
-  const t = el(ctx.doc, 'div', 'tm-toast' + (kind ? ' tm-toast--' + kind : ''), msg);
-  ctx.wrap.insertBefore(t, ctx.wrap.firstChild);
-  setTimeout(() => t.remove(), 2500);
+function toast(ctx: Ctx, msg: string, kind: '' | 'ok' | 'err' = '') {
+  showToast(ctx.doc, ctx.wrap, msg, kind);
 }
 
 function updateSelectionUI(ctx: Ctx) {
@@ -256,10 +260,7 @@ function bindFold(wiki: any, details: HTMLElement, stateTitle: string) {
 }
 
 function emptyEl(doc: Document, text: string, icon = '🗂'): HTMLElement {
-  const e = el(doc, 'div', 'tm-empty', '');
-  e.appendChild(el(doc, 'div', 'tm-empty-icon', icon));
-  e.appendChild(el(doc, 'div', '', text));
-  return e;
+  return renderEmpty(doc, { text, icon });
 }
 
 /** 字符串键比较器（pa<pb?-1:pa>pb?1:0 的唯一实现） */
@@ -334,7 +335,7 @@ function appendRowBase(ctx: Ctx, row: HTMLElement, c: Card, cb: HTMLInputElement
   link.title = crumbOf(c);
   link.addEventListener('click', (e: Event) => {
     e.preventDefault();
-    ctx.widget.dispatchEvent({ type: 'tm-navigate', navigateTo: c.title });
+    navigateTo(ctx.widget, c.title);
   });
   row.appendChild(link);
 
@@ -964,9 +965,7 @@ function makeCardManager(): WidgetCtor {
     refresh(changedTiddlers: Record<string, any>) {
       const ctx = this._ctx;
       if (!ctx) return false;
-      // 刷新：列表类精化谓词（复习日志/会话写入不重建列表）+ 合并重建（评分链路连写 4+ tiddler）
-      if (!reactive.hasCardDataChange(ctx.wiki, changedTiddlers)) return false;
-      return reactive.rebuildSoon(() => render(ctx));
+      return bindWidgetRefresh(this, changedTiddlers, () => render(ctx));
     }
   }
   return CardManagerWidget as any;

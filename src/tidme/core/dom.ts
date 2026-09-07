@@ -1,15 +1,6 @@
 /*
-core/dom.ts — 无状态 DOM 小工具
-浏览器/无头通用的 createElement 帮助。
+core/dom.ts — 向下兼容 Forward Shim
+实现已迁移至 $:/plugins/keepone/tidme/ui/base/dom.js
 */
-
-export function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
-  const e = doc.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-export function escapeHtml(s: string): string {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-}
+declare function require(module: string): any;
+module.exports = require('$:/plugins/keepone/tidme/ui/base/dom.js');

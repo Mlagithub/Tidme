@@ -12,9 +12,12 @@ widgets/pick-bubble.ts — 全局划词气泡（任意 tiddler 查看态制卡�
 declare function require(module: string): any;
 const factory = require('$:/plugins/keepone/tidme/core/card-factory.js');
 const selMod = require('$:/plugins/keepone/tidme/import/widgets/selection.js');
-const cardModal = require('$:/plugins/keepone/tidme/import/widgets/card-modal.js');
+const cardModal = require('$:/plugins/keepone/tidme/ui/components/card-modal.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
+
+const notify = dom.notify;
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
@@ -58,7 +61,7 @@ function bindGlobal(widget: any) {
     if (!draft) return;
     factory.commitCard(widget.wiki, draft, widget);
     try {
-      widget.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_CLOZE });
+      notify(widget, ns.NOTIFY_CLOZE);
     } catch { /* ignore */ }
     try {
       win.getSelection?.()?.removeAllRanges();

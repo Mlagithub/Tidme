@@ -75,6 +75,7 @@ export async function createPdfBook(
       'tidme.kind': 'topic',
       'tidme.subkind': 'section',
       'tidme.doc': docId,
+      'tidme.pdf': pdfTitle,
       'tidme.order': String(i + 1).padStart(6, '0'),
       'tidme.pages': `${s.startPage}-${s.endPage}`,
       'tidme.breadcrumb': `${bookTitle} › ${leaf}`,

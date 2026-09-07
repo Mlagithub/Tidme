@@ -186,3 +186,73 @@ test('pdf-reader: 目录抽屉列本书节卡，OCR 开启后按钮出现', asyn
   const tocBtn = buttons.find((b) => b.title === '目录（本书章节）');
   assert.notEqual(tocBtn.style.display, 'none', '有节卡 → 目录按钮可见');
 });
+
+test('pdf-reader: 节卡缺少 tidme.pdf 时通过 docId 回退解析，且学习会话中显示推进按钮', async () => {
+  const r = await pdfOps.createPdfBook(wiki, {
+    bookTitle: '回退测试书',
+    dataB64: 'JVBERi0xLjQK',
+    sections: [{ title: '第一节', startPage: 1, endPage: 5 }],
+  });
+  const secTitle = r.sectionTitles[0];
+  // 模拟历史存量数据：删除节卡上的 tidme.pdf
+  const f = { ...wiki.getTiddler(secTitle).fields };
+  delete f['tidme.pdf'];
+  wiki.addTiddler(f);
+
+  // 模拟处于学习会话中
+  const sessionMod = mod('core/session.js');
+  wiki.addTiddler({
+    title: sessionMod.SESSION_TIDDLER,
+    list: [secTitle, '后置卡片'],
+  });
+
+  const { root, w } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: secTitle },
+  });
+
+  assert.equal(w._pdfTitle, r.pdfTitle, '自动通过 docId 回退找到文档页的 tidme.pdf');
+  const buttons = collectButtons(root);
+  const nextBtn = buttons.find((b) => b.textContent?.includes('读完继续'));
+  assert.ok(nextBtn, '学习会话中工具栏展示「读完继续」按钮');
+
+  // refresh 响应
+  assert.equal(w.refresh({ [secTitle]: {} }), true, '当前卡片变更触发 refresh');
+  assert.equal(w.refresh({ [r.pdfTitle]: {} }), true, 'PDF 二进制条目变更触发 refresh');
+  assert.equal(w.refresh({ 无关卡片: {} }), false, '无关变更不触发 refresh');
+
+  w.destroy();
+});
+
+test('pdf-reader: resolvePdfContext 路径回退与全局模糊匹配兜底', async () => {
+  const pdfWidgetMod = mod('read/widgets/pdf-reader.js');
+  const resolve = pdfWidgetMod.resolvePdfContext;
+
+  // 1. 模拟存量节卡：无 tidme.pdf，无 tidme.doc
+  const bookRoot = 'Tidme/Books/极简测试书';
+  const secTitle = `${bookRoot}/01 第一节`;
+  const pdfTitle = 'Tidme/PDFs/极简测试书';
+
+  wiki.addTiddler({
+    title: pdfTitle,
+    type: 'application/pdf',
+    text: 'JVBERi0xLjQK',
+  });
+  wiki.addTiddler({
+    title: bookRoot,
+    tags: ['tidme-import-doc'],
+    'tidme.pdf': pdfTitle,
+  });
+  wiki.addTiddler({
+    title: secTitle,
+    text: '<$tidme-pdf-reader/>',
+  });
+
+  const ctx1 = resolve(wiki, secTitle);
+  assert.equal(ctx1.pdfTitle, pdfTitle, '通过路径父级 Tidme/Books/极简测试书 找到 pdfTitle');
+  assert.equal(ctx1.docPageTitle, bookRoot);
+
+  // 2. 模拟文档页也没有 tidme.pdf，仅通过书名与 type: application/pdf 模糊/候选命中
+  wiki.deleteTiddler(bookRoot);
+  const ctx2 = resolve(wiki, secTitle);
+  assert.equal(ctx2.pdfTitle, pdfTitle, '通过候选书名匹配到 Tidme/PDFs/极简测试书');
+});

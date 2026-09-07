@@ -1,15 +1,15 @@
 /*
 widgets/settings.ts — 设置页（Tidme 选项集中配置）
 
-产品约定：低频、设一次用很久的选项集中在「设置」页；每次操作都要调整的高频参数
-（导入字数覆盖、复习评分、阅读条栏动作等）保留在各功能页，不在此重复。
-UI 骨架与「今天」页同源（tm-today-section 标题体系 + --tm-* 令牌）。
-配置读写唯一收口 = core/config；widget 只做表单组装与写入触发（控件 change 即写）。
+产品约定：低频、设一次用很久的选项集中在「设置」页；每次操作都要调整的高频参数保留在各功能页。
+架构设计：纯数据 Schema 驱动，委托通用表单构建器 setting-form 组装卡片化、视线集中的现代 UI。
+配置读写唯一收口 = core/config。
 */
 
 declare function require(module: string): any;
 const config = require('$:/plugins/keepone/tidme/core/config.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const form = require('$:/plugins/keepone/tidme/ui/components/setting-form.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
@@ -37,172 +37,300 @@ function makeSettings(): any {
       const doc = this.document;
       const wiki = this.wiki;
       const root = this._root;
-      root.textContent = '';
 
-      const section = (title: string, subtitle = '') => {
-        const sec = el(doc, 'div', 'tm-today-section');
-        const head = el(doc, 'div', 'tm-today-section-head');
-        head.appendChild(el(doc, 'span', 'tm-today-section-title', title));
-        if (subtitle) head.appendChild(el(doc, 'span', 'tm-today-sub', subtitle));
-        sec.appendChild(head);
-        const body = el(doc, 'div', 'tm-set-body');
-        sec.appendChild(body);
-        root.appendChild(sec);
-        return body;
-      };
+      // 实时配置读取器
+      const ap = () => config.readAutoPostpone(wiki);
+      const deckParams = () => config.readDefaultDeckParams(wiki);
+      const queueOpts = () => config.readQueueOptions(wiki);
+      const pdfOpts = () => config.readPdfOptions(wiki);
+      const ocr = () => config.readOcrConfig(wiki);
+      const ss = () => config.readSemanticSplit(wiki);
 
-      const row = (body: any, label: string, control: any, hint = '') => {
-        const r = el(doc, 'div', 'tm-set-row');
-        r.appendChild(el(doc, 'label', 'tm-set-label', label));
-        control.classList.add('tm-set-input');
-        r.appendChild(control);
-        if (hint) r.appendChild(el(doc, 'span', 'tm-set-hint', hint));
-        body.appendChild(r);
-        return control;
-      };
+      const groups: form.SettingGroup[] = [
+        {
+          id: 'schedule',
+          title: '复习调度',
+          subtitle: '默认牌组 · 自动顺延',
+          items: [
+            {
+              id: 'order',
+              title: '出题顺序',
+              desc: '学习队列里到期卡与新卡的交错方式',
+              type: 'select',
+              options: [
+                ['due-new', '到期优先'],
+                ['new-due', '新卡优先'],
+                ['random', '随机'],
+              ],
+              getValue: () => deckParams().order,
+              setValue: (v: string) => config.writeDefaultDeckParams(wiki, { order: v }),
+            },
+            {
+              id: 'queue-stream',
+              title: '学习流构成',
+              desc: '「开始学习」的队列构成；阅读材料=节卡/摘录',
+              type: 'select',
+              options: [
+                ['items', '纯测试卡（不混入）'],
+                ['interleaved', '混入阅读材料并交错'],
+                ['strict', '混入但三段式'],
+              ],
+              getValue: () => {
+                const q = queueOpts();
+                return q.topics ? (q.mode === 'strict' ? 'strict' : 'interleaved') : 'items';
+              },
+              setValue: (v: string) => {
+                config.writeQueueOptions(wiki, {
+                  topics: v !== 'items',
+                  mode: v === 'strict' ? 'strict' : 'interleaved',
+                });
+              },
+            },
+            {
+              id: 'queue-mix',
+              title: '交错比（测试:阅读）',
+              desc: '混入阅读材料时，每 N 张测试卡插入 1 张阅读卡（SuperMemo 靠统一优先级自然混合，此为本地化调节）',
+              type: 'select',
+              options: [
+                ['4:1', '4:1（默认）'],
+                ['3:1', '3:1'],
+                ['2:1', '2:1'],
+                ['1:1', '1:1'],
+              ],
+              getValue: () => {
+                const q = queueOpts();
+                return `${q.itemRatio}:${q.topicRatio}`;
+              },
+              setValue: (v: string) => {
+                const parts = v.split(':');
+                config.writeQueueOptions(wiki, {
+                  itemRatio: Number(parts[0]),
+                  topicRatio: Number(parts[1]),
+                });
+              },
+            },
+            {
+              id: 'learn-random',
+              title: '随机打乱学习步',
+              desc: '对应 SuperMemo 的 Randomize final drill：学习中的卡默认按到期前置，开启后改为随机顺序',
+              type: 'switch',
+              getValue: () => deckParams().learn_random === true,
+              setValue: (v: boolean) => config.writeDefaultDeckParams(wiki, { learn_random: v }),
+            },
+            {
+              id: 'auto-postpone-enable',
+              title: '每日自动顺延',
+              desc: '启动时与每小时自动顺延低优先级逾期卡，防队列积压',
+              type: 'switch',
+              getValue: () => ap().enable === true,
+              setValue: (v: boolean) => config.writeAutoPostpone(wiki, { enable: v }),
+            },
+            {
+              id: 'auto-postpone-max-priority',
+              title: '顺延优先级上限',
+              desc: '优先级数值大于该值的逾期卡才会被顺延（0 最高）',
+              type: 'number',
+              min: 0,
+              max: 100,
+              step: 1,
+              visibleIf: () => ap().enable === true,
+              getValue: () => Number(ap().maxPriority),
+              setValue: (v: number) => config.writeAutoPostpone(wiki, { maxPriority: v }),
+            },
+            {
+              id: 'auto-postpone-days',
+              title: '顺延天数',
+              desc: '低优先级逾期卡向后顺延的天数',
+              type: 'number',
+              min: 1,
+              max: 365,
+              step: 1,
+              visibleIf: () => ap().enable === true,
+              getValue: () => Number(ap().postponeDays),
+              setValue: (v: number) => config.writeAutoPostpone(wiki, { postponeDays: v }),
+            },
+            {
+              id: 'auto-postpone-keep-top',
+              title: '保留高优卡数',
+              desc: '顺延时始终保护优先级最高的前 N 张',
+              type: 'number',
+              min: 0,
+              max: 999,
+              step: 1,
+              visibleIf: () => ap().enable === true,
+              getValue: () => Number(ap().keepTop),
+              setValue: (v: number) => config.writeAutoPostpone(wiki, { keepTop: v }),
+            },
+            {
+              id: 'auto-postpone-threshold',
+              title: '过载触发阈值',
+              desc: '逾期卡超过该数量才触发顺延（0 = 无门槛）',
+              type: 'number',
+              min: 0,
+              max: 9999,
+              step: 1,
+              visibleIf: () => ap().enable === true,
+              getValue: () => Number(ap().maxOverdueThreshold),
+              setValue: (v: number) => config.writeAutoPostpone(wiki, { maxOverdueThreshold: v }),
+            },
+            {
+              id: 'log-retention',
+              title: '复习日志保留天数',
+              desc: '超过该天数的复习日志启动时自动清理（0 = 永久保留）',
+              type: 'number',
+              min: 0,
+              max: 3650,
+              step: 1,
+              getValue: () => config.readLogRetentionDays(wiki),
+              setValue: (v: number) => config.writeLogRetentionDays(wiki, v),
+            },
+          ],
+        },
+        {
+          id: 'pdf-ocr',
+          title: 'PDF 与 OCR',
+          subtitle: '导入 · 扫描页识别',
+          items: [
+            {
+              id: 'pdf-split',
+              title: 'PDF 导入方式',
+              desc: '仅对后续导入生效；阅读器内可随时翻页',
+              type: 'select',
+              options: [
+                ['outline', '按大纲切分（无大纲则整本）'],
+                ['none', '整本不切分'],
+              ],
+              getValue: () => pdfOpts().split,
+              setValue: (v: string) => config.writePdfOptions(wiki, { split: v as 'outline' | 'none' }),
+            },
+            {
+              id: 'ocr-enable',
+              title: '启用 LLM-OCR',
+              desc: '扫描版 PDF 页面转图片后用视觉模型转写为 Markdown（需支持图片输入的模型）',
+              type: 'switch',
+              getValue: () => ocr().enable === true,
+              setValue: (v: boolean) => config.writeOcrConfig(wiki, { enable: v }),
+            },
+            {
+              id: 'ocr-model',
+              title: 'OCR 模型',
+              desc: '用于图像转写的视觉多模态模型名',
+              type: 'text',
+              placeholder: 'gpt-4o-mini',
+              visibleIf: () => ocr().enable === true,
+              getValue: () => String(ocr().model || ''),
+              setValue: (v: string) => config.writeOcrConfig(wiki, { model: v }),
+            },
+            {
+              id: 'ocr-base-url',
+              title: 'OCR Base URL',
+              desc: '留空 = https://api.openai.com/v1',
+              type: 'text',
+              placeholder: 'https://api.openai.com/v1',
+              visibleIf: () => ocr().enable === true,
+              getValue: () => String(ocr().baseUrl || ''),
+              setValue: (v: string) => config.writeOcrConfig(wiki, { baseUrl: v }),
+            },
+            {
+              id: 'ocr-api-key',
+              title: 'OCR API Key',
+              desc: '留空 = 复用「语义切分」的 API Key',
+              type: 'password',
+              placeholder: 'sk-...',
+              visibleIf: () => ocr().enable === true,
+              getValue: () => String(ocr().apiKey || ''),
+              setValue: (v: string) => config.writeOcrConfig(wiki, { apiKey: v }),
+            },
+          ],
+        },
+        {
+          id: 'memory-params',
+          title: '记忆参数',
+          subtitle: '默认牌组 FSRS',
+          items: [
+            {
+              id: 'request-retention',
+              title: '目标记忆率',
+              desc: '0.9 为标准；越高遗忘越慢、每日负担越重',
+              type: 'number',
+              min: 0.5,
+              max: 1,
+              step: 0.01,
+              getValue: () => Number(deckParams().request_retention),
+              setValue: (v: number) => config.writeDefaultDeckParams(wiki, { request_retention: v }),
+            },
+            {
+              id: 'maximum-interval',
+              title: '最大间隔天数',
+              desc: '单卡复习周期的最大天数上限',
+              type: 'number',
+              min: 1,
+              max: 9999,
+              step: 1,
+              getValue: () => Number(deckParams().maximum_interval),
+              setValue: (v: number) => config.writeDefaultDeckParams(wiki, { maximum_interval: v }),
+            },
+            {
+              id: 'leech-threshold',
+              title: '难以度阈值',
+              desc: '累计遗忘达到该值的卡标记为难以度',
+              type: 'number',
+              min: 1,
+              max: 99,
+              step: 1,
+              getValue: () => Number(deckParams().leech_threshold),
+              setValue: (v: number) => config.writeDefaultDeckParams(wiki, { leech_threshold: v }),
+            },
+          ],
+        },
+        {
+          id: 'semantic-split',
+          title: '语义切分',
+          subtitle: '导入 · LLM 二次切分',
+          items: [
+            {
+              id: 'semantic-enable',
+              title: '启用语义切分',
+              desc: '对无结构散文按语义断点二次切分（需 API Key）',
+              type: 'switch',
+              getValue: () => ss().enable === true,
+              setValue: (v: boolean) => config.writeSemanticSplit(wiki, { enable: v }),
+            },
+            {
+              id: 'semantic-api-key',
+              title: 'API Key',
+              desc: '用于调用语义切分 LLM 服务的密钥',
+              type: 'password',
+              placeholder: 'sk-...',
+              visibleIf: () => ss().enable === true,
+              getValue: () => String(ss().apiKey || ''),
+              setValue: (v: string) => config.writeSemanticSplit(wiki, { apiKey: v }),
+            },
+            {
+              id: 'semantic-base-url',
+              title: 'Base URL',
+              desc: 'OpenAI 兼容地址，可指向自建服务',
+              type: 'text',
+              placeholder: 'https://api.openai.com/v1',
+              visibleIf: () => ss().enable === true,
+              getValue: () => String(ss().baseUrl || ''),
+              setValue: (v: string) => config.writeSemanticSplit(wiki, { baseUrl: v }),
+            },
+            {
+              id: 'semantic-model',
+              title: '模型',
+              desc: '用于文本断点识别的 LLM 模型名',
+              type: 'text',
+              placeholder: 'gpt-4o-mini',
+              visibleIf: () => ss().enable === true,
+              getValue: () => String(ss().model || ''),
+              setValue: (v: string) => config.writeSemanticSplit(wiki, { model: v }),
+            },
+          ],
+        },
+      ];
 
-      const checkbox = (checked: boolean, onChange: (v: boolean) => void) => {
-        const input = doc.createElement('input');
-        input.type = 'checkbox';
-        input.checked = checked;
-        input.addEventListener('change', () => onChange(input.checked));
-        return input;
-      };
-      const numberInput = (value: number, min: number, max: number, step: number, onChange: (v: number) => void) => {
-        const input = doc.createElement('input');
-        input.type = 'number';
-        input.min = String(min);
-        input.max = String(max);
-        input.step = String(step);
-        input.value = String(value);
-        input.addEventListener('change', () => {
-          const v = Number(input.value);
-          if (Number.isFinite(v)) onChange(v);
-          else input.value = String(value); // 非法输入回滚为上次有效值
-        });
-        return input;
-      };
-      const textInput = (value: string, type: string, onChange: (v: string) => void) => {
-        const input = doc.createElement('input');
-        input.type = type;
-        input.value = value;
-        input.addEventListener('change', () => onChange(input.value.trim()));
-        return input;
-      };
-      const select = (value: string, options: [string, string][], onChange: (v: string) => void) => {
-        const input = doc.createElement('select');
-        for (const [v, label] of options) {
-          const opt = doc.createElement('option');
-          opt.value = v;
-          opt.textContent = label;
-          input.appendChild(opt);
-        }
-        input.value = value;
-        input.addEventListener('change', () => onChange(input.value));
-        return input;
-      };
-
-      // —— 复习调度（默认牌组 + 自动顺延） ——
-      const ap = config.readAutoPostpone(wiki);
-      const deckParams = config.readDefaultDeckParams(wiki);
-      const queueOpts = config.readQueueOptions(wiki);
-      const queueMixText = `${queueOpts.itemRatio}:${queueOpts.topicRatio}`;
-      const schedule = section('复习调度', '默认牌组 · 自动顺延');
-      row(
-        schedule,
-        '出题顺序',
-        select(deckParams.order, [['due-new', '到期优先'], ['new-due', '新卡优先'], ['random', '随机']], (v) => config.writeDefaultDeckParams(wiki, { order: v })),
-        '学习队列里到期卡与新卡的交错方式',
-      );
-      row(
-        schedule,
-        '学习流构成',
-        select(queueOpts.topics ? (queueOpts.mode === 'strict' ? 'strict' : 'interleaved') : 'items', [['items', '纯测试卡（不混入）'], ['interleaved', '混入阅读材料并交错'], [
-          'strict',
-          '混入但三段式',
-        ]], (v) => config.writeQueueOptions(wiki, { topics: v !== 'items', mode: v === 'strict' ? 'strict' : 'interleaved' })),
-        '「开始学习」的队列构成；阅读材料=节卡/摘录',
-      );
-      row(
-        schedule,
-        '交错比（测试:阅读）',
-        select(queueMixText, [['4:1', '4:1（默认）'], ['3:1', '3:1'], ['2:1', '2:1'], ['1:1', '1:1']], (v) => {
-          const parts = v.split(':');
-          config.writeQueueOptions(wiki, { itemRatio: Number(parts[0]), topicRatio: Number(parts[1]) });
-        }),
-        '混入阅读材料时，每 N 张测试卡插入 1 张阅读卡（SuperMemo 靠统一优先级自然混合，此为本地化调节）',
-      );
-      row(
-        schedule,
-        '随机打乱学习步',
-        checkbox(deckParams.learn_random === true, (v) => config.writeDefaultDeckParams(wiki, { learn_random: v })),
-        '对应 SuperMemo 的 Randomize final drill：学习中的卡默认按到期前置，开启后改为随机顺序',
-      );
-      row(schedule, '每日自动顺延', checkbox(ap.enable === true, (v) => config.writeAutoPostpone(wiki, { enable: v })), '启动时与每小时自动顺延低优先级逾期卡，防队列积压');
-      row(
-        schedule,
-        '顺延优先级上限',
-        numberInput(Number(ap.maxPriority), 0, 100, 1, (v) => config.writeAutoPostpone(wiki, { maxPriority: v })),
-        '优先级数值大于该值的逾期卡才会被顺延（0 最高）',
-      );
-      row(schedule, '顺延天数', numberInput(Number(ap.postponeDays), 1, 365, 1, (v) => config.writeAutoPostpone(wiki, { postponeDays: v })));
-      row(schedule, '保留高优卡数', numberInput(Number(ap.keepTop), 0, 999, 1, (v) => config.writeAutoPostpone(wiki, { keepTop: v })), '顺延时始终保护优先级最高的前 N 张');
-      row(
-        schedule,
-        '过载触发阈值',
-        numberInput(Number(ap.maxOverdueThreshold), 0, 9999, 1, (v) => config.writeAutoPostpone(wiki, { maxOverdueThreshold: v })),
-        '逾期卡超过该数量才触发顺延（0 = 无门槛）',
-      );
-      row(
-        schedule,
-        '复习日志保留天数',
-        numberInput(config.readLogRetentionDays(wiki), 0, 3650, 1, (v) => config.writeLogRetentionDays(wiki, v)),
-        '超过该天数的复习日志启动时自动清理（0 = 永久保留）',
-      );
-
-      // —— PDF 导入与 LLM-OCR ——
-      const pdfOpts = config.readPdfOptions(wiki);
-      const ocr = config.readOcrConfig(wiki);
-      const pdfSection = section('PDF 与 OCR', '导入 · 扫描页识别');
-      row(
-        pdfSection,
-        'PDF 导入方式',
-        select(pdfOpts.split, [['outline', '按大纲切分（无大纲则整本）'], ['none', '整本不切分']], (v) => config.writePdfOptions(wiki, { split: v as 'outline' | 'none' })),
-        '仅对后续导入生效；阅读器内可随时翻页',
-      );
-      row(
-        pdfSection,
-        '启用 LLM-OCR',
-        checkbox(ocr.enable === true, (v) => config.writeOcrConfig(wiki, { enable: v })),
-        '扫描版 PDF 页面转图片后用视觉模型转写为 Markdown（需支持图片输入的模型）',
-      );
-      row(pdfSection, 'OCR 模型', textInput(String(ocr.model || ''), 'text', (v) => config.writeOcrConfig(wiki, { model: v })));
-      row(pdfSection, 'OCR Base URL', textInput(String(ocr.baseUrl || ''), 'text', (v) => config.writeOcrConfig(wiki, { baseUrl: v })), '留空 = https://api.openai.com/v1');
-      row(pdfSection, 'OCR API Key', textInput(String(ocr.apiKey || ''), 'password', (v) => config.writeOcrConfig(wiki, { apiKey: v })), '留空 = 复用「语义切分」的 API Key');
-
-      // —— 记忆参数（默认牌组 FSRS） ——
-      const memory = section('记忆参数', '默认牌组 FSRS');
-      row(
-        memory,
-        '目标记忆率',
-        numberInput(Number(deckParams.request_retention), 0.5, 1, 0.01, (v) => config.writeDefaultDeckParams(wiki, { request_retention: v })),
-        '0.9 为标准；越高遗忘越慢、每日负担越重',
-      );
-      row(memory, '最大间隔天数', numberInput(Number(deckParams.maximum_interval), 1, 9999, 1, (v) => config.writeDefaultDeckParams(wiki, { maximum_interval: v })));
-      row(
-        memory,
-        '难以度阈值',
-        numberInput(Number(deckParams.leech_threshold), 1, 99, 1, (v) => config.writeDefaultDeckParams(wiki, { leech_threshold: v })),
-        '累计遗忘达到该值的卡标记为难以度',
-      );
-
-      // —— 语义切分（导入） ——
-      const ss = config.readSemanticSplit(wiki);
-      const semantic = section('语义切分', '导入 · LLM 二次切分');
-      row(semantic, '启用语义切分', checkbox(ss.enable === true, (v) => config.writeSemanticSplit(wiki, { enable: v })), '对无结构散文按语义断点二次切分（需 API Key）');
-      row(semantic, 'API Key', textInput(String(ss.apiKey || ''), 'password', (v) => config.writeSemanticSplit(wiki, { apiKey: v })));
-      row(semantic, 'Base URL', textInput(String(ss.baseUrl || ''), 'text', (v) => config.writeSemanticSplit(wiki, { baseUrl: v })), 'OpenAI 兼容地址，可指向自建服务');
-      row(semantic, '模型', textInput(String(ss.model || ''), 'text', (v) => config.writeSemanticSplit(wiki, { model: v })));
+      form.renderSettingGroups(doc, root, groups);
     }
   }
   return SettingsWidget as any;

@@ -86,10 +86,14 @@ test('settings: 自动顺延开关迁移到设置页（queue-ops 只保留手动
   assert.ok(collectText(renderSettings().root).includes('每日自动顺延'), '设置页承载开关');
 });
 
-test('nav: 导航含设置入口', () => {
-  const nav = mod('import/widgets/nav.js');
-  const { root } = renderWidgetBase(wiki, nav, 'tidme-nav');
-  assert.ok(collectText(root).includes('设置'));
+test('nav: 导航含设置入口（新路径 ui/components/nav 与向后兼容 shim）', () => {
+  const navNew = mod('ui/components/nav.js');
+  const { root: rootNew } = renderWidgetBase(wiki, navNew, 'tidme-nav');
+  assert.ok(collectText(rootNew).includes('设置'), 'ui/components/nav.js 包含设置');
+
+  const navOld = mod('import/widgets/nav.js');
+  const { root: rootOld } = renderWidgetBase(wiki, navOld, 'tidme-nav');
+  assert.ok(collectText(rootOld).includes('设置'), 'import/widgets/nav.js shim 包含设置');
 });
 
 test('config: 学习流构成与交错比 —— QueueMode 旧值兼容 + QueueMix 回环 + 2:1 队列形状', () => {

@@ -14,16 +14,16 @@ declare function require(module: string): any;
 const parse = require('$:/plugins/keepone/tidme/import/parse.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const stats = require('$:/plugins/keepone/tidme/core/stats.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const paths = require('$:/plugins/keepone/tidme/core/paths.js');
 const factory = require('$:/plugins/keepone/tidme/core/card-factory.js');
 const selMod = require('$:/plugins/keepone/tidme/import/widgets/selection.js');
-const cardModal = require('$:/plugins/keepone/tidme/import/widgets/card-modal.js');
+const cardModal = require('$:/plugins/keepone/tidme/ui/components/card-modal.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
-const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
+const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
@@ -126,7 +126,7 @@ function notify(kind: 'extract' | 'cloze' | 'readpoint' | 'select-first' | 'done
     later: ns.NOTIFY_LATER,
   } as const;
   try {
-    active.dispatch?.dispatchEvent({ type: 'tm-notify', param: map[kind] });
+    if (active.dispatch) dom.notify(active.dispatch, map[kind]);
   } catch { /* ignore */ }
 }
 
@@ -1275,11 +1275,25 @@ function makeSectionBody(): WidgetCtor {
       active.body = this;
       this._title = title;
 
+      const rawText = String(t.fields.text || '');
+      if (t.fields['tidme.pdf'] || t.fields['tidme.pages'] || rawText.includes('<$tidme-pdf-reader')) {
+        const parser = this.wiki.parseText('text/vnd.tiddlywiki', rawText || '<$tidme-pdf-reader/>', {
+          parentWidget: this,
+          document: doc,
+        });
+        const childWidget = this.wiki.makeWidget(parser, {
+          parentWidget: this,
+          document: doc,
+        });
+        childWidget.render(parent, nextSibling);
+        this.children.push(childWidget);
+        return;
+      }
+
       const editorContainer = el(doc, 'div', 'tm-live-wysiwyg-container');
       parent.insertBefore(editorContainer, nextSibling);
       this.domNodes.push(editorContainer);
 
-      const rawText = String(t.fields.text || '');
       const initialWikiText = cleanContaminatedHtmlToWikiText(rawText);
       if (rawText !== initialWikiText) {
         // 自动修复历史污染的数据并标记需要保存
@@ -1334,6 +1348,9 @@ function makeSectionBody(): WidgetCtor {
     }
 
     refresh(changedTiddlers: Record<string, any>) {
+      if (this.children && this.children.length > 0) {
+        return this.refreshChildren(changedTiddlers);
+      }
       if (this._isSelfSaving) {
         this._isSelfSaving = false;
         return false;

@@ -135,6 +135,7 @@ function renderBar(currentTiddler) {
       variables: { currentTiddler: { value: currentTiddler, params: [], isMacroDefinition: false } },
       getVariable: (n) => (n === 'currentTiddler' ? currentTiddler : ''),
       getAncestorCount: () => 0,
+      dispatchEvent: () => false,
     },
     variables: {},
   });
@@ -169,4 +170,29 @@ test('模式条: 结束学习 → endSession 清场 + 派发导航/通知', () =
   btn._listeners.click();
   assert.equal(session.isSessionActive(wiki), false, '点击后全部清场');
   assert.equal(holder.children[0].style.display, 'none', '结束后隐藏');
+});
+
+test('模式条: 阅读材料显示「读完，继续复习 ›」，点击推进到后续 item 卡片', () => {
+  setupActive();
+  wiki.addTiddler({
+    title: '阅读卡丙',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'doc1',
+  });
+  wiki.addTiddler({
+    title: session.SESSION_TIDDLER,
+    list: ['阅读卡丙', '卡甲', '卡乙'],
+  });
+  const { w, holder } = renderBar('阅读卡丙');
+  w.refresh({ '$:/state/tidme/learning-session': { modified: true } });
+
+  assert.ok(barText(holder).includes('读完，继续复习 ›'), '阅读卡显示推进复习按钮');
+  const advBtn = holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›');
+  assert.ok(advBtn, '存在推进按钮');
+  advBtn._listeners.click();
+
+  const sess = wiki.getTiddler(session.SESSION_TIDDLER);
+  assert.equal(sess.fields.list[0], '卡甲', '推进后队列首位切换到 item 卡片');
+  assert.ok(!sess.fields.list.includes('阅读卡丙'), '阅读卡已从当前会话移出');
 });

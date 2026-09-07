@@ -9,11 +9,11 @@ widgets/import.ts — 自包含导入组件
 declare function require(module: string): any;
 const parse = require('$:/plugins/keepone/tidme/import/parse.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const commitMod = require('$:/plugins/keepone/tidme/core/import-commit.js');
-const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
-const icons = require('$:/plugins/keepone/tidme/core/icons.js');
+const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
+const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const semMod = require('$:/plugins/keepone/tidme/core/server/semantic-split');
 const pdfImport = require('$:/plugins/keepone/tidme/import/widgets/pdf-import.js');

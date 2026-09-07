@@ -1,0 +1,12 @@
+title: $:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row
+
+<!-- 「今天」页牌组行：名称（链到牌组详情）+ 三计数徽章；拖拽排序由 list-tagged-draggable 提供 -->
+<!-- 计数逻辑统一由 core/deck-engine + <$tidme-deck-badges/> 驱动，无重复过滤器硬编码 -->
+<$let deckTiddler=<<currentTiddler>>>
+<div class="tm-today-deck-row">
+<$link to=<<deckTiddler>>><span class="tm-today-deck-name"><$wikify name="deckCaption" text={{{ [<deckTiddler>get[caption]] ~[<deckTiddler>split[/]last[]] }}} mode="inline" output="text"><<deckCaption>></$wikify></span></$link>
+<$list filter="[<deckTiddler>prefix[$:/Deck/default]]"><span class="tm-badge tm-badge-scope" title="兜底视图：包含全部在队测试卡（其它牌组的卡也计入此行计数，进度共享）">全部</span></$list>
+<$tidme-deck-badges deck=<<deckTiddler>> class="tm-today-deck-counts"/>
+<span class="tm-today-deck-open"><$link to=<<deckTiddler>> class="tm-btn tm-btn--sm">打开 ›</$link></span>
+</div>
+</$let>

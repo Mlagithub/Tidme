@@ -102,6 +102,20 @@ export const fakeDocument = {
   getElementById: () => null,
   createRange: () => ({ setStart() {}, setEnd() {}, surroundContents() {} }),
   defaultView: null,
+  _listeners: {},
+  addEventListener(t, fn) {
+    if (!this._listeners) this._listeners = {};
+    if (!this._listeners[t]) this._listeners[t] = [];
+    this._listeners[t].push(fn);
+  },
+  removeEventListener(t, fn) {
+    if (!this._listeners || !this._listeners[t]) return;
+    this._listeners[t] = this._listeners[t].filter((x) => x !== fn);
+  },
+  dispatchEvent(e) {
+    if (!this._listeners || !this._listeners[e.type]) return;
+    for (const fn of [...this._listeners[e.type]]) fn(e);
+  },
 };
 
 /** 递归收集 DOM 文本（fake 不自动聚合 textContent） */
@@ -138,6 +152,7 @@ export function renderWidget(wiki, mod, name, opts = {}) {
     variables: vars,
     getAncestorCount: () => 0,
     getVariable: () => '',
+    dispatchEvent: () => false,
   };
   const w = new mod[name]({ attributes: attrs }, {
     wiki,

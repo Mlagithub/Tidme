@@ -8,13 +8,17 @@ widgets/split.ts — 切分入口组件（优先级三档 + 预览干预）
 
 declare function require(module: string): any;
 const parse = require('$:/plugins/keepone/tidme/import/parse.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const commitMod = require('$:/plugins/keepone/tidme/core/import-commit.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
-// 共享 DOM 工具（实现收敛于 core/dom）
+
 const el = dom.el;
+const navigateTo = dom.navigateTo;
+const notify = dom.notify;
+const renderEmpty = primitives.renderEmpty;
 
 /** 从源 tiddler 提取溯源字段（切分后保留到文档页） */
 function provenanceOf(wiki: any, title: string): Record<string, string> {
@@ -79,7 +83,7 @@ function makePasteSplit(): WidgetCtor {
       wrap.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '粘贴文本'));
       const inner = el(doc, 'div', 'tm-paste-split');
       const ta = doc.createElement('textarea');
-      ta.className = 'tm-paste-textarea';
+      ta.className = 'tm-paste-textarea tm-textarea';
       ta.placeholder = '粘贴 markdown / HTML / 纯文本…';
       ta.rows = 8;
       inner.appendChild(ta);
@@ -103,8 +107,8 @@ function makePasteSplit(): WidgetCtor {
           });
           if (!r.tiddlers.some((x: any) => x['tidme.kind'] === 'topic')) throw new Error('未切分出任何节');
           for (const tdl of r.tiddlers) this.wiki.addTiddler(tdl);
-          this.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_DONE });
-          this.dispatchEvent({ type: 'tm-navigate', navigateTo: r.tiddlers[0].title });
+          notify(this, ns.NOTIFY_DONE);
+          navigateTo(this, r.tiddlers[0].title);
         } catch (e: any) {
           status.textContent = '切分失败：' + String(e.message || e);
           btn.removeAttribute('disabled');
@@ -138,7 +142,7 @@ function makeInboxSplit(): WidgetCtor {
         listBox.textContent = '';
         const items = this.wiki.filterTiddlers('[tag[tidme-inbox]!is[draft]]');
         if (!items.length) {
-          listBox.appendChild(el(doc, 'div', 'tm-import-muted', '收件箱为空——支持使用浏览器剪藏插件自动捕获内容入库。'));
+          listBox.appendChild(renderEmpty(doc, { text: '收件箱为空——支持使用浏览器剪藏插件自动捕获内容入库。', icon: '📥' }));
           return;
         }
         for (const item of items) {
@@ -150,7 +154,7 @@ function makeInboxSplit(): WidgetCtor {
             btn.textContent = '…';
             try {
               await commitSplit(this.wiki, this, item);
-              this.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_DONE });
+              notify(this, ns.NOTIFY_DONE);
               refresh();
             } catch (e: any) {
               btn.textContent = '失败：' + String((e as any).message || e);

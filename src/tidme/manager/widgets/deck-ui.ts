@@ -11,18 +11,21 @@ manager/widgets/deck-ui.ts — 牌组 UI 组件（与今天页 tm 风格统一�
 
 declare function require(module: string): any;
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
-const dialog = require('$:/plugins/keepone/tidme/core/dialog.js');
+const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
+const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
+const showToast = dom.showToast;
+const navigateTo = dom.navigateTo;
+const closeTiddler = dom.closeTiddler;
+const notify = dom.notify;
 const captionText = display.captionText;
 
-function toastIn(wrap: HTMLElement, doc: Document, msg: string, kind = '') {
-  const t = el(doc, 'div', 'tm-toast' + (kind ? ' tm-toast--' + kind : ''), msg);
-  wrap.insertBefore(t, wrap.firstChild);
-  setTimeout(() => t.remove(), 3000);
+function toastIn(wrap: HTMLElement, doc: Document, msg: string, kind: '' | 'ok' | 'err' = '') {
+  showToast(doc, wrap, msg, kind, 3000);
 }
 
 /** ＋ 新建牌组 */
@@ -111,7 +114,7 @@ function makeDeckCreate(): WidgetCtor {
           });
           details.open = false;
           toastIn(wrap, doc, `✔ 已创建「${name}」，可点行内「选项」配置参数`, 'ok');
-          this.dispatchEvent({ type: 'tm-navigate', navigateTo: title });
+          navigateTo(this, title);
         } catch (e: any) {
           toastIn(wrap, doc, '创建失败：' + String(e?.message || e), 'err');
         }
@@ -176,8 +179,8 @@ function makeDeckDelete(): WidgetCtor {
         if (!(await dialog.confirmDialog(doc, { title: '删除牌组', message: msg, confirmLabel: '删除', danger: true }))) return;
         try {
           const n = deckMod.deleteDeck(wiki, deckTitle, { alsoCards: also });
-          this.dispatchEvent({ type: 'tm-close-tiddler' });
-          this.dispatchEvent({ type: 'tm-notify', param: also ? `已删除牌组及 ${n} 张成员卡` : '✔ 已删除牌组（卡片保留）' });
+          closeTiddler(this);
+          notify(this, also ? `已删除牌组及 ${n} 张成员卡` : '✔ 已删除牌组（卡片保留）');
         } catch (e: any) {
           await dialog.alertDialog(doc, { title: '删除失败', message: String((e as any)?.message || e) });
         }
@@ -192,7 +195,68 @@ function makeDeckDelete(): WidgetCtor {
   return DeckDeleteWidget as any;
 }
 
+/** 牌组三状态计数徽章组件（学习/到期/新卡） */
+function makeDeckBadges(): WidgetCtor {
+  class DeckBadgesWidget extends Widget {
+    deckTitle: string = '';
+
+    render(parent: any, nextSibling: any) {
+      this.parentDomNode = parent;
+      this.computeAttributes();
+      this.execute();
+      const doc = this.document;
+      const wiki = this.wiki;
+      const deckTitle = this.deckTitle;
+
+      const cls = this.getAttribute('class') || 'tm-deck-counts';
+      const wrap = el(doc, 'span', cls);
+
+      if (deckTitle) {
+        const df = wiki.getTiddler(deckTitle)?.fields || {};
+        const f = deckEngine.composeDeckFilters(deckTitle, df);
+        const count = (filter: string) => (filter ? wiki.filterTiddlers(filter).length : 0);
+
+        const learnN = count(f.learn);
+        const dueN = count(f.due);
+        const newN = count(f.newly);
+
+        const lLearn = wiki.getTiddlerText('$:/language/tidme/learn') || '学习';
+        const lDue = wiki.getTiddlerText('$:/language/tidme/due') || '到期';
+        const lNew = wiki.getTiddlerText('$:/language/tidme/new') || '新卡';
+
+        const learnBadge = el(doc, 'span', 'tm-badge tm-badge-learn', `${lLearn}: ${learnN}`);
+        const dueBadge = el(doc, 'span', 'tm-badge tm-badge-due', `${lDue}: ${dueN}`);
+        const newBadge = el(doc, 'span', 'tm-badge tm-badge-new', `${lNew}: ${newN}`);
+
+        wrap.appendChild(learnBadge);
+        wrap.appendChild(doc.createTextNode(' '));
+        wrap.appendChild(dueBadge);
+        wrap.appendChild(doc.createTextNode(' '));
+        wrap.appendChild(newBadge);
+      }
+
+      parent.insertBefore(wrap, nextSibling);
+      this.domNodes.push(wrap);
+    }
+
+    execute() {
+      this.deckTitle = this.getAttribute('deck') || this.getVariable('deckTiddler') || this.getVariable('currentTiddler') || '';
+    }
+
+    refresh(changedTiddlers: any) {
+      const changed = this.computeAttributes();
+      if (changed.deck || Object.keys(changedTiddlers || {}).length > 0) {
+        this.refreshSelf();
+        return true;
+      }
+      return false;
+    }
+  }
+  return DeckBadgesWidget as any;
+}
+
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
 exports['deck-create'] = makeDeckCreate();
 exports['deck-delete'] = makeDeckDelete();
+exports['tidme-deck-badges'] = makeDeckBadges();
