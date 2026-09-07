@@ -35,7 +35,7 @@ function buildModal(doc: Document, opts: { title?: string; message: string; okLa
     resolve(v);
   };
   if (opts.withCancel) {
-    const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', '取消');
+    const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', 'Cancel');
     cancelBtn.addEventListener('click', () => done(false));
     actions.appendChild(cancelBtn);
   }
@@ -55,7 +55,7 @@ export function confirmDialog(doc: Document, opts: ConfirmOptions): Promise<bool
     buildModal(doc, {
       title: opts.title,
       message: opts.message,
-      okLabel: opts.confirmLabel || '确定',
+      okLabel: opts.confirmLabel || 'Confirm',
       danger: opts.danger,
       withCancel: true,
     }, resolve);
@@ -68,7 +68,7 @@ export function alertDialog(doc: Document, opts: { title?: string; message: stri
     buildModal(doc, {
       title: opts.title,
       message: opts.message,
-      okLabel: opts.closeLabel || '知道了',
+      okLabel: opts.closeLabel || 'OK',
       withCancel: false,
     }, () => resolve());
   });

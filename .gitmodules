@@ -1,6 +1,3 @@
 [submodule "src/zh-Hans"]
 	path = src/zh-Hans
 	url = https://github.com/oflg/Tidme-zh-Hans.git
-[submodule "src/fr-FR"]
-	path = src/fr-FR
-	url = https://github.com/papiche/Tidme-fr-FR.git

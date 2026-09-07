@@ -1,16 +1,19 @@
-title: Tidme/index
+title: $:/Tidme
+caption: Dashboard
 type: text/vnd.tiddlywiki
-caption: Tidme 命名空间
-tags: $:/tags/Tidme
+tags: $:/tags/SideBar
 
-\whitespace trim
+<div class="tm-page-header">
+  <div class="tm-page-title-row">
+    <span class="tm-page-title">Incremental Learning & Spaced Repetition</span>
+    <span class="tm-page-badge">Cockpit</span>
+  </div>
+  <div class="tm-page-subtitle">Today Tasks · Reading Materials · Decks Navigation</div>
+</div>
 
-! Tidme 命名空间根
+<$tidme-nav/>
 
-本目录是 Tidme 插件的根命名空间，所有用户内容均放在其下：
-
-* [[Tidme/Books]] — 导入的文档（每本书一个子目录）
-* [[Tidme/Decks]] — 用户/子集牌组
-* [[Tidme/Clips]] — Web 剪切（占位）
-
-全局默认牌组 $:/Deck/default 与插件系统 tiddler 继续留在 $:/ 下。
+<div class="tm-page-body">
+  <$tidme-today-hero/>
+  <$tidme-today-recent/>
+</div>

@@ -18,6 +18,10 @@ const display = require('$:/plugins/keepone/tidme/core/display.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const paths = require('$:/plugins/keepone/tidme/core/paths.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+function lingo(wiki: any, key: string, fallback: string): string {
+  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+}
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
@@ -58,10 +62,12 @@ function sortTopicCards(cards: TopicCard[]): TopicCard[] {
 }
 
 /** 按文档分组（组间按文档名；无 doc 的散卡收进「未分组」） */
-function groupByDoc(cards: TopicCard[]): { doc: string; cards: TopicCard[] }[] {
+function groupByDoc(a: any, b?: any): { doc: string; cards: TopicCard[] }[] {
+  const wiki = b ? a : null;
+  const cards: TopicCard[] = Array.isArray(a) ? a : (Array.isArray(b) ? b : []);
   const m = new Map<string, TopicCard[]>();
   for (const c of cards) {
-    const key = c.doc || '未分组';
+    const key = c.doc || (wiki ? lingo(wiki, 'rl.ungrouped', 'Ungrouped') : 'Ungrouped');
     if (!m.has(key)) m.set(key, []);
     m.get(key)!.push(c);
   }
@@ -95,23 +101,23 @@ function makeReadingList(): any {
       const compact = this._compact;
       root.textContent = '';
 
-      const groups = groupByDoc(collectTopicCards(wiki));
+      const groups = groupByDoc(wiki, collectTopicCards(wiki));
       const total = groups.reduce((n, g) => n + g.cards.length, 0);
 
       // 页头：标题 + 计数（compact：侧边栏精简）
       const head = el(doc, 'div', 'tm-rl-head');
-      head.appendChild(el(doc, 'div', 'tm-rl-title', '阅读列表'));
-      head.appendChild(el(doc, 'div', 'tm-rl-sub', `${groups.length} 篇文档 · ${total} 张待读`));
+      head.appendChild(el(doc, 'div', 'tm-rl-title', lingo(wiki, 'read.readinglist', 'Reading List')));
+      head.appendChild(el(doc, 'div', 'tm-rl-sub', `${groups.length} ${lingo(wiki, 'rl.docs', 'docs')} · ${total} ${lingo(wiki, 'rl.sectionsleft', 'sections left')}`));
       if (!compact) {
-        head.appendChild(el(doc, 'div', 'tm-rl-sub', '按优先级和到期时间排序'));
+        head.appendChild(el(doc, 'div', 'tm-rl-sub', lingo(wiki, 'rl.sortedby', 'Sorted by priority and due date')));
       }
       root.appendChild(head);
 
       if (!groups.length) {
         root.appendChild(
           renderEmpty(doc, {
-            text: '没有待读材料。',
-            actionText: !compact ? '→ 去导入中心导入新内容' : undefined,
+            text: lingo(wiki, 'today.noreading', 'No reading materials.'),
+            actionText: !compact ? lingo(wiki, 'rl.gotoimport', '→ Go to Import Center') : undefined,
             onAction: !compact ? () => navigateTo(this, ns.PAGE_IMPORT_CENTER) : undefined,
           }),
         );
@@ -133,7 +139,7 @@ function makeReadingList(): any {
         const sum = el(doc, 'summary', 'tm-rl-doc-head');
         const name = el(doc, 'a', 'tc-tiddlylink tm-rl-doc-name', docLabel);
         name.href = '#';
-        name.title = docTiddlerTitle ? `打开文档页：${docLabel}` : `文档页已删除（仅剩摘录/手动内容）`;
+        name.title = docTiddlerTitle ? `${lingo(wiki, 'read.opendoc', 'Open document:')} ${docLabel}` : lingo(wiki, 'rl.docdeleted', 'Document page deleted (extracts only)');
         name.addEventListener('click', (e: Event) => {
           e.preventDefault();
           e.stopPropagation();
@@ -141,17 +147,17 @@ function makeReadingList(): any {
         });
         sum.appendChild(name);
 
-        sum.appendChild(el(doc, 'span', 'tm-rl-doc-count', `${g.cards.length} 张待读`));
+        sum.appendChild(el(doc, 'span', 'tm-rl-doc-count', `${g.cards.length} ${lingo(wiki, 'today.sectionsleft', 'sections left')}`));
         if (!compact && docAll.length) {
-          sum.appendChild(el(doc, 'span', 'tm-rl-doc-prog', `${docDone}/${docAll.length} 节已读`));
+          sum.appendChild(el(doc, 'span', 'tm-rl-doc-prog', `${docDone}/${docAll.length} ${lingo(wiki, 'rl.read', 'read')}`));
           sum.appendChild(renderProgressBar(doc, docDone, docAll.length, { className: 'tm-rl-doc-bar' }));
         }
 
         // 继续阅读跳到第一张"当前可读"卡（scheduler.isDueNow，与 section-bar/doc-resume 一致）；
         // 全部未来排期时退回第一张（允许显式打开）
         const targetCard = docOps.docReadingTarget(wiki, g.doc) || (g.cards.find((c) => sched.isDueNow(c.fields)) || g.cards[0])?.title;
-        const cont = el(doc, 'button', 'tm-btn', '▶ 继续阅读');
-        cont.title = '从续读点或第一张待读卡开始';
+        const cont = el(doc, 'button', 'tm-btn', lingo(wiki, 'read.resume', '▶ Continue Reading'));
+        cont.title = lingo(wiki, 'rl.resumetip', 'Start from read point or first pending section');
         cont.addEventListener('click', (e: Event) => {
           e.preventDefault();
           e.stopPropagation();
@@ -165,25 +171,25 @@ function makeReadingList(): any {
         sum.appendChild(cont);
 
         // 删除阅读材料（文档页 + 节卡/大纲新节）；摘录/挖空/问答/手动散卡等知识产物保留
-        const del = icons.iconButton(doc, 'tm-btn tm-rl-del', 'trash', '清理阅读');
-        del.title = '删除本书阅读材料（文档页 + 全部普通节卡）；已提取的知识（摘录/挖空/问答）保留在复习流';
+        const del = icons.iconButton(doc, 'tm-btn tm-rl-del', 'trash', lingo(wiki, 'read/clean.materials', 'Clean Reading Materials'));
+        del.title = lingo(wiki, 'read/clean.materials.tip', 'Delete document and section cards while preserving extracted cards in review stream');
         del.addEventListener('click', async (e: Event) => {
           e.preventDefault();
           e.stopPropagation();
           if (
             await dialog.confirmDialog(doc, {
-              title: '清理阅读材料',
+              title: lingo(wiki, 'read/clean.materials', 'Clean Reading Materials'),
               message: `删除《${docLabel}》的阅读材料？
 
 将删除文档页与全部普通节卡（含大纲手动插入的新节）。
 已提取的知识（摘录/挖空/问答/手动卡）会保留，不受影响。
 此操作不可恢复。`,
-              confirmLabel: '删除',
+              confirmLabel: lingo(wiki, 'read/delete', 'Delete'),
               danger: true,
             })
           ) {
             const n = docOps.deleteDocContent(wiki, g.doc);
-            if (n === 0) await dialog.alertDialog(doc, { message: '没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。' });
+            if (n === 0) await dialog.alertDialog(doc, { message: lingo(wiki, 'rl.nomaterialstodelete', 'No reading materials to delete.') });
           }
         });
         sum.appendChild(del);
@@ -201,18 +207,18 @@ function makeReadingList(): any {
               title: '',
               width: '28px',
               render: (c: TopicCard) => {
-                const mark = el(doc, 'span', c.kind === 'extract' ? 'tm-rl-kind tm-rl-kind-extract' : 'tm-rl-kind', c.kind === 'extract' ? '摘' : '节');
-                mark.title = c.kind === 'extract' ? '摘录卡（阅读材料）' : '节卡（阅读单元）';
+                const mark = el(doc, 'span', c.kind === 'extract' ? 'tm-rl-kind tm-rl-kind-extract' : 'tm-rl-kind', c.kind === 'extract' ? 'E' : 'S');
+                mark.title = c.kind === 'extract' ? lingo(wiki, 'kind.extract', 'Extract') : lingo(wiki, 'kind.section', 'Section');
                 return mark;
               },
             },
             {
               key: 'title',
-              title: '卡片',
+              title: lingo(wiki, 'col.title', 'Title'),
               render: (c: TopicCard) => {
                 const titleLink = el(doc, 'a', 'tc-tiddlylink tm-rl-title', display.displayTitle(c.fields, c.title));
                 titleLink.href = '#';
-                titleLink.title = '打开阅读';
+                titleLink.title = lingo(wiki, 'read.open', 'Open to read');
                 titleLink.addEventListener('click', (e: Event) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -225,17 +231,17 @@ function makeReadingList(): any {
           if (!compact) {
             columns.push({
               key: 'priority',
-              title: '优先',
+              title: lingo(wiki, 'col.priority', 'Priority'),
               width: '60px',
               render: (c: TopicCard) => {
                 const pri = el(doc, 'span', 'tm-rl-pri', `P${c.priority}`);
-                pri.title = `优先级 ${c.priority}（0 最高）`;
+                pri.title = `${lingo(wiki, 'col.priority', 'Priority')} ${c.priority} (0 is highest)`;
                 return pri;
               },
             });
             columns.push({
               key: 'status',
-              title: '状态',
+              title: lingo(wiki, 'col.state', 'State'),
               width: '75px',
               render: (c: TopicCard) => {
                 const bd = badgeOf(c.fields);
@@ -247,7 +253,7 @@ function makeReadingList(): any {
           primitives.renderTable(doc, scrollBox, {
             columns,
             data: g.cards,
-            emptyText: '暂无待读卡片',
+            emptyText: lingo(wiki, 'today.noreading', 'No reading materials'),
           });
           det.appendChild(scrollBox);
         };

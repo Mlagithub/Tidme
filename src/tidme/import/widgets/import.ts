@@ -1,3 +1,4 @@
+const { lingo } = require('$:/plugins/keepone/tidme/core/lingo.js');
 /*
 widgets/import.ts — 自包含导入组件
 
@@ -78,8 +79,8 @@ async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any):
   const aiCfg = getSemanticSplitConfig(wiki);
   if (!aiCfg.apiKey) {
     await dialog.alertDialog(document, {
-      title: '缺少 API Key',
-      message: '请先在【设置 ➔ 语义切分】中填写 API Key，然后再执行二次切分！',
+      title: lingo(this.wiki, 'ai.nokey.title', 'Missing API Key'),
+      message: lingo(this.wiki, 'ai.nokey.msg', 'Please configure your API Key in Settings > AI Semantic Split before performing sub-splitting!'),
     });
     return false;
   }
@@ -93,7 +94,7 @@ async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any):
   const ratio = sumChars / (origText.length || 1);
   if (ratio < 0.95 || ratio > 1.05) {
     await dialog.alertDialog(document, {
-      title: '二次切分校验失败',
+      title: lingo(this.wiki, 'ai.splitfailed.title', 'Sub-split Validation Failed'),
       message: `切分后字数 (${sumChars}) 与原文 (${origText.length}) 偏差过大，已自动拦截以保护原文完整性。`,
     });
     return false;
@@ -144,17 +145,26 @@ function buildRow(
   const title = el(doc, 'span', 'tm-import-file-title', r.bookTitle);
   head.appendChild(title);
   head.appendChild(el(doc, 'span', 'tm-import-file-badge', r.format));
-  const metaSpan = el(doc, 'span', 'tm-import-file-meta', `${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? ' · 标题去重 ' + r.warnings.length : ''}`);
+  const metaSpan = el(
+    doc,
+    'span',
+    'tm-import-file-meta',
+    `${r.sectionCount} ${lingo(this.wiki, 'today.sectionsleft', 'sections')} · ${r.stats.hardSplitCount} ${lingo(this.wiki, 'import.hardsplit', 'hard splits')}${
+      r.warnings.length ? ' · ' + r.warnings.length + ' ' + lingo(this.wiki, 'import.dedup', 'deduplicated') : ''
+    }`,
+  );
   head.appendChild(metaSpan);
   card.appendChild(head);
 
   if (resultOrErr.duplicate) {
-    card.appendChild(el(doc, 'div', 'tm-import-dup', '⚠ 本书已在库中 —— 再次导入将走对齐（未变节保留 SRS 进度）'));
+    card.appendChild(
+      el(doc, 'div', 'tm-import-dup', lingo(this.wiki, 'import.duplicate', '⚠ Book exists in library - re-import will align unchanged sections and preserve SRS progress')),
+    );
   }
 
   // 树形目录大纲（全套在线增、删、改、改短）
   const details = el(doc, 'details', 'tm-import-outline');
-  const summaryEl = el(doc, 'summary', 'tm-import-muted', `目录大纲（共 ${r.sectionCount} 条）`);
+  const summaryEl = el(doc, 'summary', 'tm-import-muted', `${lingo(this.wiki, 'pdf/toc', 'Outline')} (${r.sectionCount})`);
   details.appendChild(summaryEl);
 
   const outlineBox = el(doc, 'div', 'tm-import-tree-box', '');
@@ -175,12 +185,12 @@ function buildRow(
     const form = el(doc, 'div', 'tm-split-add-form');
     const titleIn = doc.createElement('input');
     titleIn.className = 'tm-input';
-    titleIn.placeholder = '新节标题（如：01 前言 / 短标题）';
+    titleIn.placeholder = lingo(this.wiki, 'import.sectiontitle.placeholder', 'Section title (e.g. 01 Preface / Short Title)');
     const textIn = doc.createElement('textarea');
     textIn.className = 'tm-input';
-    textIn.placeholder = '内容...';
+    textIn.placeholder = lingo(this.wiki, 'import.content.placeholder', 'Content...');
     textIn.rows = 2;
-    const confirmBtn = el(doc, 'button', 'tm-btn tm-btn--primary tm-btn-sm', '确认插入');
+    const confirmBtn = el(doc, 'button', 'tm-btn tm-btn--primary tm-btn-sm', lingo(this.wiki, 'import.insert', 'Insert Section'));
     confirmBtn.onclick = () => {
       const tVal = titleIn.value.trim();
       const cVal = textIn.value.trim();
@@ -214,7 +224,7 @@ function buildRow(
         renderTree();
       }
     };
-    const cancelBtn = el(doc, 'button', 'tm-btn tm-btn--sm', '取消');
+    const cancelBtn = el(doc, 'button', 'tm-btn tm-btn--sm', lingo(this.wiki, 'action.cancel', 'Cancel'));
     cancelBtn.onclick = () => {
       activeAddIndex = null;
       renderTree();
@@ -233,12 +243,12 @@ function buildRow(
     metaSpan.textContent = `${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? ' · 标题去重 ' + r.warnings.length : ''}`;
 
     const allSections = r.tiddlers.filter((t) => t['tidme.kind'] === 'topic');
-    summaryEl.textContent = `目录大纲（按目录分节共 ${allSections.length} 条 · 可二次切分偏长章节）`;
+    summaryEl.textContent = `${lingo(this.wiki, 'pdf/toc', 'Outline')} (${allSections.length})`;
 
     // 顶部工具栏：一键提炼短标题
     const toolRow = el(doc, 'div', 'tm-import-actions', '');
-    const cleanBtn = icons.iconButton(doc, 'tm-btn tm-btn--sm', 'sparkles', '一键提炼短标题');
-    cleanBtn.title = '自动剔除副标题（冒号/破折号后）与括号内营销/描述说明';
+    const cleanBtn = icons.iconButton(doc, 'tm-btn tm-btn--sm', 'sparkles', lingo(this.wiki, 'import.refinetitles', 'Refine Short Titles'));
+    cleanBtn.title = lingo(this.wiki, 'import.refinetitlestip', 'Automatically strip marketing descriptions and subtitles');
     cleanBtn.onclick = () => {
       const cleanTitleFn = parse.cleanTitle || ((x: string) => x);
       for (const t of allSections) {
@@ -285,17 +295,19 @@ function buildRow(
       line.style.paddingLeft = `${level * 1.1}em`;
 
       // 状态与字数标记（字数 >= 10,000 字呈现偏长预警）
-      if (isMerged) line.appendChild(el(doc, 'span', 'tm-import-tree-mark', '⟵ 已并入'));
-      if (isRenamed) line.appendChild(el(doc, 'span', 'tm-split-done', '✏️ 短标题'));
+      if (isMerged) line.appendChild(el(doc, 'span', 'tm-import-tree-mark', lingo(this.wiki, 'import.merged', '⟵ Merged')));
+      if (isRenamed) line.appendChild(el(doc, 'span', 'tm-split-done', lingo(this.wiki, 'import.renamed', '✏️ Shortened')));
       const charBadgeCls = 'tm-import-tree-mark' + (isOverlong ? ' tm-split-chars-warn' : '');
-      line.appendChild(el(doc, 'span', charBadgeCls, `${charCount} 字${isOverlong ? ' ⚠️偏长' : ''}`));
+      line.appendChild(
+        el(doc, 'span', charBadgeCls, `${charCount} ${lingo(this.wiki, 'import.chars', 'chars')}${isOverlong ? ' ⚠️' + lingo(this.wiki, 'import.overlong', 'Overlong') : ''}`),
+      );
 
       // 标题编辑/显示
       if (activeEditTitleIndex === idx) {
         const editIn = doc.createElement('input');
         editIn.className = 'tm-split-title-input';
         editIn.value = shortTitle;
-        const confirmBtn = el(doc, 'button', 'tm-btn tm-btn--sm', '✔ 保存');
+        const confirmBtn = el(doc, 'button', 'tm-btn tm-btn--sm', lingo(this.wiki, 'action.save', '✔ Save'));
         confirmBtn.onclick = () => {
           const newShort = editIn.value.trim();
           if (newShort && newShort !== shortTitle) {
@@ -318,7 +330,7 @@ function buildRow(
         line.appendChild(confirmBtn);
       } else {
         const textSpan = el(doc, 'span', 'tm-import-tree-text', shortTitle);
-        textSpan.title = '双击可编辑标题';
+        textSpan.title = lingo(this.wiki, 'import.edittitle.tip', 'Double click to edit title');
         textSpan.ondblclick = () => {
           activeEditTitleIndex = idx;
           renderTree();
@@ -328,20 +340,20 @@ function buildRow(
 
       // 核心操作：针对偏长章节（>= 1万字）的“✂️ 二次切分”
       if (isOverlong || charCount >= 10000) {
-        const subSplitBtn = icons.iconButton(doc, 'tm-btn tm-btn--sm tm-btn--primary', 'scissors', '二次切分');
-        subSplitBtn.title = '使用 LLM 语义分析将本偏长章节切分为带主题的子切片';
+        const subSplitBtn = icons.iconButton(doc, 'tm-btn tm-btn--sm tm-btn--primary', 'scissors', lingo(this.wiki, 'import.subsplit', 'Sub-split'));
+        subSplitBtn.title = lingo(this.wiki, 'import.subsplittip', 'Use LLM semantic analysis to split this overlong chapter into sub-topics');
         subSplitBtn.onclick = async () => {
-          subSplitBtn.textContent = '🤖 LLM 切片中...';
+          subSplitBtn.textContent = lingo(this.wiki, 'import.splitting', '🤖 Splitting...');
           subSplitBtn.setAttribute('disabled', 'true');
           try {
             const ok = await subSplitTiddlerWithLLM(t, r, wiki);
             if (ok) renderTree();
             else {
-              subSplitBtn.textContent = '✂️ 二次切分';
+              subSplitBtn.textContent = lingo(this.wiki, 'import.subsplit', '✂️ Sub-split');
               subSplitBtn.removeAttribute('disabled');
             }
           } catch (e: any) {
-            await dialog.alertDialog(document, { title: 'LLM 二次切分失败', message: String(e && e.message || e) });
+            await dialog.alertDialog(document, { title: lingo(this.wiki, 'ai.splitfailed.title', 'LLM Sub-split Failed'), message: String(e && e.message || e) });
             subSplitBtn.textContent = '✂️ 二次切分';
             subSplitBtn.removeAttribute('disabled');
           }
@@ -351,14 +363,14 @@ function buildRow(
 
       // 辅助操作：移除 / 恢复
       if (isDeleted) {
-        const restoreBtn = el(doc, 'button', 'tm-btn tm-btn-icon', '↩ 恢复');
+        const restoreBtn = el(doc, 'button', 'tm-btn tm-btn-icon', lingo(this.wiki, 'action.restore', '↩ Restore'));
         restoreBtn.onclick = () => {
           delete t._deleted;
           renderTree();
         };
         line.appendChild(restoreBtn);
       } else {
-        const delBtn = icons.iconButton(doc, 'tm-btn tm-btn--sm', 'trash', '移除');
+        const delBtn = icons.iconButton(doc, 'tm-btn tm-btn--sm', 'trash', lingo(this.wiki, 'action.remove', 'Remove'));
         delBtn.onclick = () => {
           t._deleted = true;
           renderTree();
@@ -388,24 +400,24 @@ function makeFileWidget(): WidgetCtor {
       const wrap = el(doc, 'div', 'tm-import-widget');
 
       // 选择文件上传按钮与说明
-      const btnSelect = el(doc, 'button', 'tm-btn tm-btn--primary tm-import-select-btn', '选择文件上传 (.epub / .md / .txt)');
+      const btnSelect = el(doc, 'button', 'tm-btn tm-btn--primary tm-import-select-btn', lingo(this.wiki, 'import.selectfile', 'Select File to Upload (.epub / .md / .txt)'));
       const input = doc.createElement('input');
       input.type = 'file';
       input.multiple = true;
       input.accept = '.epub,.pdf,.md,.markdown,.txt';
       input.style.display = 'none';
-      const hint = el(doc, 'div', 'tm-import-hint', '或者：直接将文件拖拽到此页面的任意位置即可导入。');
+      const hint = el(doc, 'div', 'tm-import-hint', lingo(this.wiki, 'import.dragdrop.hint', 'Or: Drag and drop files anywhere onto this page to import.'));
 
       // 全页面拖放覆盖层
-      const overlay = el(doc, 'div', 'tm-import-drag-overlay', '释放文件以导入到 Tidme (.epub / .md / .txt)');
+      const overlay = el(doc, 'div', 'tm-import-drag-overlay', lingo(this.wiki, 'import.dragoverlay', 'Drop files to import into Tidme (.epub / .md / .txt)'));
       overlay.style.display = 'none';
 
       // 预览容器 + 操作按钮
       const rowsBox = el(doc, 'div', 'tm-import-rows');
       const actions = el(doc, 'div', 'tm-import-actions');
       actions.style.display = 'none';
-      const btnImport = el(doc, 'button', 'tm-btn tm-btn--primary', '✔ 全部导入');
-      const btnClear = el(doc, 'button', 'tm-btn', '清除');
+      const btnImport = el(doc, 'button', 'tm-btn tm-btn--primary', lingo(this.wiki, 'import.importall', '✔ Import All'));
+      const btnClear = el(doc, 'button', 'tm-btn', lingo(this.wiki, 'action.clear', 'Clear'));
 
       // 服务端处理选项（TiddlyWeb）：大文件上传 → 服务端后台解析，不阻塞页面
       const serverRow = el(doc, 'div', 'tm-import-server-row', '');
@@ -413,31 +425,36 @@ function makeFileWidget(): WidgetCtor {
       serverCheck.type = 'checkbox';
       serverCheck.id = 'tm-import-server-mode';
       serverRow.appendChild(serverCheck);
-      serverRow.appendChild(el(doc, 'label', 'tm-import-muted', '上传到服务端后台处理（适合大文件，解析不阻塞页面；需要 TiddlyWeb 服务端）'));
+      serverRow.appendChild(el(doc, 'label', 'tm-import-muted', lingo(this.wiki, 'import.serverprocess.desc', 'Upload to server for background processing (TiddlyWeb)')));
       const serverStatus = el(doc, 'div', 'tm-import-muted', '');
 
       // SM 对齐：导入时批量设定优先级（0 最高；高=10±8 / 中=50±8 / 低=90±8，同批分散避免挤队）
       const prioRow = el(doc, 'div', 'tm-import-actions', '');
-      prioRow.appendChild(el(doc, 'span', 'tm-import-muted', '导入优先级：'));
+      prioRow.appendChild(el(doc, 'span', 'tm-import-muted', lingo(this.wiki, 'import.priority', 'Import Priority: ')));
       const prioSel = doc.createElement('select');
       prioSel.className = 'tm-priority-select';
-      for (const [label, value] of [['高', 'high'], ['中', 'medium'], ['低', 'low']] as const) {
+      for (
+        const [label, value] of [[lingo(this.wiki, 'priority.high', 'High'), 'high'], [lingo(this.wiki, 'priority.med', 'Medium'), 'medium'], [
+          lingo(this.wiki, 'priority.low', 'Low'),
+          'low',
+        ]] as const
+      ) {
         const opt = doc.createElement('option');
         opt.value = value;
         opt.textContent = label;
         prioSel.appendChild(opt);
       }
       prioSel.value = 'medium';
-      prioSel.title = '0=最高优先级；本次导入的全部节卡按所选档位分散设定优先级';
+      prioSel.title = lingo(this.wiki, 'import.prioritytip', '0 is highest; cards will be assigned distributed priorities based on this level');
       prioRow.appendChild(prioSel);
-      prioRow.appendChild(el(doc, 'span', 'tm-import-muted', '（0 最高 · 同批随机分散 ±8）'));
+      prioRow.appendChild(el(doc, 'span', 'tm-import-muted', lingo(this.wiki, 'import.prioritynote', '(0 highest, randomly jittered +-8)')));
       const pending = new Map<string, { result?: ImportResult; error?: string; fileName: string; duplicate?: boolean }>();
 
       // 服务端上传：建 pending tiddler（server importer 契约）→ 轮询状态
       const serverUpload = (file: File) => {
         const row = el(doc, 'div', 'tm-import-row', '');
         row.appendChild(el(doc, 'strong', '', file.name));
-        const statusEl = el(doc, 'span', 'tm-import-muted', '排队中…');
+        const statusEl = el(doc, 'span', 'tm-import-muted', lingo(this.wiki, 'import.queueing', 'Queueing...'));
         row.appendChild(statusEl);
         rowsBox.appendChild(row);
         file.arrayBuffer().then((buf) => {
@@ -452,26 +469,30 @@ function makeFileWidget(): WidgetCtor {
             text: b64,
             bag: getOptions(this.wiki).bag,
           });
-          statusEl.textContent = `已上传（${Math.round(b64.length / 1024)} KB base64），等待服务端处理…`;
+          statusEl.textContent = `${lingo(this.wiki, 'import.uploaded', 'Uploaded')} (${Math.round(b64.length / 1024)} KB), ${
+            lingo(this.wiki, 'import.waitingserver', 'waiting for server...')
+          }`;
           const timer = setInterval(() => {
             const t = this.wiki.getTiddler(title);
             if (!t) {
               clearInterval(timer);
-              statusEl.textContent = '⚠ 任务 tiddler 丢失';
+              statusEl.textContent = lingo(this.wiki, 'import.tasklost', '⚠ Task tiddler lost');
               return;
             }
             if (t.fields['tidme.import-done']) {
               clearInterval(timer);
               const secs = t.fields['tidme.import-sections'];
-              statusEl.textContent = `✓ 导入完成（docId ${t.fields['tidme.import-docId'] || '?'}${secs ? '，' + secs + ' 节' : ''}）`;
+              statusEl.textContent = `✓ ${lingo(this.wiki, 'import.done', 'Import completed')} (docId ${t.fields['tidme.import-docId'] || '?'}${
+                secs ? ', ' + secs + ' ' + lingo(this.wiki, 'today.sectionsleft', 'sections') : ''
+              })`;
             } else if (t.fields['tidme.import-error']) {
               clearInterval(timer);
-              statusEl.textContent = `✕ 失败：${t.fields['tidme.import-error']}`;
+              statusEl.textContent = `✕ ${lingo(this.wiki, 'import.failed', 'Failed:')} ${t.fields['tidme.import-error']}`;
             }
           }, 2000);
           setTimeout(() => clearInterval(timer), 20 * 60 * 1000); // 兜底超时
         }).catch((e) => {
-          statusEl.textContent = '✕ 读取文件失败：' + String(e.message || e);
+          statusEl.textContent = lingo(this.wiki, 'import.filereadfailed', '✕ Failed to read file:') + ' ' + String(e.message || e);
         });
       };
 
@@ -521,7 +542,16 @@ function makeFileWidget(): WidgetCtor {
         this.wiki.addTiddler({ title: TEMP_IMPORT + 'last-created', text: String(created) });
         this.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_DONE });
         if (updated || archived) {
-          rowsBox.appendChild(el(doc, 'div', 'tm-import-summary tm-import-muted', `—— 对齐：新增 ${created} · 更新 ${updated} · 归档 ${archived}（SRS 进度保留）`));
+          rowsBox.appendChild(
+            el(
+              doc,
+              'div',
+              'tm-import-summary tm-import-muted',
+              `-- ${lingo(this.wiki, 'import.alignsummary', 'Aligned: Added')} ${created}, ${lingo(this.wiki, 'import.updated', 'Updated')} ${updated}, ${
+                lingo(this.wiki, 'import.archived', 'Archived')
+              } ${archived} (${lingo(this.wiki, 'import.srspreserved', 'SRS preserved')})`,
+            ),
+          );
         }
         // 落点：导入完成跳到本书文档汇总页（从那里决定读哪张/继续提炼），而非停在空白队列
         if (created > 0 && firstDocTitle) {
@@ -543,7 +573,14 @@ function makeFileWidget(): WidgetCtor {
         // PDF：浏览器内直传入库（pdf.js 解析 + 阅读器），不经服务端与预览行
         const importLocalPdf = async (file: File) => {
           const r = await pdfImport.importPdfFile(this.wiki, file, this);
-          rowsBox.appendChild(el(doc, 'div', 'tm-import-summary tm-import-muted', `—— PDF《${r.docTitle.split('/').pop()}》已导入（${r.pages} 页），从文档页继续。`));
+          rowsBox.appendChild(
+            el(
+              doc,
+              'div',
+              'tm-import-summary tm-import-muted',
+              `-- PDF ${r.docTitle.split('/').pop()} ${lingo(this.wiki, 'import.pdfimported', 'imported')} (${r.pages} ${lingo(this.wiki, 'read.pages', 'pages')})`,
+            ),
+          );
           this.dispatchEvent({ type: 'tm-navigate', navigateTo: r.docTitle });
         };
         // 服务端处理模式：上传 → 后台解析（不预览、不阻塞；PDF 仅本地处理）
@@ -585,7 +622,14 @@ function makeFileWidget(): WidgetCtor {
         }
         // 漏斗摘要（措辞：已安全存档，随时可学）
         if (totalSections > 0) {
-          rowsBox.appendChild(el(doc, 'div', 'tm-import-summary tm-import-muted', `—— 本次共入库 ${totalSections} 节，已安全存档并进入默认牌堆，随时可学。`));
+          rowsBox.appendChild(
+            el(
+              doc,
+              'div',
+              'tm-import-summary tm-import-muted',
+              `-- ${totalSections} ${lingo(this.wiki, 'import.sectionsadded', 'sections imported into default deck, ready to study.')}`,
+            ),
+          );
         }
         refreshActions();
       };
@@ -622,14 +666,14 @@ function makeFileWidget(): WidgetCtor {
 
       // 创建上传控制卡片
       const uploaderCard = el(doc, 'div', 'tm-dashboard-card');
-      uploaderCard.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '上传控制'));
+      uploaderCard.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(this.wiki, 'import.uploadcontrol', 'Upload Control')));
       uploaderCard.appendChild(btnSelect);
       uploaderCard.appendChild(input);
       uploaderCard.appendChild(hint);
       uploaderCard.appendChild(prioRow);
       // 服务端处理属高级选项：默认折叠（本地导入为主路径，避免普通用户被 TiddlyWeb 选项打扰）
       const adv = el(doc, 'details', 'tm-import-advanced');
-      const advSum = el(doc, 'summary', 'tm-import-muted', '高级：上传到服务端后台处理（TiddlyWeb）');
+      const advSum = el(doc, 'summary', 'tm-import-muted', lingo(this.wiki, 'import.serverprocess', 'Advanced: Server-side Background Processing (TiddlyWeb)'));
       advSum.title = '适合大文件：解析在服务端后台执行，不阻塞页面；需要 TiddlyWeb 服务端';
       adv.appendChild(advSum);
       adv.appendChild(serverRow);
@@ -640,7 +684,7 @@ function makeFileWidget(): WidgetCtor {
 
       // 创建待导预览队列卡片
       const previewCard = el(doc, 'div', 'tm-dashboard-card');
-      previewCard.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '待导入队列'));
+      previewCard.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(this.wiki, 'import.pendingqueue', 'Pending Queue')));
       previewCard.appendChild(rowsBox);
       previewCard.appendChild(actions);
       previewCard.style.display = 'none';

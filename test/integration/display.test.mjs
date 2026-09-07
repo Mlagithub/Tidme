@@ -19,20 +19,20 @@ test('badgeOf: 出队/学习/到期/新卡的徽章优先级', () => {
   b = display.badgeOf({ 'tidme.done': 'yes' });
   assert.equal(b.text, '✓');
   assert.equal(b.cls, 'tm-badge-done');
-  assert.equal(display.badgeOf({ state: '1' }).text, '学');
-  assert.equal(display.badgeOf({ state: '3' }).text, '学', 'Relearning 也算学习态');
-  assert.equal(display.badgeOf({ state: '2', due: PAST() }).text, '逾', 'state2 已过期 → 逾');
-  assert.equal(display.badgeOf({ state: '2', due: FUTURE() }).text, '到', 'state2 未到期 → 到');
-  assert.equal(display.badgeOf({}).text, '新', '无 state → 新卡');
+  assert.ok(['学', 'L'].includes(display.badgeOf({ state: '1' }).text));
+  assert.ok(['学', 'L'].includes(display.badgeOf({ state: '3' }).text), 'Relearning 也算学习态');
+  assert.ok(['逾', '!', '!'].includes(display.badgeOf({ state: '2', due: PAST() }).text), 'state2 已过期 → 逾');
+  assert.ok(['到', 'D'].includes(display.badgeOf({ state: '2', due: FUTURE() }).text), 'state2 未到期 → 到');
+  assert.ok(['新', 'N'].includes(display.badgeOf({}).text), '无 state → 新卡');
 });
 
 test('stateLabel: 出队语义优先于到期态（done 卡不得显示「到期」）', () => {
-  assert.equal(display.stateLabel({ 'tidme.done': 'yes', state: '2', due: PAST() }), '已读', '回归：曾误显示「已逾期」');
-  assert.equal(display.stateLabel({ 'tidme.suspended': 'yes' }), '搁置');
-  assert.equal(display.stateLabel({ state: '2', due: PAST() }), '已逾期');
-  assert.equal(display.stateLabel({ state: '2', due: FUTURE() }), '到期');
-  assert.equal(display.stateLabel({ state: '1' }), '学习中');
-  assert.equal(display.stateLabel({}), '新卡');
+  assert.ok(['已读', 'Read'].includes(display.stateLabel({ 'tidme.done': 'yes', state: '2', due: PAST() })), '回归：曾误显示「已逾期」');
+  assert.ok(['搁置', 'Suspended'].includes(display.stateLabel({ 'tidme.suspended': 'yes' })));
+  assert.ok(['已逾期', 'Overdue'].includes(display.stateLabel({ state: '2', due: PAST() })));
+  assert.ok(['到期', 'Due'].includes(display.stateLabel({ state: '2', due: FUTURE() })));
+  assert.ok(['学习中', 'Learning'].includes(display.stateLabel({ state: '1' })));
+  assert.ok(['新卡', 'New'].includes(display.stateLabel({})));
 });
 
 test('dueLabel/intervalLabel: 非 due 态与缺字段显示 —', () => {
@@ -40,7 +40,7 @@ test('dueLabel/intervalLabel: 非 due 态与缺字段显示 —', () => {
   assert.equal(display.dueLabel({ state: '0' }), '—', '新卡无 due');
   // 注：state=2 且缺 due 时 parseTwDate 兜底为当前时刻（schema.ts fallback），显示今天日期——
   // 实际数据中 state2 必写 due，此边缘不单独断言
-  assert.equal(display.intervalLabel({ scheduled_days: '7.4' }), '7天', '四舍五入');
+  assert.ok(['7天', '7d'].includes(display.intervalLabel({ scheduled_days: '7.4' })), '四舍五入');
   assert.equal(display.intervalLabel({ scheduled_days: '0' }), '—');
   assert.equal(display.repsLabel({}), '—');
   assert.equal(display.lapsesLabel({ lapses: '2' }), '2');

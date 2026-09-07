@@ -77,7 +77,7 @@ export function safeCaption(question: string, answer: string, prefix = ''): stri
   const textA = String(answer || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   if (textQ) return textQ.slice(0, 40);
   if (textA) return (prefix ? prefix + ' ' : '') + textA.slice(0, 35);
-  return prefix || '问答卡';
+  return prefix || 'Q&A Card';
 }
 
 /** 派生图片问答卡标题基座：短化命名空间（Tidme/Decks/{书名}/P{页}-{label或QA}），避免深层目录全量冗长堆叠 */
@@ -153,9 +153,9 @@ export function buildExtract(wiki: any, parentTitle: string, selection: string):
     kind: 'topic',
     subkind: 'extract',
     caption: preview + (selection.length > preview.length ? '…' : ''),
-    text: `<blockquote>\n${escapeHtml(selection.trim())}\n</blockquote>\n\n<p class="tm-import-muted">—— 摘自 [[${parentTitle}]]</p>`,
+    text: `<blockquote>\n${escapeHtml(selection.trim())}\n</blockquote>\n\n<p class="tm-import-muted">-- From [[${parentTitle}]]</p>`,
     snippet: compactSnippet(selection, 80),
-    breadcrumbSuffix: '摘录',
+    breadcrumbSuffix: 'Extract',
   });
 }
 
@@ -176,7 +176,7 @@ export function buildCloze(wiki: any, parentTitle: string, block: string, select
     caption: clozeLine,
     text: '',
     snippet: compactSnippet(selected, 80),
-    breadcrumbSuffix: '挖空',
+    breadcrumbSuffix: 'Cloze',
   });
 }
 
@@ -193,7 +193,7 @@ export function buildQA(wiki: any, parentTitle: string, question: string, answer
     caption: safeCaption(question, answer),
     text: `Q: ${question}\n\nA: ${answer}`,
     snippet: compactSnippet(answer, 80),
-    breadcrumbSuffix: '问答',
+    breadcrumbSuffix: 'Q&A',
   });
 }
 
@@ -215,8 +215,8 @@ export function buildImageQA(wiki: any, parentTitle: string, opts: ImageQAOption
     ? `**${labelText}**\n\n<img src="${opts.dataUrl}" style="max-width:100%">`
     : `<img src="${opts.dataUrl}" style="max-width:100%">`;
   const caption = labelText
-    ? `[图] ${labelText}`
-    : safeCaption('', answerText, `[图] 第 ${opts.page || ''} 页问答`);
+    ? `[Img] ${labelText}`
+    : safeCaption('', answerText, `[Img] p.${opts.page || ''} Q&A`);
   const card = derivedCardFields({
     parentTitle,
     pf,
@@ -224,9 +224,9 @@ export function buildImageQA(wiki: any, parentTitle: string, opts: ImageQAOption
     kind: 'item',
     subkind: 'qa',
     caption,
-    text: `Q: ${qBody}\n\nA: ${answerText || '（答案待补充）'}`,
+    text: `Q: ${qBody}\n\nA: ${answerText || '(Answer pending)'}`,
     snippet: compactSnippet(answerText || labelText, 80),
-    breadcrumbSuffix: '图片问答',
+    breadcrumbSuffix: 'Image Q&A',
   });
   if (opts.page && opts.page > 0) {
     card['tidme.page'] = String(opts.page);
@@ -300,8 +300,8 @@ export interface StandaloneCardOptions {
 
 /** 全局独立卡片构建（无需依附特定阅读材料）。kind 由模板决定，归属于指定牌组或散卡桶 */
 export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Record<string, any> {
-  const deck = (opts.deck || '散卡').trim();
-  const deckDir = deck === '散卡' ? ns.NS_DECKS_SCATTER : `Tidme/Decks/${deck}`;
+  const deck = (opts.deck || 'Inbox').trim();
+  const deckDir = (deck === '散卡' || deck.toLowerCase() === 'inbox') ? ns.NS_DECKS_SCATTER : `Tidme/Decks/${deck}`;
 
   // 智能标题基座
   let slug = '';
@@ -337,13 +337,13 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
     kind = 'item';
     subkind = 'cloze';
     const content = (opts.clozeContent || '').trim();
-    caption = opts.title ? opts.title : content.slice(0, 40) || '挖空卡';
+    caption = opts.title ? opts.title : content.slice(0, 40) || 'Cloze Card';
     text = '';
   } else {
     kind = 'topic';
     subkind = 'concept';
     const content = (opts.conceptContent || '').trim();
-    caption = opts.title ? opts.title : content.slice(0, 30) || '概念卡';
+    caption = opts.title ? opts.title : content.slice(0, 30) || 'Concept Card';
     text = content;
   }
 

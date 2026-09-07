@@ -1,15 +1,18 @@
-title: Tidme/Books/index
+title: $:/Books
+caption: Reading Materials
 type: text/vnd.tiddlywiki
-caption: 导入文档
-tags: $:/tags/Tidme
+tags: $:/tags/SideBar
 
-\whitespace trim
+<div class="tm-page-header">
+  <div class="tm-page-title-row">
+    <span class="tm-page-title">All Reading Materials</span>
+    <span class="tm-page-badge">{{{ [tag[tidme-import-doc]!is[draft]count[]] }}} Documents</span>
+  </div>
+  <div class="tm-page-subtitle">Organize Books · Outlines · Reading Progress</div>
+</div>
 
-! 导入的文档
+<$tidme-nav/>
 
-每本书一个目录：//Tidme/Books/<书名>//（同名书冲突时追加 ~docId 后缀）。目录内拍平：
-
-* 文档页（title = 目录根，tags 含 tidme-import-doc）
-* 节卡：//<可读短标题>-<sectionId>//（tidme.kind=topic / subkind=section）
-* 摘录卡：//<节叶段>--extract//（与节卡同目录）
-* 挖空/问答不在本目录——移到平行命名空间 //Tidme/Decks/<书名>//
+<div class="tm-page-body">
+  <$reading-list compact="no"/>
+</div>

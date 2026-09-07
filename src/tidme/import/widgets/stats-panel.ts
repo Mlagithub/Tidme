@@ -15,6 +15,10 @@ const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+function lingo(wiki: any, key: string, fallback: string): string {
+  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+}
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
@@ -63,15 +67,19 @@ function makeStatsPanel(): WidgetCtor {
         const ret = stats.retentionFromLogs(entries);
         const buckets = stats.priorityBuckets(cardLikes('[tidme.kind[item]]'));
         const rt = stats.getReadTimeStats ? stats.getReadTimeStats(wiki) : { totalSeconds: 0, todaySeconds: 0, docSeconds: {} };
-        const fmtDur = stats.formatDuration ? stats.formatDuration : (s: number) => `${s} 秒`;
+        const fmtDur = stats.formatDuration ? stats.formatDuration : (s: number) => `${s}s`;
 
         // 0) 指标卡（纯化为声明式数据）
         primitives.renderMetricCards(doc, wrap, [
-          { label: '牌组', value: String(decks.length) },
-          { label: '文档', value: String(docs.length) },
-          { label: '在队卡', value: String(funnel.cards) },
-          { label: '复习', value: String(ret.reviews), sub: ret.reviews ? `保留率 ${Math.round(ret.retention * 100)}%` : '' },
-          { label: '今日阅读', value: fmtDur(rt.todaySeconds), sub: `累计 ${fmtDur(rt.totalSeconds)}` },
+          { label: lingo(wiki, 'stats.decks', 'Decks'), value: String(decks.length) },
+          { label: lingo(wiki, 'stats.docs', 'Documents'), value: String(docs.length) },
+          { label: lingo(wiki, 'stats.total.cards', 'Cards in Queue'), value: String(funnel.cards) },
+          {
+            label: lingo(wiki, 'stats.today.reviewed', 'Reviews'),
+            value: String(ret.reviews),
+            sub: ret.reviews ? `${lingo(wiki, 'stats.retention', 'Retention')} ${Math.round(ret.retention * 100)}%` : '',
+          },
+          { label: lingo(wiki, 'stats.todayread', 'Today Read'), value: fmtDur(rt.todaySeconds), sub: `${lingo(wiki, 'stats.total', 'Total')} ${fmtDur(rt.totalSeconds)}` },
         ]);
 
         // 创建分栏网格布局
@@ -84,7 +92,7 @@ function makeStatsPanel(): WidgetCtor {
 
         // 1) 牌组负载（声明式卡片表格）
         const cardLoad = el(doc, 'div', 'tm-dashboard-card');
-        cardLoad.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '牌组负载'));
+        cardLoad.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.deckload', 'Deck Load')));
         const deckRows = decks.map((deck: string) => {
           const cards2 = deckMod.deckCards(wiki, deck).map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
           const load = stats.deckLoad(cards2);
@@ -93,20 +101,20 @@ function makeStatsPanel(): WidgetCtor {
         primitives.renderTable(doc, cardLoad, {
           columns: [
             { key: 'deck', title: '牌组', render: (row: any) => el(doc, 'span', 'tm-stats-deck', row.deck) },
-            { key: 'total', title: '总数' },
-            { key: 'newCount', title: '新' },
-            { key: 'learn', title: '学习中' },
-            { key: 'due', title: '到期' },
-            { key: 'overdue', title: '逾期' },
+            { key: 'total', title: lingo(wiki, 'col.total', 'Total') },
+            { key: 'newCount', title: lingo(wiki, 'state.new', 'New') },
+            { key: 'learn', title: lingo(wiki, 'state.learning', 'Learn') },
+            { key: 'due', title: lingo(wiki, 'state.due', 'Due') },
+            { key: 'overdue', title: lingo(wiki, 'state.overdue', 'Overdue') },
           ],
           data: deckRows,
-          emptyText: '暂无牌组',
+          emptyText: lingo(wiki, 'stats.nodecks', 'No decks'),
         });
         mainCol.appendChild(cardLoad);
 
         // 2) 文档进度（声明式表格）
         const cardDoc = el(doc, 'div', 'tm-dashboard-card');
-        cardDoc.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '文档进度'));
+        cardDoc.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.docprogress', 'Document Progress')));
         const docRows: any[] = [];
         for (const d of docs) {
           const docId = wiki.getTiddler(d)?.fields['tidme.doc'];
@@ -123,23 +131,27 @@ function makeStatsPanel(): WidgetCtor {
         }
         const docTableWrap = primitives.renderTable(doc, cardDoc, {
           columns: [
-            { key: 'name', title: '文档', render: (row: any) => el(doc, 'span', 'tm-stat-doc-name', row.name) },
+            { key: 'name', title: lingo(wiki, 'stats.docs', 'Document'), render: (row: any) => el(doc, 'span', 'tm-stat-doc-name', row.name) },
             {
               key: 'bar',
-              title: '进度',
+              title: lingo(wiki, 'col.progress', 'Progress'),
               render: (row: any) => renderProgressBar(doc, row.done, row.total),
             },
-            { key: 'info', title: '已读', render: (row: any) => el(doc, 'span', 'tm-import-muted', `已读 ${row.done} / ${row.total}（剩 ${row.left}）`) },
+            {
+              key: 'info',
+              title: lingo(wiki, 'state.read', 'Read'),
+              render: (row: any) => el(doc, 'span', 'tm-import-muted', `${row.done} / ${row.total} (${row.left} ${lingo(wiki, 'today.sectionsleft', 'left')})`),
+            },
           ],
           data: docRows,
-          emptyText: '暂无导入文档——导入中心导入书籍后显示进度。',
+          emptyText: lingo(wiki, 'stats.nodocs', 'No documents imported - import books to track progress.'),
         });
         docTableWrap.classList.add('tm-scroll');
         mainCol.appendChild(cardDoc);
 
         // 3) 漏斗
         const cardFunnel = el(doc, 'div', 'tm-dashboard-card');
-        cardFunnel.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '学习漏斗'));
+        cardFunnel.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.funnel', 'Learning Funnel')));
         const funnelBox = el(doc, 'div', 'tm-stat-funnel');
         const funnelMax = Math.max(1, funnel.docs, funnel.sections, funnel.extracts, funnel.cards);
         const funnelRow = (label: string, n: number) => {
@@ -153,32 +165,32 @@ function makeStatsPanel(): WidgetCtor {
           row.appendChild(el(doc, 'span', 'tm-stat-funnel-num', String(n)));
           return row;
         };
-        funnelBox.appendChild(funnelRow('导入', funnel.docs));
-        funnelBox.appendChild(funnelRow('切分', funnel.sections));
-        funnelBox.appendChild(funnelRow('摘录', funnel.extracts));
-        funnelBox.appendChild(funnelRow('卡', funnel.cards));
+        funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.import', 'Docs'), funnel.docs));
+        funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.sections', 'Sections'), funnel.sections));
+        funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.extracts', 'Extracts'), funnel.extracts));
+        funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.cards', 'Cards'), funnel.cards));
         cardFunnel.appendChild(funnelBox);
         sideCol.appendChild(cardFunnel);
 
         // 4) 复习与保留率
         const cardRet = el(doc, 'div', 'tm-dashboard-card');
-        cardRet.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '复习与保留率'));
+        cardRet.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.reviewretention', 'Review & Retention')));
         const retBox = el(doc, 'div', 'tm-stat-pills');
-        retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `复习 ${ret.reviews} 次`));
+        retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `${ret.reviews} ${lingo(wiki, 'stats.reviews', 'Reviews')}`));
         if (ret.reviews) {
-          retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-due', `保留率 ${Math.round(ret.retention * 100)}%`));
+          retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-due', `${lingo(wiki, 'stats.retention', 'Retention')}: ${Math.round(ret.retention * 100)}%`));
         }
         cardRet.appendChild(retBox);
         sideCol.appendChild(cardRet);
 
         // 5) 优先级分桶
         const cardBucket = el(doc, 'div', 'tm-dashboard-card');
-        cardBucket.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '优先级分桶'));
+        cardBucket.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.prioritybuckets', 'Priority Distribution')));
         const bucketBox = el(doc, 'div', 'tm-stat-pills');
-        bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-new', `高 ${buckets.high}`));
-        bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-due', `中 ${buckets.medium}`));
-        bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `低 ${buckets.low}`));
-        bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-suspended', `未设 ${buckets.none}`));
+        bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-new', `${lingo(wiki, 'priority.high', 'High')}: ${buckets.high}`));
+        bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-due', `${lingo(wiki, 'priority.med', 'Med')}: ${buckets.medium}`));
+        bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `${lingo(wiki, 'priority.low', 'Low')}: ${buckets.low}`));
+        bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-suspended', `${lingo(wiki, 'priority.none', 'None')}: ${buckets.none}`));
         cardBucket.appendChild(bucketBox);
         sideCol.appendChild(cardBucket);
       };

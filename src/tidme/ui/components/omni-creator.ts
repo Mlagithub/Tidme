@@ -14,6 +14,7 @@ declare function require(module: string): any;
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
@@ -32,8 +33,9 @@ interface OmniCreatorOptions {
 
 /** 收集当前 wiki 中的所有牌组名称 */
 function listAvailableDecks(wiki: any): string[] {
+  const standalone = lingoMod.lingo(wiki, 'creator.deck.standalone', 'Standalone');
   const decks = new Set<string>();
-  decks.add('散卡');
+  decks.add(standalone);
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return Array.from(decks);
   try {
     const list = deckMod.allDecks ? deckMod.allDecks(wiki) : [];
@@ -50,6 +52,8 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   const existing = doc.querySelector('.tm-omni-creator-overlay');
   if (existing) return; // 避免重复唤出
 
+  const l = (key: string, fb: string) => lingoMod.lingo(wiki, key, fb);
+
   const overlay = el(doc, 'div', 'tm-card-modal-overlay tm-omni-creator-overlay');
   const modal = el(doc, 'div', 'tm-card-modal tm-omni-creator-modal');
 
@@ -58,8 +62,8 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
 
   // 1. 顶部标题栏
   const header = el(doc, 'div', 'tm-card-modal-title tm-omni-header');
-  const titleSpan = el(doc, 'span', '', '✨ 新建卡片 (Add Card)');
-  const shortcutBadge = el(doc, 'span', 'tm-card-modal-badge', 'Alt+N 快捷唤起');
+  const titleSpan = el(doc, 'span', '', `✨ ${l('creator.modal.create', 'Add Card')}`);
+  const shortcutBadge = el(doc, 'span', 'tm-card-modal-badge', 'Alt+N');
   header.appendChild(titleSpan);
   header.appendChild(shortcutBadge);
   modal.appendChild(header);
@@ -70,9 +74,9 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   // 模板切换按钮组
   const typeGroup = el(doc, 'div', 'tm-omni-type-group');
   const typeBtns: Record<OmniCardType, HTMLElement> = {
-    qa: el(doc, 'button', 'tm-omni-type-btn', '❓ 问答卡'),
-    cloze: el(doc, 'button', 'tm-omni-type-btn', '🧩 挖空卡'),
-    concept: el(doc, 'button', 'tm-omni-type-btn', '💡 概念卡'),
+    qa: el(doc, 'button', 'tm-omni-type-btn', `❓ ${l('creator.mode.qa', 'Q&A')}`),
+    cloze: el(doc, 'button', 'tm-omni-type-btn', `🧩 ${l('creator.mode.cloze', 'Cloze')}`),
+    concept: el(doc, 'button', 'tm-omni-type-btn', `💡 ${l('creator.mode.extract', 'Concept')}`),
   };
 
   const updateTypeBtns = () => {
@@ -94,13 +98,14 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
 
   // 牌组下拉选择器
   const deckWrap = el(doc, 'div', 'tm-omni-deck-wrap');
-  const deckLabel = el(doc, 'label', '', '牌组:');
+  const deckLabel = el(doc, 'label', '', `${l('deck', 'Deck')}:`);
   const deckSelect = el(doc, 'select', 'tm-card-modal-input tm-omni-deck-select') as HTMLSelectElement;
   const availableDecks = listAvailableDecks(wiki);
+  const standaloneName = l('creator.deck.standalone', 'Standalone');
   for (const d of availableDecks) {
     const opt = el(doc, 'option', '', d) as HTMLOptionElement;
     opt.value = d;
-    if (d === (opts.defaultDeck || '散卡')) opt.selected = true;
+    if (d === (opts.defaultDeck || standaloneName)) opt.selected = true;
     deckSelect.appendChild(opt);
   }
   deckWrap.appendChild(deckLabel);
@@ -110,9 +115,9 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
 
   // 3. 标题输入框（可选）
   const fieldTitle = el(doc, 'div', 'tm-card-modal-field');
-  const titleLabel = el(doc, 'label', '', '标题 (可选，留空自动生成):');
+  const titleLabel = el(doc, 'label', '', `${l('creator.field.title', 'Card Title')} (${l('optional', 'Optional')}):`);
   const titleInput = el(doc, 'input', 'tm-card-modal-input') as HTMLInputElement;
-  titleInput.placeholder = '例如：二叉树遍历 / 渐近复杂度分析';
+  titleInput.placeholder = l('creator.field.title.placeholder', 'Optional concise summary...');
   if (opts.defaultTitle) titleInput.value = opts.defaultTitle;
   fieldTitle.appendChild(titleLabel);
   fieldTitle.appendChild(titleInput);
@@ -132,16 +137,16 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
     if (currentType === 'qa') {
       // 问答卡：Q + A
       const fQ = el(doc, 'div', 'tm-card-modal-field');
-      fQ.appendChild(el(doc, 'label', '', '问题 (Question):'));
+      fQ.appendChild(el(doc, 'label', '', `${l('creator.field.question', 'Question')}:`));
       qInput = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
-      qInput.placeholder = '输入问题内容（支持 Markdown / 粘贴图片）...';
+      qInput.placeholder = l('creator.field.question.placeholder', 'Enter question or prompt (Markdown / Images supported)...');
       if (opts.defaultQuestion) qInput.value = opts.defaultQuestion;
       fQ.appendChild(qInput);
 
       const fA = el(doc, 'div', 'tm-card-modal-field');
-      fA.appendChild(el(doc, 'label', '', '答案 (Answer):'));
+      fA.appendChild(el(doc, 'label', '', `${l('creator.field.answer', 'Answer')}:`));
       aInput = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
-      aInput.placeholder = '输入答案解析或关键结论...';
+      aInput.placeholder = l('creator.field.answer.placeholder', 'Enter answer or key explanation...');
       if (opts.defaultAnswer) aInput.value = opts.defaultAnswer;
       fA.appendChild(aInput);
 
@@ -152,14 +157,14 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
       // 挖空卡：Toolbar + Text
       const fC = el(doc, 'div', 'tm-card-modal-field');
       const clozeHead = el(doc, 'div', 'tm-omni-cloze-header');
-      clozeHead.appendChild(el(doc, 'label', '', '挖空文本 (Cloze Text):'));
-      const insertClozeBtn = el(doc, 'button', 'tm-omni-btn-sm', '+ 插入挖空 {{C}}');
+      clozeHead.appendChild(el(doc, 'label', '', `${l('creator.field.cloze', 'Cloze Text')}:`));
+      const insertClozeBtn = el(doc, 'button', 'tm-omni-btn-sm', `+ ${l('creator.btn.insertcloze', 'Add Cloze {{C}}')}`);
       insertClozeBtn.type = 'button';
       insertClozeBtn.addEventListener('click', () => {
         if (!clozeInput) return;
         const start = clozeInput.selectionStart || 0;
         const end = clozeInput.selectionEnd || 0;
-        const sel = clozeInput.value.slice(start, end) || '填空内容';
+        const sel = clozeInput.value.slice(start, end) || 'cloze text';
         const replacement = `<<C "${sel}" "c1" "">>`;
         clozeInput.setRangeText(replacement, start, end, 'select');
         clozeInput.focus();
@@ -168,7 +173,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
       fC.appendChild(clozeHead);
 
       clozeInput = el(doc, 'textarea', 'tm-card-modal-textarea tm-omni-cloze-textarea') as HTMLTextAreaElement;
-      clozeInput.placeholder = '例如：计算机系统由 <<C "硬件">> 和 <<C "软件">> 组成...';
+      clozeInput.placeholder = l('creator.field.cloze.placeholder', 'e.g. A computer system consists of <<C "hardware">> and <<C "software">>...');
       if (opts.defaultContent) clozeInput.value = opts.defaultContent;
       fC.appendChild(clozeInput);
       fieldsContainer.appendChild(fC);
@@ -176,9 +181,9 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
     } else {
       // 概念卡：Content (Topic)
       const fN = el(doc, 'div', 'tm-card-modal-field');
-      fN.appendChild(el(doc, 'label', '', '知识/笔记正文 (Concept Content):'));
+      fN.appendChild(el(doc, 'label', '', `${l('creator.field.note', 'Note Content')}:`));
       conceptInput = el(doc, 'textarea', 'tm-card-modal-textarea tm-omni-concept-textarea') as HTMLTextAreaElement;
-      conceptInput.placeholder = '输入概念定义、摘录笔记或思考内容（将作为阅读材料进入调度流）...';
+      conceptInput.placeholder = l('creator.field.note.placeholder', 'Enter concept definition, notes or thoughts...');
       if (opts.defaultContent) conceptInput.value = opts.defaultContent;
       fN.appendChild(conceptInput);
       fieldsContainer.appendChild(fN);
@@ -199,14 +204,14 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   keepCheckbox.addEventListener('change', () => {
     keepOpen = keepCheckbox.checked;
   });
-  const keepLabel = el(doc, 'span', '', '连续制卡 (保存后保持打开)');
+  const keepLabel = el(doc, 'span', '', l('creator.keepopen', 'Keep Open (Add another)'));
   keepWrap.appendChild(keepCheckbox);
   keepWrap.appendChild(keepLabel);
   bottomRow.appendChild(keepWrap);
 
   const btnGroup = el(doc, 'div', 'tm-omni-btn-group');
-  const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', '关闭 (Esc)');
-  const submitBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', '保存卡片 (Ctrl+Enter)');
+  const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', `${l('creator.btn.cancel', 'Cancel')} (Esc)`);
+  const submitBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', `${l('creator.btn.submit', 'Create Card')} (Ctrl+Enter)`);
   btnGroup.appendChild(cancelBtn);
   btnGroup.appendChild(submitBtn);
   bottomRow.appendChild(btnGroup);
@@ -217,7 +222,8 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   };
 
   const submit = () => {
-    const selectedDeck = deckSelect.value || '散卡';
+    const standaloneName = l('creator.deck.standalone', 'Standalone');
+    const selectedDeck = deckSelect.value || standaloneName;
     const userTitle = titleInput.value.trim();
 
     let draft: Record<string, any> | null = null;
@@ -264,7 +270,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
 
     if (draft) {
       cardFactory.commitCard(wiki, draft);
-      dom.showToast(doc, doc.body, `已创建卡片: ${draft.caption || draft.title}`, 'ok', 2500);
+      dom.showToast(doc, doc.body, `${l('creator.toast.success', 'Card created:')} ${draft.caption || draft.title}`, 'ok', 2500);
       opts.onSuccess?.(draft);
 
       if (keepOpen) {
@@ -334,7 +340,8 @@ function makeOmniCreatorWidget(): any {
       const wiki = this.wiki;
 
       const container = el(doc, 'div', 'tm-omni-creator-embedded');
-      const btn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', '✨ 打开全局制卡中心 (Alt+N)');
+      const btnText = `✨ ${lingoMod.lingo(wiki, 'creator.title', 'Card Creator')} (Alt+N)`;
+      const btn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', btnText);
       btn.addEventListener('click', () => {
         openOmniCardModal(doc, wiki);
       });

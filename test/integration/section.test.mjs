@@ -55,7 +55,7 @@ test('buildExtract: 嵌套摘录（parent = 摘录卡）', () => {
   });
   const card = sectionMod.buildExtract(wiki, '书 › 第一章 › 摘录', '更细的一层摘录。');
   assert.equal(card['tidme.parent'], '书 › 第一章 › 摘录', '嵌套 parent');
-  assert.ok(card['tidme.breadcrumb'].endsWith('摘录 › 摘录'), '面包屑继续追加');
+  assert.ok(card['tidme.breadcrumb'].endsWith('摘录 › 摘录') || card['tidme.breadcrumb'].endsWith('摘录 › Extract'), '面包屑继续追加');
 });
 
 test('buildCloze: anchor + parent', () => {

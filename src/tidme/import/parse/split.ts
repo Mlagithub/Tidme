@@ -128,7 +128,7 @@ export async function emitTiddlers(
 
   // 文档根路径（A1：同名不同 docId 的 folder 冲突 → 加 ~docId 短哈希，幂等）：
   // docRoot 是"每卡可读的真实文档页 title"，落库成 tidme.docpage，UI 导航不再重算。
-  const bookT = bookTitle || '未命名导入';
+  const bookT = bookTitle || 'Untitled Import';
   const docRoot = resolveDocRoot(bookT, docId, folderOccupied);
   const docTitle = bookT; // 面包屑/显示用可读名（保持 align.ts 的 cardKey 匹配逻辑）
 
@@ -172,11 +172,11 @@ export async function emitTiddlers(
 
   const links = cards.map((t) => `* [[${t.caption || t.title}|${t.title}]]`).join('\n');
   const docLines = [`//${formatLabel(format)}//`];
-  if (meta.creator) docLines.push('作者：' + meta.creator);
-  if (meta.language) docLines.push('语言：' + meta.language);
-  if (meta.date) docLines.push('原文日期：' + meta.date);
-  docLines.push('文档 ID：' + docId);
-  docLines.push(`共 ${cards.length} 节：`, '', links);
+  if (meta.creator) docLines.push('Author: ' + meta.creator);
+  if (meta.language) docLines.push('Language: ' + meta.language);
+  if (meta.date) docLines.push('Date: ' + meta.date);
+  docLines.push('Document ID: ' + docId);
+  docLines.push(`Total ${cards.length} sections:`, '', links);
 
   const docTiddler: Record<string, any> = {
     title: docRoot, // 文档页落 Tidme/Books/<书名>[/~docId] 命名空间
@@ -207,13 +207,13 @@ export async function emitTiddlers(
  */
 export async function runSplit(input: SplitInput): Promise<SplitResult> {
   const text = String(input.text || '');
-  if (!text.trim()) throw new Error('内容为空');
+  if (!text.trim()) throw new Error('Content is empty');
   const format = formatFromType(input.type, text);
   const blocks = blocksFor(format, text);
-  if (!blocks.length) throw new Error('无法解析出任何内容块');
+  if (!blocks.length) throw new Error('Cannot parse any content blocks');
 
   const meta: BookMeta & Record<string, string> = {
-    title: input.title || guessTitle(text, format) || '未命名导入',
+    title: input.title || guessTitle(text, format) || 'Untitled Import',
     ...(input.sourceFields || {}),
   };
   const bookTitle = meta.title;

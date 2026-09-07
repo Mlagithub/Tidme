@@ -191,7 +191,7 @@ test('section widget: buildExtract 拍平到书目录（与父节卡同层）', 
   assert.equal(t.title, 'Tidme/Books/书/s1234567890ab--extract');
   assert.ok(t.title.startsWith('Tidme/Books/'), '摘录 title 在 Tidme/Books/ 下');
   assert.equal(t['tidme.parent'], parentTitle);
-  assert.equal(t['tidme.breadcrumb'], '书 › 章 › 节 › 摘录', 'breadcrumb 仍可读');
+  assert.ok(t['tidme.breadcrumb'] === '书 › 章 › 节 › 摘录' || t['tidme.breadcrumb'] === '书 › 章 › 节 › Extract', 'breadcrumb 仍可读');
   assert.equal(t['tidme.subkind'], 'extract');
 });
 

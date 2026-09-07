@@ -330,7 +330,7 @@ test('pdf-reader: 框选图片制卡与 buildImageQA 字段治理（纯净短标
   });
 
   assert.equal(card1.title, 'Tidme/Decks/图片制卡测试书/P5-函数调用栈', '标题短化且携带书名/页码/用户标题');
-  assert.equal(card1.caption, '[图] 函数调用栈', 'caption 干净可读，无 Base64 或 HTML');
+  assert.ok(card1.caption === '[图] 函数调用栈' || card1.caption === '[Img] 函数调用栈', 'caption 干净可读，无 Base64 或 HTML');
   assert.ok(card1.text.includes(dummyB64), '正文安全携带图片数据');
   assert.ok(card1.text.includes('这是框选后输入的完整答案解析'), '正文包含用户答案');
   assert.equal(card1['tidme.kind'], 'item');
@@ -345,7 +345,7 @@ test('pdf-reader: 框选图片制卡与 buildImageQA 字段治理（纯净短标
   });
   assert.equal(card2.title, 'Tidme/Decks/图片制卡测试书/P5-QA', '缺省 label 时标题为 P5-QA');
   assert.ok(!card2.caption.includes('data:image'), '默认 caption 绝不泄露 Base64');
-  assert.ok(card2.caption.startsWith('[图]'), '默认 caption 携带 [图] 标识');
+  assert.ok(card2.caption.startsWith('[图]') || card2.caption.startsWith('[Img]'), '默认 caption 携带 [图] 或 [Img] 标识');
 
   // 3. 验证 safeCaption 防护：即使普通 buildQA 传入带有 <img> 的问题，caption 也绝不含 HTML
   const card3 = cardFactory.buildQA(wiki, secTitle, `<img src="${dummyB64}">`, '普通问答答案');

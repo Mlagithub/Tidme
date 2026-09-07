@@ -15,6 +15,7 @@ const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const DEFAULT_DECK = deckMod.DEFAULT_DECK;
@@ -33,8 +34,13 @@ function makeWorkflow(): any {
       const root = el(doc, 'div', 'tm-decks-actions');
       this.domNodes.push(root);
 
-      const learnBtn = icons.iconButton(doc, 'tm-btn tm-btn--primary tm-workflow-btn-hero', 'study', '开始学习');
-      learnBtn.title = '复习全部到期/新知识卡（挖空/问答）；阅读材料的混入与交错比在「设置」页配置';
+      const label = lingoMod.lingo(wiki, 'startstudy', 'Start Study');
+      const learnBtn = icons.iconButton(doc, 'tm-btn tm-btn--primary tm-workflow-btn-hero', 'study', label);
+      learnBtn.title = lingoMod.lingo(
+        wiki,
+        'workflow.hero.tip',
+        'Review all due and new knowledge cards (cloze / Q&A)',
+      );
       learnBtn.addEventListener('click', () => startGlobalLearning(wiki, this));
       root.appendChild(learnBtn);
 

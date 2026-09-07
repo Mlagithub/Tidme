@@ -1,5 +1,5 @@
 title: $:/plugins/keepone/tidme/import/ui/reading-list
-caption: 阅读列表
+caption: Reading List
 
 <$tidme-nav/>
 

@@ -1,5 +1,5 @@
 title: $:/plugins/keepone/tidme/import/ui/stats
-caption: 统计
+caption: Statistics
 type: text/vnd.tiddlywiki
 
 <$tidme-nav/>

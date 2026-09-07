@@ -10,6 +10,7 @@ declare function require(module: string): any;
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const form = require('$:/plugins/keepone/tidme/ui/components/setting-form.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
@@ -45,35 +46,36 @@ function makeSettings(): any {
       const pdfOpts = () => config.readPdfOptions(wiki);
       const ocr = () => config.readOcrConfig(wiki);
       const ss = () => config.readSemanticSplit(wiki);
+      const l = (key: string, fallback: string) => lingoMod.lingo(wiki, key, fallback);
 
       const groups: form.SettingGroup[] = [
         {
           id: 'schedule',
-          title: '复习调度',
-          subtitle: '默认牌组 · 自动顺延',
+          title: l('settings.review.title', 'Review Scheduling'),
+          subtitle: l('settings.review.subtitle', 'Default Deck & Auto-Postpone'),
           items: [
             {
               id: 'order',
-              title: '出题顺序',
-              desc: '学习队列里到期卡与新卡的交错方式',
+              title: l('settings.review.order', 'Study Order'),
+              desc: l('settings.review.order.desc', 'Interleaving order of due and new cards in study queue'),
               type: 'select',
               options: [
-                ['due-new', '到期优先'],
-                ['new-due', '新卡优先'],
-                ['random', '随机'],
+                ['due-new', l('settings.review.order.duenew', 'Due cards first')],
+                ['new-due', l('settings.review.order.newdue', 'New cards first')],
+                ['random', l('random', 'Random')],
               ],
               getValue: () => deckParams().order,
               setValue: (v: string) => config.writeDefaultDeckParams(wiki, { order: v }),
             },
             {
               id: 'queue-stream',
-              title: '学习流构成',
-              desc: '「开始学习」的队列构成；阅读材料=节卡/摘录',
+              title: l('settings.reading.ratio', 'Study Stream Composition'),
+              desc: l('settings.reading.ratio.desc', 'Queue stream composition; topics = section cards / extracts'),
               type: 'select',
               options: [
-                ['items', '纯测试卡（不混入）'],
-                ['interleaved', '混入阅读材料并交错'],
-                ['strict', '混入但三段式'],
+                ['items', l('settings.reading.ratio.none', 'Knowledge cards only (No topics)')],
+                ['interleaved', l('settings.reading.ratio.interleaved', 'Interleaved (4 items : 1 topic)')],
+                ['strict', l('settings.reading.ratio.strict', 'Strict (Items first, then Topics)')],
               ],
               getValue: () => {
                 const q = queueOpts();
@@ -88,11 +90,11 @@ function makeSettings(): any {
             },
             {
               id: 'queue-mix',
-              title: '交错比（测试:阅读）',
-              desc: '混入阅读材料时，每 N 张测试卡插入 1 张阅读卡（SuperMemo 靠统一优先级自然混合，此为本地化调节）',
+              title: l('settings.reading.mix', 'Interleaving Ratio (Items:Topics)'),
+              desc: l('settings.reading.mix.desc', 'When topics are mixed in, insert 1 topic card per N item cards'),
               type: 'select',
               options: [
-                ['4:1', '4:1（默认）'],
+                ['4:1', '4:1 (Default)'],
                 ['3:1', '3:1'],
                 ['2:1', '2:1'],
                 ['1:1', '1:1'],
@@ -111,24 +113,24 @@ function makeSettings(): any {
             },
             {
               id: 'learn-random',
-              title: '随机打乱学习步',
-              desc: '对应 SuperMemo 的 Randomize final drill：学习中的卡默认按到期前置，开启后改为随机顺序',
+              title: l('settings.review.learnrandom', 'Randomize Learning Steps'),
+              desc: l('settings.review.learnrandom.desc', 'Randomize final drill: cards in learning steps default to due-first, enable to randomize order'),
               type: 'switch',
               getValue: () => deckParams().learn_random === true,
               setValue: (v: boolean) => config.writeDefaultDeckParams(wiki, { learn_random: v }),
             },
             {
               id: 'auto-postpone-enable',
-              title: '每日自动顺延',
-              desc: '启动时与每小时自动顺延低优先级逾期卡，防队列积压',
+              title: l('settings.review.autopostpone', 'Daily Auto-Postpone'),
+              desc: l('settings.review.autopostpone.desc', 'Automatically postpone lower priority overdue cards to prevent backlog'),
               type: 'switch',
               getValue: () => ap().enable === true,
               setValue: (v: boolean) => config.writeAutoPostpone(wiki, { enable: v }),
             },
             {
               id: 'auto-postpone-max-priority',
-              title: '顺延优先级上限',
-              desc: '优先级数值大于该值的逾期卡才会被顺延（0 最高）',
+              title: l('settings.review.maxpriority', 'Postpone Priority Ceiling'),
+              desc: l('settings.review.maxpriority.desc', 'Only cards with priority value greater than this will be postponed (0 is highest)'),
               type: 'number',
               min: 0,
               max: 100,
@@ -139,8 +141,8 @@ function makeSettings(): any {
             },
             {
               id: 'auto-postpone-days',
-              title: '顺延天数',
-              desc: '低优先级逾期卡向后顺延的天数',
+              title: l('settings.review.postponedays', 'Postpone Days'),
+              desc: l('settings.review.postponedays.desc', 'Number of days to postpone low priority overdue cards'),
               type: 'number',
               min: 1,
               max: 365,
@@ -151,8 +153,8 @@ function makeSettings(): any {
             },
             {
               id: 'auto-postpone-keep-top',
-              title: '保留高优卡数',
-              desc: '顺延时始终保护优先级最高的前 N 张',
+              title: l('settings.review.topn', 'Retained High-Priority Cards'),
+              desc: l('settings.review.topn.desc', 'Always protect top N priority cards from being postponed'),
               type: 'number',
               min: 0,
               max: 999,
@@ -163,8 +165,8 @@ function makeSettings(): any {
             },
             {
               id: 'auto-postpone-threshold',
-              title: '过载触发阈值',
-              desc: '逾期卡超过该数量才触发顺延（0 = 无门槛）',
+              title: l('settings.review.threshold', 'Overload Trigger Threshold'),
+              desc: l('settings.review.threshold.desc', 'Only trigger auto-postpone when overdue cards exceed this count (0 = no threshold)'),
               type: 'number',
               min: 0,
               max: 9999,
@@ -175,8 +177,8 @@ function makeSettings(): any {
             },
             {
               id: 'log-retention',
-              title: '复习日志保留天数',
-              desc: '超过该天数的复习日志启动时自动清理（0 = 永久保留）',
+              title: l('settings.review.logretention', 'Review Log Retention Days'),
+              desc: l('settings.review.logretention.desc', 'Review logs older than this will be cleaned on startup (0 = keep forever)'),
               type: 'number',
               min: 0,
               max: 3650,
@@ -188,33 +190,33 @@ function makeSettings(): any {
         },
         {
           id: 'pdf-ocr',
-          title: 'PDF 与 OCR',
-          subtitle: '导入 · 扫描页识别',
+          title: l('settings.pdf.title', 'PDF & OCR'),
+          subtitle: l('settings.pdf.subtitle', 'Import & Scanned Page Recognition'),
           items: [
             {
               id: 'pdf-split',
-              title: 'PDF 导入方式',
-              desc: '仅对后续导入生效；阅读器内可随时翻页',
+              title: l('settings.pdf.split', 'PDF Import Mode'),
+              desc: l('settings.pdf.split.desc', 'Applies to future imports; you can always flip pages in reader'),
               type: 'select',
               options: [
-                ['outline', '按大纲切分（无大纲则整本）'],
-                ['none', '整本不切分'],
+                ['outline', l('settings.pdf.split.outline', 'Split by outline (whole book if no outline)')],
+                ['none', l('settings.pdf.split.none', 'Whole book (no split)')],
               ],
               getValue: () => pdfOpts().split,
               setValue: (v: string) => config.writePdfOptions(wiki, { split: v as 'outline' | 'none' }),
             },
             {
               id: 'ocr-enable',
-              title: '启用 LLM-OCR',
-              desc: '扫描版 PDF 页面转图片后用视觉模型转写为 Markdown（需支持图片输入的模型）',
+              title: l('settings.ocr.enable', 'Enable LLM-OCR'),
+              desc: l('settings.ocr.enable.desc', 'Render scanned PDF pages as images and transcribe with vision models'),
               type: 'switch',
               getValue: () => ocr().enable === true,
               setValue: (v: boolean) => config.writeOcrConfig(wiki, { enable: v }),
             },
             {
               id: 'ocr-model',
-              title: 'OCR 模型',
-              desc: '用于图像转写的视觉多模态模型名',
+              title: l('settings.ocr.model', 'OCR Model Name'),
+              desc: l('settings.ocr.model.desc', 'Multimodal vision model for text transcription'),
               type: 'text',
               placeholder: 'gpt-4o-mini',
               visibleIf: () => ocr().enable === true,
@@ -223,8 +225,8 @@ function makeSettings(): any {
             },
             {
               id: 'ocr-base-url',
-              title: 'OCR Base URL',
-              desc: '留空 = https://api.openai.com/v1',
+              title: l('settings.ocr.baseurl', 'OCR Base URL'),
+              desc: l('settings.ocr.baseurl.desc', 'Leave empty for https://api.openai.com/v1'),
               type: 'text',
               placeholder: 'https://api.openai.com/v1',
               visibleIf: () => ocr().enable === true,
@@ -233,8 +235,8 @@ function makeSettings(): any {
             },
             {
               id: 'ocr-api-key',
-              title: 'OCR API Key',
-              desc: '留空 = 复用「语义切分」的 API Key',
+              title: l('settings.ocr.apikey', 'OCR API Key'),
+              desc: l('settings.ocr.apikey.desc', 'Leave empty to reuse AI Semantic Split key'),
               type: 'password',
               placeholder: 'sk-...',
               visibleIf: () => ocr().enable === true,
@@ -245,13 +247,13 @@ function makeSettings(): any {
         },
         {
           id: 'memory-params',
-          title: '记忆参数',
-          subtitle: '默认牌组 FSRS',
+          title: l('settings.memory.title', 'Memory Parameters'),
+          subtitle: l('settings.memory.subtitle', 'Default Deck FSRS'),
           items: [
             {
               id: 'request-retention',
-              title: '目标记忆率',
-              desc: '0.9 为标准；越高遗忘越慢、每日负担越重',
+              title: l('settings.memory.retention', 'Target Retention'),
+              desc: l('settings.memory.retention.desc', '0.9 is standard; higher retention means slower forgetting but heavier daily load'),
               type: 'number',
               min: 0.5,
               max: 1,
@@ -261,8 +263,8 @@ function makeSettings(): any {
             },
             {
               id: 'maximum-interval',
-              title: '最大间隔天数',
-              desc: '单卡复习周期的最大天数上限',
+              title: l('settings.memory.maxinterval', 'Maximum Interval (Days)'),
+              desc: l('settings.memory.maxinterval.desc', 'Maximum interval ceiling for a single card review'),
               type: 'number',
               min: 1,
               max: 9999,
@@ -272,8 +274,8 @@ function makeSettings(): any {
             },
             {
               id: 'leech-threshold',
-              title: '难以度阈值',
-              desc: '累计遗忘达到该值的卡标记为难以度',
+              title: l('leechthreshold', 'Leech Threshold'),
+              desc: l('settings.memory.leech.desc', 'Cards with lapse count reaching this value are marked as leeches'),
               type: 'number',
               min: 1,
               max: 99,
@@ -285,21 +287,21 @@ function makeSettings(): any {
         },
         {
           id: 'semantic-split',
-          title: '语义切分',
-          subtitle: '导入 · LLM 二次切分',
+          title: l('settings.ai.title', 'AI Semantic Split'),
+          subtitle: l('settings.ai.subtitle', 'LLM-assisted document structure analysis'),
           items: [
             {
               id: 'semantic-enable',
-              title: '启用语义切分',
-              desc: '对无结构散文按语义断点二次切分（需 API Key）',
+              title: l('settings.ai.enable', 'Enable AI Split'),
+              desc: l('settings.ai.enable.desc', 'Split unstructured prose into sections using LLM semantic boundaries'),
               type: 'switch',
               getValue: () => ss().enable === true,
               setValue: (v: boolean) => config.writeSemanticSplit(wiki, { enable: v }),
             },
             {
               id: 'semantic-api-key',
-              title: 'API Key',
-              desc: '用于调用语义切分 LLM 服务的密钥',
+              title: l('settings.ai.key', 'API Key'),
+              desc: l('settings.ai.key.desc', 'API key for semantic splitting LLM service'),
               type: 'password',
               placeholder: 'sk-...',
               visibleIf: () => ss().enable === true,
@@ -308,8 +310,8 @@ function makeSettings(): any {
             },
             {
               id: 'semantic-base-url',
-              title: 'Base URL',
-              desc: 'OpenAI 兼容地址，可指向自建服务',
+              title: l('settings.ai.endpoint', 'Base URL'),
+              desc: l('settings.ai.endpoint.desc', 'OpenAI-compatible endpoint, can point to self-hosted service'),
               type: 'text',
               placeholder: 'https://api.openai.com/v1',
               visibleIf: () => ss().enable === true,
@@ -318,8 +320,8 @@ function makeSettings(): any {
             },
             {
               id: 'semantic-model',
-              title: '模型',
-              desc: '用于文本断点识别的 LLM 模型名',
+              title: l('settings.ai.model', 'Model Name'),
+              desc: l('settings.ai.model.desc', 'LLM model name for boundary detection'),
               type: 'text',
               placeholder: 'gpt-4o-mini',
               visibleIf: () => ss().enable === true,

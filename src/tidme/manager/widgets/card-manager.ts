@@ -24,6 +24,7 @@ const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const showToast = dom.showToast;
@@ -35,18 +36,18 @@ type View = 'all' | 'inqueue' | 'done' | 'suspended' | 'overdue';
 type Org = 'doc' | 'deck' | 'list';
 type SortKey = 'breadcrumb' | 'priority' | 'due' | 'deck' | 'mixed';
 
-const VIEWS: { id: View; label: string }[] = [
-  { id: 'all', label: '全部' },
-  { id: 'inqueue', label: '在队' },
-  { id: 'done', label: '已读' },
-  { id: 'suspended', label: '搁置' },
-  { id: 'overdue', label: '逾期' },
+const VIEWS: { id: View; label: string; key: string }[] = [
+  { id: 'all', label: 'All', key: 'manager.all' },
+  { id: 'inqueue', label: 'In Queue', key: 'manager.inqueue' },
+  { id: 'done', label: 'Read', key: 'manager.read' },
+  { id: 'suspended', label: 'Suspended', key: 'manager.suspended' },
+  { id: 'overdue', label: 'Overdue', key: 'manager.overdue' },
 ];
 
-const ORGS: { id: Org; label: string; tip: string }[] = [
-  { id: 'doc', label: '按文档', tip: '所有卡片按文档/面包屑树形组织（含已读/搁置/散卡）' },
-  { id: 'deck', label: '按牌组', tip: '按学习牌组组织，未入组卡片收进「未入组」分支' },
-  { id: 'list', label: '列表', tip: '全部卡片平铺（SuperMemo Browser 式）：可排序、勾选、预览' },
+const ORGS: { id: Org; label: string; tip: string; key: string }[] = [
+  { id: 'doc', label: 'By Document', tip: 'All cards organized by document / breadcrumb tree', key: 'manager.bydoc' },
+  { id: 'deck', label: 'By Deck', tip: 'Organized by study decks, unassigned cards in unassigned branch', key: 'manager.bydeck' },
+  { id: 'list', label: 'List', tip: 'Flat list of all cards (SuperMemo Browser style)', key: 'manager.flatlist' },
 ];
 
 interface Card {
@@ -163,9 +164,9 @@ function isDescendantOf(wiki: any, child: Card, parent: Card): boolean {
   return false;
 }
 
-function docNameOf(c: Card): string {
+function docNameOf(c: Card, wiki?: any): string {
   const key = String(c.fields['tidme.doc'] || c.fields['tidme.parent'] || '');
-  if (!key) return '未分组';
+  if (!key) return lingoMod.lingo(wiki, 'manager.ungrouped', 'Ungrouped');
   const first = crumbOf(c).split(ns.CRUMB_SEP)[0] || key;
   // 语义名回退：内部路径名去前缀显示（$:/Deck/IELTS_3 → IELTS_3；$:/Today → Today）
   let name = first || key;
@@ -174,14 +175,15 @@ function docNameOf(c: Card): string {
   return name;
 }
 
-function docGroupsOf(cards: Card[]): [string, Card[]][] {
+function docGroupsOf(cards: Card[], wiki?: any): [string, Card[]][] {
+  const wk = wiki || null;
   const m = new Map<string, Card[]>();
   for (const c of cards) {
     const key = String(c.fields['tidme.doc'] || c.fields['tidme.parent'] || '');
     if (!m.has(key)) m.set(key, []);
     m.get(key)!.push(c);
   }
-  return [...m.entries()].sort(cmpStr<[string, Card[]]>((entry) => docNameOf(entry[1][0])));
+  return [...m.entries()].sort(cmpStr<[string, Card[]]>((entry) => docNameOf(entry[1][0], wiki)));
 }
 
 function collectAll(ctx: Ctx) {
@@ -220,7 +222,8 @@ function updateSelectionUI(ctx: Ctx) {
     st.bulkCb.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleCount;
   }
   if (st.selLabel) {
-    st.selLabel.textContent = `已选 ${st.selected.size}/${visibleCount} 张`;
+    const prefix = lingoMod.lingo(ctx.wiki, 'manager.selected', 'Selected');
+    st.selLabel.textContent = `${prefix} ${st.selected.size}/${visibleCount}`;
   }
   for (const u of st.groupCbUpdaters) u();
   for (const u of st.cardCbUpdaters) u();
@@ -291,16 +294,16 @@ function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
   const { doc, wiki, st } = ctx;
   const inQueue = !sched.isCardDone(c.fields) && c.fields['tidme.suspended'] !== 'yes';
   if (inQueue) {
-    const readBtn = el(doc, 'button', 'tm-cm-op', '读');
-    readBtn.title = '移出队列（已读）';
+    const readBtn = el(doc, 'button', 'tm-cm-op', lingoMod.lingo(wiki, 'manager.action.read', 'Read'));
+    readBtn.title = lingoMod.lingo(wiki, 'manager.action.read.tip', 'Remove from queue (Mark as read)');
     readBtn.addEventListener('click', () => {
       wiki.addTiddler(doneFields(c.fields));
       render(ctx);
     });
     row.appendChild(readBtn);
   } else {
-    const resumeBtn = el(doc, 'button', 'tm-cm-op', '回');
-    resumeBtn.title = '恢复到学习队列';
+    const resumeBtn = el(doc, 'button', 'tm-cm-op', lingoMod.lingo(wiki, 'manager.action.back', 'Back'));
+    resumeBtn.title = lingoMod.lingo(wiki, 'manager.action.back.tip', 'Restore to learning queue');
     resumeBtn.addEventListener('click', () => {
       wiki.addTiddler(sched.restoreCard(c.fields));
       render(ctx);
@@ -308,7 +311,7 @@ function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
     row.appendChild(resumeBtn);
   }
   const del = el(doc, 'button', 'tm-cm-op tm-cm-del', '✕');
-  del.title = '删除卡片';
+  del.title = lingoMod.lingo(wiki, 'manager.action.del.tip', 'Delete card');
   del.addEventListener('click', () => {
     st.selected.delete(c.title);
     wiki.deleteTiddler(c.title);
@@ -394,7 +397,7 @@ function docDetails(ctx: Ctx, view: string, key: string, docCards: Card[]): HTML
   });
   dsum.appendChild(groupCb);
 
-  dsum.appendChild(el(doc, 'span', 'tm-cm-doc-title', `${docNameOf(docCards[0])}（${docCards.length}）`));
+  dsum.appendChild(el(doc, 'span', 'tm-cm-doc-title', `${docNameOf(docCards[0], ctx.wiki)}（${docCards.length}）`));
   dd.appendChild(dsum);
   const sorted = [...docCards].sort(cmpStr(crumbOf));
   for (const c of sorted) renderCardRow(ctx, dd, c);
@@ -404,10 +407,10 @@ function docDetails(ctx: Ctx, view: string, key: string, docCards: Card[]): HTML
 /** 树形：按文档组织（全量，默认） */
 function renderDocTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
   if (!cards.length) {
-    treeBox.appendChild(emptyEl(ctx.doc, '当前视图下没有卡片。'));
+    treeBox.appendChild(emptyEl(ctx.doc, lingoMod.lingo(ctx.wiki, 'manager.empty', 'No cards found in this view.')));
     return;
   }
-  for (const [key, docCards] of docGroupsOf(cards)) {
+  for (const [key, docCards] of docGroupsOf(cards, ctx.wiki)) {
     treeBox.appendChild(docDetails(ctx, 'doc', key, docCards));
   }
 }
@@ -416,7 +419,7 @@ function renderDocTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
 function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
   const { doc, wiki, st } = ctx;
   if (!st.deckInfos.length) {
-    treeBox.appendChild(emptyEl(doc, '暂无牌组——导入/切分后自动创建。未入组卡片见下方「未入组」分支。', '🃏'));
+    treeBox.appendChild(emptyEl(doc, lingoMod.lingo(wiki, 'manager.nodecks', 'No decks found. Cards appear in the unassigned branch below.'), '🃏'));
   }
   for (const d of st.deckInfos) {
     const deckCards = cards.filter((c) => d.strict.has(c.title));
@@ -447,7 +450,7 @@ function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
     const renderDocGroups = () => {
       if (docGroupsRendered) return;
       docGroupsRendered = true;
-      for (const [docKey, docCards] of docGroupsOf(deckCards)) {
+      for (const [docKey, docCards] of docGroupsOf(deckCards, wiki)) {
         details.appendChild(docDetails(ctx, 'deck', d.title + '/' + docKey, docCards));
       }
     };
@@ -479,8 +482,9 @@ function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
   });
   os.appendChild(orphanCb);
 
-  os.appendChild(el(doc, 'strong', '', ` 未入组（${orphans.length}）`));
-  os.title = '不属于任何牌组队列的卡片：已读、搁置或手动创建的散卡';
+  const unassignedLabel = lingoMod.lingo(wiki, 'manager.unassigned', 'Unassigned');
+  os.appendChild(el(doc, 'strong', '', ` ${unassignedLabel}（${orphans.length}）`));
+  os.title = lingoMod.lingo(wiki, 'manager.unassigned.tip', 'Cards not belonging to any deck queue: read, suspended or standalone cards');
   ob.appendChild(os);
   let orphansRendered = false;
   const renderOrphanGroups = () => {
@@ -586,21 +590,21 @@ function editForm(ctx: Ctx, c: Card): HTMLElement {
   const dueInput = doc.createElement('input');
   dueInput.type = 'text';
   dueInput.value = dueLabel(f) !== '—' ? dueLabel(f) : '';
-  dueInput.placeholder = 'YYYY-MM-DD（下次到期）';
-  row('下次到期', dueInput);
+  dueInput.placeholder = 'YYYY-MM-DD';
+  row(lingoMod.lingo(wiki, 'manager.col.due', 'Next Due'), dueInput);
   const priInput = doc.createElement('input');
   priInput.type = 'number';
   priInput.min = '0';
   priInput.max = '100';
   priInput.value = String(f['tidme.priority'] ?? '');
-  priInput.placeholder = '0-100（0 最高）';
-  row('优先级', priInput);
+  priInput.placeholder = '0-100 (0 is highest)';
+  row(lingoMod.lingo(wiki, 'manager.col.priority', 'Priority'), priInput);
   const commentInput = doc.createElement('input');
   commentInput.type = 'text';
   commentInput.value = String(f['tidme.comment'] || '');
-  commentInput.placeholder = '注释（tidme.comment）';
-  row('注释', commentInput);
-  const save = el(doc, 'button', 'tm-btn tm-btn--primary', '✔ 保存');
+  commentInput.placeholder = 'tidme.comment';
+  row(lingoMod.lingo(wiki, 'manager.col.comment', 'Comment'), commentInput);
+  const save = el(doc, 'button', 'tm-btn tm-btn--primary', `✔ ${lingoMod.lingo(wiki, 'save', 'Save')}`);
   save.addEventListener('click', () => {
     const patch: Record<string, any> = {};
     const m = String(dueInput.value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -615,9 +619,9 @@ function editForm(ctx: Ctx, c: Card): HTMLElement {
     if (ex) wiki.addTiddler({ ...ex.fields, ...patch });
     st.editTitle = null;
     render(ctx);
-    toast(ctx, '✔ 已保存卡片参数', 'ok');
+    toast(ctx, `✔ ${lingoMod.lingo(wiki, 'manager.params.saved', 'Card parameters saved')}`, 'ok');
   });
-  const cancel = el(doc, 'button', 'tm-btn', '取消');
+  const cancel = el(doc, 'button', 'tm-btn', lingoMod.lingo(wiki, 'cancel', 'Cancel'));
   cancel.addEventListener('click', () => {
     st.editTitle = null;
     render(ctx);
@@ -631,19 +635,19 @@ function editForm(ctx: Ctx, c: Card): HTMLElement {
 
 /** 列表视图（真 <table>，表头 sticky + 排序箭头 + 预览联动区） */
 function renderList(ctx: Ctx, listBox: HTMLElement, cards: Card[]) {
-  const { doc, st } = ctx;
+  const { doc, wiki, st } = ctx;
   const table = el(doc, 'table', 'tm-cm-table');
   const thead = el(doc, 'thead', '');
   const trh = el(doc, 'tr', '');
   trh.appendChild(el(doc, 'th', 'tm-cm-cell-cb', ''));
-  trh.appendChild(el(doc, 'th', '', '状态'));
-  trh.appendChild(el(doc, 'th', '', '类型'));
+  trh.appendChild(el(doc, 'th', '', lingoMod.lingo(wiki, 'manager.col.state', 'State')));
+  trh.appendChild(el(doc, 'th', '', lingoMod.lingo(wiki, 'manager.col.kind', 'Kind')));
   const th = (label: string, key?: SortKey) => {
     const t = el(doc, 'th', '');
     if (key) {
       const active = st.sortKey === key;
       const b = el(doc, 'button', 'tm-cm-sort' + (active ? ' tm-cm-sort-active' : ''), label + (active ? (st.sortAsc ? ' ↑' : ' ↓') : ''));
-      b.title = '点击排序';
+      b.title = lingoMod.lingo(wiki, 'manager.clicksort', 'Click to sort');
       b.addEventListener('click', () => {
         if (st.sortKey === key) st.sortAsc = !st.sortAsc;
         else {
@@ -658,20 +662,20 @@ function renderList(ctx: Ctx, listBox: HTMLElement, cards: Card[]) {
     }
     return t;
   };
-  trh.appendChild(th('优先', 'priority'));
-  trh.appendChild(th('混合', 'mixed'));
-  trh.appendChild(th('标题', 'breadcrumb'));
-  trh.appendChild(th('牌组', 'deck'));
-  trh.appendChild(th('到期', 'due'));
-  trh.appendChild(th('间隔'));
-  trh.appendChild(th('重复'));
-  trh.appendChild(th('难度'));
-  trh.appendChild(th('操作'));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.priority', 'Priority'), 'priority'));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.mixed', 'Mixed'), 'mixed'));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.title', 'Title'), 'breadcrumb'));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'deck', 'Deck'), 'deck'));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.due', 'Due'), 'due'));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.interval', 'Interval')));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.reps', 'Reps')));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.diff', 'Difficulty')));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.actions', 'Actions')));
   thead.appendChild(trh);
   table.appendChild(thead);
 
   if (!cards.length) {
-    listBox.appendChild(emptyEl(doc, '当前视图下没有卡片。'));
+    listBox.appendChild(emptyEl(doc, lingoMod.lingo(wiki, 'manager.empty', 'No cards found in this view.')));
     return;
   }
   const tbody = el(doc, 'tbody', '');
@@ -689,8 +693,8 @@ function renderList(ctx: Ctx, listBox: HTMLElement, cards: Card[]) {
       doc,
       'div',
       'tm-cm-preview-head',
-      `${crumbOf(prev)} · ${kindMark(f) || '节'} · p${String(f['tidme.priority'] ?? '-').padStart(2, '0')} · ${stateLabel(f)}${
-        dueLabel(f) !== '—' ? ' · 到期 ' + dueLabel(f) : ''
+      `${crumbOf(prev)} · ${kindMark(f, wiki) || 'S'} · p${String(f['tidme.priority'] ?? '-').padStart(2, '0')} · ${stateLabel(f, wiki)}${
+        dueLabel(f) !== '—' ? ` · ${lingoMod.lingo(wiki, 'manager.col.due', 'Due')} ` + dueLabel(f) : ''
       }`,
     ),
   );
@@ -701,22 +705,22 @@ function renderList(ctx: Ctx, listBox: HTMLElement, cards: Card[]) {
     s.appendChild(doc.createTextNode(String(value ?? '—')));
     grid.appendChild(s);
   };
-  info('下次到期', dueLabel(f));
-  info('上次复习', dateLabel(f.last_review));
-  info('间隔', intervalLabel(f));
-  info('重复', repsLabel(f));
-  info('遗忘', lapsesLabel(f));
-  info('稳定性', f.stability !== undefined && f.stability !== '' ? String(Number(f.stability).toFixed(1)) : '—');
-  info('难度', diffLabel(f));
-  info('已过天数', f.elapsed_days !== undefined && f.elapsed_days !== '' ? String(Number(f.elapsed_days).toFixed(1)) : '—');
-  info('牌组', decksOf(st, prev).map((d) => d.caption).join('·') || '—');
-  if (f['tidme.comment']) info('注释', f['tidme.comment']);
+  info(lingoMod.lingo(wiki, 'manager.col.due', 'Next Due'), dueLabel(f));
+  info(lingoMod.lingo(wiki, 'lastreview', 'Last Review'), dateLabel(f.last_review));
+  info(lingoMod.lingo(wiki, 'manager.col.interval', 'Interval'), intervalLabel(f, wiki));
+  info(lingoMod.lingo(wiki, 'manager.col.reps', 'Reps'), repsLabel(f));
+  info(lingoMod.lingo(wiki, 'manager.col.lapses', 'Lapses'), lapsesLabel(f));
+  info(lingoMod.lingo(wiki, 'manager.col.stability', 'Stability'), f.stability !== undefined && f.stability !== '' ? String(Number(f.stability).toFixed(1)) : '—');
+  info(lingoMod.lingo(wiki, 'manager.col.diff', 'Difficulty'), diffLabel(f));
+  info(lingoMod.lingo(wiki, 'manager.col.elapsed', 'Elapsed Days'), f.elapsed_days !== undefined && f.elapsed_days !== '' ? String(Number(f.elapsed_days).toFixed(1)) : '—');
+  info(lingoMod.lingo(wiki, 'deck', 'Deck'), decksOf(st, prev).map((d) => d.caption).join('·') || '—');
+  if (f['tidme.comment']) info(lingoMod.lingo(wiki, 'manager.col.comment', 'Comment'), f['tidme.comment']);
   pv.appendChild(grid);
   if (st.editTitle === prev.title) {
     pv.appendChild(editForm(ctx, prev));
   } else {
-    const editBtn = el(doc, 'button', 'tm-cm-op', '✎ 编辑参数');
-    editBtn.title = '修改下次到期 / 优先级 / 注释（对标 SuperMemo Element parameters）';
+    const editBtn = el(doc, 'button', 'tm-cm-op', `✎ ${lingoMod.lingo(wiki, 'manager.editparams', 'Edit Parameters')}`);
+    editBtn.title = lingoMod.lingo(wiki, 'manager.editparams.tip', 'Modify Next Due / Priority / Comment');
     editBtn.addEventListener('click', () => {
       st.editTitle = prev.title;
       render(ctx);
@@ -739,9 +743,9 @@ function batchButton(ctx: Ctx, label: string, apply: (f: Record<string, any>) =>
   b.addEventListener('click', async () => {
     if (
       destructive && !(await dialog.confirmDialog(doc, {
-        title: '删除卡片',
-        message: `确定删除选中的 ${st.selected.size} 张卡片？此操作不可恢复。`,
-        confirmLabel: '删除',
+        title: lingoMod.lingo(wiki, 'manager.delete', 'Delete Cards'),
+        message: lingoMod.lingo(wiki, 'manager.confirm.delete', `Are you sure you want to delete ${st.selected.size} cards? This cannot be undone.`),
+        confirmLabel: lingoMod.lingo(wiki, 'delete', 'Delete'),
         danger: true,
       }))
     ) return;
@@ -755,7 +759,7 @@ function batchButton(ctx: Ctx, label: string, apply: (f: Record<string, any>) =>
     }
     st.selected.clear();
     render(ctx);
-    toast(ctx, destructive ? `已删除 ${n} 张卡片` : `${label}：已处理 ${n} 张`, destructive ? 'err' : 'ok');
+    toast(ctx, destructive ? `${lingoMod.lingo(wiki, 'manager.deleted.count', 'Deleted')} ${n}` : `${label}: ${n}`, destructive ? 'err' : 'ok');
   });
   return b;
 }
@@ -763,8 +767,8 @@ function batchButton(ctx: Ctx, label: string, apply: (f: Record<string, any>) =>
 /** ⚡ 顺延过载：autoPostpone 当前可见卡（按优先级保高顺低） */
 function autoPostponeButton(ctx: Ctx): HTMLElement {
   const { doc, wiki, st } = ctx;
-  const b = icons.iconButton(doc, 'tm-cm-btn', 'zap', '顺延过载');
-  b.title = '自动按优先级顺延低优先级的逾期卡片（保留高优先级卡片）';
+  const b = icons.iconButton(doc, 'tm-cm-btn', 'zap', lingoMod.lingo(wiki, 'manager.autopostpone', 'Auto Postpone'));
+  b.title = lingoMod.lingo(wiki, 'manager.autopostpone.tip', 'Automatically postpone low-priority overdue cards (preserving high-priority ones)');
   b.addEventListener('click', () => {
     let cfg: any = {};
     try {
@@ -772,7 +776,7 @@ function autoPostponeButton(ctx: Ctx): HTMLElement {
     } catch { /* 默认配置 */ }
     const res = sched.autoPostpone(st.visibleCards, cfg);
     if (res.patches.length === 0) {
-      toast(ctx, `无需顺延（逾期 ${res.stats.overdue} 张，保留 Top ${res.stats.kept}）`, 'ok');
+      toast(ctx, lingoMod.lingo(wiki, 'manager.autopostpone.none', `No postponement needed (Overdue: ${res.stats.overdue}, Retained: Top ${res.stats.kept})`), 'ok');
       return;
     }
     for (const p of res.patches) {
@@ -780,20 +784,20 @@ function autoPostponeButton(ctx: Ctx): HTMLElement {
       if (tiddler) wiki.addTiddler({ ...tiddler.fields, ...p.fields });
     }
     render(ctx);
-    toast(ctx, `已顺延 ${res.stats.postponed} 张低优先逾期卡（保留 Top ${res.stats.kept}）`, 'ok');
+    toast(ctx, lingoMod.lingo(wiki, 'manager.autopostpone.done', `Postponed ${res.stats.postponed} low-priority overdue cards (Retained: Top ${res.stats.kept})`), 'ok');
   });
   return b;
 }
 
 function buildToolbar(ctx: Ctx): HTMLElement {
-  const { doc, st } = ctx;
+  const { doc, wiki, st } = ctx;
   const toolbar = el(doc, 'div', 'tm-cm-toolbar');
   const topRow = el(doc, 'div', 'tm-cm-top-row');
 
   // 查找（按标题/面包屑过滤当前视图）
   const searchRow = el(doc, 'div', 'tm-cm-search-row');
   const input = el(doc, 'input', 'tm-cm-search');
-  input.placeholder = '查找卡片...';
+  input.placeholder = lingoMod.lingo(wiki, 'manager.search.placeholder', 'Find cards...');
   input.value = st.searchText;
   input.addEventListener('input', () => {
     st.searchText = (input.value || '').trim().toLowerCase();
@@ -813,8 +817,9 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   // 组织方式切换
   const orgRow = el(doc, 'div', 'tm-cm-orgs');
   for (const o of ORGS) {
-    const b = el(doc, 'button', 'tm-btn' + (st.org === o.id ? ' tm-btn--active' : ''), o.label);
-    b.title = o.tip;
+    const label = lingoMod.lingo(wiki, o.key, o.label);
+    const b = el(doc, 'button', 'tm-btn' + (st.org === o.id ? ' tm-btn--active' : ''), label);
+    b.title = lingoMod.lingo(wiki, o.key + '.tip', o.tip);
     b.addEventListener('click', () => {
       st.org = o.id;
       render(ctx);
@@ -829,7 +834,8 @@ function buildToolbar(ctx: Ctx): HTMLElement {
     const count = v.id === 'all'
       ? st.allCards.length
       : st.allCards.filter((c) => inView(c.fields, v.id)).length;
-    const b = el(doc, 'button', 'tm-btn' + (st.view === v.id ? ' tm-btn--active' : ''), `${v.label}(${count})`);
+    const label = lingoMod.lingo(wiki, v.key, v.label);
+    const b = el(doc, 'button', 'tm-btn' + (st.view === v.id ? ' tm-btn--active' : ''), `${label}(${count})`);
     b.addEventListener('click', () => {
       st.view = v.id;
       render(ctx);
@@ -847,7 +853,7 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   st.bulkCb = doc.createElement('input');
   st.bulkCb.type = 'checkbox';
   st.bulkCb.className = 'tm-cm-group-cb';
-  st.bulkCb.title = '全选/清空所有当前可见卡片';
+  st.bulkCb.title = lingoMod.lingo(wiki, 'manager.selectall.tip', 'Select / Deselect all currently visible cards');
   st.bulkCb.addEventListener('change', () => {
     for (const c of st.visibleCards) {
       if (st.bulkCb?.checked) st.selected.add(c.title);
@@ -856,34 +862,35 @@ function buildToolbar(ctx: Ctx): HTMLElement {
     updateSelectionUI(ctx);
   });
   bulkCbGroup.appendChild(st.bulkCb);
-  st.selLabel = el(doc, 'span', 'tm-cm-sel-info', `已选 ${st.selected.size}/${st.visibleCards.length} 张`);
+  const selPrefix = lingoMod.lingo(wiki, 'manager.selected', 'Selected');
+  st.selLabel = el(doc, 'span', 'tm-cm-sel-info', `${selPrefix} ${st.selected.size}/${st.visibleCards.length}`);
   bulkCbGroup.appendChild(st.selLabel);
   row.appendChild(bulkCbGroup);
 
   const schedGroup = el(doc, 'span', 'tm-cm-bar-group', '');
-  schedGroup.appendChild(batchButton(ctx, '顺延7d', (f) => sched.postponeCard(f, 7)));
-  schedGroup.appendChild(batchButton(ctx, '提前', () => sched.advanceCard()));
-  schedGroup.appendChild(batchButton(ctx, '遗忘', () => sched.forgetCard()));
+  schedGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.postpone7d', 'Postpone 7d'), (f) => sched.postponeCard(f, 7)));
+  schedGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.advance', 'Advance'), () => sched.advanceCard()));
+  schedGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.forget', 'Forget'), () => sched.forgetCard()));
   schedGroup.appendChild(autoPostponeButton(ctx));
   row.appendChild(schedGroup);
 
   const stateGroup = el(doc, 'span', 'tm-cm-bar-group', '');
-  stateGroup.appendChild(batchButton(ctx, '移出队列', (f) => doneFields(f)));
-  stateGroup.appendChild(batchButton(ctx, '搁置', () => sched.suspendCard()));
-  stateGroup.appendChild(batchButton(ctx, '恢复', () => resumePatch()));
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.done', 'Done'), (f) => doneFields(f)));
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.suspend', 'Suspend'), () => sched.suspendCard()));
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.restore', 'Restore'), () => resumePatch()));
   row.appendChild(stateGroup);
 
   const dangerGroup = el(doc, 'span', 'tm-cm-bar-group', '');
-  dangerGroup.appendChild(batchButton(ctx, '删除', () => ({} as Record<string, any>), true));
+  dangerGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.delete', 'Delete'), () => ({} as Record<string, any>), true));
   row.appendChild(dangerGroup);
 
   // 批量优先级（对标 SM Browser Priority: Modify）
   const priGroup = el(doc, 'span', 'tm-cm-bar-group', '');
-  priGroup.appendChild(batchButton(ctx, '优先↑', (f) => ({ 'tidme.priority': sched.shiftPriority(f['tidme.priority'], -5) })));
-  priGroup.appendChild(batchButton(ctx, '优先↓', (f) => ({ 'tidme.priority': sched.shiftPriority(f['tidme.priority'], 5) })));
-  priGroup.appendChild(batchButton(ctx, '设高', () => ({ 'tidme.priority': '10' })));
-  priGroup.appendChild(batchButton(ctx, '设中', () => ({ 'tidme.priority': '50' })));
-  priGroup.appendChild(batchButton(ctx, '设低', () => ({ 'tidme.priority': '90' })));
+  priGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.priup', 'Pri ↑'), (f) => ({ 'tidme.priority': sched.shiftPriority(f['tidme.priority'], -5) })));
+  priGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.pridown', 'Pri ↓'), (f) => ({ 'tidme.priority': sched.shiftPriority(f['tidme.priority'], 5) })));
+  priGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.prihigh', 'High'), () => ({ 'tidme.priority': '10' })));
+  priGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.primid', 'Mid'), () => ({ 'tidme.priority': '50' })));
+  priGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.prilow', 'Low'), () => ({ 'tidme.priority': '90' })));
   row.appendChild(priGroup);
 
   bar.appendChild(row);

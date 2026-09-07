@@ -10,27 +10,28 @@ due: Due
 new: New
 options: Options
 caption: Caption
-cardfilter: Card [[filter|https://tiddlywiki.com/#Introduction%20to%20filter%20notation]]
+captionplaceholder: Enter card title or summary...
+cardfilter: Card filter
 cardfiltertip: Filtering tiddlers as cards in this Deck.
 description: Description
 advanced: Advanced
 studyorder: Study Order
 cardstate: Card state
 displayorderfilter: Display Order Filter
-random: Rando
+random: Random
 cardtypefilter: Card Type Filter
 exclude: Exclude
 excludetip: Exclude this card and not study it again
 unfold: Unfold
 unfoldtip: Unfold this card when studying
-action: [[Action|https://tiddlywiki.com/#ActionWidgets]]
+action: Action
 leech: Leech
 leechthreshold: Threshold
 expert: Expert
 experttip: I have fully understood the implications of the following expert options and accept the potentially damaging consequences.
-cardstatefilter: Card [[State|https://github.com/open-spaced-repetition/fsrs.js#usage]] Filter
+cardstatefilter: Card State Filter
 param: Param
-fsrsparam: [[FSRS algorithm|https://github.com/open-spaced-repetition/fsrs.js#usage]]
+fsrsparam: FSRS algorithm
 exportdelete: Export or delete
 startstudy: Start Study
 next: Next
@@ -40,12 +41,469 @@ good: Good
 easy: Easy
 stopstudy: Stop Study
 type: Type Question
-typetip: Insert edit of Type Question(see manual for usage)
+typetip: Insert edit of Type Question (see manual for usage)
 cloze: Cloze Question
-clozetip: Set the selected text as cloze of Cloze Question(see manual for usage)
+clozetip: Set the selected text as cloze of Cloze Question (see manual for usage)
 select: Select Question
-selecttip: Insert edit of Select Question(see manual for usage)
+selecttip: Insert edit of Select Question (see manual for usage)
 search: Search Question
 searchtip: Search for tiddler title, select to edit
 optionsmodaltip: Review Options
-read/read: Read
+lastdue: Due
+lastreview: Reviewed
+createdeck: Create Deck
+createdecktip: Create a new deck using the default deck as template
+getshared: Get Shared Decks
+importfile: Import File
+pluginlibrary: Tidme Plugin Library
+pluginlibrarytip: Install and update Tidme-related plugins.
+deckslibrary: Shared Decks Library
+deckslibrarytip: Install and update shared decks.
+unit.days: d
+badge.learn: L
+badge.overdue: !
+badge.due: D
+badge.new: N
+kind.extract: E
+kind.cloze: C
+kind.qa: Q
+kind.section: Section
+state.read: Read
+state.suspended: Suspended
+state.learning: Learning
+state.review: Review
+state.relearning: Relearning
+state.overdue: Overdue
+state.due: Due
+state.new: New
+nav.today: Today
+nav.reading: Reading
+nav.import: Import
+nav.manager: Manager
+nav.stats: Stats
+nav.settings: Settings
+today.startstudy: Start Review
+today.cardsdue: cards due
+today.noduecards: No due cards, free to review
+today.sectionsleft: sections left
+today.noreading: No reading materials
+today.reviewedprefix: Today Reviewed:
+today.focusprefix: Focus:
+today.norecentbooks: No reading in progress - Add materials from Import Center.
+studymode.learning: Learning
+studymode.finishandnext: Done, Next ›
+studymode.finishandnext.tip: Save reading progress and continue review
+studymode.end: End Study
+studymode.end.tip: End current session, clear queue, return to Today
+rate.again: Again
+rate.hard: Hard
+rate.good: Good
+rate.easy: Easy
+viewer.showanswer: Show Answer (Space)
+viewer.hideanswer: Hide Answer (Space)
+viewer.nocaption: (No caption, view text)
+viewer.stats: 📊 Study Data & Metrics
+col.title: Title
+col.state: State
+col.due: Due
+col.interval: Interval
+col.diff: Difficulty
+col.reps: Reps
+col.lapses: Lapses
+col.priority: Priority
+col.total: Total
+col.progress: Progress
+col.processing: Processing
+col.actions: Actions
+field.priority: Priority
+field.kind: Card Type
+field.state: FSRS State
+field.due: Due Date
+field.due.unrated: Scheduled after first review
+field.due.none: Not scheduled
+field.stability: Stability (S)
+field.difficulty: Difficulty (D)
+field.reps: Reps
+field.lapses: Lapses
+field.doc.duration: Book Reading Time
+field.today.duration: Today Total Reading
+priority.high: High
+priority.med: Med
+priority.low: Low
+priority.none: None
+action.open: Open
+action.open.tip: Open this card
+action.back: Back to Source
+action.back.tip: Jump back to source and highlight
+action.delete: Delete
+action.delete.tip: Delete this card
+action.create: ✔ Create
+action.cancel: Cancel
+action.save: ✔ Save
+action.restore: ↩ Restore
+action.remove: Remove
+action.clear: Clear
+action.deletefailed: Delete failed
+manager.title: Card Manager
+manager.caption: Card Manager
+manager.tip: Manage cards, review queues, and knowledge hierarchy
+manager.all: All
+manager.inqueue: In Queue
+manager.read: Read
+manager.suspended: Suspended
+manager.overdue: Overdue
+manager.bydoc: By Document
+manager.bydeck: By Deck
+manager.flatlist: List
+manager.selectall: Select All
+manager.deselectall: Deselect All
+manager.invert: Invert
+manager.postpone: Postpone
+manager.advance: Advance
+manager.suspend: Suspend
+manager.restore: Restore
+manager.forget: Forget
+manager.delete: Delete
+manager.setpriority: Set Priority
+manager.col.kind: Kind
+manager.col.priority: Priority
+manager.col.title: Title
+manager.col.state: State
+manager.col.due: Due
+manager.col.interval: Interval
+manager.col.reps: Reps
+manager.col.lapses: Lapses
+manager.col.diff: Difficulty
+manager.col.actions: Actions
+manager.action.read: Read
+manager.action.back: Back to Source
+manager.action.del: Delete
+manager.action.detail: Detail
+manager.empty: No cards found in this view.
+manager.confirm.delete: Are you sure you want to delete {count} selected cards? This cannot be undone.
+manager.prompt.postpone: Postpone selected cards by how many days?
+manager.prompt.priority: Enter new priority (0-100, 0 is highest):
+manager.success.op: Operation completed for {count} cards.
+deck.create: + New Deck
+deck.name.placeholder: Name, e.g. Vocabulary
+deck.caption.placeholder: Caption (leave blank to use name)
+deck.src.custom: Custom Filter
+deck.src.item: All Knowledge Cards
+deck.caption: Caption
+deck.membersrc: Member Source
+deck.filter: Filter
+deck.filter.error: Filter evaluation failed (check syntax)
+deck.hits: cards matched
+deck.overlap: overlap with other decks
+deck.name.empty: Please enter a deck name
+deck.created: ✔ Created
+deck.create.failed: Creation failed:
+deck.delete: Delete Deck
+deck.delete.tip: Delete deck definition (cards are kept and reviewed in default deck)
+deck.notfound: Deck not found
+deck.nodeletedefault: Default deck cannot be deleted
+deck.subset: Subset Deck
+deck.subset.deleteprompt: Delete cards together? (OK = delete cards; Cancel = delete deck only)
+deck.deletecards: Delete Cards
+deck.deleteconfirm: Delete deck
+deck.withcards: and its cards?
+deck.keepcards: (keep cards)?
+deck.cardskept: Cards will be kept.
+deck.deletedwithcards: Deleted deck and
+deck.cardscount: cards
+deck.deletedkeepcards: ✔ Deck deleted (cards kept)
+creator.title: Omni Card Creator
+creator.subtitle: Create cards and notes from anywhere
+creator.mode.qa: Q&A Card
+creator.mode.cloze: Cloze Card
+creator.mode.extract: Extract Note
+creator.field.title: Card Title
+creator.field.title.placeholder: Optional concise summary...
+creator.field.question: Question (Front)
+creator.field.question.placeholder: Enter question or prompt...
+creator.field.answer: Answer (Back)
+creator.field.answer.placeholder: Enter answer or detailed explanation...
+creator.field.cloze: Cloze Text
+creator.field.cloze.placeholder: Select text and click 'Add Cloze' or type {{c1::cloze text}}...
+creator.field.note: Extra Note / Context
+creator.field.note.placeholder: Optional background or mnemonic...
+creator.field.deck: Target Deck
+creator.field.priority: Priority (0-100)
+creator.btn.submit: Create Card
+creator.btn.cancel: Cancel
+creator.hint.shortcuts: Shortcuts: Ctrl+Enter to save, Esc to cancel
+creator.toast.success: Card created successfully!
+creator.toast.error: Failed to create card: title or question is required.
+creator.modal.edit: Edit Card
+creator.modal.create: Create Card
+read.read: Read
+read.prev: Previous
+read.next: Next
+read.readpoint: Read Point
+read.readpoint.set: Set Read Point
+read.readpoint.jump: Jump to Read Point
+read.readpoint.clear: Clear Read Point
+read.done: Read
+read.later: Later
+read.advance: Advance
+read.ignore: Ignore
+read.extract: Extract
+read.cloze: Cloze
+read.qa: Q&A
+read.more: More
+read.stats: Stats
+read.help: Help
+read.backtosource: Back to Source
+read.resume: Continue Reading
+read.readinglist: Reading List
+read.recent: Recent Reading
+read.opendoc: Open document:
+read.continue: Continue
+read.open: Open to read
+read.pages: pages
+read/kind.cloze: Cloze Card
+read/kind.qa: Q&A Card
+read/kind.extract: Extract Card
+read/from: from
+read/backtosource: Back to Source
+read/backtosource.tip: Jump back to source and highlight fragment
+read/done: Done
+read/done.tip: Finish card: remove from queue and close
+read/done.section.tip: Done! Mark section as read and remove from study queue
+read/delete: Delete
+read/delete.tip: Delete card permanently
+read/crumb.tip: Click to open book index
+read/lefttostudy: left to study
+read/state.read: Read
+read/autosaved: Auto-saved
+read/saving: Saving...
+read/nav.prev: Previous Section
+read/nav.next: Next Section
+read/rp.set.tip: Set Read Point (Ctrl+F7): Anchor at selected text
+read/rp.goto.tip: Jump to Read Point (Alt+F7)
+read/rp.clear: Clear
+read/rp.clear.tip: Clear Read Point (Ctrl+Shift+F7)
+read/readd: Re-add
+read/readd.tip: Restore to study queue
+read/later.tip: Read later (SM A-Factor): postpone proportionally
+read/advance.tip: Advance topic today: push into today queue and boost priority
+read/ignore.tip: Mark as ignored: remove from reading queue
+read/extract.tip: Extract card (Alt+X): select text first
+read/cloze.tip: Cloze card (Alt+Z): select text first
+read/qa.tip: Q&A card (Alt+Q): select text first
+read/priority: Pri
+read/pri.boost: Boost priority
+read/pri.lower: Lower priority
+read/af.lower: Lower A-Factor
+read/af.reset: Reset A-Factor
+read/af.boost: Boost A-Factor
+read/clean.extracts: Clean Extracts
+read/clean.tip: Delete extracted segments from text
+read/clean.confirm: Delete extracted text segments from this note?
+read/delete.extract: Delete Extract
+read/delete.extract.tip: Permanently delete this extract card
+read/sections.left: sections left to study
+read/review.book: Review Book
+read/review.book.tip: Subset review: review test cards of this book
+read/review.prefix: Review:
+read/subset.deck.desc: Temporary subset deck (review book test cards) - can be deleted after study
+read/clean.materials: Clean Reading Materials
+read/clean.materials.tip: Delete document and section cards while preserving extracted cards in review stream
+read/clean.materials.confirm: Delete reading materials of this book? Document page and sections will be removed, extracted cards will be preserved.
+read/readcards: Read Cards
+read/inbox.summary: Extracts & Cards
+read/clozed: Clozed
+read/clozeable: Ready
+read/clozed.tip: Already clozed into cards
+read/clozeable.tip: Select text and press Alt+Z to cloze
+rl.ungrouped: Ungrouped
+rl.docs: docs
+rl.sortedby: Sorted by priority and due date
+rl.gotoimport: → Go to Import Center
+rl.docdeleted: Document page deleted (extracts only)
+rl.read: read
+rl.resumetip: Start from read point or first pending section
+rl.nomaterialstodelete: No reading materials to delete.
+pdf/toc: Outline
+pdf/collapse-toc: Collapse Outline
+pdf/loading-pdfjs: Loading pdf.js...
+pdf/page-prefix: p.
+pdf/scanned-hint-ocr: Scanned page (no text layer) — Click "OCR" in toolbar to recognize text
+pdf/scanned-hint-settings: Scanned page (no text layer) — Enable OCR in Settings > PDF & OCR to recognize text
+pdf/ocr-no-key: OCR API key not configured (Settings > PDF & OCR)
+pdf/ocr-rendering: OCR: Converting page to image...
+pdf/ocr-recognizing: OCR: Recognizing text...
+pdf/ocr-empty: OCR recognition result is empty
+pdf/ocr-done: OCR completed
+pdf/ocr-failed: OCR failed:
+pdf/box-select-hint: Box select mode: Drag a rectangle on the page, release to create Image Q&A card
+pdf/image-card-created: Image Q&A card created
+pdf/pending-answer: (Answer pending)
+settings.title: Settings
+settings.caption: Settings
+settings.tip: Configure Tidme scheduling, review, reading, and AI parameters
+settings.review.title: Review Scheduling
+settings.review.subtitle: Default Deck & Auto-Postpone
+settings.review.order: Study Order
+settings.review.order.desc: Interleaving order of due and new cards in study queue
+settings.review.order.duenew: Due cards first
+settings.review.order.newdue: New cards first
+settings.review.autopostpone: Auto Postpone
+settings.review.autopostpone.desc: Automatically postpone lower priority overdue cards
+settings.review.autopostpone.enable: Enable auto-postpone
+settings.review.topn: Retained High-Priority
+settings.review.topn.desc: Number of top priority overdue cards to keep due today
+settings.reading.title: Incremental Reading
+settings.reading.subtitle: Topics, A-Factor & Reading Flow
+settings.reading.ratio: Study Stream Composition
+settings.reading.ratio.desc: Interleaving ratio of reading materials into study flow
+settings.reading.ratio.strict: Strict (Items first, then Topics)
+settings.reading.ratio.interleaved: Interleaved (4 items : 1 topic)
+settings.reading.ratio.none: Knowledge cards only (No topics)
+settings.ai.title: AI Semantic Split
+settings.ai.subtitle: LLM-assisted document structure analysis
+settings.ai.enable: Enable AI Split
+settings.ai.endpoint: API Endpoint
+settings.ai.key: API Key
+settings.ai.model: Model Name
+import.title: Import Center
+import.caption: Import Center
+import.tip: Import books, split documents, and manage inbox clips
+import.tab.file: File Import
+import.tab.split: Text Split
+import.tab.clips: Web Clips
+import.dropzone: Drag & drop EPUB, PDF, Markdown, HTML, or TXT files here, or click to browse
+import.bag: Target Bag:
+import.split.btn: Split Document
+import.split.minchars: Min Characters:
+import.split.preview: Preview Sections
+import.split.confirm: Confirm Import
+import.split.success: Successfully split into {count} sections.
+import.duplicate: ⚠ Book exists in library - re-import will align unchanged sections and preserve SRS progress
+import.sectiontitle.placeholder: Section title (e.g. 01 Preface / Short Title)
+import.content.placeholder: Content...
+import.insert: Insert Section
+import.refinetitles: Refine Short Titles
+import.refinetitlestip: Automatically strip marketing descriptions and subtitles
+import.merged: ⟵ Merged
+import.renamed: ✏️ Shortened
+import.edittitle.tip: Double click to edit title
+import.subsplit: Sub-split
+import.subsplittip: Use LLM semantic analysis to split this overlong chapter into sub-topics
+import.splitting: 🤖 Splitting...
+import.selectfile: Select File to Upload (.epub / .md / .txt)
+import.dragdrop.hint: Or: Drag and drop files anywhere onto this page to import.
+import.dragoverlay: Drop files to import into Tidme (.epub / .md / .txt)
+import.importall: ✔ Import All
+import.serverprocess.desc: Upload to server for background processing (TiddlyWeb)
+import.serverprocess: Advanced: Server-side Background Processing (TiddlyWeb)
+import.priority: Import Priority:
+import.prioritytip: 0 is highest; cards will be assigned distributed priorities based on this level
+import.prioritynote: (0 highest, randomly jittered +-8)
+import.uploadcontrol: Upload Control
+import.pendingqueue: Pending Queue
+import.hardsplit: hard splits
+import.dedup: deduplicated
+import.chars: chars
+import.overlong: Overlong
+import.queueing: Queueing...
+import.uploaded: Uploaded
+import.waitingserver: waiting for server...
+import.tasklost: ⚠ Task tiddler lost
+import.done: Import completed
+import.failed: Failed:
+import.filereadfailed: ✕ Failed to read file:
+import.alignsummary: Aligned: Added
+import.updated: Updated
+import.archived: Archived
+import.srspreserved: SRS preserved
+import.pdfimported: imported
+import.sectionsadded: sections imported into default deck, ready to study.
+split.sourcemissing: Source tiddler does not exist
+split.emptysections: No sections split (content too short or no recognizable structure)
+split.pastetitle: Paste Text
+split.pasteplaceholder: Paste Markdown, HTML, or plain text...
+split.btn: Split & Import
+split.emptycontent: Content is empty
+split.parsing: Parsing...
+split.failed: Split failed:
+split.inboxtitle: Inbox Clips (tidme-inbox)
+split.inboxempty: Inbox is empty - clip articles from browser to import here.
+stats.title: Statistics
+stats.caption: Statistics
+stats.tip: Learning progress, retention rate, and study habits
+stats.today.reviewed: Today Reviewed
+stats.today.focustime: Focus Time
+stats.total.cards: Cards in Queue
+stats.retention: Retention Rate
+stats.forecast: Due Forecast
+stats.decks: Decks
+stats.docs: Documents
+stats.todayread: Today Read
+stats.total: Total
+stats.deckload: Deck Load
+stats.nodecks: No decks
+stats.docprogress: Document Progress
+stats.nodocs: No documents imported - import books to track progress.
+stats.funnel: Learning Funnel
+stats.funnel.import: Docs
+stats.funnel.sections: Sections
+stats.funnel.extracts: Extracts
+stats.funnel.cards: Cards
+stats.reviewretention: Review & Retention
+stats.reviews: Reviews
+stats.prioritybuckets: Priority Distribution
+ai.nokey.title: Missing API Key
+ai.nokey.msg: Please configure your API Key in Settings > AI Semantic Split before performing sub-splitting!
+ai.splitfailed.title: Sub-split Validation Failed
+all: All
+read.leftsummary: · $(left)$ cards left
+today.reviewedsummary: $(count)$ cards reviewed today
+today.focussummary: Focus $(duration)$
+manager.postpone7d: Postpone 7d
+manager.autopostpone: Auto-Postpone
+manager.autopostpone.tip: Manually trigger auto-postpone on low-priority overdue cards
+manager.priup: Pri↑
+manager.pridown: Pri↓
+manager.prihigh: Set High
+manager.primid: Set Med
+manager.prilow: Set Low
+manager.ungrouped: Ungrouped
+manager.unassigned: Unassigned
+manager.unassigned.tip: Cards not assigned to any custom deck
+manager.selected: selected
+rl.sectionsleft: sections left
+settings.memory.title: Memory Parameters
+settings.memory.subtitle: Default Deck FSRS
+settings.memory.retention: Target Retention
+settings.memory.retention.desc: Standard is 0.9; higher retention yields slower forgetting but heavier load
+settings.memory.maxinterval: Maximum Interval (Days)
+settings.memory.maxinterval.desc: Maximum interval ceiling for a single card review
+settings.memory.leech.desc: Cards reaching this lapse count are marked as leeches
+settings.reading.mix: Interleaving Ratio
+settings.review.learnrandom: Randomize Learning Steps
+settings.review.learnrandom.desc: Randomize drill order during learning steps
+settings.review.logretention: Review Log Retention Days
+settings.review.maxpriority: Postpone Priority Ceiling
+settings.review.postponedays: Postpone Days
+settings.review.threshold: Overload Trigger Threshold
+settings.pdf.title: PDF & OCR
+settings.pdf.subtitle: Import & Recognition
+settings.pdf.split: PDF Import Mode
+settings.pdf.split.outline: Split by outline
+settings.pdf.split.none: Whole book
+settings.ocr.enable: Enable LLM-OCR
+settings.ocr.enable.desc: Transcribe scanned PDF pages with multimodal vision models
+settings.ocr.model: OCR Model Name
+settings.ocr.baseurl: OCR Base URL
+settings.ocr.apikey: OCR API Key
+read.zoom.fitpage: Fit Page
+read.zoom.fitwidth: Fit Width
+read.zoom.actual: Actual Size
+pdf.firstpage: First Page
+pdf.lastpage: Last Page
+pdf.boxselect: Box select: drag rectangle on page to create image QA card
+pdf.fullscreen: Fullscreen
+pdf.toc: Table of Contents
+pdf.ocr.btn: Scan page recognition (LLM-OCR)
+read.finishandcontinue: Finish & Next

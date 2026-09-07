@@ -32,7 +32,7 @@ export function ensurePdfJs(): Promise<any> {
       s.onload = () => {
         const lib = (globalThis as any).pdfjsLib;
         if (!lib) {
-          reject(new Error('pdf.js 脚本已加载但未暴露 pdfjsLib'));
+          reject(new Error('pdf.js script loaded but pdfjsLib is undefined'));
           return;
         }
         lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
@@ -40,7 +40,7 @@ export function ensurePdfJs(): Promise<any> {
       };
       s.onerror = () => {
         libPromise = null;
-        reject(new Error('pdf.js 加载失败（需要网络访问 cdnjs.cloudflare.com）'));
+        reject(new Error('Failed to load pdf.js (requires network access to cdnjs.cloudflare.com)'));
       };
       (document.head || document.body || document.documentElement).appendChild(s);
     });

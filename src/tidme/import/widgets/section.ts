@@ -25,7 +25,12 @@ const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
+
+function lingo(wiki: any, key: string, fallback: string): string {
+  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+}
 
 const READPOINT_PREFIX = docOps.READPOINT_PREFIX;
 
@@ -236,7 +241,8 @@ function highlightCardAnchors(wiki: any, doc: Document, parentTitle: string) {
         r.setEnd(hit.node, hit.offset + hit.length);
         const mark = doc.createElement('mark');
         mark.className = cls;
-        mark.title = `${subkind === 'cloze' ? '挖空卡' : subkind === 'qa' ? '问答卡' : '摘录卡'}: ${title}`;
+        const kLabel = subkind === 'cloze' ? lingo(wiki, 'kind.cloze', 'Cloze') : subkind === 'qa' ? lingo(wiki, 'kind.qa', 'Q&A') : lingo(wiki, 'kind.extract', 'Extract');
+        mark.title = `${kLabel}: ${title}`;
         mark.addEventListener('click', (e: Event) => {
           e.stopPropagation();
           navigate(title);
@@ -660,9 +666,11 @@ function makeSectionBar(): WidgetCtor {
       // 1. 测试卡 (Item：挖空卡 / 问答卡)
       const subkind = fields['tidme.subkind'];
       if (subkind === 'cloze' || subkind === 'qa') {
-        const kindName = subkind === 'cloze' ? '挖空卡' : '问答卡';
+        const kindName = subkind === 'cloze'
+          ? lingo(wiki, 'read/kind.cloze', 'Cloze Card')
+          : lingo(wiki, 'read/kind.qa', 'Q&A Card');
         const span = el(doc, 'span', 'tm-import-muted');
-        span.appendChild(doc.createTextNode(`${kindName} · 源自 `));
+        span.appendChild(doc.createTextNode(`${kindName} · ${lingo(wiki, 'read/from', 'from')} `));
         const link = el(doc, 'a', 'tc-tiddlylink', String(fields['tidme.parent'] || ''));
         link.href = '#';
         link.addEventListener('click', (e: Event) => {
@@ -676,22 +684,30 @@ function makeSectionBar(): WidgetCtor {
 
         const anchor = parseAnchor(fields['tidme.anchor']);
         if (anchor) {
-          btnRow.appendChild(mkBtn('↩ 回原文', 'rp', '跳回原文并高亮此片段', false, () => {
-            const targetPage = anchor?.page || (fields['tidme.page'] ? Number(fields['tidme.page']) : 0);
-            const docId = String(fields['tidme.doc'] || '');
-            let targetSection = anchor.section;
-            if (targetPage > 0 && docId) {
-              const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
-              if (matched) targetSection = matched;
-              wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
-            }
-            this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
-            this.dispatchEvent({ type: 'tm-navigate', navigateTo: targetSection });
-            if (anchor.snippet) highlightSnippetLater(doc, targetSection, anchor.snippet);
-          }));
+          btnRow.appendChild(
+            mkBtn(
+              `↩ ${lingo(wiki, 'read/backtosource', 'Back to Source')}`,
+              'rp',
+              lingo(wiki, 'read/backtosource.tip', 'Jump back to source and highlight fragment'),
+              false,
+              () => {
+                const targetPage = anchor?.page || (fields['tidme.page'] ? Number(fields['tidme.page']) : 0);
+                const docId = String(fields['tidme.doc'] || '');
+                let targetSection = anchor.section;
+                if (targetPage > 0 && docId) {
+                  const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
+                  if (matched) targetSection = matched;
+                  wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
+                }
+                this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
+                this.dispatchEvent({ type: 'tm-navigate', navigateTo: targetSection });
+                if (anchor.snippet) highlightSnippetLater(doc, targetSection, anchor.snippet);
+              },
+            ),
+          );
         }
 
-        btnRow.appendChild(mkBtn('完成', 'done', '读完此卡：移出队列并关闭', false, () => {
+        btnRow.appendChild(mkBtn(lingo(wiki, 'read/done', 'Done'), 'done', lingo(wiki, 'read/done.tip', 'Finish card: remove from queue and close'), false, () => {
           this._flushReadTime?.();
           wiki.addTiddler(sched.doneCard(fields));
           const backTo = fields['tidme.parent'] || '';
@@ -699,7 +715,7 @@ function makeSectionBar(): WidgetCtor {
           if (backTo) this.dispatchEvent({ type: 'tm-navigate', navigateTo: backTo });
           notify('done');
         }));
-        btnRow.appendChild(mkBtn('删除', 'del', '彻底删除此卡', false, () => {
+        btnRow.appendChild(mkBtn(lingo(wiki, 'read/delete', 'Delete'), 'del', lingo(wiki, 'read/delete.tip', 'Delete card permanently'), false, () => {
           this._flushSave();
           this._flushReadTime?.();
           wiki.deleteTiddler(title);
@@ -725,7 +741,7 @@ function makeSectionBar(): WidgetCtor {
       // 第一行：摘录源提示（若为摘录卡）· 面包屑 · 位置 · 本书剩余 · 优先级 · 已读状态 · 自动保存指示
       if (subkind === 'extract') {
         const span = el(doc, 'span', 'tm-import-muted');
-        span.appendChild(doc.createTextNode(`摘录卡 · 源自 `));
+        span.appendChild(doc.createTextNode(`${lingo(wiki, 'read/kind.extract', 'Extract Card')} · ${lingo(wiki, 'read/from', 'from')} `));
         const link = el(doc, 'a', 'tc-tiddlylink', String(fields['tidme.parent'] || ''));
         link.href = '#';
         link.addEventListener('click', (e: Event) => {
@@ -746,7 +762,7 @@ function makeSectionBar(): WidgetCtor {
         docOps.docPageOfDoc(wiki, crumbDoc) ||
         (crumbBook && crumbDoc ? paths.bookRoot(crumbBook, crumbDoc) : crumbBook);
       const crumb = el(doc, 'span', 'tm-section-crumb tm-import-muted', crumbBreadcrumb);
-      crumb.title = '点击打开本书汇总页';
+      crumb.title = lingo(wiki, 'read/crumb.tip', 'Click to open book summary page');
       crumb.addEventListener('click', () => {
         this._flushSave();
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
@@ -756,79 +772,108 @@ function makeSectionBar(): WidgetCtor {
 
       if (fullList.length > 0 && index >= 0) {
         infoRow.appendChild(el(doc, 'span', 'tm-section-pos tm-import-muted', `　${index + 1} / ${fullList.length}`));
-        infoRow.appendChild(el(doc, 'span', 'tm-section-load tm-import-muted', `· 本书剩 ${left} 张待学`));
+        const leftTpl = lingo(wiki, 'read.leftsummary', '· ${left} cards left');
+        const leftStr = leftTpl.replace('${left}', String(left)).replace('$(left)$', String(left));
+        infoRow.appendChild(el(doc, 'span', 'tm-section-load tm-import-muted', leftStr));
       }
 
       const priVal = sched.normalizePriority(fields['tidme.priority']);
       infoRow.appendChild(el(doc, 'span', 'tm-section-pri tm-import-muted', `p${String(priVal).padStart(2, '0')}`));
 
       if (sched.isCardDone(fields)) {
-        infoRow.appendChild(el(doc, 'span', 'tm-section-state', '✓ 已读'));
+        infoRow.appendChild(el(doc, 'span', 'tm-section-state', `✓ ${lingo(wiki, 'read.done', 'Read')}`));
       }
 
       // 自动保存状态微标
-      this._saveIndicatorEl = el(doc, 'span', 'tm-save-indicator tm-save-indicator--saved', '✓ 已自动保存');
+      this._saveIndicatorEl = el(doc, 'span', 'tm-save-indicator tm-save-indicator--saved', `✓ ${lingo(wiki, 'read/autosaved', 'Auto-saved')}`);
       infoRow.appendChild(this._saveIndicatorEl);
       root.appendChild(infoRow);
 
-      // 第二行：全部按钮
       // 若为摘录卡，包含 ↩ 回原文
       const anchor = parseAnchor(fields['tidme.anchor']);
       if (anchor) {
-        btnRow.appendChild(mkBtn('↩ 回原文', 'rp', '跳回原文并高亮此片段', false, () => {
-          const targetPage = anchor?.page || (fields['tidme.page'] ? Number(fields['tidme.page']) : 0);
-          const docId = String(fields['tidme.doc'] || '');
-          let targetSection = anchor.section;
-          if (targetPage > 0 && docId) {
-            const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
-            if (matched) targetSection = matched;
-            wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
-          }
-          this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
-          this.dispatchEvent({ type: 'tm-navigate', navigateTo: targetSection });
-          if (anchor.snippet) highlightSnippetLater(doc, targetSection, anchor.snippet);
-        }));
+        btnRow.appendChild(
+          mkBtn(`↩ ${lingo(wiki, 'action.back', 'Back to Source')}`, 'rp', lingo(wiki, 'action.back.tip', 'Jump back to source and highlight snippet'), false, () => {
+            const targetPage = anchor?.page || (fields['tidme.page'] ? Number(fields['tidme.page']) : 0);
+            const docId = String(fields['tidme.doc'] || '');
+            let targetSection = anchor.section;
+            if (targetPage > 0 && docId) {
+              const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
+              if (matched) targetSection = matched;
+              wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
+            }
+            this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
+            this.dispatchEvent({ type: 'tm-navigate', navigateTo: targetSection });
+            if (anchor.snippet) highlightSnippetLater(doc, targetSection, anchor.snippet);
+          }),
+        );
       }
 
-      btnRow.appendChild(mkBtn('', 'nav', '上一节', !prev, () => {
-        if (prev) gotoSection(prev);
-      }, 'chevron-left'));
-      btnRow.appendChild(mkBtn('', 'nav', '下一节', !schedNext, () => {
-        if (schedNext) gotoNextDoc();
-      }, 'chevron-right'));
-      // ←/→ 方向键的落点：注册当前卡的上一节/下一节（键入时校验本卡仍在故事中）
-      active.navActions = {
-        title,
-        prev: prev ? () => gotoSection(prev) : null,
-        next: schedNext ? () => gotoNextDoc() : null,
-      };
+      // 导航 ◀ / ▶
+      btnRow.appendChild(
+        mkBtn(
+          '◀',
+          'prev',
+          prev ? `${lingo(wiki, 'read/prev.tip', 'Previous section (Alt+Left):')} ${prev}` : lingo(wiki, 'read/noprev', 'No previous section'),
+          !prev,
+          () => leaveTo(prev),
+        ),
+      );
+      btnRow.appendChild(
+        mkBtn(
+          '▶',
+          'next',
+          schedNext ? `${lingo(wiki, 'read/next.tip', 'Next scheduled section (Alt+Right):')} ${schedNext}` : lingo(wiki, 'read/nonext', 'No next section'),
+          !schedNext,
+          () => leaveTo(schedNext),
+        ),
+      );
 
       sep();
 
-      btnRow.appendChild(mkBtn('⏸', 'rp', '设续读点 (Ctrl+F7)：以当前选中文字为锚', false, () => actionSetReadPoint(win)));
+      // 续读点按钮组
+      btnRow.appendChild(mkBtn('⏸', 'rp', lingo(wiki, 'read/rp.set.tip', 'Set Read Point (Ctrl+F7): Anchor at selected text'), false, () => actionSetReadPoint(win)));
       if (rp) {
         if (rp.t !== title) {
-          btnRow.appendChild(mkBtn('⏮ ' + (rp.s ? '「' + rp.s.slice(0, 10) + '…」' : rp.t.slice(0, 14)), 'rp', '转到续读点 (Alt+F7)', false, () => actionGotoReadPoint(win)));
+          btnRow.appendChild(
+            mkBtn(
+              '⏮ ' + (rp.s ? '「' + rp.s.slice(0, 10) + '…」' : rp.t.slice(0, 14)),
+              'rp',
+              lingo(wiki, 'read/rp.goto.tip', 'Jump to Read Point (Alt+F7)'),
+              false,
+              () => actionGotoReadPoint(win),
+            ),
+          );
         }
-        btnRow.appendChild(mkBtn('✕ 清除', 'rpclear', '清除续读点 (Ctrl+Shift+F7)', false, () => actionClearReadPoint(win)));
+        btnRow.appendChild(
+          mkBtn(
+            `✕ ${lingo(wiki, 'read/rp.clear', 'Clear')}`,
+            'rpclear',
+            lingo(wiki, 'read/rp.clear.tip', 'Clear Read Point (Ctrl+Shift+F7)'),
+            false,
+            () => actionClearReadPoint(win),
+          ),
+        );
       }
 
       sep();
 
       if (sched.isCardDone(fields)) {
-        btnRow.appendChild(mkBtn('重新加入', 'undo', '恢复到学习队列', false, () => {
+        btnRow.appendChild(mkBtn(lingo(wiki, 'read/readd', 'Re-add'), 'undo', lingo(wiki, 'read/readd.tip', 'Restore to study queue'), false, () => {
           this._flushSave();
           wiki.addTiddler(sched.restoreCard(fields));
         }));
       } else {
-        btnRow.appendChild(mkBtn('已读', 'done', 'Done！读完此节/摘录，移出学习队列', false, () => {
-          this._flushSave();
-          this._flushReadTime?.();
-          wiki.addTiddler(sched.doneCard(fields));
-          leaveTo(getScheduledNext());
-          notify('done');
-        }));
-        btnRow.appendChild(mkBtn('稍后', 'later', '稍后再看 (SM A-Factor)：按优先级指数顺延展期', false, () => {
+        btnRow.appendChild(
+          mkBtn(lingo(wiki, 'read.done', 'Read'), 'done', lingo(wiki, 'read/done.section.tip', 'Done! Mark section as read and remove from study queue'), false, () => {
+            this._flushSave();
+            this._flushReadTime?.();
+            wiki.addTiddler(sched.doneCard(fields));
+            leaveTo(getScheduledNext());
+            notify('done');
+          }),
+        );
+        btnRow.appendChild(mkBtn(lingo(wiki, 'read.later', 'Later'), 'later', lingo(wiki, 'read/later.tip', 'Read later (SM A-Factor): postpone proportionally'), false, () => {
           this._flushSave();
           this._flushReadTime?.();
           const patch = sched.postponeTopicByAFactor(fields);
@@ -836,14 +881,16 @@ function makeSectionBar(): WidgetCtor {
           leaveTo(getScheduledNext());
           notify('later');
         }));
-        btnRow.appendChild(mkBtn('提前', 'advance', '今日抢占排期 (SM Topic 提前)：强行加入今日队列并提升优先级', false, () => {
-          this._flushSave();
-          const patch = sched.advanceCard();
-          const newPri = sched.shiftPriority(fields['tidme.priority'], -10);
-          wiki.addTiddler({ ...fields, ...patch, 'tidme.priority': newPri });
-          this.build();
-        }));
-        btnRow.appendChild(mkBtn('忽略', 'ignore', '标记不重要：移出阅读队列', false, () => {
+        btnRow.appendChild(
+          mkBtn(lingo(wiki, 'read.advance', 'Advance'), 'advance', lingo(wiki, 'read/advance.tip', 'Advance topic today: push into today queue and boost priority'), false, () => {
+            this._flushSave();
+            const patch = sched.advanceCard();
+            const newPri = sched.shiftPriority(fields['tidme.priority'], -10);
+            wiki.addTiddler({ ...fields, ...patch, 'tidme.priority': newPri });
+            this.build();
+          }),
+        );
+        btnRow.appendChild(mkBtn(lingo(wiki, 'read.ignore', 'Ignore'), 'ignore', lingo(wiki, 'read/ignore.tip', 'Mark as ignored: remove from reading queue'), false, () => {
           this._flushSave();
           this._flushReadTime?.();
           leaveTo(getScheduledNext());
@@ -854,9 +901,15 @@ function makeSectionBar(): WidgetCtor {
       sep();
 
       // 制卡与调控按钮
-      const extractBtn = mkBtn('摘录', 'extract', '摘录制卡 (Alt+X)：先选中文字', true, () => actionExtract(win));
-      const clozeBtn = mkBtn('挖空', 'cloze', '挖空制卡 (Alt+Z)：先选中文字', true, () => actionCloze(win));
-      const qaBtn = mkBtn('问答', 'qa', '问答制卡 (Alt+Q)：先选中文字', true, () => actionQA(win));
+      const extractBtn = mkBtn(
+        lingo(wiki, 'read.extract', 'Extract'),
+        'extract',
+        lingo(wiki, 'read/extract.tip', 'Extract card (Alt+X): select text first'),
+        true,
+        () => actionExtract(win),
+      );
+      const clozeBtn = mkBtn(lingo(wiki, 'read.cloze', 'Cloze'), 'cloze', lingo(wiki, 'read/cloze.tip', 'Cloze card (Alt+Z): select text first'), true, () => actionCloze(win));
+      const qaBtn = mkBtn(lingo(wiki, 'read.qa', 'Q&A'), 'qa', lingo(wiki, 'read/qa.tip', 'Q&A card (Alt+Q): select text first'), true, () => actionQA(win));
       this._pickBtns = [extractBtn, clozeBtn, qaBtn];
       btnRow.appendChild(extractBtn);
       btnRow.appendChild(clozeBtn);
@@ -864,38 +917,39 @@ function makeSectionBar(): WidgetCtor {
 
       // —— 低频调控收进「更多」菜单（主行只留高频动作） ——
       const more = el(doc, 'details', 'tm-sec-more');
-      more.appendChild(el(doc, 'summary', 'tm-sec-more-summary', '更多'));
+      more.appendChild(el(doc, 'summary', 'tm-sec-more-summary', lingo(wiki, 'read.more', 'More')));
       const moreBox = el(doc, 'div', 'tm-sec-more-box');
       more.appendChild(moreBox);
       btnRow.appendChild(more);
       const moreBtn = (label: string, variant: string, tip: string, onClick: () => void) => {
         moreBox.appendChild(mkBtn(label, variant, tip, false, onClick));
       };
-      moreBtn('优先↑', 'pri', `提高优先级（当前 p${String(priVal).padStart(2, '0')}，提升 5）`, () => {
+      const priLabel = lingo(wiki, 'read/priority', 'Pri');
+      moreBtn(`${priLabel}↑`, 'pri', `${lingo(wiki, 'read/pri.boost', 'Boost priority')} (p${String(priVal).padStart(2, '0')})`, () => {
         this._flushSave();
         wiki.addTiddler({ ...fields, 'tidme.priority': sched.shiftPriority(priVal, -5) });
         this.build();
       });
-      moreBtn('优先↓', 'pri', `降低优先级（当前 p${String(priVal).padStart(2, '0')}，降低 5）`, () => {
+      moreBtn(`${priLabel}↓`, 'pri', `${lingo(wiki, 'read/pri.lower', 'Lower priority')} (p${String(priVal).padStart(2, '0')})`, () => {
         this._flushSave();
         wiki.addTiddler({ ...fields, 'tidme.priority': sched.shiftPriority(priVal, 5) });
         this.build();
       });
       // SM 对齐：A-Factor 可手动修改（Topics：下一次间隔 = 当前间隔 × A-Factor）
       const afVal = sched.normalizeAFactor(fields['tidme.afactor'], sched.afactorForText(Number(fields['tidme.chars'])));
-      moreBtn('A×↓', 'pri', `降低 A-Factor（当前 ${afVal.toFixed(1)}：间隔增长更平缓，适合长文/书）`, () => {
+      moreBtn('A×↓', 'pri', `${lingo(wiki, 'read/af.lower', 'Lower A-Factor')} (${afVal.toFixed(1)})`, () => {
         this._flushSave();
         const next = Math.max(1.1, Math.round((afVal - 0.1) * 10) / 10);
         wiki.addTiddler({ ...fields, 'tidme.afactor': String(next) });
         this.build();
       });
-      moreBtn(`A×${afVal.toFixed(1)}`, 'pri', `当前 A-Factor（点击重置为按篇幅启发式：短文 2.0 / 长文 1.3）`, () => {
+      moreBtn(`A×${afVal.toFixed(1)}`, 'pri', `${lingo(wiki, 'read/af.reset', 'Reset A-Factor')} (${afVal.toFixed(1)})`, () => {
         this._flushSave();
         const fresh = sched.afactorForText(Number(fields['tidme.chars']));
         wiki.addTiddler({ ...fields, 'tidme.afactor': String(fresh) });
         this.build();
       });
-      moreBtn('A×↑', 'pri', `提高 A-Factor（当前 ${afVal.toFixed(1)}：间隔增长更快，适合短文快速消化）`, () => {
+      moreBtn('A×↑', 'pri', `${lingo(wiki, 'read/af.boost', 'Boost A-Factor')} (${afVal.toFixed(1)})`, () => {
         this._flushSave();
         const next2 = Math.min(3.0, Math.round((afVal + 0.1) * 10) / 10);
         wiki.addTiddler({ ...fields, 'tidme.afactor': String(next2) });
@@ -904,25 +958,28 @@ function makeSectionBar(): WidgetCtor {
       // SM 对齐 'Delete processed text'：删除已提取/已挖空/已问答的文本片段（衍生卡保留）
       const snips = processedSnippets(wiki, title);
       if (snips.length) {
-        moreBtn('清提取', 'clean', `从本卡原文删除 ${snips.length} 段已被摘录/挖空的文本（衍生卡保留）`, async () => {
-          this._flushSave();
-          if (
-            await dialog.confirmDialog(doc, {
-              title: '清提取',
-              message: `从本卡原文中删除 ${snips.length} 段已被摘录/挖空的文本？
-
-（摘录/挖空/问答卡本身不受影响）`,
-              confirmLabel: '删除',
-              danger: true,
-            })
-          ) {
-            cleanProcessedText(wiki, title);
-            this.build();
-          }
-        });
+        moreBtn(
+          lingo(wiki, 'read/clean.extracts', 'Clean Extracts'),
+          'clean',
+          `${lingo(wiki, 'read/clean.tip', 'Delete extracted segments from text')} (${snips.length})`,
+          async () => {
+            this._flushSave();
+            if (
+              await dialog.confirmDialog(doc, {
+                title: lingo(wiki, 'read/clean.extracts', 'Clean Extracts'),
+                message: lingo(wiki, 'read/clean.confirm', `Delete ${snips.length} extracted text segments from this note?\n(Extracted cards will not be affected)`),
+                confirmLabel: lingo(wiki, 'read/delete', 'Delete'),
+                danger: true,
+              })
+            ) {
+              cleanProcessedText(wiki, title);
+              this.build();
+            }
+          },
+        );
       }
       if (subkind === 'extract') {
-        moreBtn('删除摘录', 'del', '彻底删除此摘录卡', () => {
+        moreBtn(lingo(wiki, 'read/delete.extract', 'Delete Extract'), 'del', lingo(wiki, 'read/delete.extract.tip', 'Permanently delete this extract card'), () => {
           this._flushSave();
           this._flushReadTime?.();
           wiki.deleteTiddler(title);
@@ -932,12 +989,12 @@ function makeSectionBar(): WidgetCtor {
         });
       }
 
-      btnRow.appendChild(mkBtn('学习数据', 'stats', '展开/收起本卡与学习相关的数据', false, () => {
+      btnRow.appendChild(mkBtn(lingo(wiki, 'read/stats', 'Stats'), 'stats', lingo(wiki, 'read/stats.tip', 'Toggle card study data'), false, () => {
         this._showStats = !this._showStats;
         this.build();
       }));
 
-      btnRow.appendChild(mkBtn('', 'help', '快捷键与用法帮助', false, () => {
+      btnRow.appendChild(mkBtn('', 'help', lingo(wiki, 'read/help', 'Shortcuts and usage help'), false, () => {
         this.dispatchEvent({ type: 'tm-navigate', navigateTo: ns.PAGE_HELP_SHORTCUTS });
       }, 'info-button'));
 
@@ -960,25 +1017,40 @@ function makeSectionBar(): WidgetCtor {
         statsBox.appendChild(item);
       };
 
-      const stateMap: Record<string, string> = { '0': '新卡 (New)', '1': '学习中 (Learning)', '2': '复习中 (Review)', '3': '重学中 (Relearning)' };
-      const stateText = stateMap[String(fields.state || '0')] || '新卡';
-      const priLevel = priVal <= 33 ? '高' : priVal <= 66 ? '中' : '低';
+      const stateMap: Record<string, string> = {
+        '0': lingo(wiki, 'state.new', 'New'),
+        '1': lingo(wiki, 'state.learning', 'Learning'),
+        '2': lingo(wiki, 'state.review', 'Review'),
+        '3': lingo(wiki, 'state.relearning', 'Relearning'),
+      };
+      const stateText = stateMap[String(fields.state || '0')] || lingo(wiki, 'state.new', 'New');
+      const priLevel = priVal <= 33
+        ? lingo(wiki, 'priority.high', 'High')
+        : priVal <= 66
+        ? lingo(wiki, 'priority.med', 'Med')
+        : lingo(wiki, 'priority.low', 'Low');
       const rtStats = stats.getReadTimeStats(wiki);
       const docSec = rtStats.docSeconds[docId] || 0;
 
-      addStat('优先级', `p${String(priVal).padStart(2, '0')} (${priLevel})`);
-      addStat('A-Factor', `${sched.normalizeAFactor(fields['tidme.afactor'], sched.afactorForText(Number(fields['tidme.chars']))).toFixed(2)}（间隔 ×A-Factor）`);
-      addStat('卡片类型', String(fields['tidme.kind'] || 'item'));
-      addStat('FSRS 状态', stateText);
-      // 新卡（state 0/未调度）的 due 只是 FSRS 占位（导入时刻），并非"到期"——不展示为到期时间
+      addStat(lingo(wiki, 'field.priority', 'Priority'), `p${String(priVal).padStart(2, '0')} (${priLevel})`);
+      addStat('A-Factor', `${sched.normalizeAFactor(fields['tidme.afactor'], sched.afactorForText(Number(fields['tidme.chars']))).toFixed(2)}`);
+      addStat(lingo(wiki, 'field.kind', 'Card Type'), String(fields['tidme.kind'] || 'item'));
+      addStat(lingo(wiki, 'field.state', 'FSRS State'), stateText);
       const rawState = String(fields.state || '0');
-      addStat('到期时间', rawState === '0' ? '首评后排期' : fields.due ? sched.parseTwDate(fields.due).toLocaleString() : '未排期');
-      addStat('稳定性 (S)', fields.stability ? Number(fields.stability).toFixed(2) : '未设置');
-      addStat('难度 (D)', fields.difficulty ? Number(fields.difficulty).toFixed(2) : '未设置');
-      addStat('复习次数', String(fields.reps || 0));
-      addStat('遗忘次数', String(fields.lapses || 0));
-      addStat('本书阅读耗时', stats.formatDuration(docSec));
-      addStat('今日总阅读', stats.formatDuration(rtStats.todaySeconds));
+      addStat(
+        lingo(wiki, 'field.due', 'Due Date'),
+        rawState === '0'
+          ? lingo(wiki, 'field.due.unrated', 'Scheduled after first review')
+          : fields.due
+          ? sched.parseTwDate(fields.due).toLocaleString()
+          : lingo(wiki, 'field.due.none', 'Not scheduled'),
+      );
+      addStat(lingo(wiki, 'field.stability', 'Stability (S)'), fields.stability ? Number(fields.stability).toFixed(2) : '-');
+      addStat(lingo(wiki, 'field.difficulty', 'Difficulty (D)'), fields.difficulty ? Number(fields.difficulty).toFixed(2) : '-');
+      addStat(lingo(wiki, 'field.reps', 'Reps'), String(fields.reps || 0));
+      addStat(lingo(wiki, 'field.lapses', 'Lapses'), String(fields.lapses || 0));
+      addStat(lingo(wiki, 'field.doc.duration', 'Book Reading Time'), stats.formatDuration(docSec));
+      addStat(lingo(wiki, 'field.today.duration', 'Today Total Reading'), stats.formatDuration(rtStats.todaySeconds));
 
       root.appendChild(statsBox);
     }
@@ -1023,7 +1095,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
   progNum.appendChild(el(doc, 'span', 'tm-doc-prog-done', String(done)));
   progNum.appendChild(el(doc, 'span', 'tm-doc-prog-total', ` / ${all.length}`));
   prog.appendChild(progNum);
-  prog.appendChild(el(doc, 'div', 'tm-doc-prog-label', `剩余 ${left} 节待学`));
+  prog.appendChild(el(doc, 'div', 'tm-doc-prog-label', `${left} ${lingo(wiki, 'read/sections.left', 'sections left to study')}`));
   const barWrap = el(doc, 'div', 'tm-stat-bar tm-stat-bar-lg', '');
   const bar = el(doc, 'span', 'tm-stat-bar-fill', '');
   bar.style.width = all.length ? `${Math.round((done / all.length) * 100)}%` : '0%';
@@ -1032,7 +1104,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
   banner.appendChild(prog);
   // 右侧：主按钮
   const actions = el(doc, 'div', 'tm-doc-banner-actions');
-  const btn = el(doc, 'button', 'tm-btn tm-btn--primary', '继续阅读');
+  const btn = el(doc, 'button', 'tm-btn tm-btn--primary', lingo(wiki, 'read.resume', 'Continue Reading'));
   btn.addEventListener('click', () => {
     const rp = parseReadPoint(wiki, docId);
     const list = all.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields));
@@ -1059,13 +1131,13 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
   const itemFilter = docItemFilter(wiki, docId);
   const inQueueCount = wiki.filterTiddlers(itemFilter).length;
   if (inQueueCount > 0) {
-    const subsetBtn = el(doc, 'button', 'tm-btn tm-btn--primary', '复习本书');
-    subsetBtn.title = `子集复习：仅复习本书 ${inQueueCount} 张挖空/问答卡（临时牌组，复习完可删除）`;
+    const subsetBtn = el(doc, 'button', 'tm-btn tm-btn--primary', lingo(wiki, 'read/review.book', 'Review Book'));
+    subsetBtn.title = `${lingo(wiki, 'read/review.book.tip', 'Subset review: review test cards of this book')} (${inQueueCount})`;
     subsetBtn.addEventListener('click', () => {
       // 子集牌组放"文档页所在 folder 的 Decks 镜像"（folder 冲突带 ~docId 后缀时亦准确）：
       // 文档页 title == folder 根（含后缀），Books→Decks 即 decks 根（镜像推导见 core/ns）
       const deckRoot = ns.booksToDecksRoot(String(title)) || `${ns.NS_DECKS}${paths.leafIdOf(title)}`;
-      const deckTitle = `${deckRoot}/复习本书`;
+      const deckTitle = `${deckRoot}/` + lingo(wiki, 'read/review.book', 'Review Book');
       const docFields = wiki.getTiddler(title)?.fields || {};
       // 统一走 core/deck（低层 fsrs4tw 字段由 configToFields 生成；重复点击 = 刷新 card）
       const cfg: any = {
@@ -1073,8 +1145,8 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
         kind: 'subset',
         sourceDoc: docId,
         card: itemFilter,
-        caption: `复习：${display.displayTitle(docFields, title)}`,
-        description: '临时子集牌组（复习本书测试卡）——复习完可删除',
+        caption: `${lingo(wiki, 'read/review.prefix', 'Review:')} ${display.displayTitle(docFields, title)}`,
+        description: lingo(wiki, 'read/subset.deck.desc', 'Temporary subset deck (review book test cards) - can be deleted after study'),
       };
       if (deckMod.getDeck(wiki, deckTitle)) deckMod.updateDeck(wiki, deckTitle, deckMod.configToFields(wiki, cfg));
       else deckMod.createDeck(wiki, cfg);
@@ -1088,18 +1160,16 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
 
   // 清理阅读材料（文档页 + 节卡/大纲新节）→ 摘录/挖空/问答/手动散卡等知识产物保留 → 跳回阅读列表
   const docLabel = display.displayTitle(wiki.getTiddler(title)?.fields, title);
-  const delBook = el(doc, 'button', 'tm-btn tm-btn--ghost', '清理阅读材料');
-  delBook.title = '删除文档页与全部普通节卡；已提取的知识（摘录/挖空/问答）保留在复习流';
+  const delBook = el(doc, 'button', 'tm-btn tm-btn--ghost', lingo(wiki, 'read/clean.materials', 'Clean Reading Materials'));
+  delBook.title = lingo(wiki, 'read/clean.materials.tip', 'Delete document and section cards while preserving extracted cards in review stream');
   delBook.addEventListener('click', async () => {
     if (
       await dialog.confirmDialog(doc, {
-        title: '清理阅读材料',
-        message: `删除《${docLabel}》的阅读材料？
-
-将删除文档页与全部普通节卡（含大纲手动插入的新节）。
-已提取的知识（摘录/挖空/问答/手动卡）会保留，不受影响。
-此操作不可恢复。`,
-        confirmLabel: '删除',
+        title: lingo(wiki, 'read/clean.materials', 'Clean Reading Materials'),
+        message: `${
+          lingo(wiki, 'read/clean.materials.confirm', 'Delete reading materials of this book? Document page and sections will be removed, extracted cards will be preserved.')
+        } (${docLabel})`,
+        confirmLabel: lingo(wiki, 'read/delete', 'Delete'),
         danger: true,
       })
     ) {
@@ -1117,12 +1187,12 @@ function appendDocDoneSection(doc: Document, wiki: any, wrap: HTMLElement, all: 
   const doneTitles = all.filter((x) => sched.isCardDone(wiki.getTiddler(x)?.fields));
   if (!doneTitles.length) return;
   const doneBox = el(doc, 'details', 'tm-doc-done');
-  const summary = el(doc, 'summary', 'tm-import-muted', `已读卡（${doneTitles.length}）—— 可重新加入`);
+  const summary = el(doc, 'summary', 'tm-import-muted', `${lingo(wiki, 'read/readcards', 'Read Cards')} (${doneTitles.length})`);
   doneBox.appendChild(summary);
   const table = el(doc, 'table', 'tm-doc-table tm-doc-done-table');
   const thead = el(doc, 'thead', '');
   const htr = el(doc, 'tr', '');
-  for (const h of ['名称', '操作']) htr.appendChild(el(doc, 'th', '', h));
+  for (const h of [lingo(wiki, 'col.title', 'Title'), lingo(wiki, 'col.actions', 'Actions')]) htr.appendChild(el(doc, 'th', '', h));
   thead.appendChild(htr);
   table.appendChild(thead);
   const tbody = el(doc, 'tbody', '');
@@ -1131,8 +1201,8 @@ function appendDocDoneSection(doc: Document, wiki: any, wrap: HTMLElement, all: 
     const doneFields = wiki.getTiddler(dt)?.fields || {};
     tr.appendChild(el(doc, 'td', 'tm-cb-name', display.displayTitle(doneFields, dt)));
     const actTd = el(doc, 'td', 'tm-cb-actions', '');
-    const back = el(doc, 'button', 'tm-btn tm-btn--ghost', '重新加入');
-    back.title = '恢复到学习队列';
+    const back = el(doc, 'button', 'tm-btn tm-btn--ghost', lingo(wiki, 'read/readd', 'Re-add'));
+    back.title = lingo(wiki, 'read/readd.tip', 'Restore to study queue');
     back.addEventListener('click', () => {
       const f = wiki.getTiddler(dt)?.fields;
       if (f) wiki.addTiddler(sched.restoreCard(f));
@@ -1159,7 +1229,7 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
   const box = el(doc, 'details', 'tm-doc-derived');
   // 默认展开：摘录/问答是文档页的核心产出，折叠会让「形成了却看不见」（此前默认折叠）
   box.open = true;
-  const summary = el(doc, 'summary', 'tm-import-muted', `摘录/挖空/问答（${derived.length}）—— 摘录可挖空成卡片`);
+  const summary = el(doc, 'summary', 'tm-import-muted', `${lingo(wiki, 'read/inbox.summary', 'Extracts & Cards')} (${derived.length})`);
   box.appendChild(summary);
   const sorted = [...derived].sort((a: any, b: any) => {
     const pa = String(a.fields['tidme.breadcrumb'] || a.title);
@@ -1170,14 +1240,16 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
   const table = el(doc, 'table', 'tm-doc-table tm-doc-derived-table');
   const thead = el(doc, 'thead', '');
   const htr = el(doc, 'tr', '');
-  for (const h of ['', '名称', '加工', '操作']) htr.appendChild(el(doc, 'th', '', h));
+  for (const h of ['', lingo(wiki, 'col.title', 'Title'), lingo(wiki, 'col.processing', 'Processing'), lingo(wiki, 'col.actions', 'Actions')]) {
+    htr.appendChild(el(doc, 'th', '', h));
+  }
   thead.appendChild(htr);
   table.appendChild(thead);
   const tbody = el(doc, 'tbody', '');
   for (const c of sorted) {
     const tr = el(doc, 'tr', 'tm-doc-done-row');
     const kindTd = el(doc, 'td', '', '');
-    const kindMark = c.fields['tidme.subkind'] === 'cloze' ? '挖' : c.fields['tidme.subkind'] === 'qa' ? '问' : '摘';
+    const kindMark = c.fields['tidme.subkind'] === 'cloze' ? 'C' : c.fields['tidme.subkind'] === 'qa' ? 'Q' : 'E';
     kindTd.appendChild(el(doc, 'span', 'tm-cb-kind', kindMark));
     tr.appendChild(kindTd);
     tr.appendChild(el(doc, 'td', 'tm-cb-name', display.displayTitle(c.fields, c.title)));
@@ -1185,20 +1257,25 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
     const stateTd = el(doc, 'td', '', '');
     if (c.fields['tidme.subkind'] === 'extract') {
       const hasCloze = clozeChildrenOf(c.title) > 0;
-      const state = el(doc, 'span', hasCloze ? 'tm-cb-state tm-cb-state-done' : 'tm-cb-state', hasCloze ? '已挖空' : '可挖空');
-      state.title = hasCloze ? '已在此摘录上挖空成卡片' : '选中文字按 Alt+Z 挖空成卡片';
+      const state = el(
+        doc,
+        'span',
+        hasCloze ? 'tm-cb-state tm-cb-state-done' : 'tm-cb-state',
+        hasCloze ? lingo(wiki, 'read/clozed', 'Clozed') : lingo(wiki, 'read/clozeable', 'Ready'),
+      );
+      state.title = hasCloze ? lingo(wiki, 'read/clozed.tip', 'Already clozed into cards') : lingo(wiki, 'read/clozeable.tip', 'Select text and press Alt+Z to cloze');
       stateTd.appendChild(state);
     }
     tr.appendChild(stateTd);
     const actTd = el(doc, 'td', 'tm-cb-actions', '');
-    const open = el(doc, 'button', 'tm-btn tm-btn--ghost', '打开');
-    open.title = '打开此卡';
+    const open = el(doc, 'button', 'tm-btn tm-btn--ghost', lingo(wiki, 'action.open', 'Open'));
+    open.title = lingo(wiki, 'action.open.tip', 'Open this card');
     open.addEventListener('click', () => {
       widget.dispatchEvent({ type: 'tm-navigate', navigateTo: c.title });
     });
     actTd.appendChild(open);
-    const back = el(doc, 'button', 'tm-btn tm-btn--ghost', '回原文');
-    back.title = '跳回原文并高亮';
+    const back = el(doc, 'button', 'tm-btn tm-btn--ghost', lingo(wiki, 'action.back', 'Back to Source'));
+    back.title = lingo(wiki, 'action.back.tip', 'Jump back to source and highlight');
     back.addEventListener('click', () => {
       const anchor = parseAnchor(c.fields['tidme.anchor']);
       let target = anchor?.section || c.fields['tidme.parent'] || '';
@@ -1215,8 +1292,8 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
       }
     });
     actTd.appendChild(back);
-    const del = el(doc, 'button', 'tm-btn tm-btn--ghost tm-cb-del', '删除');
-    del.title = '删除此卡';
+    const del = el(doc, 'button', 'tm-btn tm-btn--ghost tm-cb-del', lingo(wiki, 'action.delete', 'Delete'));
+    del.title = lingo(wiki, 'action.delete.tip', 'Delete this card');
     del.addEventListener('click', () => {
       wiki.deleteTiddler(c.title);
       widget.dispatchEvent({ type: 'tm-tidme-queue-changed' });
@@ -1349,7 +1426,7 @@ function makeSectionBody(): WidgetCtor {
           if (newText === initialWikiText) return;
           this._dirtyText = newText;
           if (active.sectionBar && active.sectionBar._saveIndicatorEl) {
-            active.sectionBar._saveIndicatorEl.textContent = '💾 保存中...';
+            active.sectionBar._saveIndicatorEl.textContent = '💾 ' + lingo(activeWiki(), 'read/saving', 'Saving...');
             active.sectionBar._saveIndicatorEl.className = 'tm-save-indicator tm-save-indicator--saving';
           }
           if (this._saveTimer) clearTimeout(this._saveTimer);
@@ -1379,7 +1456,7 @@ function makeSectionBody(): WidgetCtor {
         }
         this._dirtyText = null;
         if (active.sectionBar && active.sectionBar._saveIndicatorEl) {
-          active.sectionBar._saveIndicatorEl.textContent = '✓ 已自动保存';
+          active.sectionBar._saveIndicatorEl.textContent = '✓ ' + lingo(activeWiki(), 'read/autosaved', 'Auto-saved');
           active.sectionBar._saveIndicatorEl.className = 'tm-save-indicator tm-save-indicator--saved';
         }
       }

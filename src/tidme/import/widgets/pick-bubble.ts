@@ -129,8 +129,8 @@ function bindGlobal(widget: any) {
       });
       bubble!.appendChild(b);
     };
-    mk('🧩 挖空', () => openCloze(title!, selectedText, blockText));
-    mk('❓ 问答', () => openQA(title!, selectedText));
+    mk('🧩 Cloze', () => openCloze(title!, selectedText, blockText));
+    mk('❓ Q&A', () => openQA(title!, selectedText));
     const scrollX = win.scrollX || win.pageXOffset || 0;
     const scrollY = win.scrollY || win.pageYOffset || 0;
     bubble.style.left = `${rect.left + rect.width / 2 + scrollX}px`;

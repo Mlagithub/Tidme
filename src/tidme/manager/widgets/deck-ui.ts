@@ -1,3 +1,4 @@
+const { lingo } = require('$:/plugins/keepone/tidme/core/lingo.js');
 /*
 manager/widgets/deck-ui.ts — 牌组 UI 组件（与今天页 tm 风格统一）
 
@@ -40,7 +41,7 @@ function makeDeckCreate(): WidgetCtor {
       const wrap = el(doc, 'div', 'tm-decks-create');
 
       const details = el(doc, 'details', 'tm-decks-create-box');
-      const summary = el(doc, 'summary', 'tm-btn tm-btn--primary', '＋ 新建牌组');
+      const summary = el(doc, 'summary', 'tm-btn tm-btn--primary', lingo(wiki, 'deck.create', '+ New Deck'));
       details.appendChild(summary);
 
       const form = el(doc, 'div', 'tm-dashboard-card tm-decks-create-form');
@@ -54,13 +55,13 @@ function makeDeckCreate(): WidgetCtor {
       };
       const nameIn = doc.createElement('input');
       nameIn.className = 'tm-input';
-      nameIn.placeholder = '名称，如 六级词汇';
+      nameIn.placeholder = lingo(wiki, 'deck.name.placeholder', 'Name, e.g. Vocabulary');
       const capIn = doc.createElement('input');
       capIn.className = 'tm-input';
-      capIn.placeholder = '显示名（留空 = 名称）';
+      capIn.placeholder = lingo(wiki, 'deck.caption.placeholder', 'Caption (leave blank to use name)');
       const srcSel = doc.createElement('select');
       srcSel.className = 'tm-input';
-      for (const [v, l] of [['custom', '自定义过滤器'], ['item', '全库测试卡（与默认牌组相同，通常无需另建）']] as const) {
+      for (const [v, l] of [['custom', lingo(wiki, 'deck.src.custom', 'Custom Filter')], ['item', lingo(wiki, 'deck.src.item', 'All Knowledge Cards')]] as const) {
         const o = doc.createElement('option');
         o.value = v;
         o.textContent = l;
@@ -73,10 +74,10 @@ function makeDeckCreate(): WidgetCtor {
       srcSel.addEventListener('change', () => {
         customIn.style.display = srcSel.value === 'custom' ? '' : 'none';
       });
-      form.appendChild(rowOf('名称', nameIn));
-      form.appendChild(rowOf('显示名', capIn));
-      form.appendChild(rowOf('成员来源', srcSel));
-      form.appendChild(rowOf('过滤器', customIn));
+      form.appendChild(rowOf(lingo(wiki, 'col.title', 'Name'), nameIn));
+      form.appendChild(rowOf(lingo(wiki, 'deck.caption', 'Caption'), capIn));
+      form.appendChild(rowOf(lingo(wiki, 'deck.membersrc', 'Member Source'), srcSel));
+      form.appendChild(rowOf(lingo(wiki, 'deck.filter', 'Filter'), customIn));
       // 成员预览：创建前即可看到命中数与跨牌组重叠（牌组是筛选视图，同一张卡
       // 会出现在所有匹配它的牌组里、进度共享——重叠是正常现象，但要可见）
       const preview = el(doc, 'div', 'tm-decks-preview', '');
@@ -86,9 +87,9 @@ function makeDeckCreate(): WidgetCtor {
         const card = srcSel.value === 'custom' ? customIn.value.trim() : deckMod.DEFAULT_CARD_FILTER || '';
         const r = deckMod.previewMembership(wiki, card);
         preview.textContent = r.hits < 0
-          ? '过滤器暂无法求值（请检查语法）'
-          : `命中 ${r.hits} 张在队测试卡` +
-            (r.overlap > 0 ? `，其中 ${r.overlap} 张也与其它牌组匹配（进度共享，不会重复复习）` : '，与其它牌组无重叠');
+          ? lingo(wiki, 'deck.filter.error', 'Filter evaluation failed (check syntax)')
+          : `${r.hits} ${lingo(wiki, 'deck.hits', 'cards matched')}` +
+            (r.overlap > 0 ? ` (${r.overlap} ${lingo(wiki, 'deck.overlap', 'overlap with other decks')})` : '');
       };
       srcSel.addEventListener('change', updatePreview);
       customIn.addEventListener('input', () => {
@@ -98,12 +99,12 @@ function makeDeckCreate(): WidgetCtor {
       updatePreview();
       const btnRow = el(doc, 'div', 'tm-decks-create-actions');
       btnRow.style.cssText = 'display:flex;gap:8px;margin-top:6px;';
-      const ok = el(doc, 'button', 'tm-btn tm-btn--primary', '✔ 创建');
-      const cancel = el(doc, 'button', 'tm-btn', '取消');
+      const ok = el(doc, 'button', 'tm-btn tm-btn--primary', lingo(wiki, 'action.create', '✔ Create'));
+      const cancel = el(doc, 'button', 'tm-btn', lingo(wiki, 'action.cancel', 'Cancel'));
       ok.addEventListener('click', () => {
         const name = nameIn.value.trim();
         if (!name) {
-          toastIn(wrap, doc, '请输入牌组名称', 'err');
+          toastIn(wrap, doc, lingo(wiki, 'deck.name.empty', 'Please enter a deck name'), 'err');
           return;
         }
         try {
@@ -113,10 +114,10 @@ function makeDeckCreate(): WidgetCtor {
             card: srcSel.value === 'custom' ? (customIn.value.trim() || undefined) : undefined,
           });
           details.open = false;
-          toastIn(wrap, doc, `✔ 已创建「${name}」，可点行内「选项」配置参数`, 'ok');
+          toastIn(wrap, doc, `${lingo(wiki, 'deck.created', '✔ Created')} "${name}"`, 'ok');
           navigateTo(this, title);
         } catch (e: any) {
-          toastIn(wrap, doc, '创建失败：' + String(e?.message || e), 'err');
+          toastIn(wrap, doc, lingo(wiki, 'deck.create.failed', 'Creation failed:') + ' ' + String(e?.message || e), 'err');
         }
       });
       cancel.addEventListener('click', () => {
@@ -148,16 +149,16 @@ function makeDeckDelete(): WidgetCtor {
       const doc = this.document;
       const wiki = this.wiki;
       const deckTitle = String(this.getAttribute('deck', '') || '');
-      const label = this.getAttribute('label', '删除牌组');
+      const label = this.getAttribute('label', lingo(wiki, 'deck.delete', 'Delete Deck'));
       const btn = el(doc, 'button', 'tm-btn tm-btn--danger', label);
-      btn.title = '删除牌组定义（成员卡保留，仍由默认牌组复习）';
+      btn.title = lingo(wiki, 'deck.delete.tip', 'Delete deck definition (cards are kept and reviewed in default deck)');
       const d = deckTitle ? deckMod.getDeck(wiki, deckTitle) : null;
       if (!d) {
         btn.setAttribute('disabled', 'true');
-        btn.title = '牌组不存在';
+        btn.title = lingo(wiki, 'deck.notfound', 'Deck not found');
       } else if (d.title === deckMod.DEFAULT_DECK) {
         btn.setAttribute('disabled', 'true');
-        btn.title = '默认牌组不可删除';
+        btn.title = lingo(wiki, 'deck.nodeletedefault', 'Default deck cannot be deleted');
       }
       btn.addEventListener('click', async () => {
         if (!deckTitle || !d) return;
@@ -165,24 +166,36 @@ function makeDeckDelete(): WidgetCtor {
         let also = false;
         if (subset) {
           also = await dialog.confirmDialog(doc, {
-            title: '子集牌组',
+            title: lingo(wiki, 'deck.subset', 'Subset Deck'),
             message: `《${captionText(wiki, d.fields.caption || d.name, this) || d.name}》是子集牌组。
 连成员卡一起删除？
 （确定 = 连卡删；取消 = 仅删牌组定义）`,
-            confirmLabel: '连卡删',
+            confirmLabel: lingo(wiki, 'deck.deletecards', 'Delete Cards'),
             danger: true,
           });
         }
         const msg = subset
           ? `删除子集牌组${also ? '及其成员卡' : '（卡片保留）'}？`
           : `删除牌组「${captionText(wiki, d.fields.caption || d.name, this) || d.name}」的定义？\n成员卡会保留（挖空/问答卡仍由默认牌组收录）。`;
-        if (!(await dialog.confirmDialog(doc, { title: '删除牌组', message: msg, confirmLabel: '删除', danger: true }))) return;
+        if (
+          !(await dialog.confirmDialog(doc, {
+            title: lingo(wiki, 'deck.delete', 'Delete Deck'),
+            message: msg,
+            confirmLabel: lingo(wiki, 'manager.delete', 'Delete'),
+            danger: true,
+          }))
+        ) return;
         try {
           const n = deckMod.deleteDeck(wiki, deckTitle, { alsoCards: also });
           closeTiddler(this);
-          notify(this, also ? `已删除牌组及 ${n} 张成员卡` : '✔ 已删除牌组（卡片保留）');
+          notify(
+            this,
+            also
+              ? `${lingo(wiki, 'deck.deletedwithcards', 'Deleted deck and')} ${n} ${lingo(wiki, 'deck.cardscount', 'cards')}`
+              : lingo(wiki, 'deck.deletedkeepcards', '✔ Deck deleted (cards kept)'),
+          );
         } catch (e: any) {
-          await dialog.alertDialog(doc, { title: '删除失败', message: String((e as any)?.message || e) });
+          await dialog.alertDialog(doc, { title: lingo(wiki, 'action.deletefailed', 'Delete failed'), message: String((e as any)?.message || e) });
         }
       });
       parent.insertBefore(btn, nextSibling);
@@ -220,9 +233,9 @@ function makeDeckBadges(): WidgetCtor {
         const dueN = count(f.due);
         const newN = count(f.newly);
 
-        const lLearn = wiki.getTiddlerText('$:/language/tidme/learn') || '学习';
-        const lDue = wiki.getTiddlerText('$:/language/tidme/due') || '到期';
-        const lNew = wiki.getTiddlerText('$:/language/tidme/new') || '新卡';
+        const lLearn = wiki.getTiddlerText('$:/language/tidme/learn') || 'Learn';
+        const lDue = wiki.getTiddlerText('$:/language/tidme/due') || 'Due';
+        const lNew = wiki.getTiddlerText('$:/language/tidme/new') || 'New';
 
         const learnBadge = el(doc, 'span', 'tm-badge tm-badge-learn', `${lLearn}: ${learnN}`);
         const dueBadge = el(doc, 'span', 'tm-badge tm-badge-due', `${lDue}: ${dueN}`);

@@ -258,7 +258,7 @@ export function chunkFile(
   if (!headings.length) {
     const fallbackTitle = crumbBase[crumbBase.length - 1] ||
       String(p.fileName || '').replace(/.*\//, '').replace(/\.[a-z0-9]+$/i, '') ||
-      '正文';
+      'Body';
     const level = Math.max(2, Math.min(6, crumbBase.length + 1));
     const { parts, hardSplitCount } = partitionBlocks(blocks, cfg.maxChars);
     statsOut.hardSplitCount += hardSplitCount;
@@ -282,7 +282,7 @@ export function chunkFile(
   const leaves = collectLeaves(roots);
 
   if (preamble.some((b) => normalizeText(b.text))) {
-    leaves.unshift({ node: { level: headings[0].level, text: '前言', blocks: preamble, children: [] }, trail: [...crumbBase, '前言'] });
+    leaves.unshift({ node: { level: headings[0].level, text: 'Preface', blocks: preamble, children: [] }, trail: [...crumbBase, 'Preface'] });
   }
 
   const processed = applySizeRules(leaves, cfg, statsOut);
@@ -319,10 +319,10 @@ export function chunkBook(
   sections.forEach((s, idx) => {
     s.ordinal = idx;
     if (s.isContinuation) {
-      const base = s.trail.length ? s.trail[s.trail.length - 1] : '续';
-      s.trail = [...s.trail.slice(0, -1), `${base} (续)`];
+      const base = s.trail.length ? s.trail[s.trail.length - 1] : 'Cont.';
+      s.trail = [...s.trail.slice(0, -1), `${base} (cont.)`];
     }
-    if (!s.title) s.title = s.trail[s.trail.length - 1] || '续';
+    if (!s.title) s.title = s.trail[s.trail.length - 1] || 'Cont.';
   });
   // 收尾：派生产物 + ordinal 重排
   const final = finalizeSections(sections);

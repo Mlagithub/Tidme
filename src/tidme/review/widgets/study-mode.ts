@@ -15,6 +15,10 @@ const session = require('$:/plugins/keepone/tidme/core/session.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+function lingo(wiki: any, key: string, fallback: string): string {
+  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+}
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
@@ -113,7 +117,7 @@ function makeStudyModeBar(): WidgetCtor {
         return;
       }
       container.style.display = '';
-      container.appendChild(el(doc, 'span', 'tm-study-mode-label', '学习中'));
+      container.appendChild(el(doc, 'span', 'tm-study-mode-label', lingo(this.wiki, 'studymode.learning', 'Learning')));
 
       const curTitle = getCurrentStudyCard(this.wiki, this, study.list);
       const i = study.list.indexOf(curTitle);
@@ -125,16 +129,16 @@ function makeStudyModeBar(): WidgetCtor {
       const isReading = curFields && (curFields['tidme.kind'] === 'topic' || curFields['tidme.pdf']);
 
       if (isReading) {
-        const advBtn = el(doc, 'button', 'tm-btn tm-study-mode-next tm-btn--primary', '读完，继续复习 ›');
-        advBtn.title = '保存当前阅读进度，继续复习后续卡片';
+        const advBtn = el(doc, 'button', 'tm-btn tm-study-mode-next tm-btn--primary', lingo(this.wiki, 'studymode.finishandnext', 'Done, Next ›'));
+        advBtn.title = lingo(this.wiki, 'studymode.finishandnext.tip', 'Save reading progress and continue review');
         advBtn.addEventListener('click', () => {
           advanceStudy(this);
         });
         container.appendChild(advBtn);
       }
 
-      const btn = el(doc, 'button', 'tm-btn tm-study-mode-end', '结束学习');
-      btn.title = '结束本次学习：清空会话与排期队列，返回今天';
+      const btn = el(doc, 'button', 'tm-btn tm-study-mode-end', lingo(this.wiki, 'studymode.end', 'End Study'));
+      btn.title = lingo(this.wiki, 'studymode.end.tip', 'End current session, clear queue, return to Today');
       btn.addEventListener('click', () => {
         endStudy(this);
         this.build(); // 同步隐藏（真实环境刷新周期也会触发，这里保证确定性反馈）

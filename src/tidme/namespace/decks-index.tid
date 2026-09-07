@@ -1,16 +1,18 @@
-title: Tidme/Decks/index
+title: $:/Decks
+caption: Decks
 type: text/vnd.tiddlywiki
-caption: 子集牌组
-tags: $:/tags/Tidme
+tags: $:/tags/SideBar
 
-\whitespace trim
+<div class="tm-page-header">
+  <div class="tm-page-title-row">
+    <span class="tm-page-title">Decks & Workflow</span>
+    <span class="tm-page-badge">{{{ [prefix[$:/Deck/]!is[draft]count[]] }}} Decks</span>
+  </div>
+  <div class="tm-page-subtitle">Focus study on decks · Knowledge cards and reading streams</div>
+</div>
 
-! 子集与用户牌组
+<$tidme-nav/>
 
-全局默认牌组 $:/Deck/default 留在 $:/ 下；本目录下存放：
-
-* 「复习本书」子集牌组（按文档自动创建）— //Tidme/Decks/<书名>/复习本书//
-* 普通笔记上制作的挖空/问答卡 — //Tidme/Decks/散卡//（item 类统一入此命名空间）
-* 未来用户自建牌组
-
-子集牌组复习完可手动删除；下次「复习本书」按钮会重建。
+<div class="tm-page-body">
+  <$workflow-center/>
+</div>

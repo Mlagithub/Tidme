@@ -1,5 +1,5 @@
-caption: 新建卡片
-description: Tidme 全局制卡工作台 (Alt+N)
+caption: New Card
+description: Tidme Omni Card Creator (Alt+N)
 title: $:/plugins/keepone/tidme/creator
 
 \whitespace trim

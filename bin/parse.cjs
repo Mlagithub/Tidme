@@ -330,7 +330,7 @@ function chunkFile(p, statsOut = {}) {
   const crumbBase = Array.isArray(p.fileBreadcrumb) ? p.fileBreadcrumb.filter(Boolean) : [];
   const headings = blocks.filter((b) => b.isHeading);
   if (!headings.length) {
-    const fallbackTitle = crumbBase[crumbBase.length - 1] || String(p.fileName || "").replace(/.*\//, "").replace(/\.[a-z0-9]+$/i, "") || "\u6B63\u6587";
+    const fallbackTitle = crumbBase[crumbBase.length - 1] || String(p.fileName || "").replace(/.*\//, "").replace(/\.[a-z0-9]+$/i, "") || "Body";
     const level = Math.max(2, Math.min(6, crumbBase.length + 1));
     const { parts, hardSplitCount } = partitionBlocks(blocks, cfg.maxChars);
     statsOut.hardSplitCount += hardSplitCount;
@@ -352,7 +352,7 @@ function chunkFile(p, statsOut = {}) {
   const { roots, preamble } = buildTree(blocks);
   const leaves = collectLeaves(roots);
   if (preamble.some((b) => normalizeText(b.text))) {
-    leaves.unshift({ node: { level: headings[0].level, text: "\u524D\u8A00", blocks: preamble, children: [] }, trail: [...crumbBase, "\u524D\u8A00"] });
+    leaves.unshift({ node: { level: headings[0].level, text: "Preface", blocks: preamble, children: [] }, trail: [...crumbBase, "Preface"] });
   }
   const processed = applySizeRules(leaves, cfg, statsOut);
   return processed.map((sec) => __spreadValues({
@@ -376,11 +376,11 @@ function chunkBook(files, options = {}) {
   sections.forEach((s, idx) => {
     s.ordinal = idx;
     if (s.isContinuation) {
-      const base = s.trail.length ? s.trail[s.trail.length - 1] : "\u7EED";
-      s.trail = [...s.trail.slice(0, -1), `${base} (\u7EED)`];
+      const base = s.trail.length ? s.trail[s.trail.length - 1] : "Cont.";
+      s.trail = [...s.trail.slice(0, -1), `${base} (cont.)`];
     }
     if (!s.title)
-      s.title = s.trail[s.trail.length - 1] || "\u7EED";
+      s.title = s.trail[s.trail.length - 1] || "Cont.";
   });
   const final = finalizeSections(sections);
   stats.sections = final.length;
@@ -1212,7 +1212,7 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
     const format = meta.__format || "epub";
     const nowFields = initialFsrsFields(new Date());
     const syncFields = { bag, revision: "0" };
-    const bookT = bookTitle || "\u672A\u547D\u540D\u5BFC\u5165";
+    const bookT = bookTitle || "Untitled Import";
     const docRoot = resolveDocRoot(bookT, docId, folderOccupied);
     const docTitle = bookT;
     const cards = [];
@@ -1251,13 +1251,13 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
     const links = cards.map((t) => `* [[${t.caption || t.title}|${t.title}]]`).join("\n");
     const docLines = [`//${formatLabel(format)}//`];
     if (meta.creator)
-      docLines.push("\u4F5C\u8005\uFF1A" + meta.creator);
+      docLines.push("Author: " + meta.creator);
     if (meta.language)
-      docLines.push("\u8BED\u8A00\uFF1A" + meta.language);
+      docLines.push("Language: " + meta.language);
     if (meta.date)
-      docLines.push("\u539F\u6587\u65E5\u671F\uFF1A" + meta.date);
-    docLines.push("\u6587\u6863 ID\uFF1A" + docId);
-    docLines.push(`\u5171 ${cards.length} \u8282\uFF1A`, "", links);
+      docLines.push("Date: " + meta.date);
+    docLines.push("Document ID: " + docId);
+    docLines.push(`Total ${cards.length} sections:`, "", links);
     const docTiddler = __spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({
       title: docRoot,
       caption: docTitle,
@@ -1277,13 +1277,13 @@ function runSplit(input) {
   return __async(this, null, function* () {
     const text = String(input.text || "");
     if (!text.trim())
-      throw new Error("\u5185\u5BB9\u4E3A\u7A7A");
+      throw new Error("Content is empty");
     const format = formatFromType(input.type, text);
     const blocks = blocksFor(format, text);
     if (!blocks.length)
-      throw new Error("\u65E0\u6CD5\u89E3\u6790\u51FA\u4EFB\u4F55\u5185\u5BB9\u5757");
+      throw new Error("Cannot parse any content blocks");
     const meta = __spreadValues({
-      title: input.title || guessTitle(text, format) || "\u672A\u547D\u540D\u5BFC\u5165"
+      title: input.title || guessTitle(text, format) || "Untitled Import"
     }, input.sourceFields || {});
     const bookTitle = meta.title;
     const docId = yield makeDocId({ title: bookTitle, creator: meta.creator || "", language: meta.language || "" });

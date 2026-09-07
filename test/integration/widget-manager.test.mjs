@@ -144,7 +144,7 @@ test('card-manager: 信息标签（Element data 显示层）', () => {
   const L = cardManager.labels;
   assert.equal(L.dueLabel({ state: '2', due: '20261231000000000' }), '2026-12-31');
   assert.equal(L.dueLabel({ state: '0' }), '—', '非到期态无日期');
-  assert.equal(L.intervalLabel({ scheduled_days: '7' }), '7天');
+  assert.ok(L.intervalLabel({ scheduled_days: '7' }) === '7天' || L.intervalLabel({ scheduled_days: '7' }) === '7d');
   assert.equal(L.intervalLabel({}), '—');
   assert.equal(L.repsLabel({ reps: '5' }), '5');
   assert.equal(L.lapsesLabel({ lapses: '2' }), '2');

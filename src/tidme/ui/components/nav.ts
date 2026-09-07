@@ -9,15 +9,20 @@ widgets/nav.ts — 页面间导航条（Tidme 主页面切换 + 分隔线 + 当�
 declare function require(module: string): any;
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
-const NAV: [string, string][] = [
-  [ns.PAGE_TODAY, '今天'],
-  [ns.PAGE_READING_LIST, '阅读'],
-  [ns.PAGE_IMPORT_CENTER, '导入'],
-  [ns.PAGE_CARD_MANAGER, '管理'],
-  [ns.PAGE_IMPORT_STATS, '统计'],
-  [ns.PAGE_SETTINGS, '设置'],
+function lingo(wiki: any, key: string, fallback: string): string {
+  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+}
+
+const NAV: [string, string, string][] = [
+  [ns.PAGE_TODAY, 'nav.today', 'Today'],
+  [ns.PAGE_READING_LIST, 'nav.reading', 'Reading'],
+  [ns.PAGE_IMPORT_CENTER, 'nav.import', 'Import'],
+  [ns.PAGE_CARD_MANAGER, 'nav.manager', 'Manager'],
+  [ns.PAGE_IMPORT_STATS, 'nav.stats', 'Stats'],
+  [ns.PAGE_SETTINGS, 'nav.settings', 'Settings'],
 ];
 
 // 共享 DOM 工具（实现收敛于 core/dom）
@@ -34,7 +39,8 @@ function makeNav(): any {
       this.domNodes.push(root);
 
       const current = this.getVariable('currentTiddler') || this.getVariable('currentTiddlerTitle') || '';
-      for (const [title, label] of NAV) {
+      for (const [title, key, fallback] of NAV) {
+        const label = lingo(this.wiki, key, fallback);
         const a = dom.createNavLink(doc, this, {
           text: label,
           target: title,

@@ -1,13 +1,13 @@
 title: $:/plugins/keepone/tidme/import/ui/import-center
-caption: 导入中心
+caption: Import Center
 type: text/vnd.tiddlywiki
 
 <$tidme-nav/>
 
 <div class="tm-import-tabs">
-<$radio tiddler="$:/state/tidme/import/tab" value="file" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">本地文件</$radio>
-<$radio tiddler="$:/state/tidme/import/tab" value="paste" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">粘贴文本</$radio>
-<$radio tiddler="$:/state/tidme/import/tab" value="inbox" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">剪藏收件箱</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="file" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">Local Files</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="paste" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">Paste Text</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="inbox" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">Inbox Clips</$radio>
 </div>
 
 <$reveal type="match" state="$:/state/tidme/import/tab" text="file" default="file">
@@ -24,4 +24,4 @@ type: text/vnd.tiddlywiki
 
 ---
 
-[[快捷键与用法|$:/plugins/keepone/tidme/import/ui/help-shortcuts]]
+[[Shortcuts & Manual|$:/plugins/keepone/tidme/import/ui/help-shortcuts]]

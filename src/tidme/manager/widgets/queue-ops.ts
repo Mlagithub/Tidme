@@ -16,6 +16,7 @@ const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 // 共享 DOM/显示/组件工具（实现收敛于 ui/base/dom、ui/components/ui-primitives、core/display）
@@ -37,14 +38,25 @@ function makeQueueOps(): WidgetCtor {
 
       const toast = (msg: string, kind: '' | 'ok' | 'err' = '') => showToast(doc, wrap, msg, kind);
 
-      wrap.appendChild(el(doc, 'h3', '', '牌组批量操作（优先级调度）'));
-      wrap.appendChild(el(doc, 'div', 'tm-import-muted', '顺延=due+7d（低优先级积压）· 提前=今天复习 · 忽略=移出队列 · 搁置=暂停（deck.card 已排除）· 遗忘=回新卡'));
+      wrap.appendChild(el(doc, 'h3', '', lingoMod.lingo(wiki, 'queueops.title', 'Deck Batch Operations (Priority Scheduling)')));
+      wrap.appendChild(
+        el(
+          doc,
+          'div',
+          'tm-import-muted',
+          lingoMod.lingo(wiki, 'queueops.desc', 'Postpone = due+7d · Advance = review today · Ignore = remove from queue · Suspend = pause · Forget = reset to new'),
+        ),
+      );
 
       // 手动触发 auto-postpone（启动与每小时自动执行；开关与参数在「设置」页集中配置）
       const autoRow = el(doc, 'div', 'tm-import-actions', '');
       const autoStatus = el(doc, 'span', 'tm-import-muted', '');
-      const runAuto = icons.iconButton(doc, 'tm-btn tm-btn--primary', 'zap', '立即顺延（auto-postpone）');
-      runAuto.title = '手动触发：低优先级逾期卡顺延 postponeDays 天，保留 top N 高优先级（开关与参数在「设置」页）';
+      const runAuto = icons.iconButton(doc, 'tm-btn tm-btn--primary', 'zap', lingoMod.lingo(wiki, 'queueops.autopostpone', 'Auto-Postpone Now'));
+      runAuto.title = lingoMod.lingo(
+        wiki,
+        'manager.autopostpone.tip',
+        'Manually trigger: postpone low-priority overdue cards by postponeDays, preserving top N high-priority cards',
+      );
       runAuto.addEventListener('click', () => {
         const cfg = config.readAutoPostpone(wiki);
         const cards = wiki.filterTiddlers('[all[shadows+tiddlers]!is[draft]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]has[due]]')
@@ -54,7 +66,7 @@ function makeQueueOps(): WidgetCtor {
           const existing = wiki.getTiddler(p.title);
           if (existing) wiki.addTiddler({ ...existing.fields, ...p.fields });
         }
-        autoStatus.textContent = `✓ 逾期 ${result.stats.overdue} · 顺延 ${result.stats.postponed} · 保留高优 ${result.stats.kept}`;
+        autoStatus.textContent = `✓ Overdue: ${result.stats.overdue} · Postponed: ${result.stats.postponed} · Retained: ${result.stats.kept}`;
         renderList();
       });
       autoRow.appendChild(runAuto);
@@ -68,7 +80,7 @@ function makeQueueOps(): WidgetCtor {
         list.textContent = '';
         const decks = deckMod.listDecks(wiki);
         if (!decks.length) {
-          list.appendChild(renderEmpty(doc, { text: '暂无牌组。', icon: '🃏' }));
+          list.appendChild(renderEmpty(doc, { text: lingoMod.lingo(wiki, 'manager.nodecks', 'No decks found.'), icon: '🃏' }));
           return;
         }
         for (const deck of decks) {
@@ -78,7 +90,7 @@ function makeQueueOps(): WidgetCtor {
           const head = el(doc, 'div', 'tm-queue-card-head');
           const caption = captionText(wiki, wiki.getTiddler(deck)?.fields?.caption || deck.split('/').pop() || deck, this);
           head.appendChild(el(doc, 'strong', '', caption));
-          head.appendChild(el(doc, 'span', 'tm-queue-card-count', `${cards.length} 卡`));
+          head.appendChild(el(doc, 'span', 'tm-queue-card-count', `${cards.length} cards`));
           head.title = deck;
           card.appendChild(head);
           const btns = el(doc, 'div', 'tm-queue-card-btns');
@@ -93,16 +105,16 @@ function makeQueueOps(): WidgetCtor {
                 n++;
               }
               renderList();
-              toast(`${label}：已处理 ${n} 张`, 'ok');
+              toast(`${label}: processed ${n} cards`, 'ok');
             });
             return b;
           };
-          btns.appendChild(apply((f) => sched.postponeCard(f, 7), '顺延7d'));
-          btns.appendChild(apply(() => sched.advanceCard(), '提前'));
-          btns.appendChild(apply((f) => sched.ignoreCard(f), '忽略'));
-          btns.appendChild(apply(() => sched.suspendCard(), '搁置'));
-          btns.appendChild(apply(() => sched.resumeCard(), '恢复'));
-          btns.appendChild(apply(() => sched.forgetCard(), '遗忘'));
+          btns.appendChild(apply((f) => sched.postponeCard(f, 7), lingoMod.lingo(wiki, 'manager.postpone7d', 'Postpone 7d')));
+          btns.appendChild(apply(() => sched.advanceCard(), lingoMod.lingo(wiki, 'manager.advance', 'Advance')));
+          btns.appendChild(apply((f) => sched.ignoreCard(f), lingoMod.lingo(wiki, 'read.ignore', 'Ignore')));
+          btns.appendChild(apply(() => sched.suspendCard(), lingoMod.lingo(wiki, 'manager.suspend', 'Suspend')));
+          btns.appendChild(apply(() => sched.resumeCard(), lingoMod.lingo(wiki, 'manager.restore', 'Restore')));
+          btns.appendChild(apply(() => sched.forgetCard(), lingoMod.lingo(wiki, 'manager.forget', 'Forget')));
           card.appendChild(btns);
           list.appendChild(card);
         }

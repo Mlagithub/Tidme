@@ -27,7 +27,12 @@ const cardModal = require('$:/plugins/keepone/tidme/ui/components/card-modal.js'
 const parsePdf = require('$:/plugins/keepone/tidme/import/parse/pdf.js');
 const pdfjsMod = require('$:/plugins/keepone/tidme/import/widgets/pdfjs.js');
 const stats = require('$:/plugins/keepone/tidme/core/stats.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
+
+function lingo(wiki: any, key: string, fallback: string): string {
+  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+}
 
 const el = dom.el;
 
@@ -128,7 +133,7 @@ async function loadPdfBytesWithWait(
   let b64 = wiki.getTiddlerText(pdfTitle, '');
   // 当条目处于懒加载状态（getTiddlerText 返回 null 或 text 为空且有 _is_skinny）
   if (b64 === null || (b64 === '' && tiddler.hasField?.('_is_skinny'))) {
-    onStatus?.('正在从服务端加载 PDF 数据…');
+    onStatus?.(lingoMod.lingo(wiki, 'pdf.loading.server', 'Loading PDF data from server...'));
     for (let i = 0; i < 50; i++) {
       await new Promise((res) => setTimeout(res, 200));
       b64 = wiki.getTiddlerText(pdfTitle, '');
@@ -143,7 +148,7 @@ async function loadPdfBytesWithWait(
 
   // 外部链接 _canonical_uri 支持
   if ((!b64 || b64 === '') && tiddler?.fields?._canonical_uri && typeof fetch === 'function') {
-    onStatus?.('正在请求外部 PDF 文件…');
+    onStatus?.(lingoMod.lingo(wiki, 'pdf.loading.external', 'Requesting external PDF file...'));
     const resp = await fetch(tiddler.fields._canonical_uri);
     if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
     const buf = await resp.arrayBuffer();
@@ -233,36 +238,36 @@ function makeReader(): any {
       const bar = el(doc, 'div', 'tm-pdf-bar');
       const gNav = el(doc, 'div', 'tm-pdf-bar-group');
       this._tocBtn = el(doc, 'button', 'tm-pdf-ico', '☰');
-      this._tocBtn.title = '目录（本书章节）';
-      this._tocBtn.setAttribute('aria-label', '目录');
+      this._tocBtn.title = lingoMod.lingo(wiki, 'pdf.toc.tip', 'Table of Contents');
+      this._tocBtn.setAttribute('aria-label', lingoMod.lingo(wiki, 'pdf.toc', 'TOC'));
       const firstBtn = el(doc, 'button', 'tm-pdf-ico', '«');
-      firstBtn.title = '第一页';
+      firstBtn.title = lingoMod.lingo(wiki, 'pdf.firstpage', 'First Page');
       const prevBtn = el(doc, 'button', 'tm-pdf-ico', '‹');
-      prevBtn.title = '上一页';
+      prevBtn.title = lingoMod.lingo(wiki, 'pdf.prevpage', 'Previous Page');
       this._pageInput = doc.createElement('input');
       this._pageInput.type = 'number';
       this._pageInput.min = '1';
       this._pageInput.className = 'tm-pdf-page';
-      this._pageInput.setAttribute('aria-label', '页码');
+      this._pageInput.setAttribute('aria-label', lingoMod.lingo(wiki, 'read.page', 'Page'));
       this._pageInput.value = String(this._page);
       this._total = el(doc, 'span', 'tm-pdf-total', ' / …');
       const nextBtn = el(doc, 'button', 'tm-pdf-ico', '›');
-      nextBtn.title = '下一页';
+      nextBtn.title = lingoMod.lingo(wiki, 'pdf.nextpage', 'Next Page');
       const lastBtn = el(doc, 'button', 'tm-pdf-ico', '»');
-      lastBtn.title = '最后一页';
+      lastBtn.title = lingoMod.lingo(wiki, 'pdf.lastpage', 'Last Page');
       for (const n of [this._tocBtn, firstBtn, prevBtn, this._pageInput, this._total, nextBtn, lastBtn]) gNav.appendChild(n);
 
       const gZoom = el(doc, 'div', 'tm-pdf-bar-group tm-pdf-bar-center');
       const zoomOutBtn = el(doc, 'button', 'tm-pdf-ico', '−');
-      zoomOutBtn.title = '缩小';
+      zoomOutBtn.title = lingoMod.lingo(wiki, 'read.zoom.out', 'Zoom Out');
       this._zoomSel = doc.createElement('select');
       this._zoomSel.className = 'tm-pdf-zoom';
-      this._zoomSel.setAttribute('aria-label', '缩放');
+      this._zoomSel.setAttribute('aria-label', lingoMod.lingo(wiki, 'read.zoom', 'Zoom'));
       for (
         const opt of [
-          { value: 'fit-page', label: '适合页面' },
-          { value: 'fit-width', label: '适合宽度' },
-          { value: 'actual', label: '实际大小' },
+          { value: 'fit-page', label: lingoMod.lingo(wiki, 'read.zoom.fitpage', 'Fit Page') },
+          { value: 'fit-width', label: lingoMod.lingo(wiki, 'read.zoom.fitwidth', 'Fit Width') },
+          { value: 'actual', label: lingoMod.lingo(wiki, 'read.zoom.actual', 'Actual Size') },
           ...zoomMod.ladderOptions(),
         ]
       ) {
@@ -273,22 +278,22 @@ function makeReader(): any {
       }
       this._zoomSel.value = 'fit-page';
       const zoomInBtn = el(doc, 'button', 'tm-pdf-ico', '+');
-      zoomInBtn.title = '放大';
+      zoomInBtn.title = lingoMod.lingo(wiki, 'read.zoom.in', 'Zoom In');
       // 与桌面阅读器一致：− + 相邻，其后为缩放模式下拉
       for (const n of [zoomOutBtn, zoomInBtn, this._zoomSel]) gZoom.appendChild(n);
 
       const gTools = el(doc, 'div', 'tm-pdf-bar-group');
-      this._selBtn = el(doc, 'button', 'tm-pdf-ico', '框选');
-      this._selBtn.title = '框选图片制卡：在页面上拖拽矩形生成图片问答卡';
+      this._selBtn = el(doc, 'button', 'tm-pdf-ico', lingoMod.lingo(wiki, 'pdf.select', 'Select'));
+      this._selBtn.title = lingoMod.lingo(wiki, 'pdf.select.tip', 'Select image area to create Image QA card');
       if (this._ocrEnabled) {
         const ocrBtn = el(doc, 'button', 'tm-pdf-ico', 'OCR');
-        ocrBtn.title = '扫描页识别：页面转图片后用视觉模型转写为文本（设置 → PDF 与 OCR）';
+        ocrBtn.title = lingoMod.lingo(wiki, 'pdf.ocr.tip', 'Recognize scanned page text via vision model');
         ocrBtn.addEventListener('click', () => this._ocrPage(ocrBtn));
         gTools.appendChild(ocrBtn);
       }
       this._fsBtn = el(doc, 'button', 'tm-pdf-ico', '');
       this._fsBtn.innerHTML = FS_SVG;
-      this._fsBtn.title = '全屏阅读';
+      this._fsBtn.title = lingoMod.lingo(wiki, 'pdf.fullscreen', 'Fullscreen');
       for (const n of [this._selBtn, this._fsBtn]) gTools.appendChild(n);
 
       bar.appendChild(gNav);
@@ -298,8 +303,8 @@ function makeReader(): any {
       const activeStudy = sessionMod.getActiveStudy(wiki);
       if (activeStudy) {
         const gStudy = el(doc, 'div', 'tm-pdf-bar-group tm-pdf-bar-study');
-        const nextBtn = el(doc, 'button', 'tm-pdf-btn-study-next', '✓ 读完继续 ›');
-        nextBtn.title = '保存当前阅读进度，继续复习后续卡片';
+        const nextBtn = el(doc, 'button', 'tm-pdf-btn-study-next', lingoMod.lingo(wiki, 'pdf.study.next', '✓ Done & Continue ›'));
+        nextBtn.title = lingoMod.lingo(wiki, 'pdf.study.next.tip', 'Save reading progress and continue study flow');
         nextBtn.addEventListener('click', () => {
           if (this._docId && this._page) {
             docOps.saveReadPoint(wiki, this._docId, { t, s: `p${this._page}` });
@@ -329,9 +334,9 @@ function makeReader(): any {
       // ── 工作区：目录抽屉 + 灰底滚动区 + 居中纸页（canvas/文本层/框选矩形）+ 悬浮提示 ──
       const body = el(doc, 'div', 'tm-pdf-body');
       this._tocEl = el(doc, 'div', 'tm-pdf-toc');
-      const tocHead = el(doc, 'div', 'tm-pdf-toc-head', '目录');
+      const tocHead = el(doc, 'div', 'tm-pdf-toc-head', lingo(this.wiki, 'pdf/toc', 'Outline'));
       const tocClose = el(doc, 'button', 'tm-pdf-ico', '✕');
-      tocClose.title = '收起目录';
+      tocClose.title = lingo(this.wiki, 'pdf/collapse-toc', 'Collapse Outline');
       tocHead.appendChild(tocClose);
       const tocList = el(doc, 'div', 'tm-pdf-toc-list');
       this._tocEl.appendChild(tocHead);
@@ -353,7 +358,7 @@ function makeReader(): any {
       this._viewer.appendChild(this._pageBox);
 
       this._hint = el(doc, 'div', 'tm-pdf-hint', '');
-      this._status = el(doc, 'div', 'tm-pdf-status', '正在加载 pdf.js…');
+      this._status = el(doc, 'div', 'tm-pdf-status', lingo(this.wiki, 'pdf/loading-pdfjs', 'Loading pdf.js...'));
       body.appendChild(this._tocEl);
       body.appendChild(this._viewer);
       body.appendChild(this._hint);
@@ -443,7 +448,7 @@ function makeReader(): any {
           if (this._status) this._status.textContent = msg;
         });
         if (!bytes || bytes.length === 0) {
-          this._status.textContent = `缺少 PDF 数据（条目：${this._pdfTitle || '未找到关联 PDF'}）`;
+          this._status.textContent = lingoMod.lingo(wiki, 'pdf.missing', `Missing PDF data (${this._pdfTitle || 'No associated PDF found'})`);
           return;
         }
         this._pdf = await pdfjsMod.loadPdfBytes(bytes);
@@ -452,7 +457,7 @@ function makeReader(): any {
         const start = this._resolveInitialPage(r, this._numPages);
         this._setPage(start, false);
       } catch (e: any) {
-        this._status.textContent = '加载失败：' + String(e?.message || e);
+        this._status.textContent = lingoMod.lingo(wiki, 'pdf.load.failed', 'Failed to load: ') + String(e?.message || e);
       }
     }
 
@@ -549,7 +554,7 @@ function makeReader(): any {
     async _renderPage() {
       if (!this._pdf) return;
       const seq = ++this._renderSeq;
-      this._status.textContent = '渲染中…';
+      this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.rendering', 'Rendering...');
       try {
         const dpr = Math.min(Number((typeof window !== 'undefined' && (window as any).devicePixelRatio) || 1) || 1, 2);
         const size = await pdfjsMod.pageSize(this._pdf, this._page);
@@ -571,7 +576,7 @@ function makeReader(): any {
         if (seq !== this._renderSeq) return;
         this._status.textContent = '';
       } catch (e: any) {
-        this._status.textContent = '渲染失败：' + String(e?.message || e);
+        this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.render.failed', 'Render failed: ') + String(e?.message || e);
       }
     }
 
@@ -634,7 +639,7 @@ function makeReader(): any {
         const item = el(doc, 'button', 'tm-pdf-toc-item');
         item.appendChild(el(doc, 'span', 'tm-pdf-toc-name', label));
         item.appendChild(el(doc, 'span', 'tm-pdf-toc-page', String(r.start)));
-        item.title = `${label}（第 ${r.start} 页）`;
+        item.title = `${label} (${lingo(this.wiki, 'pdf/page-prefix', 'p.')} ${r.start})`;
         item.addEventListener('click', () => {
           this._toggleToc(false);
           this._setPage(r.start);
@@ -678,8 +683,8 @@ function makeReader(): any {
       const items = await pdfjsMod.pageTextItems(this._pdf, this._page);
       if (parsePdf.isScannedPageText(items.map((it: any) => it.str).join(' '))) {
         this._hint.textContent = this._ocrEnabled
-          ? '扫描页（无文本层）——点工具栏「OCR」识别文字'
-          : '扫描页（无文本层）——设置页开启「PDF 与 OCR」后可识别文字';
+          ? lingo(this.wiki, 'pdf/scanned-hint-ocr', 'Scanned page (no text layer) — Click "OCR" in toolbar to recognize text')
+          : lingo(this.wiki, 'pdf/scanned-hint-settings', 'Scanned page (no text layer) — Enable OCR in Settings > PDF & OCR to recognize text');
         return;
       }
       for (const it of items) {
@@ -701,14 +706,14 @@ function makeReader(): any {
       if (this._ocrBusy || !this._pdf) return;
       const cfg = config.readOcrConfig(this.wiki);
       if (!cfg.apiKey) {
-        this._status.textContent = 'OCR 未配置 API Key（设置 → PDF 与 OCR）';
+        this._status.textContent = lingo(this.wiki, 'pdf/ocr-no-key', 'OCR API key not configured (Settings > PDF & OCR)');
         return;
       }
       this._ocrBusy = true;
       btn.disabled = true;
       const pageNum = this._page;
       try {
-        this._status.textContent = 'OCR：页面转图片…';
+        this._status.textContent = lingo(this.wiki, 'pdf/ocr-rendering', 'OCR: Converting page to image...');
         // 离屏渲染（宽上限 1400px，控制请求体大小）
         const page = await this._pdf.getPage(pageNum);
         const base = page.getViewport({ scale: 1 });
@@ -719,12 +724,12 @@ function makeReader(): any {
         await page.render({ canvasContext: off.getContext('2d'), viewport }).promise;
         const dataUrl = off.toDataURL('image/png');
         const imageB64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
-        this._status.textContent = 'OCR：识别中…';
-        const req = parsePdf.buildOcrRequest(cfg, imageB64, `第 ${pageNum} 页`);
+        this._status.textContent = lingo(this.wiki, 'pdf/ocr-recognizing', 'OCR: Recognizing text...');
+        const req = parsePdf.buildOcrRequest(cfg, imageB64, `Page ${pageNum}`);
         const res = await fetch(req.url, { method: 'POST', headers: req.headers, body: req.body });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const text = parsePdf.parseOcrResponse(await res.json());
-        if (!text) throw new Error('识别结果为空');
+        if (!text) throw new Error(lingo(this.wiki, 'pdf/ocr-empty', 'OCR recognition result is empty'));
         // 识别期间翻页也照常按原页落库；仅停在原页时刷新文本层
         this.wiki.addTiddler({
           title: parsePdf.ocrTiddlerTitle(this._docPageTitle, pageNum),
@@ -732,13 +737,13 @@ function makeReader(): any {
           'tidme.doc': this._docId,
         });
         if (this._page === pageNum) {
-          this._status.textContent = 'OCR 完成';
+          this._status.textContent = lingo(this.wiki, 'pdf/ocr-done', 'OCR completed');
           await this._renderPage();
         } else {
-          this._status.textContent = `OCR 完成（第 ${pageNum} 页，翻回即可查看）`;
+          this._status.textContent = `${lingo(this.wiki, 'pdf/ocr-done', 'OCR completed')} (${lingo(this.wiki, 'pdf/page-prefix', 'p.')} ${pageNum})`;
         }
       } catch (e: any) {
-        this._status.textContent = 'OCR 失败：' + String(e?.message || e);
+        this._status.textContent = `${lingo(this.wiki, 'pdf/ocr-failed', 'OCR failed:')} ${String(e?.message || e)}`;
       } finally {
         this._ocrBusy = false;
         btn.disabled = false;
@@ -759,7 +764,9 @@ function makeReader(): any {
         this._selMode = !this._selMode;
         selBtn.classList.toggle('tm-pdf-ico--on', this._selMode);
         viewer.classList.toggle('tm-pdf-selecting', this._selMode);
-        this._status.textContent = this._selMode ? '框选模式：在页面上拖拽矩形，松开后生成图片问答卡' : '';
+        this._status.textContent = this._selMode
+          ? lingo(this.wiki, 'pdf/box-select-hint', 'Box select mode: Drag a rectangle on the page, release to create Image Q&A card')
+          : '';
       });
       viewer.addEventListener('mousedown', (e: MouseEvent) => {
         if (!this._selMode || e.button !== 0) return;
@@ -809,11 +816,12 @@ function makeReader(): any {
           const label = (res.label || '').trim();
           const matchedSection = docOps.sectionOfDocByPage && this._docId ? docOps.sectionOfDocByPage(this.wiki, this._docId, this._page) : null;
           const targetSection = matchedSection || sectionTitle || this.getVariable('currentTiddler') || this._docPageTitle;
+          const defaultPending = lingo(this.wiki, 'pdf/pending-answer', '(Answer pending)');
           const qa = cardFactory.buildImageQA
             ? cardFactory.buildImageQA(this.wiki, targetSection, { dataUrl, answer, label, page: this._page })
-            : cardFactory.buildQA(this.wiki, targetSection, `<img src="${dataUrl}" style="max-width:100%">`, answer || '（答案待补充）');
+            : cardFactory.buildQA(this.wiki, targetSection, `<img src="${dataUrl}" style="max-width:100%">`, answer || defaultPending);
           cardFactory.commitCard(this.wiki, qa, this);
-          this._status.textContent = '已创建图片问答卡';
+          this._status.textContent = lingo(this.wiki, 'pdf/image-card-created', 'Image Q&A card created');
           if (this._selMode) {
             this._selMode = false;
             this._selBtn?.classList.remove('tm-pdf-ico--on');

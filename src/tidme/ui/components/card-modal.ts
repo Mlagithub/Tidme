@@ -50,13 +50,13 @@ export function openCardModal(
   const modal = el(doc, 'div', 'tm-card-modal');
 
   // 标题行
-  let titleText = '❓ 极速问答卡 (QA Card)';
-  if (type === 'cloze') titleText = '🧩 挖空卡设置 (Cloze Deletion)';
-  else if (type === 'image-qa') titleText = '📷 图片问答卡 (Image QA)';
+  let titleText = '❓ Q&A Card';
+  if (type === 'cloze') titleText = '🧩 Cloze Card';
+  else if (type === 'image-qa') titleText = '📷 Image Q&A Card';
 
   const titleRow = el(doc, 'div', 'tm-card-modal-title', titleText);
   if (type === 'image-qa' && opts.page) {
-    const badge = el(doc, 'span', 'tm-card-modal-badge', `第 ${opts.page} 页`);
+    const badge = el(doc, 'span', 'tm-card-modal-badge', `Page ${opts.page}`);
     titleRow.appendChild(badge);
   }
   modal.appendChild(titleRow);
@@ -69,7 +69,7 @@ export function openCardModal(
     // 1. 图片预览区（作为问题面）
     if (opts.imageUrl) {
       const imgField = el(doc, 'div', 'tm-card-modal-field');
-      const imgLabel = el(doc, 'label', '', '问题 (Question / 框选截图):');
+      const imgLabel = el(doc, 'label', '', 'Question (Image Selection):');
       const imgWrap = el(doc, 'div', 'tm-card-modal-img-wrap');
       const imgNode = el(doc, 'img', 'tm-card-modal-img-preview') as HTMLImageElement;
       imgNode.src = opts.imageUrl;
@@ -81,18 +81,18 @@ export function openCardModal(
 
     // 2. 简短标题 / 说明（可选）
     const fieldTitle = el(doc, 'div', 'tm-card-modal-field');
-    const labelTitle = el(doc, 'label', '', '卡片说明 / 简短标题 (可选):');
+    const labelTitle = el(doc, 'label', '', 'Card Title / Note (Optional):');
     labelInput = el(doc, 'input', 'tm-card-modal-input') as HTMLInputElement;
-    labelInput.placeholder = '例如：核心架构图 / 损失函数（留空按页码命名）';
+    labelInput.placeholder = 'e.g. Architecture Diagram (defaults to page number if empty)';
     fieldTitle.appendChild(labelTitle);
     fieldTitle.appendChild(labelInput);
     modal.appendChild(fieldTitle);
 
     // 3. 答案输入区（自动聚焦）
     const fieldAns = el(doc, 'div', 'tm-card-modal-field');
-    const labelAns = el(doc, 'label', '', '答案 (Answer):');
+    const labelAns = el(doc, 'label', '', 'Answer:');
     input2 = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
-    input2.placeholder = '输入此图对应的答案、解析或记忆线索（支持多行）...';
+    input2.placeholder = 'Enter answer or key explanation for this image...';
     input2.value = initial;
     fieldAns.appendChild(labelAns);
     fieldAns.appendChild(input2);
@@ -100,14 +100,14 @@ export function openCardModal(
   } else {
     // 经典 QA / Cloze 布局
     const field1 = el(doc, 'div', 'tm-card-modal-field');
-    const label1 = el(doc, 'label', '', type === 'qa' ? '问题 (Question):' : '挖空预览 / 上下文:');
+    const label1 = el(doc, 'label', '', type === 'qa' ? 'Question:' : 'Cloze Preview / Context:');
     input1 = el(
       doc,
       type === 'qa' ? 'input' : 'textarea',
       type === 'qa' ? 'tm-card-modal-input' : 'tm-card-modal-textarea',
     ) as any;
     if (type === 'qa') {
-      (input1 as HTMLInputElement).placeholder = '输入问题（例如：该概念的核心定义是什么？）';
+      (input1 as HTMLInputElement).placeholder = 'Enter question...';
     } else {
       (input1 as HTMLTextAreaElement).value = initial;
     }
@@ -117,7 +117,7 @@ export function openCardModal(
 
     if (type === 'qa') {
       const field2 = el(doc, 'div', 'tm-card-modal-field');
-      const label2 = el(doc, 'label', '', '答案 (Answer / 选区):');
+      const label2 = el(doc, 'label', '', 'Answer:');
       input2 = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
       input2.value = initial;
       field2.appendChild(label2);
@@ -127,8 +127,8 @@ export function openCardModal(
   }
 
   const actions = el(doc, 'div', 'tm-card-modal-actions');
-  const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', '取消 (Esc)');
-  const saveBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', '确定生成卡片 (Ctrl+Enter)');
+  const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', 'Cancel (Esc)');
+  const saveBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', 'Create Card (Ctrl+Enter)');
 
   const close = () => {
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);

@@ -1,52 +1,46 @@
 title: $:/plugins/keepone/tidme/import/ui/help-shortcuts
-caption: 快捷键与用法
+caption: Shortcuts & Manual
 type: text/vnd.tiddlywiki
 tags: [[Tidme Manual]]
 
-|!快捷键 |!功能 |!说明 |
-|[[Alt+X]] |摘录制卡 |把选中文字生成一张摘录卡（继承本文档溯源字段）|
-|[[Alt+Z]] |挖空制卡 |把选中文字在原句中挖空，生成挖空卡|
-|[[Ctrl+F7]] |设续读点 |以当前选中文字为锚，标记"读到此处"|
-|[[Alt+F7]] |转到续读点 |跳回续读点并高亮当时的片段|
-|[[Shift+Ctrl+F7]] |清除续读点 |移除本书的续读点|
+|!Shortcut |!Function |!Description |
+|[[Alt+X]] |Extract Card |Create an extract card from selected text (inherits document provenance)|
+|[[Alt+Z]] |Cloze Card |Create a cloze card from selected text in context|
+|[[Alt+Q]] |Q&A Card |Create a question & answer card from selected text|
+|[[Ctrl+F7]] |Set Read Point |Anchor read point at currently selected text|
+|[[Alt+F7]] |Jump to Read Point |Jump back to read point and highlight text fragment|
+|[[Shift+Ctrl+F7]] |Clear Read Point |Remove read point of this document|
 
-!! 阅读条栏（每张节卡顶部）
+!! Section Bar (Top of each Section Card)
 
-* ''第一行''：面包屑 · 位置 X/Y · 本书剩 N 张待学 · 已读状态
-* ''第二行''（按钮）：
-** 上一节 / 下一节（自动更新续读点）
-** ⏸ 设续读点 · ⏮ 转到续读点 · ✕ 清除续读点
-** ✔ 已读（Done，移出队列，8 秒内可撤销）· ⏩ 稍后（A-Factor 指数展期）· ⚡ 提前（今日抢占排期）· 忽略（标记不重要，出队保留）
-** 摘录 · 挖空 · ？（帮助）
+* ''Row 1 (Info)'': Breadcrumb · Position X/Y · Cards left to study · Read state · Auto-saved indicator
+* ''Row 2 (Actions)'':
+** Previous / Next section (automatically advances reading queue)
+** ⏸ Set Read Point · ⏮ Jump to Read Point · ✕ Clear Read Point
+** ✔ Read (Done, moves out of queue) · ⏩ Later (postpones by A-Factor) · ⚡ Advance (boosts priority into today) · Ignore (mark as unneeded)
+** Extract · Cloze · Q&A · More (Priority / A-Factor / Clean extracts / Delete) · Stats · Help
 
-!! 文档页
+!! Document Page
 
-* ▶ 继续阅读 · 📖 复习本书（子集复习，只复习本书的挖空/问答卡）
-* 已读卡（可重新加入）· 摘录/挖空聚合（摘录标注''可挖空/已挖空''，可回原文/删除）
+* ▶ Continue Reading · 📖 Review Book (subset review of book test cards)
+* Read Sections (can be re-added) · Extracted & Cloze Cards inbox (with back to source & delete)
 
-!! 阅读列表（顶部导航「阅读列表」）
+!! Reading List (Navigation > Reading)
 
-* 待读清单：未读节卡/摘录按文档分组，组内按优先级与到期排序
-* 每文档组显示阅读进度 + 「▶ 继续阅读」+「🗑 清理阅读」（删原文、知识卡保留）；挖空/问答卡在牌组复习，不在此页
+* Pending reading list: Unread sections/extracts grouped by document, sorted by priority and due date
+* Each document group displays progress + "▶ Continue Reading" + "🗑 Clean Reading Materials"; knowledge cards are reviewed in decks
 
-!! 卡片管理器（卡片管理器，含下方「牌组批量操作」）
+!! Card Manager (Navigation > Manager)
 
-* 视图过滤：全部 / 在队 / 已读 / 搁置 / 逾期
-* 组织方式：按文档 / 按牌组（含未入组）/ 列表（可排序、勾选批量、点行预览）
-* 单卡：点击标题打开 · 读 / 回 / ✕ / ✎ 编辑参数（改到期/优先级/注释）
-* 批量：勾选后 顺延/提前/遗忘/移出队列/搁置/恢复/删除（删除需确认）
+* Views: All / In Queue / Read / Suspended / Overdue
+* Organization: By Document / By Deck / Flat List (sortable, batch operations, live preview)
+* Actions: Open · Read · Back to Source · Delete · Edit parameters (due date, priority, notes)
+* Batch: Postpone / Advance / Forget / Remove from Queue / Suspend / Restore / Delete
 
-!! 键盘
+!! Keyboard Shortcuts
 
-* 复习评分：[[1]] Again · [[2]] Hard · [[3]] Good · [[4]] Easy · [[Space]] 折叠/翻面 · [[p]] 停止学习 · [[n]] 下一张 · [[e]] 移出队列 · [[u]] 展开
-* 阅读条栏：[[←]] / [[→]] 上一节 / 下一节 · [[Alt+X]] 摘录 · [[Alt+Z]] 挖空 · [[Alt+Q]] 问答 · [[Ctrl+F7]] 设续读点 · [[Alt+F7]] 转到续读点 · [[Shift+Ctrl+F7]] 清除续读点
+* Review: [[1]] Again · [[2]] Hard · [[3]] Good · [[4]] Easy · [[Space]] Flip/Unfold · [[p]] Stop study · [[n]] Next · [[e]] Remove from queue · [[u]] Unfold
+* Reading: [[←]] / [[→]] Previous / Next section · [[Alt+X]] Extract · [[Alt+Z]] Cloze · [[Alt+Q]] Q&A · [[Ctrl+F7]] Set Read Point · [[Alt+F7]] Jump to Read Point · [[Shift+Ctrl+F7]] Clear Read Point
 
-> 原则提醒（源自 SuperMemo）：遇到任何卡片都做一个轻量动作（已读/稍后/忽略/摘录），不要空转；
-> 导入不怕多，系统会按优先级替你安排。
-
-!! 任意条目制卡（不止阅读材料）
-
-* 在''任意条目''查看态选中文字 → 浮出「🧩 挖空 / ❓ 问答」气泡，直接制卡（快捷键 Alt+Z / Alt+Q 通用）
-* 编辑器工具栏：''挖空成卡 / 问答成卡''把选中文本直接制成卡片（不改正文）；旧「挖空/选择/问答」按钮用于在既有卡面插 `<<C>>`/`<<S>>`/`<<T>>` 宏
-* 摘录仅用于阅读材料（导入的书籍/文章）；普通笔记请直接挖空/问答
-* 旧版手动建的散卡（无类型标记）可用 `node tools/migrate-manual-cards.cjs <wiki目录> --apply` 一键迁移为问答/挖空卡
+> Principle (from SuperMemo): Take a lightweight action on every item (Read / Later / Ignore / Extract), never idle;
+> Never fear high import volume—the system schedules items according to priority.

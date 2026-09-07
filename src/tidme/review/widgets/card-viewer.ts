@@ -10,6 +10,10 @@ const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const session = require('$:/plugins/keepone/tidme/core/session.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+function lingo(wiki: any, key: string, fallback: string): string {
+  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+}
 const fsrs = require('$:/plugins/keepone/tidme/core/fsrs.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
@@ -22,18 +26,18 @@ const el = dom.el;
 /** 相对时间可读格式化 */
 function formatRelativeTime(targetDate: Date, now = new Date()): string {
   const diffSec = Math.round((targetDate.getTime() - now.getTime()) / 1000);
-  if (diffSec <= 0) return '现在';
-  if (diffSec < 60) return `${diffSec}秒`;
+  if (diffSec <= 0) return 'now';
+  if (diffSec < 60) return `${diffSec}s`;
   const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}分钟`;
+  if (diffMin < 60) return `${diffMin}m`;
   const diffHours = Math.round(diffMin / 60);
-  if (diffHours < 24) return `${diffHours}小时`;
+  if (diffHours < 24) return `${diffHours}h`;
   const diffDays = Math.round(diffHours / 24);
-  if (diffDays < 30) return `${diffDays}天`;
+  if (diffDays < 30) return `${diffDays}d`;
   const diffMonths = Math.round(diffDays / 30);
-  if (diffMonths < 12) return `${diffMonths}个月`;
+  if (diffMonths < 12) return `${diffMonths}mo`;
   const diffYears = Math.round(diffDays / 365);
-  return `${diffYears}年`;
+  return `${diffYears}y`;
 }
 
 /** 预测四档评分下次复习时间 */
@@ -132,7 +136,7 @@ function makeCardViewer(): any {
         doc,
         'button',
         'tm-btn tm-card-fold-banner' + (folded ? ' is-folded' : ' is-expanded'),
-        folded ? '查看答案 (空格)' : '隐藏答案 (空格)',
+        folded ? lingo(this.wiki, 'viewer.showanswer', 'Show Answer (Space)') : lingo(this.wiki, 'viewer.hideanswer', 'Hide Answer (Space)'),
       );
       bannerBtn.type = 'button';
       bannerBtn.addEventListener('click', () => this.toggleFold());
@@ -144,7 +148,7 @@ function makeCardViewer(): any {
       if (folded) {
         // 问题态：优先显示 caption
         const qBox = el(doc, 'div', 'tm-card-viewer-question');
-        const cap = f.caption ? String(f.caption) : '(无题面，请查看正文)';
+        const cap = f.caption ? String(f.caption) : lingo(this.wiki, 'viewer.nocaption', '(No caption, view text)');
         qBox.textContent = cap;
         body.appendChild(qBox);
       } else {
@@ -166,10 +170,10 @@ function makeCardViewer(): any {
       const intervals = getPredictedIntervals(f, df.p);
 
       const ratingsConfig = [
-        { key: 'Again', label: '重来 (1)', cls: 'tm-btn--again', color: 'var(--tm-danger, #ef4444)' },
-        { key: 'Hard', label: '困难 (2)', cls: 'tm-btn--hard', color: 'var(--tm-warning, #f59e0b)' },
-        { key: 'Good', label: '良好 (3)', cls: 'tm-btn--good', color: 'var(--tm-success, #10b981)' },
-        { key: 'Easy', label: '简单 (4)', cls: 'tm-btn--easy', color: 'var(--tm-accent, #3b82f6)' },
+        { key: 'Again', label: lingo(this.wiki, 'rate.again', 'Again') + ' (1)', cls: 'tm-btn--again', color: 'var(--tm-danger, #ef4444)' },
+        { key: 'Hard', label: lingo(this.wiki, 'rate.hard', 'Hard') + ' (2)', cls: 'tm-btn--hard', color: 'var(--tm-warning, #f59e0b)' },
+        { key: 'Good', label: lingo(this.wiki, 'rate.good', 'Good') + ' (3)', cls: 'tm-btn--good', color: 'var(--tm-success, #10b981)' },
+        { key: 'Easy', label: lingo(this.wiki, 'rate.easy', 'Easy') + ' (4)', cls: 'tm-btn--easy', color: 'var(--tm-accent, #3b82f6)' },
       ];
 
       const btnGrid = el(doc, 'div', 'tm-card-viewer-ratings');
@@ -193,7 +197,7 @@ function makeCardViewer(): any {
 
       // 4. 统计数据详情
       const details = el(doc, 'details', 'tm-card-stats');
-      const summary = el(doc, 'summary', '', '📊 学习数据与指标');
+      const summary = el(doc, 'summary', '', lingo(this.wiki, 'viewer.stats', '📊 Study Data & Metrics'));
       details.appendChild(summary);
 
       const grid = el(doc, 'div', 'tm-card-stats-grid');
@@ -206,14 +210,14 @@ function makeCardViewer(): any {
         grid.appendChild(row);
       };
 
-      addStat('状态', display.stateLabel(f));
-      addStat('到期', display.dueLabel(f));
-      addStat('间隔', display.intervalLabel(f));
-      addStat('稳定性', f.stability ? String(f.stability) : '—');
-      addStat('难度', display.diffLabel(f));
-      addStat('复习次数', display.repsLabel(f));
-      addStat('遗忘次数', display.lapsesLabel(f));
-      addStat('优先级', `p${sched.normalizePriority(f['tidme.priority'])}`);
+      addStat(lingo(this.wiki, 'col.state', 'State'), display.stateLabel(f));
+      addStat(lingo(this.wiki, 'col.due', 'Due'), display.dueLabel(f));
+      addStat(lingo(this.wiki, 'col.interval', 'Interval'), display.intervalLabel(f));
+      addStat(lingo(this.wiki, 'field.stability', 'Stability'), f.stability ? String(f.stability) : '—');
+      addStat(lingo(this.wiki, 'col.diff', 'Difficulty'), display.diffLabel(f));
+      addStat(lingo(this.wiki, 'col.reps', 'Reps'), display.repsLabel(f));
+      addStat(lingo(this.wiki, 'col.lapses', 'Lapses'), display.lapsesLabel(f));
+      addStat(lingo(this.wiki, 'col.priority', 'Priority'), `p${sched.normalizePriority(f['tidme.priority'])}`);
 
       details.appendChild(grid);
       footer.appendChild(details);

@@ -51,7 +51,7 @@ export function titleOf(name: string): string {
   const clean = raw
     .replace(/[\\/:*?"<>|$\[\]]/g, '-')
     .replace(/[\s]+/g, '-');
-  if (!clean || clean === '-') throw new Error('deck: 无效牌组名: ' + name);
+  if (!clean || clean === '-') throw new Error('deck: invalid deck name: ' + name);
   return ns.DECK_PREFIX + clean;
 }
 
@@ -153,7 +153,7 @@ export const DEFAULT_CARD_FILTER = '[all[shadows+tiddlers]tidme.kind[item]!has[t
 /** 创建牌组；名称已存在抛错。返回标题。 */
 export function createDeck(wiki: any, cfg: DeckConfig): string {
   const title = titleOf(cfg.name);
-  if (getDeck(wiki, title)) throw new Error(`deck: 牌组已存在: ${title}`);
+  if (getDeck(wiki, title)) throw new Error(`deck: deck already exists: ${title}`);
   wiki.addTiddler({ title, ...configToFields(wiki, cfg) });
   return title;
 }
@@ -161,7 +161,7 @@ export function createDeck(wiki: any, cfg: DeckConfig): string {
 /** 更新牌组字段（patch 合并；值 undefined 忽略）。default 允许（普通覆盖 shadow）。 */
 export function updateDeck(wiki: any, nameOrTitle: string, patch: Record<string, any>): void {
   const deck = getDeck(wiki, nameOrTitle);
-  if (!deck) throw new Error(`deck: 牌组不存在: ${nameOrTitle}`);
+  if (!deck) throw new Error(`deck: deck not found: ${nameOrTitle}`);
   const fields = { ...deck.fields };
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
@@ -178,7 +178,7 @@ export function updateDeck(wiki: any, nameOrTitle: string, patch: Record<string,
 export function deleteDeck(wiki: any, nameOrTitle: string, opts: { alsoCards?: boolean } = {}): number {
   const deck = getDeck(wiki, nameOrTitle);
   if (!deck) return 0;
-  if (deck.title === DEFAULT_DECK) throw new Error('deck: 默认牌组不可删除');
+  if (deck.title === DEFAULT_DECK) throw new Error('deck: default deck cannot be deleted');
   let removed = 0;
   if (opts.alsoCards) {
     for (const c of deckCards(wiki, deck.title)) {

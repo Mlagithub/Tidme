@@ -137,7 +137,7 @@ export function renderTable<T = any>(
 ): HTMLElement {
   const wrap = el(doc, 'div', 'tm-table-wrap');
   if (!config.data || config.data.length === 0) {
-    const empty = renderEmpty(doc, config.emptyText || '暂无数据');
+    const empty = renderEmpty(doc, config.emptyText || 'No data');
     wrap.appendChild(empty);
     container.appendChild(wrap);
     return wrap;

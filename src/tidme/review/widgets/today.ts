@@ -21,6 +21,10 @@ const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
 const workflow = require('$:/plugins/keepone/tidme/review/widgets/workflow.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+function lingo(wiki: any, key: string, fallback: string): string {
+  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+}
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
@@ -92,15 +96,21 @@ function makeTodayHero(): WidgetCtor {
         return card;
       };
       grid.appendChild(
-        mkCta('tm-today-cta--study', 'study', '开始学习', toStudy > 0 ? `${toStudy} 张卡待复习` : '暂无到期卡片，可自由复习', () => workflow.startGlobalLearning(wiki, this)),
+        mkCta(
+          'tm-today-cta--study',
+          'study',
+          lingo(wiki, 'today.startstudy', 'Start Review'),
+          toStudy > 0 ? `${toStudy} ${lingo(wiki, 'today.cardsdue', 'cards due')}` : lingo(wiki, 'today.noduecards', 'No due cards, free to review'),
+          () => workflow.startGlobalLearning(wiki, this),
+        ),
       );
       const readTarget = workflow.globalReadingTarget(wiki);
       grid.appendChild(
         mkCta(
           'tm-today-cta--read',
           'read',
-          '继续阅读',
-          c.toRead > 0 ? `${c.toRead} 节待读` : '暂无待读材料',
+          lingo(wiki, 'read.resume', 'Continue Reading'),
+          c.toRead > 0 ? `${c.toRead} ${lingo(wiki, 'today.sectionsleft', 'sections left')}` : lingo(wiki, 'today.noreading', 'No reading materials'),
           () => navigateTo(this, readTarget),
         ),
       );
@@ -112,7 +122,11 @@ function makeTodayHero(): WidgetCtor {
       // 容错补偿：若今日已有复习记录但专注时间为 0（因历史版本卡片复习流未挂载计时器），
       // 按每卡至少 1 秒给予基础时间，杜绝"已复习45卡 专注0秒"的反常现象
       const effectiveSec = Math.max(rt.todaySeconds, reviewed > 0 && rt.todaySeconds === 0 ? reviewed : 0);
-      const feed = el(doc, 'div', 'tm-today-feed', `今日已复习 ${reviewed} 卡 · 专注 ${stats.formatDuration(effectiveSec)}`);
+      const revTpl = lingo(wiki, 'today.reviewedsummary', '${count} cards reviewed today');
+      const reviewedStr = revTpl.replace('${count}', String(reviewed)).replace('$(count)$', String(reviewed));
+      const focTpl = lingo(wiki, 'today.focussummary', 'Focus ${duration}');
+      const focusStr = focTpl.replace('${duration}', stats.formatDuration(effectiveSec)).replace('$(duration)$', stats.formatDuration(effectiveSec));
+      const feed = el(doc, 'div', 'tm-today-feed', `${reviewedStr} · ${focusStr}`);
       container.appendChild(feed);
     }
 
@@ -149,7 +163,7 @@ function makeTodayRecent(): WidgetCtor {
       const wiki = this.wiki;
       container.textContent = '';
 
-      container.appendChild(el(doc, 'div', 'tm-today-section-title', '最近阅读'));
+      container.appendChild(el(doc, 'div', 'tm-today-section-title', lingo(wiki, 'read.recent', 'Recent Reading')));
       const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
       // 最近打开时间：全局续读点所属书置顶（每次打开阅读卡都会刷新全局续读点）；
       // 其余书回退各自续读点的写入时间（制卡/设续读点时更新）
@@ -190,14 +204,14 @@ function makeTodayRecent(): WidgetCtor {
         return {
           id: r.title,
           title: r.label,
-          titleTooltip: `打开文档：${r.label}`,
+          titleTooltip: `${lingo(wiki, 'read.opendoc', 'Open document: ')}${r.label}`,
           onTitleClick: () => {
             syncPdfPage();
             navigateTo(this, r.title);
           },
           progress: { done: r.done, total: r.total },
           action: {
-            label: '继续',
+            label: lingo(wiki, 'read.continue', 'Continue'),
             onClick: () => {
               syncPdfPage();
               navigateTo(this, target);
@@ -205,7 +219,7 @@ function makeTodayRecent(): WidgetCtor {
           },
         };
       });
-      primitives.renderActionList(doc, container, items, '暂无在读书籍——去导入中心添加材料。');
+      primitives.renderActionList(doc, container, items, lingo(wiki, 'today.norecentbooks', 'No reading in progress - Add materials from Import Center.'));
     }
 
     refresh(changedTiddlers: Record<string, any>) {

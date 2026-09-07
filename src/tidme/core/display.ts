@@ -8,38 +8,46 @@ declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
-export function badgeOf(fields: Record<string, any>): { text: string; cls: string } {
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+
+export function badgeOf(fields: Record<string, any>, wiki?: any): { text: string; cls: string } {
   if (fields['tidme.suspended'] === 'yes') return { text: '⏸', cls: 'tm-badge-suspended' };
   if (sched.isCardDone(fields)) return { text: '✓', cls: 'tm-badge-done' };
   const state = String(fields.state || '0');
-  if (state === '1' || state === '3') return { text: '学', cls: 'tm-badge-learn' };
+  if (state === '1' || state === '3') {
+    return { text: wiki ? lingoMod.lingo(wiki, 'badge.learn', 'L') : 'L', cls: 'tm-badge-learn' };
+  }
   if (state === '2') {
     const overdue = sched.parseTwDate(fields.due).getTime() < Date.now();
-    return overdue ? { text: '逾', cls: 'tm-badge-overdue' } : { text: '到', cls: 'tm-badge-due' };
+    return overdue
+      ? { text: wiki ? lingoMod.lingo(wiki, 'badge.overdue', '!') : '!', cls: 'tm-badge-overdue' }
+      : { text: wiki ? lingoMod.lingo(wiki, 'badge.due', 'D') : 'D', cls: 'tm-badge-due' };
   }
-  return { text: '新', cls: 'tm-badge-new' };
+  return { text: wiki ? lingoMod.lingo(wiki, 'badge.new', 'N') : 'N', cls: 'tm-badge-new' };
 }
 
-export function kindMark(fields: Record<string, any>): string {
+export function kindMark(fields: Record<string, any>, wiki?: any): string {
   const sub = String(fields['tidme.subkind'] || '');
-  if (sub === 'extract') return '摘';
-  if (sub === 'cloze') return '挖';
-  if (sub === 'qa') return '问';
+  if (sub === 'extract') return wiki ? lingoMod.lingo(wiki, 'kind.extract', 'E') : 'E';
+  if (sub === 'cloze') return wiki ? lingoMod.lingo(wiki, 'kind.cloze', 'C') : 'C';
+  if (sub === 'qa') return wiki ? lingoMod.lingo(wiki, 'kind.qa', 'Q') : 'Q';
   return '';
 }
 
-export function stateLabel(fields: Record<string, any>): string {
-  const b = badgeOf(fields);
+export function stateLabel(fields: Record<string, any>, wiki?: any): string {
+  const b = badgeOf(fields, wiki);
   // 出队语义优先（done/ignored/suspended）—— 否则 done 卡仍显示 "到期/已逾期" 误导
-  if (b.text === '✓') return '已读';
-  if (b.text === '⏸') return '搁置';
+  if (b.text === '✓') return wiki ? lingoMod.lingo(wiki, 'state.read', 'Read') : 'Read';
+  if (b.text === '⏸') return wiki ? lingoMod.lingo(wiki, 'state.suspended', 'Suspended') : 'Suspended';
   const state = String(fields.state || '0');
-  if (state === '1' || state === '3') return '学习中';
+  if (state === '1' || state === '3') return wiki ? lingoMod.lingo(wiki, 'state.learning', 'Learning') : 'Learning';
   if (state === '2') {
     const overdue = sched.parseTwDate(fields.due).getTime() < Date.now();
-    return overdue ? '已逾期' : '到期';
+    return overdue
+      ? (wiki ? lingoMod.lingo(wiki, 'state.overdue', 'Overdue') : 'Overdue')
+      : (wiki ? lingoMod.lingo(wiki, 'state.due', 'Due') : 'Due');
   }
-  return '新卡';
+  return wiki ? lingoMod.lingo(wiki, 'state.new', 'New') : 'New';
 }
 
 export function dueLabel(fields: Record<string, any>): string {
@@ -48,9 +56,11 @@ export function dueLabel(fields: Record<string, any>): string {
   return Number.isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
 }
 
-export function intervalLabel(fields: Record<string, any>): string {
+export function intervalLabel(fields: Record<string, any>, wiki?: any): string {
   const s = Number(fields.scheduled_days);
-  return Number.isFinite(s) && s > 0 ? `${Math.round(s)}天` : '—';
+  if (!Number.isFinite(s) || s <= 0) return '—';
+  const unit = wiki ? lingoMod.lingo(wiki, 'unit.days', 'd') : 'd';
+  return `${Math.round(s)}${unit}`;
 }
 
 export function repsLabel(fields: Record<string, any>): string {

@@ -1,3 +1,4 @@
+const { lingo } = require('$:/plugins/keepone/tidme/core/lingo.js');
 /*
 widgets/split.ts — 切分入口组件（优先级三档 + 预览干预）
 
@@ -35,7 +36,7 @@ function provenanceOf(wiki: any, title: string): Record<string, string> {
  * 对齐写库统一走 core/import-commit（未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档）。 */
 async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number) {
   const t = wiki.getTiddler(title);
-  if (!t) throw new Error('源 tiddler 不存在');
+  if (!t) throw new Error(lingo(wiki, 'split.sourcemissing', 'Source tiddler does not exist'));
   const r = await parse.runSplit({
     text: String(t.fields.text || ''),
     title,
@@ -45,7 +46,7 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
     folderOccupied: (base: string) => docOps.docFolderOwner(wiki, base),
   });
   const [doc, ...cards] = r.tiddlers;
-  if (!cards.length) throw new Error('未切分出任何节（内容过短或无可识别结构）');
+  if (!cards.length) throw new Error(lingo(wiki, 'split.emptysections', 'No sections split (content too short or no recognizable structure)'));
 
   // 源 tiddler → 文档页：合并溯源字段、标签合并（去 tidme-inbox）；
   // 卡片 tidme.docpage 须指向合并后真实存在的文档页 title（源 tiddler title 优先于管线 docRoot）
@@ -79,25 +80,26 @@ function makePasteSplit(): WidgetCtor {
       this.computeAttributes();
       this.execute();
       const doc = this.document;
+      const wiki = this.wiki;
       const wrap = el(doc, 'div', 'tm-dashboard-card');
-      wrap.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '粘贴文本'));
+      wrap.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'split.pastetitle', 'Paste Text')));
       const inner = el(doc, 'div', 'tm-paste-split');
       const ta = doc.createElement('textarea');
       ta.className = 'tm-paste-textarea tm-textarea';
-      ta.placeholder = '粘贴 markdown / HTML / 纯文本…';
+      ta.placeholder = lingo(wiki, 'split.pasteplaceholder', 'Paste Markdown, HTML, or plain text...');
       ta.rows = 8;
       inner.appendChild(ta);
-      const btn = el(doc, 'button', 'tm-btn tm-btn--primary', '切分文本并入库');
+      const btn = el(doc, 'button', 'tm-btn tm-btn--primary', lingo(wiki, 'split.btn', 'Split & Import'));
       const status = el(doc, 'div', 'tm-import-muted', '');
       btn.addEventListener('click', async () => {
         const text = String(ta.value || '').trim();
         if (!text) {
-          status.textContent = '内容为空';
+          status.textContent = lingo(wiki, 'split.emptycontent', 'Content is empty');
           return;
         }
         const firstLine = text.split('\n')[0].replace(/^#+\s*/, '').replace(/^!\s*/, '').slice(0, 40) || '粘贴内容';
         btn.setAttribute('disabled', 'true');
-        status.textContent = '解析中…';
+        status.textContent = lingo(wiki, 'split.parsing', 'Parsing...');
         try {
           const r = await parse.runSplit({
             text,
@@ -110,7 +112,7 @@ function makePasteSplit(): WidgetCtor {
           notify(this, ns.NOTIFY_DONE);
           navigateTo(this, r.tiddlers[0].title);
         } catch (e: any) {
-          status.textContent = '切分失败：' + String(e.message || e);
+          status.textContent = lingo(wiki, 'split.failed', 'Split failed:') + ' ' + String(e.message || e);
           btn.removeAttribute('disabled');
         }
       });
@@ -134,21 +136,22 @@ function makeInboxSplit(): WidgetCtor {
       this.computeAttributes();
       this.execute();
       const doc = this.document;
+      const wiki = this.wiki;
       const wrap = el(doc, 'div', 'tm-dashboard-card');
-      wrap.appendChild(el(doc, 'div', 'tm-dashboard-card-title', '剪藏收件箱 (tidme-inbox)'));
+      wrap.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'split.inboxtitle', 'Inbox Clips (tidme-inbox)')));
       const inner = el(doc, 'div', 'tm-inbox-split');
       const listBox = el(doc, 'div', '');
       const refresh = () => {
         listBox.textContent = '';
         const items = this.wiki.filterTiddlers('[tag[tidme-inbox]!is[draft]]');
         if (!items.length) {
-          listBox.appendChild(renderEmpty(doc, { text: '收件箱为空——支持使用浏览器剪藏插件自动捕获内容入库。', icon: '📥' }));
+          listBox.appendChild(renderEmpty(doc, { text: lingo(wiki, 'split.inboxempty', 'Inbox is empty - clip articles from browser to import here.'), icon: '📥' }));
           return;
         }
         for (const item of items) {
           const row = el(doc, 'div', 'tm-import-row');
           row.appendChild(el(doc, 'strong', '', item));
-          const btn = el(doc, 'button', 'tm-btn tm-btn--primary', '切分并入库');
+          const btn = el(doc, 'button', 'tm-btn tm-btn--primary', lingo(wiki, 'split.btn', 'Split & Import'));
           btn.addEventListener('click', async () => {
             btn.setAttribute('disabled', 'true');
             btn.textContent = '…';
@@ -157,7 +160,7 @@ function makeInboxSplit(): WidgetCtor {
               notify(this, ns.NOTIFY_DONE);
               refresh();
             } catch (e: any) {
-              btn.textContent = '失败：' + String((e as any).message || e);
+              btn.textContent = lingo(wiki, 'split.failed', 'Failed:') + ' ' + String((e as any).message || e);
             }
           });
           row.appendChild(btn);
