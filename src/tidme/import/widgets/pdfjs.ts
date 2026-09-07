@@ -4,7 +4,7 @@ widgets/pdfjs.ts — pdf.js CDN 按需加载器与浏览器适配
 - Mozilla pdf.js（Apache-2.0）固定版本经 cdnjs 按需注入（不打包进插件，省 ~1.5MB）；
   加载失败（离线/无网）时 promise reject，调用方给出提示。
 - 适配层：loadPdfBytes / extractOutlineNodes（outline → {title,page} 拍平前解析）/
-  renderPageToCanvas（渲染并返回 viewport）/ pageTextItems（文本层数据）。
+  pageSize（scale1 原始尺寸）/ renderPageToCanvas（渲染并返回 viewport）/ pageTextItems（文本层数据）。
 */
 
 const PDFJS_VERSION = '3.11.174';
@@ -118,16 +118,47 @@ export async function extractOutlineNodes(pdf: any): Promise<Array<{ title: stri
   return resolved;
 }
 
-/** 渲染页到 canvas（按容器宽度自适应，1.5× 清晰度）；返回 viewport */
-export async function renderPageToCanvas(pdf: any, num: number, canvas: HTMLCanvasElement): Promise<any> {
+/** 页面原始尺寸（scale=1 视口，缩放 fit 计算的基准） */
+export async function pageSize(pdf: any, num: number): Promise<{ width: number; height: number }> {
   const page = await pdf.getPage(num);
-  const scale = 1.5;
-  const viewport = page.getViewport({ scale });
-  const ctx = canvas.getContext('2d');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  return viewport;
+  const vp = page.getViewport({ scale: 1 });
+  return { width: vp.width, height: vp.height };
+}
+
+/**
+ * 渲染页到 canvas；返回渲染 viewport。
+ * - 缺省 1.5× 渲染（旧调用兼容），像素即 CSS 尺寸
+ * - opts { cssScale, dpr }：CSS 缩放 × 设备像素比渲染，canvas CSS 尺寸随之显式设置
+ *   （cssScale 单位 = PDF scale1；文本层坐标同样处于渲染空间，除以 dpr 得 CSS 像素）
+ * - 同一 canvas 的多次调用按序串行（pdf.js 禁止同一 canvas 并发 render；
+ *   翻页与 ResizeObserver 的渲染请求可能重叠），过期调用由调用方按返回值取舍
+ */
+const canvasRenderChains = new WeakMap<object, Promise<any>>();
+
+export function renderPageToCanvas(
+  pdf: any,
+  num: number,
+  canvas: HTMLCanvasElement,
+  opts: { cssScale?: number; dpr?: number } = {},
+): Promise<any> {
+  const prev = canvasRenderChains.get(canvas) || Promise.resolve();
+  const task = prev.catch(() => {}).then(async () => {
+    const page = await pdf.getPage(num);
+    const dpr = Number(opts.dpr) > 0 ? Number(opts.dpr) : 1;
+    const cssScale = Number(opts.cssScale) > 0 ? Number(opts.cssScale) : 1.5;
+    const viewport = page.getViewport({ scale: cssScale * dpr });
+    const ctx = canvas.getContext('2d');
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
+    if (dpr !== 1) {
+      canvas.style.width = `${canvas.width / dpr}px`;
+      canvas.style.height = `${canvas.height / dpr}px`;
+    }
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return viewport;
+  });
+  canvasRenderChains.set(canvas, task);
+  return task;
 }
 
 /** 页文本项（文本层数据；扫描页返回近空数组） */

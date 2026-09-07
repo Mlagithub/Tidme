@@ -8,7 +8,7 @@ pdf.test.mjs — PDF 导入/阅读/制卡 测试（node:test）
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { collectText, fakeDocument, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
+import { collectButtons, collectText, fakeDocument, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
 const { wiki, mod } = bootPlugin({ prefix: 'tidme-pdf-' });
@@ -136,6 +136,53 @@ test('pdf-reader: 无 pdf.js 环境渲染加载提示（不挂）', () => {
     text: '<$tidme-pdf-reader/>',
   });
   wiki.addTiddler({ title: 'Tidme/PDFs/PDF书', type: 'application/pdf', text: 'JVBERi0xLjK=' });
-  const { root } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: 'Tidme/Books/PDF书' } });
+  const { root, w } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: 'Tidme/Books/PDF书' } });
   assert.ok(collectText(root).includes('正在加载 pdf.js'), '渲染加载提示（异步加载在无头环境挂起，不阻塞）');
+  assert.equal(typeof w._ocrPage, 'function', 'OCR 按钮绑定的处理方法必须存在（曾缺失导致点击即崩）');
+});
+
+test('pdf-reader: 工具栏结构 —— 缩放/翻页/全屏齐备，目录无节卡隐藏，OCR 开启才出现', () => {
+  config.writeOcrConfig(wiki, { enable: false }); // 显式关闭，用例不依赖文件内执行顺序
+  wiki.addTiddler({
+    title: 'Tidme/Books/裸工具栏书',
+    'tidme.kind': 'topic',
+    'tidme.type': 'pdf',
+    'tidme.pdf': 'Tidme/PDFs/裸工具栏书',
+    'tidme.doc': 'dpx2',
+    text: '<$tidme-pdf-reader/>',
+  });
+  wiki.addTiddler({ title: 'Tidme/PDFs/裸工具栏书', type: 'application/pdf', text: 'JVBERi0xLjK=' });
+  const { root } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: 'Tidme/Books/裸工具栏书' } });
+  const text = collectText(root);
+  const buttons = collectButtons(root);
+  assert.ok(text.includes('适合页面') && text.includes('适合宽度') && text.includes('实际大小'), '缩放下拉三模式（仿桌面阅读器）');
+  assert.ok(buttons.some((b) => b.title === '第一页') && buttons.some((b) => b.title === '最后一页'), '首末页按钮');
+  assert.ok(buttons.some((b) => b.title === '框选图片制卡：在页面上拖拽矩形生成图片问答卡'), '框选制卡入口');
+  assert.ok(buttons.some((b) => b.title === '全屏阅读'), '全屏入口');
+  const tocBtn = buttons.find((b) => b.title === '目录（本书章节）');
+  assert.ok(tocBtn, '目录按钮存在');
+  assert.equal(tocBtn.style.display, 'none', '本书无节卡 → 目录按钮隐藏');
+  assert.ok(!buttons.some((b) => b.title.startsWith('扫描页识别')), 'OCR 未启用 → 无 OCR 按钮');
+  assert.ok(!buttons.some((b) => String(b.className || '').includes('tm-pdf-toc-item')), '无节卡 → 无目录项');
+});
+
+test('pdf-reader: 目录抽屉列本书节卡，OCR 开启后按钮出现', async () => {
+  const r = await pdfOps.createPdfBook(wiki, {
+    bookTitle: '目录测试书',
+    dataB64: 'JVBERi0xLjK=',
+    sections: [
+      { title: '前言', startPage: 1, endPage: 3 },
+      { title: '第一章', startPage: 4, endPage: 9 },
+    ],
+  });
+  config.writeOcrConfig(wiki, { enable: true });
+  const { root } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: r.sectionTitles[0] } });
+  const text = collectText(root);
+  const buttons = collectButtons(root);
+  const tocItems = buttons.filter((b) => String(b.className || '').includes('tm-pdf-toc-item'));
+  assert.equal(tocItems.length, 2, '目录项 = 本书节卡');
+  assert.ok(text.includes('前言') && text.includes('第一章'), '目录项标题');
+  assert.ok(buttons.some((b) => b.title.startsWith('扫描页识别')), 'OCR 启用 → OCR 按钮出现');
+  const tocBtn = buttons.find((b) => b.title === '目录（本书章节）');
+  assert.notEqual(tocBtn.style.display, 'none', '有节卡 → 目录按钮可见');
 });

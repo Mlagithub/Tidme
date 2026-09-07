@@ -57,11 +57,11 @@ test('pdf-import: 端到端 —— 大纲切分落库且 PDF 二进制非空', a
   assert.equal(bin.fields.type, 'application/pdf');
   assert.ok(String(bin.fields.text).length > 100, `二进制非空（实际 ${String(bin.fields.text).length} 字符）`);
 
-  // 文档页 + 大纲节卡
+  // 文档页 + 大纲节卡（文档页本身也是 kind topic，节卡按 subkind=section 区分）
   const doc = wiki.getTiddler(r.docTitle).fields;
   assert.equal(doc['tidme.type'], 'pdf');
   assert.equal(doc['tidme.pdf'], 'Tidme/PDFs/未来简史');
-  const sections = wiki.filterTiddlers(`[tidme.doc[${doc['tidme.doc']}]tidme.kind[topic]]`);
+  const sections = wiki.filterTiddlers(`[tidme.doc[${doc['tidme.doc']}]tidme.kind[topic]tidme.subkind[section]]`);
   assert.equal(sections.length, 2, '大纲切出两节');
   // 阅读队列：继续阅读落到第一节
   assert.equal(workflow.globalReadingTarget(wiki), sections[0]);
