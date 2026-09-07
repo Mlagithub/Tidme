@@ -1,0 +1,529 @@
+title: $:/language/tidme/
+
+tidme: 墨屉
+tidmetip: 终身知识，深入脑海
+default: 默认
+defaulttip: <center>此为不可自定义的默认牌组，可通过“创建牌组”进行自定义。</center>
+deck: 牌组
+learn: 学习中
+due: 待复习
+new: 未学习
+options: 选项
+caption: 显示名
+captionplaceholder: 输入卡片标题或摘要...
+cardfilter: 卡片筛选器
+cardfiltertip: 筛选出条目作为此牌组中的卡片。
+description: 描述
+advanced: 高级
+studyorder: 学习顺序
+cardstate: 卡片状态
+displayorderfilter: 展示顺序筛选器
+random: 随机
+cardtypefilter: 卡片类型筛选器
+exclude: 排除
+excludetip: 排除此卡片不再学习
+unfold: 不折叠
+unfoldtip: 学习时不折叠此卡片
+action: 动作
+leech: 记忆难点
+leechthreshold: 阈值
+expert: 专业
+experttip: 我已完全理解以下专业选项的含义，接受可能产生的破坏性后果。
+cardstatefilter: 卡片状态筛选器
+param: 参数
+fsrsparam: FSRS 算法
+exportdelete: 导出或删除
+startstudy: 开始学习
+next: 下一个
+again: 重来
+hard: 困难
+good: 良好
+easy: 简单
+stopstudy: 结束学习
+type: 打字题
+typetip: 插入打字题编辑器（用法请参阅手册）
+cloze: 填空题
+clozetip: 将所选文本设置为填空题挖空（用法请参阅手册）
+select: 选择题
+selecttip: 将所选文本设置为选择题选项（用法请参阅手册）
+search: 搜索题
+searchtip: 搜索条目标题，选中后编辑
+optionsmodaltip: 复习选项
+lastdue: 到期
+lastreview: 复习
+createdeck: 创建牌组
+createdecktip: 以默认牌组为模板创建新牌组
+getshared: 获取牌组
+importfile: 导入文件
+pluginlibrary: 墨屉插件库
+pluginlibrarytip: 可以用此插件库安装和更新墨屉相关插件。
+deckslibrary: 共享牌组插件库
+deckslibrarytip: 可以用此插件库安装和更新共享牌组。
+unit.days: 天
+badge.learn: 学
+badge.overdue: !
+badge.due: 期
+badge.new: 新
+kind.extract: 摘
+kind.cloze: 挖
+kind.qa: 问
+kind.section: 节
+state.read: 已读
+state.suspended: 搁置
+state.learning: 学习中
+state.review: 复习中
+state.relearning: 重学中
+state.overdue: 逾期
+state.due: 到期
+state.new: 新卡
+nav.today: 今天
+nav.reading: 阅读
+nav.import: 导入
+nav.manager: 管理
+nav.stats: 统计
+nav.settings: 设置
+today.startstudy: 开始学习
+today.cardsdue: 张卡待复习
+today.noduecards: 暂无到期卡片，可自由复习
+today.sectionsleft: 节待读
+today.noreading: 暂无待读材料
+today.reviewedprefix: 今日已复习：
+today.focusprefix: 专注：
+today.norecentbooks: 暂无在读书籍——去导入中心添加材料。
+studymode.learning: 学习中
+studymode.finishandnext: 读完，继续复习 ›
+studymode.finishandnext.tip: 保存当前阅读进度，继续复习后续卡片
+studymode.end: 结束学习
+studymode.end.tip: 结束本次学习：清空会话与排期队列，返回今天
+rate.again: 重来
+rate.hard: 困难
+rate.good: 良好
+rate.easy: 简单
+viewer.showanswer: 查看答案 (空格)
+viewer.hideanswer: 隐藏答案 (空格)
+viewer.nocaption: (无题面，请查看正文)
+viewer.stats: 📊 学习数据与指标
+col.title: 标题
+col.state: 状态
+col.due: 到期
+col.interval: 间隔
+col.diff: 难度
+col.reps: 复习次数
+col.lapses: 遗忘次数
+col.priority: 优先级
+col.total: 总数
+col.progress: 进度
+col.processing: 加工
+col.actions: 操作
+field.priority: 优先级
+field.kind: 卡片类型
+field.state: FSRS 状态
+field.due: 到期时间
+field.due.unrated: 首评后排期
+field.due.none: 未排期
+field.stability: 稳定性 (S)
+field.difficulty: 难度 (D)
+field.reps: 复习次数
+field.lapses: 遗忘次数
+field.doc.duration: 本书阅读耗时
+field.today.duration: 今日总阅读
+priority.high: 高
+priority.med: 中
+priority.low: 低
+priority.none: 未设
+action.open: 打开
+action.open.tip: 打开此卡
+action.back: 回原文
+action.back.tip: 跳回原文并高亮
+action.delete: 删除
+action.delete.tip: 删除此卡
+action.create: ✔ 创建
+action.cancel: 取消
+action.save: ✔ 保存
+action.restore: ↩ 恢复
+action.remove: 移除
+action.clear: 清除
+action.deletefailed: 删除失败
+manager.title: 卡片管理
+manager.caption: 卡片管理
+manager.tip: 浏览、组织与管理全部学习卡片（含已读、搁置与手动创建的散卡）
+manager.all: 全部
+manager.inqueue: 在队
+manager.read: 已读
+manager.suspended: 搁置
+manager.overdue: 逾期
+manager.bydoc: 按文档
+manager.bydeck: 按牌组
+manager.flatlist: 列表
+manager.selectall: 全选
+manager.deselectall: 取消选择
+manager.invert: 反选
+manager.postpone: 顺延
+manager.advance: 提前
+manager.suspend: 搁置
+manager.restore: 恢复
+manager.forget: 遗忘
+manager.delete: 删除
+manager.setpriority: 设优先级
+manager.col.kind: 类型
+manager.col.priority: 优先级
+manager.col.title: 标题
+manager.col.state: 状态
+manager.col.due: 到期
+manager.col.interval: 间隔
+manager.col.reps: 重复
+manager.col.lapses: 遗忘次数
+manager.col.diff: 难度
+manager.col.actions: 操作
+manager.action.read: 读
+manager.action.back: 回
+manager.action.del: 删
+manager.action.detail: 详情
+manager.empty: 当前视图无匹配卡片。
+manager.confirm.delete: 确定彻底删除选中的 {count} 张卡片？此操作不可恢复。
+manager.prompt.postpone: 顺延选中卡片多少天？
+manager.prompt.priority: 输入新优先级（0-100，0 最高）：
+manager.success.op: 成功对 {count} 张卡片执行操作。
+deck.create: ＋ 新建牌组
+deck.name.placeholder: 名称，如 六级词汇
+deck.caption.placeholder: 显示名（留空 = 名称）
+deck.src.custom: 自定义过滤器
+deck.src.item: 全库测试卡（与默认牌组相同，通常无需另建）
+deck.caption: 显示名
+deck.membersrc: 成员来源
+deck.filter: 过滤器
+deck.filter.error: 过滤器暂无法求值（请检查语法）
+deck.hits: 张测试卡命中
+deck.overlap: 张也与其它牌组匹配（进度共享，不会重复复习）
+deck.name.empty: 请输入牌组名称
+deck.created: ✔ 已创建
+deck.create.failed: 创建失败：
+deck.delete: 删除牌组
+deck.delete.tip: 删除牌组定义（成员卡保留，仍由默认牌组复习）
+deck.notfound: 牌组不存在
+deck.nodeletedefault: 默认牌组不可删除
+deck.subset: 子集牌组
+deck.subset.deleteprompt: 连成员卡一起删除？（确定 = 连卡删；取消 = 仅删牌组定义）
+deck.deletecards: 连卡删
+deck.deleteconfirm: 删除牌组
+deck.withcards: 及其成员卡？
+deck.keepcards: （卡片保留）？
+deck.cardskept: 成员卡会保留。
+deck.deletedwithcards: 已删除牌组及
+deck.cardscount: 张成员卡
+deck.deletedkeepcards: ✔ 已删除牌组（卡片保留）
+creator.title: 全局制卡中心
+creator.subtitle: 随时随地创建卡片与笔记
+creator.mode.qa: 问答卡
+creator.mode.cloze: 挖空卡
+creator.mode.extract: 摘录笔记
+creator.field.title: 卡片标题
+creator.field.title.placeholder: 可选简明题面/卡片标题...
+creator.field.question: 问题 / 正面
+creator.field.question.placeholder: 输入问题或提示...
+creator.field.answer: 答案 / 背面
+creator.field.answer.placeholder: 输入答案或详解...
+creator.field.cloze: 挖空正文
+creator.field.cloze.placeholder: 选中文字点'插入挖空'或输入 {{c1::挖空内容}}...
+creator.field.note: 背景备注 / 溯源
+creator.field.note.placeholder: 可选补充背景或助记内容...
+creator.field.deck: 归属牌组
+creator.field.priority: 优先级 (0-100)
+creator.btn.submit: 创建卡片
+creator.btn.cancel: 取消
+creator.hint.shortcuts: 快捷键：Ctrl+Enter 保存，Esc 关闭
+creator.toast.success: 卡片创建成功！
+creator.toast.error: 制卡失败：标题或问题不能为空。
+creator.modal.edit: 编辑卡片
+creator.modal.create: 新建卡片
+read.read: 阅读
+read.prev: 上一节
+read.next: 下一节
+read.readpoint: 续读点
+read.readpoint.set: 设续读点
+read.readpoint.jump: 转到续读点
+read.readpoint.clear: 清除续读点
+read.done: 已读
+read.later: 稍后
+read.advance: 提前
+read.ignore: 忽略
+read.extract: 摘录
+read.cloze: 挖空
+read.qa: 问答
+read.more: 更多
+read.stats: 学习数据
+read.help: 帮助
+read.backtosource: 回原文
+read.resume: 继续阅读
+read.readinglist: 阅读列表
+read.recent: 最近阅读
+read.opendoc: 打开文档：
+read.continue: 继续
+read.open: 打开阅读
+read.pages: 页
+read/kind.cloze: 挖空卡
+read/kind.qa: 问答卡
+read/kind.extract: 摘录卡
+read/from: 源自
+read/backtosource: 回原文
+read/backtosource.tip: 跳回原文并高亮此片段
+read/done: 完成
+read/done.tip: 读完此卡：移出队列并关闭
+read/done.section.tip: 读完此节/摘录，移出学习队列
+read/delete: 删除
+read/delete.tip: 彻底删除此卡
+read/crumb.tip: 点击打开本书汇总页
+read/lefttostudy: 张待学
+read/state.read: 已读
+read/autosaved: 已自动保存
+read/saving: 保存中...
+read/nav.prev: 上一节
+read/nav.next: 下一节
+read/rp.set.tip: 设续读点 (Ctrl+F7)：以当前选中文字为锚
+read/rp.goto.tip: 转到续读点 (Alt+F7)
+read/rp.clear: 清除
+read/rp.clear.tip: 清除续读点 (Ctrl+Shift+F7)
+read/readd: 重新加入
+read/readd.tip: 恢复到学习队列
+read/later.tip: 稍后再看 (SM A-Factor)：按优先级指数顺延展期
+read/advance.tip: 今日抢占排期 (SM Topic 提前)：强行加入今日队列并提升优先级
+read/ignore.tip: 标记不重要：移出阅读队列
+read/extract.tip: 摘录制卡 (Alt+X)：先选中文字
+read/cloze.tip: 挖空制卡 (Alt+Z)：先选中文字
+read/qa.tip: 问答制卡 (Alt+Q)：先选中文字
+read/priority: 优先
+read/pri.boost: 提高优先级
+read/pri.lower: 降低优先级
+read/af.lower: 降低 A-Factor
+read/af.reset: 重置 A-Factor
+read/af.boost: 提高 A-Factor
+read/clean.extracts: 清提取
+read/clean.tip: 从本卡原文删除已被摘录/挖空的文本
+read/clean.confirm: 从本卡原文中删除已被摘录/挖空的文本？（衍生卡本身不受影响）
+read/delete.extract: 删除摘录
+read/delete.extract.tip: 彻底删除此摘录卡
+read/sections.left: 节待学
+read/review.book: 复习本书
+read/review.book.tip: 子集复习：仅复习本书测试卡
+read/review.prefix: 复习：
+read/subset.deck.desc: 临时子集牌组（复习本书测试卡）——复习完可删除
+read/clean.materials: 清理阅读材料
+read/clean.materials.tip: 删除文档页与全部普通节卡；已提取的知识（摘录/挖空/问答）保留在复习流
+read/clean.materials.confirm: 删除本书的阅读材料？将删除文档页与全部普通节卡；已提取的知识（摘录/挖空/问答）会保留。
+read/readcards: 已读卡
+read/inbox.summary: 摘录/挖空/问答
+read/clozed: 已挖空
+read/clozeable: 可挖空
+read/clozed.tip: 已在此摘录上挖空成卡片
+read/clozeable.tip: 选中文字按 Alt+Z 挖空成卡片
+rl.ungrouped: 未分组
+rl.docs: 篇文档
+rl.sortedby: 按优先级和到期时间排序
+rl.gotoimport: → 去导入中心导入新内容
+rl.docdeleted: 文档页已删除（仅剩摘录/手动内容）
+rl.read: 节已读
+rl.resumetip: 从续读点或第一张待读卡开始
+rl.nomaterialstodelete: 没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。
+pdf/toc: 目录
+pdf/collapse-toc: 收起目录
+pdf/loading-pdfjs: 正在加载 pdf.js…
+pdf/page-prefix: 第
+pdf/scanned-hint-ocr: 扫描页（无文本层）——点工具栏「OCR」识别文字
+pdf/scanned-hint-settings: 扫描页（无文本层）——设置页开启「PDF 与 OCR」后可识别文字
+pdf/ocr-no-key: OCR 未配置 API Key（设置 → PDF 与 OCR）
+pdf/ocr-rendering: OCR：页面转图片…
+pdf/ocr-recognizing: OCR：识别中…
+pdf/ocr-empty: 识别结果为空
+pdf/ocr-done: OCR 完成
+pdf/ocr-failed: OCR 失败：
+pdf/box-select-hint: 框选模式：在页面上拖拽矩形，松开后生成图片问答卡
+pdf/image-card-created: 已创建图片问答卡
+pdf/pending-answer: （答案待补充）
+settings.title: 设置
+settings.caption: 设置
+settings.tip: 配置 Tidme 调度算法、复习偏好、阅读流及 AI 密钥
+settings.review.title: 复习调度
+settings.review.subtitle: 默认牌组与自动顺延
+settings.review.order: 出题顺序
+settings.review.order.desc: 到期卡与新卡在学习流中的交错顺序
+settings.review.order.duenew: 到期卡优先
+settings.review.order.newdue: 新卡优先
+settings.review.autopostpone: 每日自动顺延
+settings.review.autopostpone.desc: 启动与定时自动延期低优先级卡，保留头部卡
+settings.review.autopostpone.enable: 启用自动顺延
+settings.review.topn: 保留高优先级卡数
+settings.review.topn.desc: 每天保留排在最前面的高优卡张数
+settings.reading.title: 增量阅读
+settings.reading.subtitle: 阅读材料、A-Factor 与交错流
+settings.reading.ratio: 学习流构成
+settings.reading.ratio.desc: 阅读材料与复习卡片的交错推进规则
+settings.reading.ratio.strict: 宏观三段式（先复习完知识卡，再阅读）
+settings.reading.ratio.interleaved: 4:1 动态交错（4张卡片穿插1节阅读）
+settings.reading.ratio.none: 纯复习流（不混入阅读材料）
+settings.ai.title: 语义切分
+settings.ai.subtitle: 大模型辅助智能篇章分节与二次切分
+settings.ai.enable: 启用 AI 切分
+settings.ai.endpoint: API 代理地址 (Base URL)
+settings.ai.key: API 密钥 (API Key)
+settings.ai.model: 模型名称 (Model)
+import.title: 导入中心
+import.caption: 导入中心
+import.tip: 导入电子书、文本切分与管理网页剪藏
+import.tab.file: 本地文件
+import.tab.split: 粘贴文本
+import.tab.clips: 剪藏收件箱
+import.dropzone: 拖拽 EPUB、PDF、Markdown 或 TXT 文件到此处导入
+import.bag: 目标存储桶：
+import.split.btn: 切分文档
+import.split.minchars: 最小字符数：
+import.split.preview: 预览章节
+import.split.confirm: 确认入库
+import.split.success: 成功切分为 {count} 节。
+import.duplicate: ⚠ 本书已在库中 —— 再次导入将走对齐（未变节保留 SRS 进度）
+import.sectiontitle.placeholder: 新节标题（如：01 前言 / 短标题）
+import.content.placeholder: 内容...
+import.insert: 确认插入
+import.refinetitles: 一键提炼短标题
+import.refinetitlestip: 自动剔除副标题（冒号/破折号后）与括号内营销/描述说明
+import.merged: ⟵ 已并入
+import.renamed: ✏️ 短标题
+import.edittitle.tip: 双击可编辑标题
+import.subsplit: 二次切分
+import.subsplittip: 使用 LLM 语义分析将本偏长章节切分为带主题的子切片
+import.splitting: 🤖 LLM 切片中...
+import.selectfile: 选择文件上传 (.epub / .md / .txt)
+import.dragdrop.hint: 或者：直接将文件拖拽到此页面的任意位置即可导入。
+import.dragoverlay: 释放文件以导入到 Tidme (.epub / .md / .txt)
+import.importall: ✔ 全部导入
+import.serverprocess.desc: 上传到服务端后台处理（适合大文件，解析不阻塞页面；需要 TiddlyWeb 服务端）
+import.serverprocess: 高级：上传到服务端后台处理（TiddlyWeb）
+import.priority: 导入优先级：
+import.prioritytip: 0=最高优先级；本次导入的全部节卡按所选档位分散设定优先级
+import.prioritynote: （0 最高 · 同批随机分散 ±8）
+import.uploadcontrol: 上传控制
+import.pendingqueue: 待导入队列
+import.hardsplit: 硬切块
+import.dedup: 标题去重
+import.chars: 字
+import.overlong: 偏长
+import.queueing: 排队中…
+import.uploaded: 已上传
+import.waitingserver: 等待服务端处理…
+import.tasklost: ⚠ 任务 tiddler 丢失
+import.done: 导入完成
+import.failed: 失败：
+import.filereadfailed: ✕ 读取文件失败：
+import.alignsummary: 对齐：新增
+import.updated: 更新
+import.archived: 归档
+import.srspreserved: SRS 进度保留
+import.pdfimported: 已导入
+import.sectionsadded: 节已入库并进入默认牌堆，随时可学。
+split.sourcemissing: 源 tiddler 不存在
+split.emptysections: 未切分出任何节（内容过短或无可识别结构）
+split.pastetitle: 粘贴文本
+split.pasteplaceholder: 粘贴 markdown / HTML / 纯文本…
+split.btn: 切分文本并入库
+split.emptycontent: 内容为空
+split.parsing: 解析中…
+split.failed: 切分失败：
+split.inboxtitle: 剪藏收件箱 (tidme-inbox)
+split.inboxempty: 收件箱为空——支持使用浏览器剪藏插件自动捕获内容入库。
+stats.title: 统计
+stats.caption: 统计
+stats.tip: 学习进度、记忆保留率与复习习惯
+stats.today.reviewed: 今日复习
+stats.today.focustime: 专注时间
+stats.total.cards: 在队卡片
+stats.retention: 保留率
+stats.forecast: 到期预测
+stats.decks: 牌组
+stats.docs: 文档
+stats.todayread: 今日阅读
+stats.total: 累计
+stats.deckload: 牌组负载
+stats.nodecks: 暂无牌组
+stats.docprogress: 文档进度
+stats.nodocs: 暂无导入文档——导入中心导入书籍后显示进度。
+stats.funnel: 学习漏斗
+stats.funnel.import: 导入
+stats.funnel.sections: 切分
+stats.funnel.extracts: 摘录
+stats.funnel.cards: 卡片
+stats.reviewretention: 复习与保留率
+stats.reviews: 次复习
+stats.prioritybuckets: 优先级分桶
+ai.nokey.title: 缺少 API Key
+ai.nokey.msg: 请先在【设置 ➔ 语义切分】中填写 API Key，然后再执行二次切分！
+ai.splitfailed.title: 二次切分校验失败
+all: 全部
+read.leftsummary: · 本书剩 $(left)$ 张待学
+today.reviewedsummary: 今日已复习 $(count)$ 卡
+today.focussummary: 专注 $(duration)$
+manager.postpone7d: 顺延7d
+manager.autopostpone: 顺延过载
+manager.autopostpone.tip: 立即执行自动顺延低优先级到期卡
+manager.priup: 优先↑
+manager.pridown: 优先↓
+manager.prihigh: 设高
+manager.primid: 设中
+manager.prilow: 设低
+manager.ungrouped: 未分组
+manager.unassigned: 未入组
+manager.unassigned.tip: 未分配到任何用户自定义牌组的卡片
+manager.selected: 已选
+rl.sectionsleft: 张待读
+settings.memory.title: 记忆参数
+settings.memory.subtitle: 默认牌组 FSRS
+settings.memory.retention: 目标记忆率
+settings.memory.retention.desc: 0.9 为标准值；更高目标意味着遗忘更慢但每日复习量激增
+settings.memory.maxinterval: 最大间隔（天）
+settings.memory.maxinterval.desc: 单卡复习间隔上限
+settings.memory.leech.desc: 复习中累计遗忘达到此阈值的卡片标记为记忆难点 (Leech)
+settings.reading.mix: 交错比
+settings.review.learnrandom: 随机打乱学习步
+settings.review.learnrandom.desc: 卡片在学习步中默认到期优先，开启后随机打乱
+settings.review.logretention: 复习日志保留天数
+settings.review.maxpriority: 顺延优先级上限
+settings.review.postponedays: 顺延天数
+settings.review.threshold: 过载触发阈值
+settings.pdf.title: PDF 与 OCR
+settings.pdf.subtitle: 导入与扫描页识别
+settings.pdf.split: PDF 导入模式
+settings.pdf.split.outline: 按目录切分（无目录则整本）
+settings.pdf.split.none: 整本导入（不切分）
+settings.ocr.enable: 启用 LLM-OCR
+settings.ocr.enable.desc: 扫描版 PDF 页面转图片并调用多模态大模型转录文字
+settings.ocr.model: OCR 模型名称
+settings.ocr.baseurl: OCR 接口地址 (Base URL)
+settings.ocr.apikey: OCR 密钥 (API Key)
+read.zoom.fitpage: 适合页面
+read.zoom.fitwidth: 适合宽度
+read.zoom.actual: 实际大小
+pdf.firstpage: 第一页
+pdf.lastpage: 最后一页
+pdf.boxselect: 框选图片制卡：在页面上拖拽矩形生成图片问答卡
+pdf.fullscreen: 全屏阅读
+pdf.toc: 目录（本书章节）
+pdf.ocr.btn: 扫描页识别 (LLM-OCR)
+read.finishandcontinue: 读完继续
+pdf.select.tip: 框选图片制卡：在页面上拖拽矩形生成图片问答卡
+pdf.ocr.tip: 扫描页识别 (LLM-OCR)
+pdf.study.next: ✓ 读完继续 ›
+creator.deck.standalone: 散卡
+queueops.autopostpone: 立即顺延
+pdf.toc.tip: 目录（本书章节）
+annotate: 标注
+close: 关闭弹窗
+closetip: 关闭此弹窗
+word: 标注单词
+wordtip: 标注选中的单词
+sentence: 摘录句子
+sentencetip: 摘录选中的句子
+twpub: TWPUB 书
+twpubtip: TWPUB 是一种基于 TiddlyWiki 的电子出版物
+importtwpub: 导入 TWPUB
+twpublibrary: TWPUB 书库
+twpublibrarytip: 可以用此插件库安装和更新TWPUB书。
+focus: 聚焦
+focustip: 知识图谱

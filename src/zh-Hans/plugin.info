@@ -1,0 +1,12 @@
+{
+    "title": "$:/tidme/languages/zh-Hans",
+    "name": "Tidme Languages (zh-Hans)",
+    "plugin-type": "plugin",
+    "description": "Chinese (Simplified) language pack for Tidme",
+    "dependents": "$:/plugins/keepone/tidme",
+    "author": "keepone",
+    "version": "1.18.0",
+    "list": "readme license",
+    "source": "https://github.com/oflg/Tidme",
+    "core-version": ">=5.3.0"
+}
