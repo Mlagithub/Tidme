@@ -109,7 +109,10 @@ function makeTodayHero(): WidgetCtor {
       // 今日反馈条
       const rt = stats.getReadTimeStats(wiki);
       const reviewed = todayReviewCount(wiki);
-      const feed = el(doc, 'div', 'tm-today-feed', `今日已复习 ${reviewed} 卡 · 专注 ${stats.formatDuration(rt.todaySeconds)}`);
+      // 容错补偿：若今日已有复习记录但专注时间为 0（因历史版本卡片复习流未挂载计时器），
+      // 按每卡至少 1 秒给予基础时间，杜绝"已复习45卡 专注0秒"的反常现象
+      const effectiveSec = Math.max(rt.todaySeconds, reviewed > 0 && rt.todaySeconds === 0 ? reviewed : 0);
+      const feed = el(doc, 'div', 'tm-today-feed', `今日已复习 ${reviewed} 卡 · 专注 ${stats.formatDuration(effectiveSec)}`);
       container.appendChild(feed);
     }
 
@@ -150,13 +153,16 @@ function makeTodayRecent(): WidgetCtor {
       const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
       // 最近打开时间：全局续读点所属书置顶（每次打开阅读卡都会刷新全局续读点）；
       // 其余书回退各自续读点的写入时间（制卡/设续读点时更新）
-      const globalFields = wiki.getTiddler(docOps.GLOBAL_READPOINT)?.fields || {};
+      const globalTiddler = [wiki.getTiddler(docOps.GLOBAL_READPOINT), wiki.getTiddler(docOps.LEGACY_GLOBAL_READPOINT)]
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.fields.modified || 0).getTime() - new Date(a.fields.modified || 0).getTime())[0];
+      const globalFields = globalTiddler?.fields || {};
       const globalCard = wiki.getTiddler(String(globalFields.text || ''));
       const globalDoc = String(globalCard?.fields?.['tidme.doc'] || '');
       const globalTime = globalFields.modified ? new Date(globalFields.modified).getTime() : 0;
       const lastOpen = (docId: string): number => {
         if (docId && docId === globalDoc) return globalTime;
-        const m = wiki.getTiddler(docOps.READPOINT_PREFIX + docId)?.fields?.modified;
+        const m = (wiki.getTiddler(docOps.READPOINT_PREFIX + docId) || wiki.getTiddler(docOps.LEGACY_READPOINT_PREFIX + docId))?.fields?.modified;
         return m ? new Date(m).getTime() : 0;
       };
       const rows: { title: string; label: string; done: number; total: number; last: number }[] = [];
@@ -174,13 +180,26 @@ function makeTodayRecent(): WidgetCtor {
       const items: any[] = top.map((r) => {
         const docId = String(wiki.getTiddler(r.title)?.fields['tidme.doc'] || '');
         const target = docOps.docReadingTarget(wiki, docId) || r.title;
+        const syncPdfPage = () => {
+          const rp = docOps.parseReadPoint(wiki, docId);
+          const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
+          if (pageMatch && docId) {
+            wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: pageMatch[1] });
+          }
+        };
         return {
           id: r.title,
           title: r.label,
+          titleTooltip: `打开文档：${r.label}`,
+          onTitleClick: () => {
+            syncPdfPage();
+            navigateTo(this, r.title);
+          },
           progress: { done: r.done, total: r.total },
           action: {
             label: '继续',
             onClick: () => {
+              syncPdfPage();
               navigateTo(this, target);
             },
           },

@@ -22,12 +22,18 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
 const escapeHtml = dom.escapeHtml;
 
-/** 解析 tidme.anchor（{section, snippet}） */
-export function parseAnchor(raw: any): { section: string; snippet: string } | null {
+/** 解析 tidme.anchor（{section, snippet, page}） */
+export function parseAnchor(raw: any): { section: string; snippet: string; page?: number } | null {
   if (!raw) return null;
   try {
     const o = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (o && o.section) return { section: String(o.section), snippet: String(o.snippet || '') };
+    if (o && o.section) {
+      return {
+        section: String(o.section),
+        snippet: String(o.snippet || ''),
+        page: o.page ? Number(o.page) : undefined,
+      };
+    }
   } catch { /* 忽略非法 anchor */ }
   return null;
 }
@@ -62,6 +68,32 @@ export function nextFreeTitle(wiki: any, base: string): string {
 /** 规整片段（紧凑空白 + 截断），用于 anchor.snippet / caption 预览 */
 function compactSnippet(s: string, max: number): string {
   return String(s).replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+/** 提取纯文本摘要作为安全 Caption，剥离所有 HTML/Base64，确保不会污染卡片摘要与列表渲染 */
+export function safeCaption(question: string, answer: string, prefix = ''): string {
+  // 彻底剔除所有 HTML 标签（含 <img src="data:...">），收敛空白
+  const textQ = String(question || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const textA = String(answer || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (textQ) return textQ.slice(0, 40);
+  if (textA) return (prefix ? prefix + ' ' : '') + textA.slice(0, 35);
+  return prefix || '问答卡';
+}
+
+/** 派生图片问答卡标题基座：短化命名空间（Tidme/Decks/{书名}/P{页}-{label或QA}），避免深层目录全量冗长堆叠 */
+export function derivedImageQABase(pf: Record<string, any>, parentTitle: string, page?: number, label?: string): string {
+  let dir = '';
+  if (parentTitle.startsWith(ns.NS_BOOKS)) {
+    const parts = parentTitle.split('/');
+    const bookName = parts[2] || 'doc';
+    dir = `Tidme/Decks/${bookName}/`;
+  } else {
+    const parentSlug = paths.slugify(parentTitle) || 'untitled';
+    dir = paths.joinPath(ns.NS_DECKS_SCATTER, parentSlug) + '/';
+  }
+  const pagePrefix = page && page > 0 ? `P${page}-` : '';
+  const labelSuffix = label ? paths.slugify(label).slice(0, 25) : 'QA';
+  return `${dir}${pagePrefix}${labelSuffix || 'QA'}`;
 }
 
 /**
@@ -158,11 +190,53 @@ export function buildQA(wiki: any, parentTitle: string, question: string, answer
     title,
     kind: 'item',
     subkind: 'qa',
-    caption: question || answer.slice(0, 30),
+    caption: safeCaption(question, answer),
     text: `Q: ${question}\n\nA: ${answer}`,
     snippet: compactSnippet(answer, 80),
     breadcrumbSuffix: '问答',
   });
+}
+
+export interface ImageQAOptions {
+  dataUrl: string;
+  answer: string;
+  label?: string;
+  page?: number;
+}
+
+/** 图片问答卡字段（PDF 框选或截图制卡）。kind=item/subkind=qa */
+export function buildImageQA(wiki: any, parentTitle: string, opts: ImageQAOptions): Record<string, any> {
+  const pf = wiki.getTiddler(parentTitle)?.fields || {};
+  const base = derivedImageQABase(pf, parentTitle, opts.page, opts.label);
+  const title = nextFreeTitle(wiki, base);
+  const labelText = (opts.label || '').trim();
+  const answerText = (opts.answer || '').trim();
+  const qBody = labelText
+    ? `**${labelText}**\n\n<img src="${opts.dataUrl}" style="max-width:100%">`
+    : `<img src="${opts.dataUrl}" style="max-width:100%">`;
+  const caption = labelText
+    ? `[图] ${labelText}`
+    : safeCaption('', answerText, `[图] 第 ${opts.page || ''} 页问答`);
+  const card = derivedCardFields({
+    parentTitle,
+    pf,
+    title,
+    kind: 'item',
+    subkind: 'qa',
+    caption,
+    text: `Q: ${qBody}\n\nA: ${answerText || '（答案待补充）'}`,
+    snippet: compactSnippet(answerText || labelText, 80),
+    breadcrumbSuffix: '图片问答',
+  });
+  if (opts.page && opts.page > 0) {
+    card['tidme.page'] = String(opts.page);
+    card['tidme.anchor'] = JSON.stringify({
+      section: parentTitle,
+      page: opts.page,
+      snippet: compactSnippet(labelText || answerText, 80),
+    });
+  }
+  return card;
 }
 
 /**
@@ -210,6 +284,83 @@ export function cleanProcessedText(wiki: any, title: string): number {
     wiki.addTiddler({ ...t.fields, text: out });
   }
   return removed;
+}
+
+export interface StandaloneCardOptions {
+  type: 'qa' | 'cloze' | 'concept';
+  title?: string;
+  deck?: string; // 牌组名，默认 '散卡'
+  question?: string;
+  answer?: string;
+  clozeContent?: string;
+  conceptContent?: string;
+  tags?: string[];
+  priority?: string | number;
+}
+
+/** 全局独立卡片构建（无需依附特定阅读材料）。kind 由模板决定，归属于指定牌组或散卡桶 */
+export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Record<string, any> {
+  const deck = (opts.deck || '散卡').trim();
+  const deckDir = deck === '散卡' ? ns.NS_DECKS_SCATTER : `Tidme/Decks/${deck}`;
+
+  // 智能标题基座
+  let slug = '';
+  if (opts.title) {
+    slug = paths.slugify(opts.title);
+  }
+  if (!slug) {
+    if (opts.type === 'qa') {
+      slug = paths.slugify(opts.question?.slice(0, 20) || '') || 'QA';
+    } else if (opts.type === 'cloze') {
+      slug = paths.slugify(opts.clozeContent?.slice(0, 20) || '') || 'Cloze';
+    } else {
+      slug = paths.slugify(opts.conceptContent?.slice(0, 20) || '') || 'Concept';
+    }
+  }
+
+  const baseTitle = paths.joinPath(deckDir, slug || 'Card');
+  const title = nextFreeTitle(wiki, baseTitle);
+
+  let kind: 'topic' | 'item' = 'item';
+  let subkind = 'qa';
+  let caption = '';
+  let text = '';
+
+  if (opts.type === 'qa') {
+    kind = 'item';
+    subkind = 'qa';
+    const q = (opts.question || '').trim();
+    const a = (opts.answer || '').trim();
+    caption = opts.title ? opts.title : safeCaption(q, a);
+    text = `Q: ${q}\n\nA: ${a}`;
+  } else if (opts.type === 'cloze') {
+    kind = 'item';
+    subkind = 'cloze';
+    const content = (opts.clozeContent || '').trim();
+    caption = opts.title ? opts.title : content.slice(0, 40) || '挖空卡';
+    text = '';
+  } else {
+    kind = 'topic';
+    subkind = 'concept';
+    const content = (opts.conceptContent || '').trim();
+    caption = opts.title ? opts.title : content.slice(0, 30) || '概念卡';
+    text = content;
+  }
+
+  return {
+    title,
+    type: 'text/vnd.tiddlywiki',
+    caption,
+    text,
+    ...schema.initialFsrsFields(new Date()),
+    revision: '0',
+    'tidme.deck': deck,
+    'tidme.kind': kind,
+    'tidme.subkind': subkind,
+    'tidme.breadcrumb': deck,
+    ...(opts.priority !== undefined ? { 'tidme.priority': String(opts.priority) } : {}),
+    ...(Array.isArray(opts.tags) && opts.tags.length ? { tags: opts.tags } : {}),
+  };
 }
 
 /**

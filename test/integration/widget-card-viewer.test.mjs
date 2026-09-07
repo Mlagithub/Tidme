@@ -115,6 +115,11 @@ test('card-viewer: rateCard 评分流转并写入 FSRS 字段、日志及更新�
   // 检查优先级（Good 降优先，数值增大）
   assert.ok(Number(f['tidme.priority']) >= 50, '优先级按 SM 规则自动动态调整');
 
+  // 检查专注时间统计（卡片复习打卡必须记录专注时长）
+  const statsMod = mod('core/stats.js');
+  const rt = statsMod.getReadTimeStats(wiki);
+  assert.ok(rt.todaySeconds >= 1, '卡片评分复习后成功累计专注时间');
+
   widget.destroy();
 });
 

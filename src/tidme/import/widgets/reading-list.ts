@@ -149,13 +149,18 @@ function makeReadingList(): any {
 
         // 继续阅读跳到第一张"当前可读"卡（scheduler.isDueNow，与 section-bar/doc-resume 一致）；
         // 全部未来排期时退回第一张（允许显式打开）
-        const firstUnread = g.cards.find((c) => sched.isDueNow(c.fields)) || g.cards[0];
+        const targetCard = docOps.docReadingTarget(wiki, g.doc) || (g.cards.find((c) => sched.isDueNow(c.fields)) || g.cards[0])?.title;
         const cont = el(doc, 'button', 'tm-btn', '▶ 继续阅读');
-        cont.title = '从本组第一张待读卡开始';
+        cont.title = '从续读点或第一张待读卡开始';
         cont.addEventListener('click', (e: Event) => {
           e.preventDefault();
           e.stopPropagation();
-          navigateTo(this, firstUnread.title);
+          const rp = docOps.parseReadPoint(wiki, g.doc);
+          const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
+          if (pageMatch && g.doc) {
+            wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + g.doc, text: pageMatch[1] });
+          }
+          if (targetCard) navigateTo(this, targetCard);
         });
         sum.appendChild(cont);
 

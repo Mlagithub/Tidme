@@ -373,6 +373,7 @@ if (typeof document !== 'undefined') {
     'alt+x': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'x',
     'alt+z': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z',
     'alt+q': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'q',
+    'alt+n': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'n',
     'ctrl+f7': (e) => e.ctrlKey && !e.shiftKey && e.key === 'F7',
     'alt+f7': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'F7',
     'shift+ctrl+f7': (e) => e.ctrlKey && e.shiftKey && e.key === 'F7',
@@ -383,6 +384,14 @@ if (typeof document !== 'undefined') {
     'alt+x': () => actionExtract(document.defaultView || globalThis),
     'alt+z': () => actionCloze(document.defaultView || globalThis),
     'alt+q': () => actionQA(document.defaultView || globalThis),
+    'alt+n': () => {
+      try {
+        const omni = require('$:/plugins/keepone/tidme/ui/components/omni-creator.js');
+        if (omni?.openOmniCardModal) {
+          omni.openOmniCardModal(document, activeWiki());
+        }
+      } catch { /* 容错 */ }
+    },
     'ctrl+f7': () => actionSetReadPoint(document.defaultView || globalThis),
     'alt+f7': () => actionGotoReadPoint(document.defaultView || globalThis),
     'shift+ctrl+f7': () => actionClearReadPoint(document.defaultView || globalThis),
@@ -668,9 +677,17 @@ function makeSectionBar(): WidgetCtor {
         const anchor = parseAnchor(fields['tidme.anchor']);
         if (anchor) {
           btnRow.appendChild(mkBtn('↩ 回原文', 'rp', '跳回原文并高亮此片段', false, () => {
+            const targetPage = anchor?.page || (fields['tidme.page'] ? Number(fields['tidme.page']) : 0);
+            const docId = String(fields['tidme.doc'] || '');
+            let targetSection = anchor.section;
+            if (targetPage > 0 && docId) {
+              const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
+              if (matched) targetSection = matched;
+              wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
+            }
             this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
-            this.dispatchEvent({ type: 'tm-navigate', navigateTo: anchor.section });
-            highlightSnippetLater(doc, anchor.section, anchor.snippet);
+            this.dispatchEvent({ type: 'tm-navigate', navigateTo: targetSection });
+            if (anchor.snippet) highlightSnippetLater(doc, targetSection, anchor.snippet);
           }));
         }
 
@@ -759,9 +776,17 @@ function makeSectionBar(): WidgetCtor {
       const anchor = parseAnchor(fields['tidme.anchor']);
       if (anchor) {
         btnRow.appendChild(mkBtn('↩ 回原文', 'rp', '跳回原文并高亮此片段', false, () => {
+          const targetPage = anchor?.page || (fields['tidme.page'] ? Number(fields['tidme.page']) : 0);
+          const docId = String(fields['tidme.doc'] || '');
+          let targetSection = anchor.section;
+          if (targetPage > 0 && docId) {
+            const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
+            if (matched) targetSection = matched;
+            wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
+          }
           this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
-          this.dispatchEvent({ type: 'tm-navigate', navigateTo: anchor.section });
-          highlightSnippetLater(doc, anchor.section, anchor.snippet);
+          this.dispatchEvent({ type: 'tm-navigate', navigateTo: targetSection });
+          if (anchor.snippet) highlightSnippetLater(doc, targetSection, anchor.snippet);
         }));
       }
 
@@ -1011,11 +1036,17 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
   btn.addEventListener('click', () => {
     const rp = parseReadPoint(wiki, docId);
     const list = all.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields));
-    // 优先跳到续读点（须当前可读），否则第一张 due≤now 的卡；全未来排期退回 list[0]
     const readable = list.filter((x) => sched.isDueNow(wiki.getTiddler(x)?.fields));
-    const target = (rp && readable.includes(rp.t) ? rp.t : null) || readable[0] || list[0];
+    // 优先跳到续读点（只要该卡在队且未完成，或指向文档页本身），其次第一张当前可读卡；无节卡则退回文档页本身
+    const target = (rp && (list.includes(rp.t) || rp.t === title) ? rp.t : null) || readable[0] || list[0] || title;
     if (target) {
-      widget.dispatchEvent({ type: 'tm-close-tiddler' }); // 关闭文档页，进入阅读
+      const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
+      if (pageMatch) {
+        wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: pageMatch[1] });
+      }
+      if (target !== title) {
+        widget.dispatchEvent({ type: 'tm-close-tiddler' }); // 关闭文档页，进入节卡
+      }
       widget.dispatchEvent({ type: 'tm-navigate', navigateTo: target });
     }
   });
@@ -1170,7 +1201,14 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
     back.title = '跳回原文并高亮';
     back.addEventListener('click', () => {
       const anchor = parseAnchor(c.fields['tidme.anchor']);
-      const target = anchor?.section || c.fields['tidme.parent'] || '';
+      let target = anchor?.section || c.fields['tidme.parent'] || '';
+      const targetPage = anchor?.page || (c.fields['tidme.page'] ? Number(c.fields['tidme.page']) : 0);
+      const docId = String(c.fields['tidme.doc'] || '');
+      if (targetPage > 0 && docId) {
+        const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
+        if (matched) target = matched;
+        wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
+      }
       if (target) {
         widget.dispatchEvent({ type: 'tm-navigate', navigateTo: target });
         if (anchor?.snippet) highlightSnippetLater(doc, target, anchor.snippet);

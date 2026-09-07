@@ -406,3 +406,86 @@ test('today-recent: 最近阅读按最近打开排序，全局续读点所属书
   const text = collectText(root);
   assert.ok(text.indexOf('书乙') < text.indexOf('书甲'), '最近打开的书排在前（乙先于甲）');
 });
+
+test('today-recent: 项目书名渲染为超链接并支持点击导航到文档页且同步阅读点', () => {
+  const todayMod = mod('review/widgets/today.js');
+  reset();
+  wiki.addTiddler({ title: 'Tidme/Books/测试书', tags: ['tidme-import-doc'], 'tidme.doc': 'docTest' });
+  wiki.addTiddler({
+    title: '测试节1',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'docTest',
+    'tidme.order': '000001',
+    'tidme.breadcrumb': '测试书 › 第一节',
+    state: '0',
+    due: twDate(),
+  });
+  wiki.addTiddler({
+    title: '$:/config/tidme/readpoint/docTest',
+    type: 'application/json',
+    text: JSON.stringify({ t: '测试节1', s: 'p5' }),
+  });
+
+  let clickHandler = null;
+  const origCreateElement = fakeDocument.createElement;
+  fakeDocument.createElement = (t) => {
+    const el = origCreateElement(t);
+    el.addEventListener = (evt, fn) => {
+      if (evt === 'click' && t === 'a') clickHandler = fn;
+    };
+    return el;
+  };
+
+  try {
+    const { root, w } = renderWidgetBase(wiki, todayMod, 'tidme-today-recent');
+    const findAnchor = (n) => {
+      if (!n) return null;
+      if (String(n.tagName) === 'A') return n;
+      for (const c of n.childNodes || []) {
+        const f = findAnchor(c);
+        if (f) return f;
+      }
+      return null;
+    };
+    const link = findAnchor(root);
+    assert.ok(link, '书名应渲染为 a 超链接');
+    assert.equal(link.textContent, '测试书');
+    assert.equal(link.getAttribute('title'), '打开文档：测试书');
+
+    let navTarget = null;
+    w.dispatchEvent = (event) => {
+      if (event.type === 'tm-navigate') {
+        navTarget = event.navigateTo;
+      }
+    };
+    assert.ok(clickHandler, '应绑定点击事件');
+    clickHandler({ preventDefault() {}, stopPropagation() {} });
+    assert.equal(wiki.getTiddlerText('$:/state/tidme-pdf/page/docTest'), '5');
+    assert.equal(navTarget, 'Tidme/Books/测试书');
+  } finally {
+    fakeDocument.createElement = origCreateElement;
+  }
+});
+
+test('today-hero: 已复习卡片时专注时间保底不为 0 秒', () => {
+  const todayMod = mod('review/widgets/today.js');
+  const nsMod = mod('core/ns.js');
+  reset();
+  const logData = {};
+  const todayK = nsMod.todayKey();
+  for (let i = 0; i < 45; i++) {
+    logData[`${todayK}00000${String(i).padStart(4, '0')}`] = { rating: 1 };
+  }
+  wiki.addTiddler({
+    title: '$:/Deck/default/log',
+    type: 'application/json',
+    text: JSON.stringify(logData),
+  });
+
+  const { root } = renderWidgetBase(wiki, todayMod, 'tidme-today-hero');
+  const text = collectText(root);
+  assert.ok(text.includes('今日已复习 45 卡'), '正确统计今日复习卡数');
+  assert.ok(!text.includes('专注 0 秒'), '已复习 45 卡时绝不显示专注 0 秒');
+  assert.ok(text.includes('45 秒'), '获得 45 秒基础保底时长');
+});

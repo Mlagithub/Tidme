@@ -162,3 +162,97 @@ test('向下兼容转发桩 (Shims) 完整性验证', () => {
   const importNav = mod('import/widgets/nav.js');
   assert.ok(importNav['tidme-nav']);
 });
+
+test('card-factory: buildStandaloneCard 全局独立制卡构建（QA / Cloze / Concept 与牌组归属）', () => {
+  const cardFactory = mod('core/card-factory.js');
+
+  // 1. 独立问答卡 (QA)
+  const qaCard = cardFactory.buildStandaloneCard(wiki, {
+    type: 'qa',
+    title: '二叉查找树性质',
+    deck: '算法',
+    question: 'BST 中序遍历的输出特征是什么？',
+    answer: '单调非递减有序序列。',
+  });
+
+  assert.equal(qaCard.title, 'Tidme/Decks/算法/二叉查找树性质');
+  assert.equal(qaCard['tidme.kind'], 'item');
+  assert.equal(qaCard['tidme.subkind'], 'qa');
+  assert.equal(qaCard['tidme.deck'], '算法');
+  assert.equal(qaCard.caption, '二叉查找树性质');
+  assert.ok(qaCard.text.includes('Q: BST 中序遍历'));
+  assert.ok(qaCard.text.includes('A: 单调非递减'));
+  assert.equal(qaCard.state, '0');
+
+  // 2. 独立挖空卡 (Cloze)
+  const clozeCard = cardFactory.buildStandaloneCard(wiki, {
+    type: 'cloze',
+    clozeContent: '计算机硬件由 <<C "运算器">>、控制器、存储器、输入设备和输出设备组成。',
+  });
+
+  assert.ok(clozeCard.title.startsWith('Tidme/Decks/散卡/'));
+  assert.equal(clozeCard['tidme.kind'], 'item');
+  assert.equal(clozeCard['tidme.subkind'], 'cloze');
+  assert.equal(clozeCard['tidme.deck'], '散卡');
+  assert.equal(clozeCard.state, '0');
+
+  // 3. 独立概念/知识卡 (Concept -> Topic 材料流)
+  const conceptCard = cardFactory.buildStandaloneCard(wiki, {
+    type: 'concept',
+    title: '李代数基础',
+    deck: '数学',
+    conceptContent: '李代数是一个在数域上的向量空间，带有一个双线性二元运算（李括号）...',
+  });
+
+  assert.equal(conceptCard.title, 'Tidme/Decks/数学/李代数基础');
+  assert.equal(conceptCard['tidme.kind'], 'topic');
+  assert.equal(conceptCard['tidme.subkind'], 'concept');
+  assert.equal(conceptCard.caption, '李代数基础');
+  assert.ok(conceptCard.text.includes('李代数是一个在数域上的向量空间'));
+});
+
+test('omni-creator: 全局制卡模态弹窗与 Widget 结构导出', () => {
+  const omni = mod('ui/components/omni-creator.js');
+  assert.equal(typeof omni.openOmniCardModal, 'function');
+  assert.equal(typeof omni.listAvailableDecks, 'function');
+  assert.ok(omni['tidme-card-creator'], 'Widget 已导出');
+
+  const decks = omni.listAvailableDecks(wiki);
+  assert.ok(decks.includes('散卡'), '默认包含散卡桶');
+
+  let clickSubmit = null;
+  const mockDoc = {
+    createElement: (t) => {
+      const el = fakeDocument.createElement(t);
+      el.addEventListener = (evt, fn) => {
+        if (evt === 'click' && String(el.className).includes('tm-card-modal-submit')) {
+          clickSubmit = fn;
+        }
+      };
+      return el;
+    },
+    body: fakeDocument.createElement('body'),
+    querySelector: () => null,
+  };
+
+  let createdCard = null;
+  omni.openOmniCardModal(mockDoc, wiki, {
+    defaultType: 'qa',
+    defaultTitle: '快速问答',
+    defaultQuestion: '什么是闭包？',
+    defaultAnswer: '闭包是函数与其词法环境的组合。',
+    onSuccess: (card) => {
+      createdCard = card;
+    },
+  });
+
+  assert.ok(mockDoc.body.childNodes.length > 0, '全局模态窗成功挂载');
+  assert.ok(clickSubmit, '保存按钮成功绑定');
+
+  // 模拟输入并保存
+  clickSubmit();
+  // 校验回调
+  assert.ok(createdCard, '保存成功触发 onSuccess');
+  assert.equal(createdCard['tidme.kind'], 'item');
+  assert.equal(createdCard['tidme.subkind'], 'qa');
+});

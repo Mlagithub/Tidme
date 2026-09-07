@@ -17,6 +17,8 @@ const pdfOps = mod('core/pdf-ops.js');
 const config = mod('core/config.js');
 const docOps = mod('core/doc-ops.js');
 const ns = mod('core/ns.js');
+const cardFactory = mod('core/card-factory.js');
+const cardModal = mod('ui/components/card-modal.js');
 const workflow = mod('review/widgets/workflow.js');
 
 test('parse/pdf: normalizeOutline —— 嵌套拍平 + 不可解析页跳过', () => {
@@ -255,4 +257,173 @@ test('pdf-reader: resolvePdfContext 路径回退与全局模糊匹配兜底', as
   wiki.deleteTiddler(bookRoot);
   const ctx2 = resolve(wiki, secTitle);
   assert.equal(ctx2.pdfTitle, pdfTitle, '通过候选书名匹配到 Tidme/PDFs/极简测试书');
+});
+
+test('pdf-reader: 翻页自动持久化续读点与精准页码恢复（跨刷新/跨小节）', async () => {
+  const r = await pdfOps.createPdfBook(wiki, {
+    bookTitle: '翻页测试书',
+    dataB64: 'JVBERi0xLjQK',
+    sections: [
+      { title: '第一章', startPage: 1, endPage: 10 },
+      { title: '第二章', startPage: 11, endPage: 30 },
+    ],
+  });
+  const sec1 = r.sectionTitles[0];
+  const sec2 = r.sectionTitles[1];
+
+  // 1. 测试 sectionOfDocByPage
+  assert.equal(docOps.sectionOfDocByPage(wiki, r.docId, 5), sec1);
+  assert.equal(docOps.sectionOfDocByPage(wiki, r.docId, 15), sec2);
+  assert.equal(docOps.sectionOfDocByPage(wiki, r.docId, 999), null);
+
+  // 2. 模拟在第一章打开阅读器
+  const { w } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: sec1 },
+  });
+
+  // 翻页到第 18 页（跨越到第二章范围）
+  w._setPage(18);
+  // 等待防抖保存
+  await new Promise((resolve) => setTimeout(resolve, 350));
+
+  // 验证续读点自动将卡片对准第二章，且页码为 p18
+  const rp = docOps.parseReadPoint(wiki, r.docId);
+  assert.ok(rp, '续读点成功持久化');
+  assert.equal(rp.t, sec2, '自动感知并映射至第二章');
+  assert.equal(rp.s, 'p18', '记录页码 p18');
+  assert.equal(wiki.getTiddlerText(docOps.GLOBAL_READPOINT), sec2, '全局续读点同步更新');
+
+  w.destroy();
+
+  // 3. 模拟会话级临时条目失效（例如跨设备或临时条目被清除）：清空 $:/state/tidme-pdf/page/ 条目
+  for (const t of wiki.filterTiddlers('[prefix[$:/state/tidme-pdf/page/]]')) {
+    wiki.deleteTiddler(t);
+  }
+
+  // 4. 再次打开第二章：验证从持久化续读点精准恢复到第 18 页
+  const { w: w2 } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: sec2 },
+  });
+
+  // 等待 _loadPdf 完成
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(w2._page, 18, '刷新后即使 $:/state/ 丢失，依然精准恢复至第 18 页');
+
+  w2.destroy();
+});
+
+test('pdf-reader: 框选图片制卡与 buildImageQA 字段治理（纯净短标题+无Base64污染+即时答案）', async () => {
+  const r = await pdfOps.createPdfBook(wiki, {
+    bookTitle: '图片制卡测试书',
+    dataB64: 'JVBERi0xLjQK',
+    sections: [{ title: '第一章', startPage: 1, endPage: 10 }],
+  });
+  const secTitle = r.sectionTitles[0];
+  const dummyB64 = 'data:image/png;base64,' + 'A'.repeat(500);
+
+  // 1. 测试 buildImageQA 纯净字段与短标题
+  const card1 = cardFactory.buildImageQA(wiki, secTitle, {
+    dataUrl: dummyB64,
+    answer: '这是框选后输入的完整答案解析',
+    label: '函数调用栈',
+    page: 5,
+  });
+
+  assert.equal(card1.title, 'Tidme/Decks/图片制卡测试书/P5-函数调用栈', '标题短化且携带书名/页码/用户标题');
+  assert.equal(card1.caption, '[图] 函数调用栈', 'caption 干净可读，无 Base64 或 HTML');
+  assert.ok(card1.text.includes(dummyB64), '正文安全携带图片数据');
+  assert.ok(card1.text.includes('这是框选后输入的完整答案解析'), '正文包含用户答案');
+  assert.equal(card1['tidme.kind'], 'item');
+  assert.equal(card1['tidme.subkind'], 'qa');
+  assert.equal(card1['tidme.parent'], secTitle);
+
+  // 2. 测试默认无 label 时自动生成 P{page}-QA
+  const card2 = cardFactory.buildImageQA(wiki, secTitle, {
+    dataUrl: dummyB64,
+    answer: '第二张卡片答案',
+    page: 5,
+  });
+  assert.equal(card2.title, 'Tidme/Decks/图片制卡测试书/P5-QA', '缺省 label 时标题为 P5-QA');
+  assert.ok(!card2.caption.includes('data:image'), '默认 caption 绝不泄露 Base64');
+  assert.ok(card2.caption.startsWith('[图]'), '默认 caption 携带 [图] 标识');
+
+  // 3. 验证 safeCaption 防护：即使普通 buildQA 传入带有 <img> 的问题，caption 也绝不含 HTML
+  const card3 = cardFactory.buildQA(wiki, secTitle, `<img src="${dummyB64}">`, '普通问答答案');
+  assert.ok(!card3.caption.includes('<img') && !card3.caption.includes('data:image'), 'buildQA 安全剥离 Base64');
+
+  // 4. 测试 cardModal 打开 image-qa 模式与快捷交互
+  let savedResult = null;
+  let clickSubmit = null;
+  let answerInput = null;
+  const mockDoc = {
+    createElement: (t) => {
+      const el = fakeDocument.createElement(t);
+      el.addEventListener = (evt, fn) => {
+        if (evt === 'click' && String(el.className).includes('tm-card-modal-submit')) {
+          clickSubmit = fn;
+        }
+      };
+      return el;
+    },
+    body: fakeDocument.createElement('body'),
+  };
+
+  cardModal.openCardModal(mockDoc, {
+    type: 'image-qa',
+    imageUrl: dummyB64,
+    page: 5,
+    onSave: (res) => {
+      savedResult = res;
+    },
+  });
+
+  assert.ok(mockDoc.body.childNodes.length > 0, '制卡弹窗成功在 DOM 挂载');
+  assert.ok(clickSubmit, '确定按钮成功绑定事件');
+
+  clickSubmit();
+  assert.ok(savedResult, '点击保存成功触发 onSave 回调');
+  assert.ok(savedResult.question.includes(dummyB64), '问题面包含图片');
+});
+
+test('pdf: sectionsOfDoc 排除文档页与续读点持久化 & 回原文精确定位', async () => {
+  const b = await pdfOps.createPdfBook(wiki, {
+    bookTitle: '精确定位测试书',
+    dataB64: 'fake-bytes',
+    sections: [
+      { title: '第一章', startPage: 1, endPage: 10 },
+      { title: '第二章', startPage: 11, endPage: 20 },
+    ],
+  });
+
+  // 1. sectionsOfDoc 排除文档页本身（仅包含章节）
+  const secs = docOps.sectionsOfDoc(wiki, b.docId);
+  assert.equal(secs.length, 2, '两章书籍的 sectionsOfDoc 仅含 2 节，排除文档页');
+  assert.equal(secs[0], b.sectionTitles[0]);
+  assert.equal(secs[1], b.sectionTitles[1]);
+
+  // 2. 跨章在第 18 页制作图片卡
+  const card = cardFactory.buildImageQA(wiki, b.sectionTitles[0], {
+    dataUrl: 'data:image/png;base64,sample',
+    answer: '测试答案',
+    label: '重点图示',
+    page: 18,
+  });
+  assert.equal(card['tidme.page'], '18', '卡片包含 tidme.page 字段');
+  const anchor = cardFactory.parseAnchor(card['tidme.anchor']);
+  assert.equal(anchor?.page, 18, 'anchor 记录页码');
+
+  // 3. sectionOfDocByPage 能够按页码反查节卡
+  const matchedSec = docOps.sectionOfDocByPage(wiki, b.docId, 18);
+  assert.equal(matchedSec, b.sectionTitles[1], '第 18 页准确命中第二章节卡');
+
+  // 4. 续读点持久化至 $:/config/ 命名空间
+  docOps.saveReadPoint(wiki, b.docId, { t: b.sectionTitles[1], s: 'p18' });
+  const rp = docOps.parseReadPoint(wiki, b.docId);
+  assert.equal(rp?.t, b.sectionTitles[1]);
+  assert.equal(rp?.s, 'p18');
+  assert.ok(wiki.getTiddler(docOps.READPOINT_PREFIX + b.docId), '持久化保存到 $:/config/tidme/readpoint/');
+
+  // 5. docReadingTarget 正确返回续读点
+  const target = docOps.docReadingTarget(wiki, b.docId);
+  assert.equal(target, b.sectionTitles[1], '续读目标命中第二章');
 });

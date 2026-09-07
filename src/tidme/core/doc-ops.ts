@@ -10,9 +10,11 @@ const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 
-export const READPOINT_PREFIX = '$:/state/tidme-import/readpoint/';
+export const READPOINT_PREFIX = '$:/config/tidme/readpoint/';
+export const LEGACY_READPOINT_PREFIX = '$:/state/tidme-import/readpoint/';
 /** 全局续读点（最近打开的阅读卡；section-bar 写、workflow「开始阅读」读） */
 export const GLOBAL_READPOINT = READPOINT_PREFIX + 'global';
+export const LEGACY_GLOBAL_READPOINT = LEGACY_READPOINT_PREFIX + 'global';
 
 /** 各书的章节进度（一次全库扫描按书聚合；口径与 sectionsOfDoc 一致：topic 且非摘录）。
  * 供「最近阅读」等聚合视图使用——避免每书一次全库扫描（书多时 O(书数×全库)）。 */
@@ -64,30 +66,36 @@ function parseReadPointRaw(raw: string | undefined): { t: string; s: string } | 
   return { t: s0, s: '' };
 }
 
-/** 读续读点（$:/state/tidme-import/readpoint/<docId>；无 → null）。阅读条栏/文档页/全局续读唯一实现 */
+/** 读续读点（优先读持久化的 $:/config/，回退兼容旧版 $:/state/；无 → null）。阅读条栏/文档页/全局续读唯一实现 */
 export function parseReadPoint(wiki: any, doc: string): { t: string; s: string } | null {
   if (!wiki || !doc) return null;
-  const t = wiki.getTiddler(READPOINT_PREFIX + doc);
+  const t = [wiki.getTiddler(READPOINT_PREFIX + doc), wiki.getTiddler(LEGACY_READPOINT_PREFIX + doc)]
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.fields.modified || 0).getTime() - new Date(a.fields.modified || 0).getTime())[0];
   return t ? parseReadPointRaw(String(t.fields.text || '')) : null;
 }
 
-/** 写续读点（text = JSON {t,s}） */
+/** 写续读点（text = JSON {t,s}，持久化到 $:/config/ 命名空间并同步镜像到 $:/state/ 保证会话瞬时与遗留测试兼容） */
 export function saveReadPoint(wiki: any, doc: string, rp: { t: string; s: string }): void {
   if (!wiki || !doc || !rp || !rp.t) return;
-  // modified 供「最近阅读」类 UI 作最近打开时间排序
-  wiki.addTiddler({ title: READPOINT_PREFIX + doc, type: 'application/json', text: JSON.stringify(rp), modified: new Date() });
+  const now = new Date();
+  wiki.addTiddler({ title: READPOINT_PREFIX + doc, type: 'application/json', text: JSON.stringify(rp), modified: now });
+  wiki.addTiddler({ title: LEGACY_READPOINT_PREFIX + doc, type: 'application/json', text: JSON.stringify(rp), modified: now });
 }
 
 /** 清除续读点 */
 export function clearReadPoint(wiki: any, doc: string): void {
   if (!wiki || !doc) return;
   wiki.deleteTiddler(READPOINT_PREFIX + doc);
+  wiki.deleteTiddler(LEGACY_READPOINT_PREFIX + doc);
 }
 
 /** 写全局续读点（最近打开的阅读卡）；modified 供「最近阅读」排序，唯一写入口 */
 export function saveGlobalReadPoint(wiki: any, title: string): void {
   if (!wiki || !title) return;
-  wiki.addTiddler({ title: GLOBAL_READPOINT, text: title, modified: new Date() });
+  const now = new Date();
+  wiki.addTiddler({ title: GLOBAL_READPOINT, text: title, modified: now });
+  wiki.addTiddler({ title: LEGACY_GLOBAL_READPOINT, text: title, modified: now });
 }
 
 /**
@@ -107,7 +115,7 @@ export function docReadingTarget(wiki: any, docId: string): string {
     const f = wiki.getTiddler(t)?.fields;
     return !!f && !sched.isCardDone(f) && f['tidme.suspended'] !== 'yes';
   });
-  return first || '';
+  return first || docPageOfDoc(wiki, docId) || '';
 }
 
 /**
@@ -150,10 +158,16 @@ export function deleteDocContent(wiki: any, docId: string): number {
     }
   }
   // 续读点：仅当指向被删内容时清除（指向保留的摘录/卡则保留）
-  const rpTarget = parseReadPointRaw(String(wiki.getTiddler(READPOINT_PREFIX + docId)?.fields.text || ''));
-  if (rpTarget && targets.has(rpTarget.t)) wiki.deleteTiddler(READPOINT_PREFIX + docId);
-  const gTarget = parseReadPointRaw(String(wiki.getTiddler(READPOINT_PREFIX + 'global')?.fields.text || ''));
-  if (gTarget && targets.has(gTarget.t)) wiki.deleteTiddler(READPOINT_PREFIX + 'global');
+  const rpTarget = parseReadPointRaw(String(wiki.getTiddler(READPOINT_PREFIX + docId)?.fields.text || wiki.getTiddler(LEGACY_READPOINT_PREFIX + docId)?.fields.text || ''));
+  if (rpTarget && targets.has(rpTarget.t)) {
+    wiki.deleteTiddler(READPOINT_PREFIX + docId);
+    wiki.deleteTiddler(LEGACY_READPOINT_PREFIX + docId);
+  }
+  const gTarget = parseReadPointRaw(String(wiki.getTiddler(GLOBAL_READPOINT)?.fields.text || wiki.getTiddler(LEGACY_GLOBAL_READPOINT)?.fields.text || ''));
+  if (gTarget && targets.has(gTarget.t)) {
+    wiki.deleteTiddler(GLOBAL_READPOINT);
+    wiki.deleteTiddler(LEGACY_GLOBAL_READPOINT);
+  }
 
   let n = 0;
   for (const t of targets) {
@@ -167,7 +181,7 @@ export function deleteDocContent(wiki: any, docId: string): number {
 
 /** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 卡中排除摘录） */
 export function sectionsOfDoc(wiki: any, docId: string): string[] {
-  return wiki
+  const all = wiki
     .filterTiddlers('[has[tidme.doc]nsort[tidme.order]]')
     .filter((t: string) => {
       const f = wiki.getTiddler(t)?.fields;
@@ -176,6 +190,27 @@ export function sectionsOfDoc(wiki: any, docId: string): string[] {
         f['tidme.kind'] === 'topic' &&
         String(f['tidme.subkind'] || '') !== 'extract';
     });
+  const nonDoc = all.filter((t: string) => !isDocPage(wiki.getTiddler(t)?.fields || {}));
+  return nonDoc.length > 0 ? nonDoc : all;
+}
+
+/** 根据页码查找该页所属的节卡（若无匹配则返回 null） */
+export function sectionOfDocByPage(wiki: any, docId: string, page: number): string | null {
+  if (!wiki || !docId || !Number.isFinite(page)) return null;
+  const sections = sectionsOfDoc(wiki, docId);
+  for (const s of sections) {
+    const f = wiki.getTiddler(s)?.fields;
+    if (!f || !f['tidme.pages']) continue;
+    const m = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(String(f['tidme.pages']));
+    if (m) {
+      const start = Number(m[1]);
+      const end = Number(m[2]);
+      if (page >= start && page <= end) {
+        return s;
+      }
+    }
+  }
+  return null;
 }
 
 /**
@@ -188,7 +223,10 @@ export function sectionsOfDoc(wiki: any, docId: string): string[] {
  */
 export function globalReadingTarget(wiki: any): string {
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return ns.PAGE_READING_LIST;
-  const g = String(wiki.getTiddler(GLOBAL_READPOINT)?.fields?.text || '').trim();
+  const gTiddler = [wiki.getTiddler(GLOBAL_READPOINT), wiki.getTiddler(LEGACY_GLOBAL_READPOINT)]
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.fields.modified || 0).getTime() - new Date(a.fields.modified || 0).getTime())[0];
+  const g = String(gTiddler?.fields?.text || '').trim();
   if (g && wiki.getTiddler(g)) {
     const f = wiki.getTiddler(g).fields || {};
     if (!sched.isCardDone(f) && f['tidme.suspended'] !== 'yes') return g;

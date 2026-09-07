@@ -15,6 +15,7 @@ const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
+const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 
 const el = dom.el;
 
@@ -63,11 +64,13 @@ function makeCardViewer(): any {
     deckTitle: string = '';
     _keyHandler: ((e: KeyboardEvent) => void) | null = null;
     _container: HTMLElement | null = null;
+    _startTime: number = 0;
 
     render(parent: any, nextSibling: any) {
       this.parentDomNode = parent;
       this.computeAttributes();
       this.execute();
+      this._startTime = Date.now();
 
       this.cardTitle = this.getAttribute('tiddler') ||
         this.getVariable('studyTiddler') ||
@@ -292,7 +295,16 @@ function makeCardViewer(): any {
       const patch = { ...targetData.card };
       wiki.addTiddler({ ...f, ...patch });
 
-      // 2. 写回 deck log
+      // 2. 写回 deck log 与专注时长记录
+      if (this._startTime) {
+        const elapsedSec = (Date.now() - this._startTime) / 1000;
+        this._startTime = Date.now();
+        const sec = Math.max(1, Math.min(300, Math.round(elapsedSec)));
+        const docId = String(f['tidme.doc'] || '');
+        if (stats && typeof stats.recordReadTime === 'function') {
+          stats.recordReadTime(wiki, docId, sec);
+        }
+      }
       const logTitle = `${this.deckTitle}/log`;
       const nowTw = schema.twDateString(new Date());
       wiki.setText(logTitle, null, nowTw, JSON.stringify(targetData.review_log));

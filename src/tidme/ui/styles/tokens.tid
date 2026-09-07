@@ -9,14 +9,19 @@ type: text/css
    ============================================================ */
 
 :root {
-	/* ---- 默认继承 TW5 调色板，确保完美兼容任何原生亮/暗主题 ---- */
-	--tm-surface: <<colour tiddler-background>>;
-	--tm-surface-2: <<colour background>>;
-	--tm-surface-3: <<colour very-light-background>>;
-	--tm-border: <<colour table-border>>;
-	--tm-text-1: <<colour foreground>>;
-	--tm-text-2: <<colour muted-foreground>>;
-	--tm-text-3: hsl(220, 10%, 42%);
+	/* ---- 现代化高对比度基础 Token（实体扎实配色，彻底杜绝半透明与隐形） ---- */
+	--tm-surface: #ffffff;
+	--tm-surface-2: #f8fafc;
+	--tm-surface-3: #f1f5f9;
+	--tm-border: #e2e8f0;
+	--tm-border-strong: #cbd5e1;
+	--tm-text-1: #0f172a;
+	--tm-text-2: #475569;
+	--tm-text-3: #64748b;
+	--tm-text-muted: #64748b;
+
+	--tm-primary: #2563eb;
+	--tm-primary-hover: #1d4ed8;
 
 	--tm-accent: hsl(245, 75%, 60%);
 	--tm-accent-strong: hsl(245, 75%, 50%);
@@ -296,4 +301,20 @@ type: text/css
 }
 .tm-select { cursor: pointer; }
 .tm-textarea { resize: vertical; min-height: 4em; }
+
+/* ---- 暗色模式适配（仅响应 TiddlyWiki 调色板暗色类，绝不越权响应 OS 偏好） ---- */
+body.tc-palette-dark,
+[data-color-scheme="dark"] {
+	--tm-surface: #1e293b;
+	--tm-surface-2: #0f172a;
+	--tm-surface-3: #334155;
+	--tm-border: #334155;
+	--tm-border-strong: #475569;
+	--tm-text-1: #f8fafc;
+	--tm-text-2: #cbd5e1;
+	--tm-text-3: #94a3b8;
+	--tm-text-muted: #94a3b8;
+	--tm-primary: #3b82f6;
+	--tm-primary-hover: #60a5fa;
+}
 

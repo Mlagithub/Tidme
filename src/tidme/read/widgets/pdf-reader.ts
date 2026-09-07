@@ -23,8 +23,10 @@ const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
+const cardModal = require('$:/plugins/keepone/tidme/ui/components/card-modal.js');
 const parsePdf = require('$:/plugins/keepone/tidme/import/parse/pdf.js');
 const pdfjsMod = require('$:/plugins/keepone/tidme/import/widgets/pdfjs.js');
+const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
@@ -193,11 +195,24 @@ function makeReader(): any {
     _resizeObs: any = null;
     _ocrEnabled = false;
     _onFsChange: () => void = () => {};
+    _savePageTimer: any = null;
+    _startTime: number = 0;
+
+    _flushReadTime() {
+      if (this._startTime && this.wiki) {
+        const elapsedSec = (Date.now() - this._startTime) / 1000;
+        this._startTime = Date.now();
+        if (elapsedSec >= 1 && elapsedSec <= 7200) {
+          stats.recordReadTime(this.wiki, this._docId || '', elapsedSec);
+        }
+      }
+    }
 
     render(parent: any, nextSibling: any) {
       this.parentDomNode = parent;
       this.computeAttributes();
       this.execute();
+      this._startTime = Date.now();
       const doc = this.document;
       const wiki = this.wiki;
       const t = this.getVariable('currentTiddler') || '';
@@ -207,8 +222,8 @@ function makeReader(): any {
       this._pdfTitle = ctx.pdfTitle;
       this._docPageTitle = ctx.docPageTitle;
       const range = parsePdf.parsePagesField(String(f['tidme.pages'] || ''));
-      this._page = range.start;
-      this._numPages = range.end || 0;
+      this._page = this._resolveInitialPage(range, 0);
+      this._numPages = 0;
       this._ocrEnabled = config.readOcrConfig(wiki).enable === true;
 
       const root = el(doc, 'div', 'tm-pdf');
@@ -382,6 +397,42 @@ function makeReader(): any {
       void this._loadPdf(range);
     }
 
+    _resolveInitialPage(range: { start: number; end: number }, numPages = 0): number {
+      const wiki = this.wiki;
+      const t = this.getVariable('currentTiddler') || '';
+      let target = range.start;
+      if (this._docId) {
+        const rp = docOps.parseReadPoint(wiki, this._docId);
+        const rpPage = rp?.s && /^p\d+$/.test(rp.s) ? Number(rp.s.slice(1)) : NaN;
+        const statePage = Number(wiki.getTiddlerText('$:/state/tidme-pdf/page/' + this._docId, ''));
+
+        // 1. 若当前卡是真实续读点所在的卡（用户通过继续阅读打开）→ 采用真实续读点记录的页码
+        if (rp?.t === t && Number.isFinite(rpPage) && rpPage >= 1) {
+          const inRange = !range.end || (rpPage >= range.start && rpPage <= range.end);
+          if (inRange) {
+            return numPages > 0 && rpPage > numPages ? target : rpPage;
+          }
+        }
+
+        // 2. 若外部指定了有效页码（如「回原文」临时溯源），且落在本节区间内 → 采用该页（不修改续读点）
+        if (Number.isFinite(statePage) && statePage >= 1) {
+          const inRange = !range.end || (statePage >= range.start && statePage <= range.end);
+          if (inRange) {
+            return numPages > 0 && statePage > numPages ? target : statePage;
+          }
+        }
+
+        // 3. 全书无区间（单文档页）回退
+        if (!range.end) {
+          const fallback = Number.isFinite(rpPage) && rpPage >= 1 ? rpPage : statePage;
+          if (Number.isFinite(fallback) && fallback >= 1) {
+            return numPages > 0 && fallback > numPages ? target : fallback;
+          }
+        }
+      }
+      return target;
+    }
+
     async _loadPdf(range?: { start: number; end: number }) {
       const wiki = this.wiki;
       const t = this.getVariable('currentTiddler') || '';
@@ -398,11 +449,7 @@ function makeReader(): any {
         this._pdf = await pdfjsMod.loadPdfBytes(bytes);
         this._numPages = Number(this._pdf.numPages) || 0;
         this._total.textContent = ` / ${this._numPages}`;
-        let start = r.start;
-        if (this._docId) {
-          const saved = Number(wiki.getTiddlerText('$:/state/tidme-pdf/page/' + this._docId, ''));
-          if (Number.isFinite(saved) && saved >= 1 && saved <= this._numPages) start = saved;
-        }
+        const start = this._resolveInitialPage(r, this._numPages);
         this._setPage(start, false);
       } catch (e: any) {
         this._status.textContent = '加载失败：' + String(e?.message || e);
@@ -423,10 +470,23 @@ function makeReader(): any {
         void this._loadPdf();
         return true;
       }
+      if (this._docId && changedTiddlers['$:/state/tidme-pdf/page/' + this._docId]) {
+        const p = Number(this.wiki.getTiddlerText('$:/state/tidme-pdf/page/' + this._docId, ''));
+        const curT = this.getVariable('currentTiddler') || '';
+        const f = this.wiki.getTiddler(curT)?.fields || {};
+        const range = parsePdf.parsePagesField(String(f['tidme.pages'] || ''));
+        const inRange = !range.end || (p >= range.start && p <= range.end);
+        if (inRange && Number.isFinite(p) && p >= 1 && p !== this._page) {
+          this._setPage(p, false);
+          return true;
+        }
+      }
       return false;
     }
 
     destroy() {
+      this._flushReadTime();
+      if (this._savePageTimer) clearTimeout(this._savePageTimer);
       if (this._resizeObs) this._resizeObs.disconnect();
       if (this._resizeTimer) clearTimeout(this._resizeTimer);
       if (this._onFsChange && typeof this.document.removeEventListener === 'function') {
@@ -438,11 +498,24 @@ function makeReader(): any {
     // ---------- 翻页与渲染 ----------
 
     _setPage(n: number, save = true) {
-      const max = this._numPages || this._page;
+      this._flushReadTime();
+      const max = this._numPages > 0 ? this._numPages : Infinity;
       this._page = Math.min(Math.max(1, Math.floor(n) || 1), max || 1);
       this._pageInput.value = String(this._page);
       if (save && this._docId) {
         this.wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + this._docId, text: String(this._page) });
+        // 防抖持久化续读点与全局续读点（章节跨越自动感知）
+        if (this._savePageTimer) clearTimeout(this._savePageTimer);
+        this._savePageTimer = setTimeout(() => {
+          this._savePageTimer = null;
+          const curT = this.getVariable('currentTiddler') || '';
+          const matchedSection = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(this.wiki, this._docId, this._page) : null;
+          const targetCard = matchedSection || curT || this._docPageTitle;
+          if (targetCard) {
+            docOps.saveReadPoint(this.wiki, this._docId, { t: targetCard, s: `p${this._page}` });
+            docOps.saveGlobalReadPoint(this.wiki, targetCard);
+          }
+        }, 300);
       }
       this._updateTocCurrent();
       void this._renderPage();
@@ -618,6 +691,7 @@ function makeReader(): any {
         span.style.left = `${st.left / dpr}px`;
         span.style.top = `${st.top / dpr}px`;
         span.style.fontSize = `${st.fontSize / dpr}px`;
+        span.style.color = 'transparent';
         layer.appendChild(span);
       }
     }
@@ -724,10 +798,29 @@ function makeReader(): any {
       crop.height = Math.round(h * scale);
       crop.getContext('2d').drawImage(this._canvas, x * scale, y * scale, crop.width, crop.height, 0, 0, crop.width, crop.height);
       const dataUrl = crop.toDataURL('image/png');
-      // 图片问答卡：问题面 = 截图；答案先占位，卡片内可编辑
-      const qa = cardFactory.buildQA(this.wiki, sectionTitle, `<img src="${dataUrl}" style="max-width:100%">`, '（答案待补充）');
-      cardFactory.commitCard(this.wiki, qa, this);
-      this._status.textContent = '已创建图片问答卡（进入复习或卡片管理可补充答案）';
+
+      // 弹出即时制卡弹窗：显示截图预览，直接录入答案与可选简短标题
+      cardModal.openCardModal(this.document, {
+        type: 'image-qa',
+        imageUrl: dataUrl,
+        page: this._page,
+        onSave: (res: any) => {
+          const answer = (res.answerOrCloze || '').trim();
+          const label = (res.label || '').trim();
+          const matchedSection = docOps.sectionOfDocByPage && this._docId ? docOps.sectionOfDocByPage(this.wiki, this._docId, this._page) : null;
+          const targetSection = matchedSection || sectionTitle || this.getVariable('currentTiddler') || this._docPageTitle;
+          const qa = cardFactory.buildImageQA
+            ? cardFactory.buildImageQA(this.wiki, targetSection, { dataUrl, answer, label, page: this._page })
+            : cardFactory.buildQA(this.wiki, targetSection, `<img src="${dataUrl}" style="max-width:100%">`, answer || '（答案待补充）');
+          cardFactory.commitCard(this.wiki, qa, this);
+          this._status.textContent = '已创建图片问答卡';
+          if (this._selMode) {
+            this._selMode = false;
+            this._selBtn?.classList.remove('tm-pdf-ico--on');
+            this._viewer?.classList.remove('tm-pdf-selecting');
+          }
+        },
+      });
     }
   }
   return PdfReaderWidget as any;

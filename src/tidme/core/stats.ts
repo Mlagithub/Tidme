@@ -150,7 +150,7 @@ export function recordReadTime(wiki: any, docId: string, seconds: number) {
   if (!data.docs) data.docs = {};
   if (!data.days) data.days = {};
 
-  const sec = Math.round(seconds);
+  const sec = Math.max(1, Math.round(seconds));
   const todayKey = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
   data.totalSeconds = (Number(data.totalSeconds) || 0) + sec;

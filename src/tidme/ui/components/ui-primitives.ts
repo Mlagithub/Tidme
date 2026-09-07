@@ -187,6 +187,9 @@ export interface ActionListItem {
   id?: string;
   title: string;
   sub?: string;
+  titleHref?: string;
+  titleTooltip?: string;
+  onTitleClick?: (e: MouseEvent) => void;
   progress?: { done: number; total: number };
   badge?: { text: string; cls?: string };
   action?: {
@@ -214,8 +217,27 @@ export function renderActionList(
   for (const item of items) {
     const row = el(doc, 'div', 'tm-today-read-row tm-action-row');
 
-    // 标题
-    const nameEl = el(doc, 'span', 'tm-today-read-name', item.title);
+    // 标题（支持超链接跳转或普通文本）
+    let nameEl: HTMLElement;
+    if (item.onTitleClick || item.titleHref) {
+      nameEl = el(doc, 'a', 'tc-tiddlylink tm-today-read-name', item.title);
+      (nameEl as HTMLAnchorElement).href = item.titleHref || '#';
+      if (item.titleTooltip) {
+        nameEl.setAttribute('title', item.titleTooltip);
+        nameEl.title = item.titleTooltip;
+      }
+      nameEl.addEventListener('click', (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (item.onTitleClick) item.onTitleClick(e);
+      });
+    } else {
+      nameEl = el(doc, 'span', 'tm-today-read-name', item.title);
+      if (item.titleTooltip) {
+        nameEl.setAttribute('title', item.titleTooltip);
+        nameEl.title = item.titleTooltip;
+      }
+    }
     row.appendChild(nameEl);
 
     // 进度条
