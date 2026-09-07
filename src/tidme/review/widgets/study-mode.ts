@@ -138,7 +138,7 @@ function makeStudyModeBar(): WidgetCtor {
       }
 
       const btn = el(doc, 'button', 'tm-btn tm-study-mode-end', lingo(this.wiki, 'studymode.end', 'End Study'));
-      btn.title = lingo(this.wiki, 'studymode.end.tip', 'End current session, clear queue, return to Today');
+      btn.title = lingo(this.wiki, 'studymode.end.tip', 'End current session, clear queue, return to Incremental Learning');
       btn.addEventListener('click', () => {
         endStudy(this);
         this.build(); // 同步隐藏（真实环境刷新周期也会触发，这里保证确定性反馈）

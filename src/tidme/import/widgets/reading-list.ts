@@ -137,6 +137,7 @@ function makeReadingList(): any {
         const docLabel = bookTitle || g.doc;
 
         const sum = el(doc, 'summary', 'tm-rl-doc-head');
+        const info = el(doc, 'div', 'tm-rl-doc-info');
         const name = el(doc, 'a', 'tc-tiddlylink tm-rl-doc-name', docLabel);
         name.href = '#';
         name.title = docTiddlerTitle ? `${lingo(wiki, 'read.opendoc', 'Open document:')} ${docLabel}` : lingo(wiki, 'rl.docdeleted', 'Document page deleted (extracts only)');
@@ -145,18 +146,22 @@ function makeReadingList(): any {
           e.stopPropagation();
           if (docTiddlerTitle) navigateTo(this, docTiddlerTitle);
         });
-        sum.appendChild(name);
+        info.appendChild(name);
+        sum.appendChild(info);
 
-        sum.appendChild(el(doc, 'span', 'tm-rl-doc-count', `${g.cards.length} ${lingo(wiki, 'today.sectionsleft', 'sections left')}`));
+        const meta = el(doc, 'div', 'tm-rl-doc-meta');
+        meta.appendChild(el(doc, 'span', 'tm-rl-doc-count', `${g.cards.length} ${lingo(wiki, 'today.sectionsleft', 'sections left')}`));
         if (!compact && docAll.length) {
-          sum.appendChild(el(doc, 'span', 'tm-rl-doc-prog', `${docDone}/${docAll.length} ${lingo(wiki, 'rl.read', 'read')}`));
-          sum.appendChild(renderProgressBar(doc, docDone, docAll.length, { className: 'tm-rl-doc-bar' }));
+          meta.appendChild(el(doc, 'span', 'tm-rl-doc-prog', `${docDone}/${docAll.length} ${lingo(wiki, 'rl.read', 'read')}`));
+          meta.appendChild(renderProgressBar(doc, docDone, docAll.length, { className: 'tm-rl-doc-bar' }));
         }
+        sum.appendChild(meta);
 
         // 继续阅读跳到第一张"当前可读"卡（scheduler.isDueNow，与 section-bar/doc-resume 一致）；
         // 全部未来排期时退回第一张（允许显式打开）
+        const actions = el(doc, 'div', 'tm-rl-doc-actions');
         const targetCard = docOps.docReadingTarget(wiki, g.doc) || (g.cards.find((c) => sched.isDueNow(c.fields)) || g.cards[0])?.title;
-        const cont = el(doc, 'button', 'tm-btn', lingo(wiki, 'read.resume', '▶ Continue Reading'));
+        const cont = el(doc, 'button', 'tm-btn tm-rl-resume-btn', lingo(wiki, 'read.resume', '▶ Continue Reading'));
         cont.title = lingo(wiki, 'rl.resumetip', 'Start from read point or first pending section');
         cont.addEventListener('click', (e: Event) => {
           e.preventDefault();
@@ -168,7 +173,7 @@ function makeReadingList(): any {
           }
           if (targetCard) navigateTo(this, targetCard);
         });
-        sum.appendChild(cont);
+        actions.appendChild(cont);
 
         // 删除阅读材料（文档页 + 节卡/大纲新节）；摘录/挖空/问答/手动散卡等知识产物保留
         const del = icons.iconButton(doc, 'tm-btn tm-rl-del', 'trash', lingo(wiki, 'read/clean.materials', 'Clean Reading Materials'));
@@ -192,7 +197,8 @@ function makeReadingList(): any {
             if (n === 0) await dialog.alertDialog(doc, { message: lingo(wiki, 'rl.nomaterialstodelete', 'No reading materials to delete.') });
           }
         });
-        sum.appendChild(del);
+        actions.appendChild(del);
+        sum.appendChild(actions);
         det.appendChild(sum);
         root.appendChild(det);
 

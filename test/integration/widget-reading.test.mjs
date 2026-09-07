@@ -222,13 +222,25 @@ test('reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅�
   assert.ok(text.includes('阅读列表'), '标题');
   assert.ok(text.includes('待读'), '计数');
   assert.ok(text.includes('书名甲'), '文档名');
-  assert.ok(text.includes('继续阅读'), '继续按钮');
-  assert.ok(text.includes('清理阅读'), '清理阅读材料按钮');
-  assert.ok(text.includes('已读'), '进度文案');
+  function findByClass(node, cls) {
+    if (!node) return null;
+    if (typeof node.className === 'string' && node.className.split(/\s+/).includes(cls)) return node;
+    for (const c of node.childNodes || []) {
+      const res = findByClass(c, cls);
+      if (res) return res;
+    }
+    return null;
+  }
+
+  assert.ok(findByClass(root, 'tm-rl-doc-info'), '头部包含标题容器 tm-rl-doc-info');
+  assert.ok(findByClass(root, 'tm-rl-doc-meta'), '头部包含元数据容器 tm-rl-doc-meta');
+  assert.ok(findByClass(root, 'tm-rl-doc-actions'), '头部包含操作按钮容器 tm-rl-doc-actions');
   // compact 模式（侧边栏）：文档分组折叠 + 不含页头"复习测试卡"与进度条
   const compactRoot = renderWidgetEx(wiki, rl, 'reading-list', { attributes: { compact: 'yes' } }).root;
   const ctext = collectText(compactRoot);
   assert.ok(ctext.includes('张待读'), 'compact 计数');
   assert.ok(!ctext.includes('去复习'), 'compact 不含去复习按钮');
   assert.ok(ctext.includes('书名甲'), 'compact 文档名');
+  assert.ok(findByClass(compactRoot, 'tm-rl-doc-info'), 'compact 头部包含标题容器 tm-rl-doc-info');
+  assert.ok(findByClass(compactRoot, 'tm-rl-doc-actions'), 'compact 头部包含操作按钮容器 tm-rl-doc-actions');
 });

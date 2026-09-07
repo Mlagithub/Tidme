@@ -76,7 +76,8 @@ state.relearning: 重学中
 state.overdue: 逾期
 state.due: 到期
 state.new: 新卡
-nav.today: 今天
+nav.incrementallearning: 渐进学习
+nav.today: 渐进学习
 nav.reading: 阅读
 nav.import: 导入
 nav.manager: 管理
@@ -94,7 +95,7 @@ studymode.learning: 学习中
 studymode.finishandnext: 读完，继续复习 ›
 studymode.finishandnext.tip: 保存当前阅读进度，继续复习后续卡片
 studymode.end: 结束学习
-studymode.end.tip: 结束本次学习：清空会话与排期队列，返回今天
+studymode.end.tip: 结束本次学习：清空会话与排期队列，返回渐进学习
 rate.again: 重来
 rate.hard: 困难
 rate.good: 良好
@@ -527,3 +528,45 @@ twpublibrary: TWPUB 书库
 twpublibrarytip: 可以用此插件库安装和更新TWPUB书。
 focus: 聚焦
 focustip: 知识图谱
+sidebar.readingmaterials: 阅读材料
+sidebar.webclips: 网页摘录
+sidebar.decks: 牌组
+sidebar.dashboard: 渐进学习
+books.title: 全部阅读材料
+books.badge: 篇文档
+clips.title: 摘录收集箱
+clips.badge: 条摘录
+decks.title: 牌组与工作流
+decks.badge: 个牌组
+decks.views.sub: 牌组即过滤视图：卡片全局唯一，进度天然共享
+tidme.title: 渐进学习与间隔重复
+tidme.badge: 驾驶舱
+today.cockpit: 渐进学习驾驶舱：系统规划调度，助你稳步推进
+today.decks.sub: 牌组即过滤视图：卡片全局唯一，进度天然共享
+read.readinglist.footer: 本页是待读清单：节卡与摘录按优先级和到期时间排序。挖空/问答卡在[[$:/Deck/default]]复习。
+import.tab.localfiles: 本地文件
+import.tab.pastetext: 粘贴文本
+import.tab.inboxclips: 网页摘录
+import.shortcuts.manual: 快捷键与使用手册
+manager.desc: 浏览、组织和管理所有学习卡片（包含已读、搁置及手动卡片）。
+manager.autopostpone.help.title: 自动顺延机制说明
+manager.autopostpone.help.desc: 自动顺延机制会在每日（启动及每小时）自动顺延低优先级的逾期卡片，同时保护高优先级卡片不受影响。可通过 <code>$:/config/Tidme/AutoPostpone</code> 进行配置。
+manager.subset.desc: 子集复习：文档页上的“复习本书”按钮会为该书卡片创建临时子集牌组，复习结束后自动清理。
+manager.bydoc.tip: 按文档/面包屑树状层级组织所有卡片
+manager.bydeck.tip: 按复习牌组组织，未入组卡片归入未分配分支
+manager.flatlist.tip: 平铺浏览所有卡片（类似 SuperMemo Browser 列表）
+manager.search.placeholder: 搜索卡片...
+manager.selectall.tip: 全选 / 取消全选当前可见卡片
+manager.autopostpone.none: 当前无需顺延
+manager.autopostpone.done: 已顺延低优先级逾期卡片
+manager.deleted.count: 已删除
+manager.nodecks: 未找到牌组，卡片将出现在下方的未分配分支中。
+manager.col.comment: 备注
+manager.params.saved: 卡片参数已保存
+manager.col.mixed: 混合
+manager.clicksort: 点击排序
+manager.editparams: 编辑参数
+manager.editparams.tip: 修改下次到期日 / 优先级 / 备注
+manager.col.stability: 稳定度
+manager.col.elapsed: 距上次天数
+

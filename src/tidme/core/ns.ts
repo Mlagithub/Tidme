@@ -74,7 +74,8 @@ export function todayKey(now = new Date()): string {
 
 // ---------- 本插件 UI 页面地址（tm-navigate 目标；.tid 引用见头部跨端契约清单） ----------
 
-export const PAGE_TODAY = '$:/Today';
+export const PAGE_INCREMENTAL_LEARNING = '$:/IncrementalLearning';
+export const PAGE_TODAY = PAGE_INCREMENTAL_LEARNING;
 export const PAGE_READING_LIST = '$:/plugins/keepone/tidme/import/ui/reading-list';
 export const PAGE_IMPORT_CENTER = '$:/plugins/keepone/tidme/import/ui/import-center';
 export const PAGE_CARD_MANAGER = '$:/plugins/keepone/tidme/manager/ui/card-manager';

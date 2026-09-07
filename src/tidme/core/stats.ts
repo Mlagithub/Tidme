@@ -109,15 +109,15 @@ export interface ReadTimeStats {
 
 export function formatDuration(seconds: number): string {
   const sec = Math.max(0, Math.round(seconds));
-  if (sec < 60) return `${sec} 秒`;
+  if (sec < 60) return `${sec} s`;
   const mins = Math.floor(sec / 60);
   const remSec = sec % 60;
   if (mins < 60) {
-    return remSec > 0 ? `${mins} 分 ${remSec} 秒` : `${mins} 分钟`;
+    return remSec > 0 ? `${mins} m ${remSec} s` : `${mins} m`;
   }
   const hrs = Math.floor(mins / 60);
   const remMins = mins % 60;
-  return remMins > 0 ? `${hrs} 小时 ${remMins} 分` : `${hrs} 小时`;
+  return remMins > 0 ? `${hrs} h ${remMins} m` : `${hrs} h`;
 }
 
 export function getReadTimeStats(wiki: any): ReadTimeStats {

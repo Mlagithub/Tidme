@@ -486,6 +486,6 @@ test('today-hero: 已复习卡片时专注时间保底不为 0 秒', () => {
   const { root } = renderWidgetBase(wiki, todayMod, 'tidme-today-hero');
   const text = collectText(root);
   assert.ok(text.includes('今日已复习 45 卡'), '正确统计今日复习卡数');
-  assert.ok(!text.includes('专注 0 秒'), '已复习 45 卡时绝不显示专注 0 秒');
-  assert.ok(text.includes('45 秒'), '获得 45 秒基础保底时长');
+  assert.ok(!text.includes('专注 0 秒') && !text.includes('0 s'), '已复习 45 卡时绝不显示专注 0');
+  assert.ok(text.includes('45 s') || text.includes('45 秒'), '获得 45 秒基础保底时长');
 });

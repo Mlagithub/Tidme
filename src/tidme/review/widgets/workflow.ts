@@ -98,5 +98,6 @@ function globalReadingTarget(wiki: any): string {
 }
 
 exports['tidme-workflow'] = makeWorkflow();
+exports['workflow-center'] = makeWorkflow();
 exports.globalReadingTarget = globalReadingTarget;
 exports.startGlobalLearning = startGlobalLearning;

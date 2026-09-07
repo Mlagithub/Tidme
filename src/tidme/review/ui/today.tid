@@ -1,21 +1,21 @@
-title: $:/Today
-caption: Today
+title: $:/IncrementalLearning
+caption: {{$:/language/tidme/nav.incrementallearning}}
 type: text/vnd.tiddlywiki
 
 <div class="tm-today">
 
 <div class="tm-today-header">
-<div class="tm-today-sub">Incremental learning cockpit - System schedules, you advance</div>
+<div class="tm-today-sub"><$transclude tiddler="$:/language/tidme/today.cockpit">Incremental learning cockpit - System schedules, you advance</$transclude></div>
 </div>
 
 <$tidme-today-hero/>
 
 <div class="tm-today-section">
 <div class="tm-today-section-head">
-<span class="tm-today-section-title">Decks</span>
+<span class="tm-today-section-title"><$transclude tiddler="$:/language/tidme/deck">Decks</$transclude></span>
 <$deck-create/>
 </div>
-<div class="tm-today-sub">Decks are filtered views: cards are unique, progress is shared</div>
+<div class="tm-today-sub"><$transclude tiddler="$:/language/tidme/today.decks.sub">Decks are filtered views: cards are unique, progress is shared</$transclude></div>
 <<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row" storyview:"classic">>
 </div>
 

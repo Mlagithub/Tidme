@@ -100,7 +100,7 @@ function makeStatsPanel(): WidgetCtor {
         });
         primitives.renderTable(doc, cardLoad, {
           columns: [
-            { key: 'deck', title: '牌组', render: (row: any) => el(doc, 'span', 'tm-stats-deck', row.deck) },
+            { key: 'deck', title: lingo(wiki, 'deck', 'Deck'), render: (row: any) => el(doc, 'span', 'tm-stats-deck', row.deck) },
             { key: 'total', title: lingo(wiki, 'col.total', 'Total') },
             { key: 'newCount', title: lingo(wiki, 'state.new', 'New') },
             { key: 'learn', title: lingo(wiki, 'state.learning', 'Learn') },

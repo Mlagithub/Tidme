@@ -17,7 +17,7 @@ function lingo(wiki: any, key: string, fallback: string): string {
 }
 
 const NAV: [string, string, string][] = [
-  [ns.PAGE_TODAY, 'nav.today', 'Today'],
+  [ns.PAGE_INCREMENTAL_LEARNING, 'nav.incrementallearning', 'Incremental Learning'],
   [ns.PAGE_READING_LIST, 'nav.reading', 'Reading'],
   [ns.PAGE_IMPORT_CENTER, 'nav.import', 'Import'],
   [ns.PAGE_CARD_MANAGER, 'nav.manager', 'Manager'],

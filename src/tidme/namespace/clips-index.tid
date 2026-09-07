@@ -1,14 +1,13 @@
 title: $:/Clips
-caption: Web Clips
+caption: {{$:/language/tidme/sidebar.webclips}}
 type: text/vnd.tiddlywiki
 tags: $:/tags/SideBar
 
 <div class="tm-page-header">
   <div class="tm-page-title-row">
-    <span class="tm-page-title">Web Clips Inbox</span>
-    <span class="tm-page-badge">{{{ [tag[tidme-inbox]!is[draft]count[]] }}} Clips</span>
+    <span class="tm-page-title"><$transclude tiddler="$:/language/tidme/clips.title">Web Clips Inbox</$transclude></span>
+    <span class="tm-page-badge">{{{ [tag[tidme-inbox]!is[draft]count[]] }}} <$transclude tiddler="$:/language/tidme/clips.badge">Clips</$transclude></span>
   </div>
-  <div class="tm-page-subtitle">Captured web clips · One-click split and import</div>
 </div>
 
 <$tidme-nav/>

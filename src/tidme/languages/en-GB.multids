@@ -76,7 +76,8 @@ state.relearning: Relearning
 state.overdue: Overdue
 state.due: Due
 state.new: New
-nav.today: Today
+nav.incrementallearning: Incremental Learning
+nav.today: Incremental Learning
 nav.reading: Reading
 nav.import: Import
 nav.manager: Manager
@@ -94,7 +95,7 @@ studymode.learning: Learning
 studymode.finishandnext: Done, Next ›
 studymode.finishandnext.tip: Save reading progress and continue review
 studymode.end: End Study
-studymode.end.tip: End current session, clear queue, return to Today
+studymode.end.tip: End current session, clear queue, return to Incremental Learning
 rate.again: Again
 rate.hard: Hard
 rate.good: Good
@@ -507,3 +508,45 @@ pdf.fullscreen: Fullscreen
 pdf.toc: Table of Contents
 pdf.ocr.btn: Scan page recognition (LLM-OCR)
 read.finishandcontinue: Finish & Next
+sidebar.readingmaterials: Reading Materials
+sidebar.webclips: Web Clips
+sidebar.decks: Decks
+sidebar.dashboard: Dashboard
+books.title: All Reading Materials
+books.badge: Documents
+clips.title: Web Clips Inbox
+clips.badge: Clips
+decks.title: Decks & Workflow
+decks.badge: Decks
+decks.views.sub: Decks are filtered views: cards are unique, progress is shared
+tidme.title: Incremental Learning & Spaced Repetition
+tidme.badge: Cockpit
+today.cockpit: Incremental learning cockpit - System schedules, you advance
+today.decks.sub: Decks are filtered views: cards are unique, progress is shared
+read.readinglist.footer: Reading queue: section cards and extracts sorted by priority and due date. Cloze / Q&A cards are reviewed in [[Default Deck|$:/Deck/default]].
+import.tab.localfiles: Local Files
+import.tab.pastetext: Paste Text
+import.tab.inboxclips: Inbox Clips
+import.shortcuts.manual: Shortcuts & Manual
+manager.desc: Browse, organize, and manage all learning cards (including read, suspended, and manual cards).
+manager.autopostpone.help.title: Auto-Postpone Documentation
+manager.autopostpone.help.desc: Auto-postpone automatically defers lower-priority overdue cards daily (at startup and every hour) while preserving high-priority cards. Configure via <code>$:/config/Tidme/AutoPostpone</code>: <code>{"enable": true, "maxPriority": 60, "postponeDays": 7, "keepTop": 10}</code>.
+manager.subset.desc: Subset Review: The "Review Book" button on document pages creates a temporary subset deck for that book's cards, which is automatically cleaned up after review.
+manager.bydoc.tip: All cards organized by document / breadcrumb tree
+manager.bydeck.tip: Organized by study decks, unassigned cards in unassigned branch
+manager.flatlist.tip: Flat list of all cards (SuperMemo Browser style)
+manager.search.placeholder: Find cards...
+manager.selectall.tip: Select / Deselect all currently visible cards
+manager.autopostpone.none: No postponement needed
+manager.autopostpone.done: Postponed low-priority overdue cards
+manager.deleted.count: Deleted
+manager.nodecks: No decks found. Cards appear in the unassigned branch below.
+manager.col.comment: Comment
+manager.params.saved: Card parameters saved
+manager.col.mixed: Mixed
+manager.clicksort: Click to sort
+manager.editparams: Edit Parameters
+manager.editparams.tip: Modify Next Due / Priority / Comment
+manager.col.stability: Stability
+manager.col.elapsed: Elapsed Days
+

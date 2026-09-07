@@ -1,18 +1,25 @@
 title: $:/Decks
-caption: Decks
+caption: {{$:/language/tidme/sidebar.decks}}
 type: text/vnd.tiddlywiki
 tags: $:/tags/SideBar
 
 <div class="tm-page-header">
   <div class="tm-page-title-row">
-    <span class="tm-page-title">Decks & Workflow</span>
-    <span class="tm-page-badge">{{{ [prefix[$:/Deck/]!is[draft]count[]] }}} Decks</span>
+    <span class="tm-page-title"><$transclude tiddler="$:/language/tidme/decks.title">Decks & Workflow</$transclude></span>
+    <span class="tm-page-badge">{{{ [prefix[$:/Deck/]!is[draft]count[]] }}} <$transclude tiddler="$:/language/tidme/decks.badge">Decks</$transclude></span>
   </div>
-  <div class="tm-page-subtitle">Focus study on decks · Knowledge cards and reading streams</div>
 </div>
 
 <$tidme-nav/>
 
 <div class="tm-page-body">
-  <$workflow-center/>
+  <$tidme-workflow/>
+  <div class="tm-today-section">
+    <div class="tm-today-section-head">
+      <span class="tm-today-section-title"><$transclude tiddler="$:/language/tidme/deck">Decks</$transclude></span>
+      <$deck-create/>
+    </div>
+    <div class="tm-today-sub"><$transclude tiddler="$:/language/tidme/decks.views.sub">Decks are filtered views: cards are unique, progress is shared</$transclude></div>
+    <<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row" storyview:"classic">>
+  </div>
 </div>

@@ -1,14 +1,13 @@
 title: $:/Books
-caption: Reading Materials
+caption: {{$:/language/tidme/sidebar.readingmaterials}}
 type: text/vnd.tiddlywiki
 tags: $:/tags/SideBar
 
 <div class="tm-page-header">
   <div class="tm-page-title-row">
-    <span class="tm-page-title">All Reading Materials</span>
-    <span class="tm-page-badge">{{{ [tag[tidme-import-doc]!is[draft]count[]] }}} Documents</span>
+    <span class="tm-page-title"><$transclude tiddler="$:/language/tidme/books.title">All Reading Materials</$transclude></span>
+    <span class="tm-page-badge">{{{ [tag[tidme-import-doc]!is[draft]count[]] }}} <$transclude tiddler="$:/language/tidme/books.badge">Documents</$transclude></span>
   </div>
-  <div class="tm-page-subtitle">Organize Books · Outlines · Reading Progress</div>
 </div>
 
 <$tidme-nav/>

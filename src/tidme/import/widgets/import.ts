@@ -239,8 +239,9 @@ function buildRow(
   const renderTree = () => {
     outlineBox.textContent = '';
     const cardTiddlers = r.tiddlers.filter((t) => t['tidme.kind'] === 'topic' && !t._deleted);
-    r.sectionCount = cardTiddlers.length;
-    metaSpan.textContent = `${r.sectionCount} 节 · 硬切 ${r.stats.hardSplitCount} 块${r.warnings.length ? ' · 标题去重 ' + r.warnings.length : ''}`;
+    metaSpan.textContent = `${r.sectionCount} ${lingo(this.wiki, 'today.sectionsleft', 'sections')} · ${r.stats.hardSplitCount} ${
+      lingo(this.wiki, 'import.hardsplit', 'hard splits')
+    }${r.warnings.length ? ' · ' + r.warnings.length + ' ' + lingo(this.wiki, 'import.dedup', 'deduplicated') : ''}`;
 
     const allSections = r.tiddlers.filter((t) => t['tidme.kind'] === 'topic');
     summaryEl.textContent = `${lingo(this.wiki, 'pdf/toc', 'Outline')} (${allSections.length})`;
@@ -354,7 +355,7 @@ function buildRow(
             }
           } catch (e: any) {
             await dialog.alertDialog(document, { title: lingo(this.wiki, 'ai.splitfailed.title', 'LLM Sub-split Failed'), message: String(e && e.message || e) });
-            subSplitBtn.textContent = '✂️ 二次切分';
+            subSplitBtn.textContent = lingo(this.wiki, 'import.subsplit', '✂️ Sub-split');
             subSplitBtn.removeAttribute('disabled');
           }
         };

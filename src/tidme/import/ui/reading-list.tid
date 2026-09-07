@@ -1,5 +1,5 @@
 title: $:/plugins/keepone/tidme/import/ui/reading-list
-caption: Reading List
+caption: {{$:/language/tidme/read.readinglist}}
 
 <$tidme-nav/>
 
@@ -7,4 +7,4 @@ caption: Reading List
 
 ----
 
-本页是待读清单：节卡与摘录按优先级和到期时间排序。挖空/问答卡在[[默认牌组|$:/Deck/default]]复习。
+<$transclude tiddler="$:/language/tidme/read.readinglist.footer">本页是待读清单：节卡与摘录按优先级和到期时间排序。挖空/问答卡在[[$:/Deck/default]]复习。</$transclude>

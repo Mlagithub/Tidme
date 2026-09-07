@@ -1,13 +1,13 @@
 title: $:/plugins/keepone/tidme/import/ui/import-center
-caption: Import Center
+caption: {{$:/language/tidme/import.title}}
 type: text/vnd.tiddlywiki
 
 <$tidme-nav/>
 
 <div class="tm-import-tabs">
-<$radio tiddler="$:/state/tidme/import/tab" value="file" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">Local Files</$radio>
-<$radio tiddler="$:/state/tidme/import/tab" value="paste" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">Paste Text</$radio>
-<$radio tiddler="$:/state/tidme/import/tab" value="inbox" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active">Inbox Clips</$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="file" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active"><$transclude tiddler="$:/language/tidme/import.tab.localfiles">Local Files</$transclude></$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="paste" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active"><$transclude tiddler="$:/language/tidme/import.tab.pastetext">Paste Text</$transclude></$radio>
+<$radio tiddler="$:/state/tidme/import/tab" value="inbox" class="tm-tab tm-import-tab" selectedClass="tm-tab tm-import-tab tm-tab--active"><$transclude tiddler="$:/language/tidme/import.tab.inboxclips">Inbox Clips</$transclude></$radio>
 </div>
 
 <$reveal type="match" state="$:/state/tidme/import/tab" text="file" default="file">
@@ -24,4 +24,4 @@ type: text/vnd.tiddlywiki
 
 ---
 
-[[Shortcuts & Manual|$:/plugins/keepone/tidme/import/ui/help-shortcuts]]
+<$link to="$:/plugins/keepone/tidme/import/ui/help-shortcuts"><$transclude tiddler="$:/language/tidme/import.shortcuts.manual">Shortcuts & Manual</$transclude></$link>

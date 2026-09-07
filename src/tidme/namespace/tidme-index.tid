@@ -1,14 +1,13 @@
 title: $:/Tidme
-caption: Dashboard
+caption: {{$:/language/tidme/sidebar.dashboard}}
 type: text/vnd.tiddlywiki
 tags: $:/tags/SideBar
 
 <div class="tm-page-header">
   <div class="tm-page-title-row">
-    <span class="tm-page-title">Incremental Learning & Spaced Repetition</span>
-    <span class="tm-page-badge">Cockpit</span>
+    <span class="tm-page-title"><$transclude tiddler="$:/language/tidme/tidme.title">Incremental Learning & Spaced Repetition</$transclude></span>
+    <span class="tm-page-badge"><$transclude tiddler="$:/language/tidme/tidme.badge">Cockpit</$transclude></span>
   </div>
-  <div class="tm-page-subtitle">Today Tasks · Reading Materials · Decks Navigation</div>
 </div>
 
 <$tidme-nav/>

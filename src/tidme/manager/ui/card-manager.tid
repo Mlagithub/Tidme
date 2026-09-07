@@ -1,10 +1,10 @@
 title: $:/plugins/keepone/tidme/manager/ui/card-manager
-caption: Card Manager
+caption: {{$:/language/tidme/manager.title}}
 type: text/vnd.tiddlywiki
 
 <$tidme-nav/>
 
-Browse, organize, and manage all learning cards (including read, suspended, and manual cards).
+<$transclude tiddler="$:/language/tidme/manager.desc">Browse, organize, and manage all learning cards (including read, suspended, and manual cards).</$transclude>
 
 <$card-manager/>
 
@@ -12,10 +12,10 @@ Browse, organize, and manage all learning cards (including read, suspended, and 
 
 <$queue-ops/>
 
-<details class="tm-cm-help"><summary>Auto-Postpone Documentation</summary>
+<details class="tm-cm-help"><summary><$transclude tiddler="$:/language/tidme/manager.autopostpone.help.title">Auto-Postpone Documentation</$transclude></summary>
 
-Auto-postpone automatically defers lower-priority overdue cards daily (at startup and every hour) while preserving high-priority cards. Configure via <code>$:/config/Tidme/AutoPostpone</code>: <code>{"enable": true, "maxPriority": 60, "postponeDays": 7, "keepTop": 10}</code>.
+<$transclude tiddler="$:/language/tidme/manager.autopostpone.help.desc">Auto-postpone automatically defers lower-priority overdue cards daily (at startup and every hour) while preserving high-priority cards. Configure via <code>$:/config/Tidme/AutoPostpone</code>: <code>{"enable": true, "maxPriority": 60, "postponeDays": 7, "keepTop": 10}</code>.</$transclude>
 
 </details>
 
-Subset Review: The "Review Book" button on document pages creates a temporary subset deck for that book's cards, which is automatically cleaned up after review.
+<$transclude tiddler="$:/language/tidme/manager.subset.desc">Subset Review: The "Review Book" button on document pages creates a temporary subset deck for that book's cards, which is automatically cleaned up after review.</$transclude>

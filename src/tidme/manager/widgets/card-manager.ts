@@ -168,7 +168,7 @@ function docNameOf(c: Card, wiki?: any): string {
   const key = String(c.fields['tidme.doc'] || c.fields['tidme.parent'] || '');
   if (!key) return lingoMod.lingo(wiki, 'manager.ungrouped', 'Ungrouped');
   const first = crumbOf(c).split(ns.CRUMB_SEP)[0] || key;
-  // 语义名回退：内部路径名去前缀显示（$:/Deck/IELTS_3 → IELTS_3；$:/Today → Today）
+  // 语义名回退：内部路径名去前缀显示（$:/Deck/IELTS_3 → IELTS_3；$:/IncrementalLearning → IncrementalLearning）
   let name = first || key;
   if (name.startsWith(ns.DECK_PREFIX)) name = name.slice(ns.DECK_PREFIX.length);
   else if (name.startsWith('$:/')) name = name.slice(3);
