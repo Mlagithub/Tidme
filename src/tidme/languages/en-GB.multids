@@ -549,4 +549,81 @@ manager.editparams: Edit Parameters
 manager.editparams.tip: Modify Next Due / Priority / Comment
 manager.col.stability: Stability
 manager.col.elapsed: Elapsed Days
-
+pdf.select.tip: Box select: drag rectangle on page to create image QA card
+pdf.ocr.tip: Scan page recognition (LLM-OCR)
+pdf.study.next: ✓ Done & Continue ›
+creator.deck.standalone: Standalone
+queueops.autopostpone: Postpone Overdue
+pdf.toc.tip: Table of Contents
+annotate: Annotate
+close: Close
+closetip: Close this dialog
+word: Mark Word
+wordtip: Mark selected word
+sentence: Extract Sentence
+sentencetip: Extract selected sentence
+twpub: TWPUB Book
+twpubtip: TWPUB is an electronic publication based on TiddlyWiki
+importtwpub: Import TWPUB
+twpublibrary: TWPUB Library
+twpublibrarytip: Install and update TWPUB books via this library.
+focus: Focus
+focustip: Knowledge Graph
+question: Question
+answer: Answer
+optional: Optional
+cancel: Cancel
+confirm: Confirm
+card: Card
+cloze.preview: Cloze Preview / Context
+question.placeholder: Enter question...
+answer.placeholder: Enter answer or key explanation...
+modal.imageqa: Image Q&A Card
+modal.imgquestion: Question (Image Selection)
+creator.submit: Create Card
+creator.btn.insertcloze: Add Cloze {{C}}
+creator.keepopen: Keep Open (Add another)
+save: Save
+delete: Delete
+cardmodal.title.qa: Q&A Card
+cardmodal.title.cloze: Cloze Card
+read.page: Page
+read/prev.tip: Previous section (Alt+Left):
+read/noprev: No previous section
+read/next.tip: Next scheduled section (Alt+Right):
+read/nonext: No next section
+read/stats: Stats
+read/stats.tip: Toggle card study data
+read/help: Shortcuts and usage help
+manager.action.read.tip: Remove from queue (Mark as read)
+manager.action.back.tip: Restore to learning queue
+manager.action.del.tip: Delete card
+manager.done: Done
+queueops.title: Deck Batch Operations (Priority Scheduling)
+queueops.desc: Postpone = due+7d · Advance = review today · Ignore = remove from queue · Suspend = pause · Forget = reset to new
+settings.reading.mix.desc: When topics are mixed in, insert 1 topic card per N item cards
+settings.review.maxpriority.desc: Only cards with priority value greater than this will be postponed (0 is highest)
+settings.review.postponedays.desc: Number of days to postpone low priority overdue cards
+settings.review.threshold.desc: Only trigger auto-postpone when overdue cards exceed this count (0 = no threshold)
+settings.review.logretention.desc: Review logs older than this will be cleaned on startup (0 = keep forever)
+settings.pdf.split.desc: Applies to future imports; you can always flip pages in reader
+settings.ocr.model.desc: Multimodal vision model for text transcription
+settings.ocr.baseurl.desc: Leave empty for https://api.openai.com/v1
+settings.ocr.apikey.desc: Leave empty to reuse AI Semantic Split key
+settings.ai.enable.desc: Split unstructured prose into sections using LLM semantic boundaries
+settings.ai.key.desc: API key for semantic splitting LLM service
+settings.ai.endpoint.desc: OpenAI-compatible endpoint, can point to self-hosted service
+settings.ai.model.desc: LLM model name for boundary detection
+pdf.loading.server: Loading PDF data from server...
+pdf.loading.external: Requesting external PDF file...
+pdf.prevpage: Previous Page
+pdf.nextpage: Next Page
+read.zoom.out: Zoom Out
+read.zoom: Zoom
+read.zoom.in: Zoom In
+pdf.select: Select
+pdf.study.next.tip: Save reading progress and continue study flow
+pdf.load.failed: Failed to load: 
+pdf.rendering: Rendering...
+pdf.render.failed: Render failed: 
+workflow.hero.tip: Review all due and new knowledge cards (cloze / Q&A)

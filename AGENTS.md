@@ -9,14 +9,14 @@ master 分支走 semantic-release。
 - `src/tidme/core` 领域核心（调度/会话/牌组/统计/命名空间），纯逻辑 + wiki 注入
 - `src/tidme/import/parse` 导入解析（EPUB/Markdown → tiddler，辅助功能）；`import/widgets` 导入 UI
 - `src/tidme/review` 复习流（filters/buttons/ViewTemplate）；`manager` 卡片管理 UI；`editor` CodeMirror 集成
-- `src/zh-Hans`、`src/fr-FR` 语言包 **git 子模块**（常未初始化，缺失是正常现象）
+- `src/zh-Hans` 语言包（内置主项目管理，产出 `$__tidme_languages_zh-Hans.json`）
 - `test/` 分层测试（见下）；`tools/` 构建脚本；`bin/` 构建产物（**git 跟踪，改源码后重建并提交**）
 
 ## 常用命令
 
 ```bash
 node tools/build-plugins.cjs   # 构建 bin/（插件 JSON + parse.cjs）；改 src 后必须先跑
-npm test                       # 全部测试（node --test，237 用例 ~6s）
+npm test                       # 全部测试（node --test，305+ 用例 ~6s）
 npm run test:coverage          # 同上 + 覆盖率
 npm run dev                    # tiddlywiki-plugin-dev 开发模式
 ```
@@ -35,7 +35,7 @@ Node ≥22（类型剥离直跑 .ts）；本机 node 由 fnm 管理。CI = build
 ## 测试约定
 
 - 分层：`unit/` 直测 TS 源码；`integration/` boot 真实 TW + bin 产物；`e2e/` 真实 TiddlyWeb / 学习流
-- 用例基线**只增不减**（当前 237）；五条黄金法则：AAA / 一测一概念 / 命名即文档 / 谨慎 Mock / 测试独立
+- 用例基线**只增不减**（当前 305+）；五条黄金法则：AAA / 一测一概念 / 命名即文档 / 谨慎 Mock / 测试独立
 - 永不 mock `$tw`/wiki（boot 真实 TW）；setup 一律走 `test/helpers/`（bootPlugin/fake-dom/tw-date 等），禁止手写第二份
 - 已知陷阱：
   - TW 经 vm 沙箱 boot，`filterTiddlers` 返回跨 realm 数组 → 断言前先 `[...out]` 展开，对象逐字段比

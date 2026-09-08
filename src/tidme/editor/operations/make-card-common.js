@@ -39,7 +39,7 @@ commitCard），不改写编辑器文本。
       if (!draft) return;
       factory.commitCard(wiki, draft, editWidget);
       try {
-        if ($tw && $tw.notifier && $tw.notifier.display) {
+        if (typeof $tw !== 'undefined' && $tw && $tw.notifier && $tw.notifier.display) {
           $tw.notifier.display(ns.NOTIFY_CLOZE);
         }
       } catch (e) { /* 无头/无 document 环境忽略通知 */ }

@@ -9,6 +9,7 @@ core/card-factory.commitCard，由调用方在 onSave 回调里完成）。
 
 declare function require(module: string): any;
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const el = dom.el;
 
 export interface CardModalResult {
@@ -23,6 +24,7 @@ export interface CardModalOptions {
   imageUrl?: string;
   docTitle?: string;
   page?: number;
+  wiki?: any;
   onSave: (res: CardModalResult) => void;
 }
 
@@ -45,18 +47,23 @@ export function openCardModal(
   const type = opts.type;
   const initial = opts.initialAnswerOrCloze || '';
   const saveCallback = opts.onSave;
+  const wiki = opts.wiki;
+
+  const l = (key: string, fallback: string) => {
+    return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
+  };
 
   const overlay = el(doc, 'div', 'tm-card-modal-overlay');
   const modal = el(doc, 'div', 'tm-card-modal');
 
-  // 标题行
-  let titleText = '❓ Q&A Card';
-  if (type === 'cloze') titleText = '🧩 Cloze Card';
-  else if (type === 'image-qa') titleText = '📷 Image Q&A Card';
+  // 标题行（移除 emoji，遵循图标设计规范并支持国际化）
+  let titleText = l('cardmodal.title.qa', 'Q&A Card');
+  if (type === 'cloze') titleText = l('cardmodal.title.cloze', 'Cloze Card');
+  else if (type === 'image-qa') titleText = l('modal.imageqa', 'Image Q&A Card');
 
   const titleRow = el(doc, 'div', 'tm-card-modal-title', titleText);
   if (type === 'image-qa' && opts.page) {
-    const badge = el(doc, 'span', 'tm-card-modal-badge', `Page ${opts.page}`);
+    const badge = el(doc, 'span', 'tm-card-modal-badge', `${l('read.page', 'Page')} ${opts.page}`);
     titleRow.appendChild(badge);
   }
   modal.appendChild(titleRow);
@@ -69,7 +76,7 @@ export function openCardModal(
     // 1. 图片预览区（作为问题面）
     if (opts.imageUrl) {
       const imgField = el(doc, 'div', 'tm-card-modal-field');
-      const imgLabel = el(doc, 'label', '', 'Question (Image Selection):');
+      const imgLabel = el(doc, 'label', '', `${l('modal.imgquestion', 'Question (Image Selection)')}:`);
       const imgWrap = el(doc, 'div', 'tm-card-modal-img-wrap');
       const imgNode = el(doc, 'img', 'tm-card-modal-img-preview') as HTMLImageElement;
       imgNode.src = opts.imageUrl;
@@ -81,18 +88,18 @@ export function openCardModal(
 
     // 2. 简短标题 / 说明（可选）
     const fieldTitle = el(doc, 'div', 'tm-card-modal-field');
-    const labelTitle = el(doc, 'label', '', 'Card Title / Note (Optional):');
+    const labelTitle = el(doc, 'label', '', `${l('creator.field.title', 'Card Title')} (${l('optional', 'Optional')}):`);
     labelInput = el(doc, 'input', 'tm-card-modal-input') as HTMLInputElement;
-    labelInput.placeholder = 'e.g. Architecture Diagram (defaults to page number if empty)';
+    labelInput.placeholder = l('creator.field.title.placeholder', 'Optional concise summary...');
     fieldTitle.appendChild(labelTitle);
     fieldTitle.appendChild(labelInput);
     modal.appendChild(fieldTitle);
 
     // 3. 答案输入区（自动聚焦）
     const fieldAns = el(doc, 'div', 'tm-card-modal-field');
-    const labelAns = el(doc, 'label', '', 'Answer:');
+    const labelAns = el(doc, 'label', '', `${l('answer', 'Answer')}:`);
     input2 = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
-    input2.placeholder = 'Enter answer or key explanation for this image...';
+    input2.placeholder = l('answer.placeholder', 'Enter answer or key explanation for this image...');
     input2.value = initial;
     fieldAns.appendChild(labelAns);
     fieldAns.appendChild(input2);
@@ -100,14 +107,14 @@ export function openCardModal(
   } else {
     // 经典 QA / Cloze 布局
     const field1 = el(doc, 'div', 'tm-card-modal-field');
-    const label1 = el(doc, 'label', '', type === 'qa' ? 'Question:' : 'Cloze Preview / Context:');
+    const label1 = el(doc, 'label', '', type === 'qa' ? `${l('question', 'Question')}:` : `${l('cloze.preview', 'Cloze Preview / Context')}:`);
     input1 = el(
       doc,
       type === 'qa' ? 'input' : 'textarea',
       type === 'qa' ? 'tm-card-modal-input' : 'tm-card-modal-textarea',
     ) as any;
     if (type === 'qa') {
-      (input1 as HTMLInputElement).placeholder = 'Enter question...';
+      (input1 as HTMLInputElement).placeholder = l('question.placeholder', 'Enter question...');
     } else {
       (input1 as HTMLTextAreaElement).value = initial;
     }
@@ -117,9 +124,10 @@ export function openCardModal(
 
     if (type === 'qa') {
       const field2 = el(doc, 'div', 'tm-card-modal-field');
-      const label2 = el(doc, 'label', '', 'Answer:');
+      const label2 = el(doc, 'label', '', `${l('answer', 'Answer')}:`);
       input2 = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
       input2.value = initial;
+      input2.placeholder = l('answer.placeholder', 'Enter answer...');
       field2.appendChild(label2);
       field2.appendChild(input2);
       modal.appendChild(field2);
@@ -127,8 +135,8 @@ export function openCardModal(
   }
 
   const actions = el(doc, 'div', 'tm-card-modal-actions');
-  const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', 'Cancel (Esc)');
-  const saveBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', 'Create Card (Ctrl+Enter)');
+  const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', `${l('cancel', 'Cancel')} (Esc)`);
+  const saveBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', `${l('creator.submit', 'Create Card')} (Ctrl+Enter)`);
 
   const close = () => {
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
@@ -138,8 +146,9 @@ export function openCardModal(
     if (type === 'image-qa') {
       const a = String(input2?.value || '').trim();
       const lbl = String(labelInput?.value || '').trim();
+      const safeImgUrl = opts.imageUrl ? String(opts.imageUrl).replace(/"/g, '&quot;') : '';
       saveCallback({
-        question: opts.imageUrl ? `<img src="${opts.imageUrl}" style="max-width:100%">` : '',
+        question: safeImgUrl ? `<img src="${safeImgUrl}" style="max-width:100%">` : '',
         answerOrCloze: a,
         label: lbl,
       });

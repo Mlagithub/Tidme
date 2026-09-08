@@ -360,7 +360,7 @@ test('doc-ops: docReadingTarget —— 续读点被忽略/搁置视为出队；�
 test('doc-ops: 续读点写入携带 modified（最近阅读排序的时间源）', () => {
   const docOps = mod('core/doc-ops.js');
   docOps.saveReadPoint(wiki, 'dmod', { t: '某卡', s: '' });
-  const m = wiki.getTiddler('$:/state/tidme-import/readpoint/dmod')?.fields?.modified;
+  const m = wiki.getTiddler(docOps.READPOINT_PREFIX + 'dmod')?.fields?.modified;
   assert.ok(m && !Number.isNaN(new Date(m).getTime()), 'per-doc 续读点带 modified');
   docOps.saveGlobalReadPoint(wiki, '某卡');
   const g = wiki.getTiddler('$:/state/tidme-import/readpoint/global');

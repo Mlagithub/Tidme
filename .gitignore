@@ -153,3 +153,5 @@ wiki/tiddlers/$__Deck_*log_*.json*
 wiki/tiddlers/$__Deck_*study*.tid*
 
 .zcode/
+
+*.md

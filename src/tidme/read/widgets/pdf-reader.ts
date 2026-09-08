@@ -40,84 +40,8 @@ const el = dom.el;
 const FS_SVG =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-/** 智能解析 PDF 上下文（二进制标题、docId、文档页标题，带路径/书名/库内候选多级回退） */
-function resolvePdfContext(
-  wiki: any,
-  currentTitle: string,
-): { pdfTitle: string; docId: string; docPageTitle: string } {
-  if (!wiki || !currentTitle) return { pdfTitle: '', docId: '', docPageTitle: '' };
-  const f = wiki.getTiddler(currentTitle)?.fields || {};
-  let docId = String(f['tidme.doc'] || '');
-  let pdfTitle = String(f['tidme.pdf'] || '');
-  let docPageTitle = '';
-
-  // 1. 若当前卡是文档页
-  if (String(f['tidme.type'] || '') === 'pdf' && !f['tidme.subkind']) {
-    docPageTitle = currentTitle;
-  }
-
-  // 2. 若无 pdfTitle，通过 docId 找文档页
-  if (!pdfTitle && docId) {
-    const docPage = docOps.docPageOfDoc(wiki, docId);
-    if (docPage) {
-      docPageTitle = docPageTitle || docPage;
-      pdfTitle = String(wiki.getTiddler(docPage)?.fields?.['tidme.pdf'] || '');
-    }
-  }
-
-  // 3. 若仍无，尝试从当前路径父级推断文档页（如 Tidme/Books/书名/01 章节 -> Tidme/Books/书名）
-  if (!docPageTitle && currentTitle.includes('/')) {
-    const parentCandidate = currentTitle.slice(0, currentTitle.lastIndexOf('/'));
-    docPageTitle = parentCandidate;
-    const parentTiddler = wiki.getTiddler(parentCandidate);
-    if (parentTiddler) {
-      if (!docId) docId = String(parentTiddler.fields['tidme.doc'] || '');
-      if (!pdfTitle) pdfTitle = String(parentTiddler.fields['tidme.pdf'] || '');
-    }
-  }
-
-  // 4. 若仍未找到有效 pdfTitle，从书名或全局库中匹配 PDF 二进制条目
-  if (!pdfTitle || !wiki.getTiddler(pdfTitle)) {
-    const breadcrumbFirst = String(f['tidme.breadcrumb'] || '').split('›')[0].trim();
-    const caption = String(f.caption || '');
-    let bookFromPath = '';
-    if (currentTitle.startsWith(ns.NS_BOOKS)) {
-      bookFromPath = currentTitle.slice(ns.NS_BOOKS.length).split('/')[0];
-    } else if (docPageTitle && docPageTitle.startsWith(ns.NS_BOOKS)) {
-      bookFromPath = docPageTitle.slice(ns.NS_BOOKS.length).split('/')[0];
-    }
-    const candidates = [breadcrumbFirst, caption, bookFromPath].filter((x) => x && x.length > 0);
-
-    for (const name of candidates) {
-      const direct = ns.NS_PDFS + name;
-      if (wiki.getTiddler(direct)) {
-        pdfTitle = direct;
-        break;
-      }
-    }
-
-    if (!pdfTitle || !wiki.getTiddler(pdfTitle)) {
-      const allPdfs = typeof wiki.filterTiddlers === 'function' ? wiki.filterTiddlers('[type[application/pdf]]') : [];
-      if (allPdfs.length === 1) {
-        pdfTitle = allPdfs[0];
-      } else if (allPdfs.length > 1) {
-        for (const p of allPdfs) {
-          const stripped = p.replace(ns.NS_PDFS, '');
-          if (candidates.some((c) => p.includes(c) || c.includes(stripped))) {
-            pdfTitle = p;
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  return {
-    pdfTitle,
-    docId,
-    docPageTitle: docPageTitle || (docId ? docOps.docPageOfDoc(wiki, docId) : ''),
-  };
-}
+const pdfContextMod = require('$:/plugins/keepone/tidme/core/pdf-context.js');
+const resolvePdfContext = pdfContextMod.resolvePdfContext;
 
 /** 获取 PDF 字节数组（支持 base64、服务端懒加载 _is_skinny 轮询等待、_canonical_uri fetch） */
 async function loadPdfBytesWithWait(
@@ -217,6 +141,7 @@ function makeReader(): any {
       this.parentDomNode = parent;
       this.computeAttributes();
       this.execute();
+      this._cleanup();
       this._startTime = Date.now();
       const doc = this.document;
       const wiki = this.wiki;
@@ -303,9 +228,9 @@ function makeReader(): any {
       const activeStudy = sessionMod.getActiveStudy(wiki);
       if (activeStudy) {
         const gStudy = el(doc, 'div', 'tm-pdf-bar-group tm-pdf-bar-study');
-        const nextBtn = el(doc, 'button', 'tm-pdf-btn-study-next', lingoMod.lingo(wiki, 'pdf.study.next', '✓ Done & Continue ›'));
-        nextBtn.title = lingoMod.lingo(wiki, 'pdf.study.next.tip', 'Save reading progress and continue study flow');
-        nextBtn.addEventListener('click', () => {
+        const studyNextBtn = el(doc, 'button', 'tm-pdf-btn-study-next', lingoMod.lingo(wiki, 'pdf.study.next', '✓ Done & Continue ›'));
+        studyNextBtn.title = lingoMod.lingo(wiki, 'pdf.study.next.tip', 'Save reading progress and continue study flow');
+        studyNextBtn.addEventListener('click', () => {
           if (this._docId && this._page) {
             docOps.saveReadPoint(wiki, this._docId, { t, s: `p${this._page}` });
             wiki.addTiddler({ title: `$:/state/tidme-pdf/page/${this._docId}`, text: String(this._page) });
@@ -325,7 +250,7 @@ function makeReader(): any {
             dom.navigateTo(this, ns.PAGE_TODAY);
           }
         });
-        gStudy.appendChild(nextBtn);
+        gStudy.appendChild(studyNextBtn);
         bar.appendChild(gStudy);
       }
 
@@ -419,10 +344,12 @@ function makeReader(): any {
           }
         }
 
-        // 2. 若外部指定了有效页码（如「回原文」临时溯源），且落在本节区间内 → 采用该页（不修改续读点）
+        // 2. 若外部指定了有效页码（如「回原文」临时溯源），且落在本节区间内 → 采用该页并消费清理
         if (Number.isFinite(statePage) && statePage >= 1) {
           const inRange = !range.end || (statePage >= range.start && statePage <= range.end);
           if (inRange) {
+            // 消费即清理，防止误劫持后续打开的其他节卡
+            this.wiki.deleteTiddler('$:/state/tidme-pdf/page/' + this._docId);
             return numPages > 0 && statePage > numPages ? target : statePage;
           }
         }
@@ -489,14 +416,40 @@ function makeReader(): any {
       return false;
     }
 
-    destroy() {
+    _cleanup() {
       this._flushReadTime();
-      if (this._savePageTimer) clearTimeout(this._savePageTimer);
-      if (this._resizeObs) this._resizeObs.disconnect();
-      if (this._resizeTimer) clearTimeout(this._resizeTimer);
-      if (this._onFsChange && typeof this.document.removeEventListener === 'function') {
-        this.document.removeEventListener('fullscreenchange', this._onFsChange);
+      if (this._savePageTimer) {
+        clearTimeout(this._savePageTimer);
+        this._savePageTimer = null;
       }
+      if (this._resizeObs) {
+        this._resizeObs.disconnect();
+        this._resizeObs = null;
+      }
+      if (this._resizeTimer) {
+        clearTimeout(this._resizeTimer);
+        this._resizeTimer = null;
+      }
+      if (this._onFsChange && this.document && typeof this.document.removeEventListener === 'function') {
+        this.document.removeEventListener('fullscreenchange', this._onFsChange);
+        this._onFsChange = () => {};
+      }
+      this._renderSeq++;
+      if (this._pdf && typeof this._pdf.destroy === 'function') {
+        try {
+          this._pdf.destroy();
+        } catch (_) {}
+        this._pdf = null;
+      }
+    }
+
+    removeChildDomNodes() {
+      this._cleanup();
+      super.removeChildDomNodes?.();
+    }
+
+    destroy() {
+      this._cleanup();
       super.destroy?.();
     }
 
@@ -572,6 +525,7 @@ function makeReader(): any {
         this._pageBox.style.display = 'block';
         this._textLayer.style.width = `${cssW}px`;
         this._textLayer.style.height = `${cssH}px`;
+        if (seq !== this._renderSeq) return;
         await this._fillTextLayer(viewport, dpr);
         if (seq !== this._renderSeq) return;
         this._status.textContent = '';
@@ -770,20 +724,23 @@ function makeReader(): any {
       });
       viewer.addEventListener('mousedown', (e: MouseEvent) => {
         if (!this._selMode || e.button !== 0) return;
+        const doc = this.document || document;
         const cr = this._canvas.getBoundingClientRect();
         this._selStart = { x: e.clientX - cr.left, y: e.clientY - cr.top };
         setRect(this._selStart.x, this._selStart.y, 0, 0);
         const move = (ev: MouseEvent) => {
           if (!this._selStart) return;
-          const x2 = ev.clientX - cr.left;
-          const y2 = ev.clientY - cr.top;
+          const currentCr = this._canvas.getBoundingClientRect();
+          const x2 = ev.clientX - currentCr.left;
+          const y2 = ev.clientY - currentCr.top;
           setRect(Math.min(this._selStart.x, x2), Math.min(this._selStart.y, y2), Math.abs(x2 - this._selStart.x), Math.abs(y2 - this._selStart.y));
         };
         const up = (ev: MouseEvent) => {
-          document.removeEventListener('mousemove', move);
-          document.removeEventListener('mouseup', up);
-          const x2 = ev.clientX - cr.left;
-          const y2 = ev.clientY - cr.top;
+          doc.removeEventListener('mousemove', move);
+          doc.removeEventListener('mouseup', up);
+          const currentCr = this._canvas.getBoundingClientRect();
+          const x2 = ev.clientX - currentCr.left;
+          const y2 = ev.clientY - currentCr.top;
           const x = Math.min(this._selStart.x, x2);
           const y = Math.min(this._selStart.y, y2);
           const w = Math.abs(x2 - this._selStart.x);
@@ -793,8 +750,8 @@ function makeReader(): any {
           if (w < 12 || h < 12) return; // 误触
           this._createImageCard(sectionTitle, x, y, w, h);
         };
-        document.addEventListener('mousemove', move);
-        document.addEventListener('mouseup', up);
+        doc.addEventListener('mousemove', move);
+        doc.addEventListener('mouseup', up);
       });
     }
 

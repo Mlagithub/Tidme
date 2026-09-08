@@ -75,12 +75,11 @@ export function parseReadPoint(wiki: any, doc: string): { t: string; s: string }
   return t ? parseReadPointRaw(String(t.fields.text || '')) : null;
 }
 
-/** 写续读点（text = JSON {t,s}，持久化到 $:/config/ 命名空间并同步镜像到 $:/state/ 保证会话瞬时与遗留测试兼容） */
+/** 写续读点（text = JSON {t,s}，持久化到 $:/config/ 命名空间） */
 export function saveReadPoint(wiki: any, doc: string, rp: { t: string; s: string }): void {
   if (!wiki || !doc || !rp || !rp.t) return;
   const now = new Date();
   wiki.addTiddler({ title: READPOINT_PREFIX + doc, type: 'application/json', text: JSON.stringify(rp), modified: now });
-  wiki.addTiddler({ title: LEGACY_READPOINT_PREFIX + doc, type: 'application/json', text: JSON.stringify(rp), modified: now });
 }
 
 /** 清除续读点 */

@@ -9,7 +9,7 @@ ui-components.test.mjs — UI 基础层与通用组件库测试（node:test）
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { collectText, fakeDocument } from '../helpers/fake-dom.mjs';
+import { collectButtons, collectText, fakeDocument } from '../helpers/fake-dom.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
 const { wiki, mod } = bootPlugin({ prefix: 'tidme-ui-test-' });
@@ -255,4 +255,105 @@ test('omni-creator: 全局制卡模态弹窗与 Widget 结构导出', () => {
   assert.ok(createdCard, '保存成功触发 onSuccess');
   assert.equal(createdCard['tidme.kind'], 'item');
   assert.equal(createdCard['tidme.subkind'], 'qa');
+});
+
+test('omni-creator: <$tidme-card-creator/> widget 在 TW 真实解析并渲染为 DOM 节点', () => {
+  const container = fakeDocument.createElement('div');
+  const parser = wiki.parseText('text/vnd.tiddlywiki', '<$tidme-card-creator/>');
+  const widget = wiki.makeWidget(parser, { document: fakeDocument });
+  widget.render(container, null);
+
+  assert.ok(container.childNodes.length > 0, '成功渲染出 DOM 元素');
+  const btns = collectButtons(container);
+  assert.ok(btns.length > 0, '包含制卡按钮');
+  const btn = btns[0];
+  assert.ok(btn && String(btn.className).includes('tm-card-modal-submit'), '包含制卡按钮类名');
+  assert.ok(btn && String(btn.textContent).includes('Alt+K'), '制卡按钮显示 Alt+K 快捷键');
+});
+
+test('omni-creator: Alt+K 唤起独立制卡并截断事件传播，Alt+N 保留给系统原生新建条目', () => {
+  const omni = mod('ui/components/omni-creator.js');
+  const docListeners = {};
+  const mockWinDoc = {
+    addEventListener: (evt, fn) => {
+      docListeners[evt] = fn;
+    },
+    querySelector: () => null,
+    createElement: (t) => fakeDocument.createElement(t),
+    body: fakeDocument.createElement('body'),
+  };
+
+  omni.initGlobalCardShortcut(wiki, { document: mockWinDoc });
+  const onKeydown = docListeners['keydown'];
+  assert.ok(onKeydown, '成功挂载 keydown 全局监听器');
+
+  // 1. Alt+N 不应触发，且不调用 preventDefault / stopPropagation
+  let altNPrevented = false;
+  let altNStopped = false;
+  onKeydown({
+    altKey: true,
+    ctrlKey: false,
+    shiftKey: false,
+    key: 'n',
+    preventDefault: () => {
+      altNPrevented = true;
+    },
+    stopPropagation: () => {
+      altNStopped = true;
+    },
+    stopImmediatePropagation: () => {
+      altNStopped = true;
+    },
+  });
+  assert.equal(altNPrevented, false, 'Alt+N 不应被阻止（留给 TiddlyWiki 原生新建）');
+  assert.equal(altNStopped, false, 'Alt+N 不应截断传播');
+
+  // 2. Alt+K 应触发制卡，并且同时阻止默认行为和事件传播
+  let altKPrevented = false;
+  let altKStopped = false;
+  let altKImmediateStopped = false;
+  onKeydown({
+    altKey: true,
+    ctrlKey: false,
+    shiftKey: false,
+    key: 'k',
+    preventDefault: () => {
+      altKPrevented = true;
+    },
+    stopPropagation: () => {
+      altKStopped = true;
+    },
+    stopImmediatePropagation: () => {
+      altKImmediateStopped = true;
+    },
+  });
+  assert.equal(altKPrevented, true, 'Alt+K 必须调用 preventDefault');
+  assert.equal(altKStopped, true, 'Alt+K 必须调用 stopPropagation');
+  assert.equal(altKImmediateStopped, true, 'Alt+K 必须调用 stopImmediatePropagation');
+});
+
+test('ui/components/omni-creator: listDeckOptions 解耦内部值与显示文本', () => {
+  const omni = mod('ui/components/omni-creator.js');
+  const cardFactory = mod('core/card-factory.js');
+  const ns = mod('core/ns.js');
+
+  const options = omni.listDeckOptions(wiki);
+  assert.ok(Array.isArray(options));
+  assert.ok(options.length >= 1);
+  assert.equal(options[0].value, '__inbox__', '散卡首项内部值必须为 __inbox__');
+  assert.ok(options[0].label, '散卡首项必须有本地化显示标签');
+
+  // 向后兼容测试
+  const labels = omni.listAvailableDecks(wiki);
+  assert.equal(labels[0], options[0].label);
+
+  // buildStandaloneCard 散卡路径测试
+  const card = cardFactory.buildStandaloneCard(wiki, {
+    type: 'qa',
+    title: 'Test Q',
+    deck: '__inbox__',
+    question: 'Q',
+    answer: 'A',
+  });
+  assert.ok(card.title.startsWith(ns.NS_DECKS_SCATTER), `散卡必须以 ${ns.NS_DECKS_SCATTER} 为基座路径`);
 });

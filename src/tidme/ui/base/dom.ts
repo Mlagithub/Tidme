@@ -1,6 +1,5 @@
 /*
-core/dom.ts — 无状态 DOM 小工具
-浏览器/无头通用的 createElement 帮助。
+ui/base/dom.ts — DOM 操作工具（ui/base/dom.ts 唯一真实实现）createElement 帮助。
 */
 
 export function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {

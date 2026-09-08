@@ -1,7 +1,7 @@
 /*
 ui/components/omni-creator.ts — 全局独立制卡中心（Omni Card Creator）
 
-- 全局快捷键唤起（Alt+N）：随时随地灵感录入，无需预先划词；
+- 全局快捷键唤起（Alt+K）：随时随地灵感录入，无需预先划词；
 - 模板切换引擎：问答卡 (Q&A)、挖空卡 (Cloze)、概念卡 (Concept)；
 - 牌组与分类归属：支持选择散卡桶或指定牌组；
 - 连续添加模式（Keep Open）：支持 Anki 式快速连续录卡；
@@ -31,20 +31,39 @@ interface OmniCreatorOptions {
   onSuccess?: (card: any) => void;
 }
 
-/** 收集当前 wiki 中的所有牌组名称 */
-function listAvailableDecks(wiki: any): string[] {
-  const standalone = lingoMod.lingo(wiki, 'creator.deck.standalone', 'Standalone');
-  const decks = new Set<string>();
-  decks.add(standalone);
-  if (!wiki || typeof wiki.filterTiddlers !== 'function') return Array.from(decks);
+interface DeckOption {
+  value: string;
+  label: string;
+}
+
+/** 获取牌组选项列表（value 统一为内部标识，label 为展示文本） */
+function listDeckOptions(wiki: any): DeckOption[] {
+  const standaloneLabel = lingoMod.lingo(wiki, 'creator.deck.standalone', 'Standalone');
+  const options: DeckOption[] = [
+    { value: '__inbox__', label: standaloneLabel },
+  ];
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return options;
   try {
-    const list = deckMod.allDecks ? deckMod.allDecks(wiki) : [];
+    const list = typeof deckMod.listDecks === 'function'
+      ? deckMod.listDecks(wiki)
+      : (typeof deckMod.allDecks === 'function' ? deckMod.allDecks(wiki) : []);
+    const prefix = deckMod.DECK_PREFIX || '$:/Deck/';
+    const seen = new Set<string>();
     for (const d of list) {
-      const name = String(d?.name || d?.title || d || '').trim();
-      if (name) decks.add(name);
+      const raw = String(d?.name || d?.title || d || '').trim();
+      const name = raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
+      if (name && name !== 'default' && !seen.has(name)) {
+        seen.add(name);
+        options.push({ value: name, label: name });
+      }
     }
   } catch { /* 容错 */ }
-  return Array.from(decks);
+  return options;
+}
+
+/** 收集当前 wiki 中的所有牌组名称（保持外部兼容） */
+function listAvailableDecks(wiki: any): string[] {
+  return listDeckOptions(wiki).map((opt) => opt.label);
 }
 
 /** 打开全局独立制卡模态弹窗 */
@@ -63,7 +82,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   // 1. 顶部标题栏
   const header = el(doc, 'div', 'tm-card-modal-title tm-omni-header');
   const titleSpan = el(doc, 'span', '', `✨ ${l('creator.modal.create', 'Add Card')}`);
-  const shortcutBadge = el(doc, 'span', 'tm-card-modal-badge', 'Alt+N');
+  const shortcutBadge = el(doc, 'span', 'tm-card-modal-badge', 'Alt+K');
   header.appendChild(titleSpan);
   header.appendChild(shortcutBadge);
   modal.appendChild(header);
@@ -100,12 +119,14 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   const deckWrap = el(doc, 'div', 'tm-omni-deck-wrap');
   const deckLabel = el(doc, 'label', '', `${l('deck', 'Deck')}:`);
   const deckSelect = el(doc, 'select', 'tm-card-modal-input tm-omni-deck-select') as HTMLSelectElement;
-  const availableDecks = listAvailableDecks(wiki);
-  const standaloneName = l('creator.deck.standalone', 'Standalone');
-  for (const d of availableDecks) {
-    const opt = el(doc, 'option', '', d) as HTMLOptionElement;
-    opt.value = d;
-    if (d === (opts.defaultDeck || standaloneName)) opt.selected = true;
+  const deckOptions = listDeckOptions(wiki);
+  const targetDefault = (opts.defaultDeck || '__inbox__').trim();
+  for (const optData of deckOptions) {
+    const opt = el(doc, 'option', '', optData.label) as HTMLOptionElement;
+    opt.value = optData.value;
+    if (optData.value === targetDefault || (targetDefault !== '__inbox__' && optData.label === targetDefault)) {
+      opt.selected = true;
+    }
     deckSelect.appendChild(opt);
   }
   deckWrap.appendChild(deckLabel);
@@ -132,6 +153,15 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   let clozeInput: HTMLTextAreaElement | null = null;
   let conceptInput: HTMLTextAreaElement | null = null;
 
+  const focusEl = (target: HTMLElement | null) => {
+    if (!target) return;
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(() => target.focus());
+    } else {
+      target.focus();
+    }
+  };
+
   const renderFields = () => {
     fieldsContainer.innerHTML = '';
     if (currentType === 'qa') {
@@ -152,7 +182,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
 
       fieldsContainer.appendChild(fQ);
       fieldsContainer.appendChild(fA);
-      setTimeout(() => qInput?.focus(), 50);
+      focusEl(qInput);
     } else if (currentType === 'cloze') {
       // 挖空卡：Toolbar + Text
       const fC = el(doc, 'div', 'tm-card-modal-field');
@@ -177,7 +207,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
       if (opts.defaultContent) clozeInput.value = opts.defaultContent;
       fC.appendChild(clozeInput);
       fieldsContainer.appendChild(fC);
-      setTimeout(() => clozeInput?.focus(), 50);
+      focusEl(clozeInput);
     } else {
       // 概念卡：Content (Topic)
       const fN = el(doc, 'div', 'tm-card-modal-field');
@@ -187,7 +217,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
       if (opts.defaultContent) conceptInput.value = opts.defaultContent;
       fN.appendChild(conceptInput);
       fieldsContainer.appendChild(fN);
-      setTimeout(() => conceptInput?.focus(), 50);
+      focusEl(conceptInput);
     }
   };
 
@@ -222,8 +252,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   };
 
   const submit = () => {
-    const standaloneName = l('creator.deck.standalone', 'Standalone');
-    const selectedDeck = deckSelect.value || standaloneName;
+    const selectedDeck = (deckSelect.value || '__inbox__').trim();
     const userTitle = titleInput.value.trim();
 
     let draft: Record<string, any> | null = null;
@@ -307,23 +336,25 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   doc.body.appendChild(overlay);
 }
 
-/** 注册全局制卡快捷键（Alt+N），模块加载或启动时仅绑定一次 */
+/** 注册全局制卡快捷键（Alt+K），模块加载或启动时仅绑定一次 */
 let _shortcutRegistered = false;
 function initGlobalCardShortcut(wiki: any, win: any = globalThis) {
-  if (_shortcutRegistered) return;
-  const doc = win.document;
+  if (_shortcutRegistered && win === globalThis) return;
+  const doc = win?.document;
   if (!doc || typeof doc.addEventListener !== 'function') return;
-  _shortcutRegistered = true;
+  if (win === globalThis) _shortcutRegistered = true;
 
   doc.addEventListener('keydown', (e: KeyboardEvent) => {
-    // Alt+N：全局独立新建卡片
-    if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'n') {
+    // Alt+K：全局独立新建卡片
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
       const activeEl = doc.activeElement as HTMLElement | null;
       const tag = String(activeEl?.tagName || '').toLowerCase();
       // 若当前在普通输入框内且已输入文字，避免打断输入（但若在只读或背景时随时唤起）
       if (activeEl?.isContentEditable) return;
       if (doc.querySelector('.tm-omni-creator-overlay')) return; // 已打开时不重复唤出
       e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       openOmniCardModal(doc, wiki);
     }
   }, true);
@@ -340,7 +371,7 @@ function makeOmniCreatorWidget(): any {
       const wiki = this.wiki;
 
       const container = el(doc, 'div', 'tm-omni-creator-embedded');
-      const btnText = `✨ ${lingoMod.lingo(wiki, 'creator.title', 'Card Creator')} (Alt+N)`;
+      const btnText = `${lingoMod.lingo(wiki, 'creator.title', 'Card Creator')} (Alt+K)`;
       const btn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', btnText);
       btn.addEventListener('click', () => {
         openOmniCardModal(doc, wiki);
@@ -353,6 +384,19 @@ function makeOmniCreatorWidget(): any {
       // 尝试挂载全局快捷键
       initGlobalCardShortcut(wiki, doc.defaultView || globalThis);
     }
+    refresh(changedTiddlers: Record<string, any>) {
+      const changed = Object.keys(changedTiddlers || {});
+      const needRefresh = changed.some((t) =>
+        t.startsWith('$:/language/') ||
+        t.startsWith('$:/Deck/') ||
+        t.startsWith('$:/config/Tidme/')
+      );
+      if (needRefresh) {
+        this.refreshSelf();
+        return true;
+      }
+      return false;
+    }
   }
   return OmniCreatorWidget;
 }
@@ -361,3 +405,4 @@ exports['tidme-card-creator'] = makeOmniCreatorWidget();
 exports.openOmniCardModal = openOmniCardModal;
 exports.initGlobalCardShortcut = initGlobalCardShortcut;
 exports.listAvailableDecks = listAvailableDecks;
+exports.listDeckOptions = listDeckOptions;

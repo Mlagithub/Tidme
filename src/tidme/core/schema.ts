@@ -147,3 +147,13 @@ export function assertKind(fields: Record<string, unknown>, kind: Kind): void {
     throw new Error(`[tidme/core] ${kind} 实体缺 FSRS 字段: ${fsrsMissing.join(', ')}`);
   }
 }
+
+/** HTML 实体安全转义（纯函数） */
+export function escapeHtml(s: string): string {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}

@@ -379,7 +379,7 @@ if (typeof document !== 'undefined') {
     'alt+x': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'x',
     'alt+z': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z',
     'alt+q': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'q',
-    'alt+n': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'n',
+    'alt+k': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'k',
     'ctrl+f7': (e) => e.ctrlKey && !e.shiftKey && e.key === 'F7',
     'alt+f7': (e) => e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'F7',
     'shift+ctrl+f7': (e) => e.ctrlKey && e.shiftKey && e.key === 'F7',
@@ -390,7 +390,7 @@ if (typeof document !== 'undefined') {
     'alt+x': () => actionExtract(document.defaultView || globalThis),
     'alt+z': () => actionCloze(document.defaultView || globalThis),
     'alt+q': () => actionQA(document.defaultView || globalThis),
-    'alt+n': () => {
+    'alt+k': () => {
       try {
         const omni = require('$:/plugins/keepone/tidme/ui/components/omni-creator.js');
         if (omni?.openOmniCardModal) {
@@ -417,6 +417,8 @@ if (typeof document !== 'undefined') {
     for (const key of Object.keys(KEYMAP)) {
       if (KEYMAP[key](e)) {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         if (key === 'arrowleft' || key === 'arrowright') fireNav(key === 'arrowleft' ? 'prev' : 'next');
         else ACTIONS[key]();
         return;
@@ -568,9 +570,10 @@ function makeSectionBar(): WidgetCtor {
         return btn;
       };
 
-      bubble.appendChild(mkB('摘录', '✂️', () => actionExtract(win)));
-      bubble.appendChild(mkB('挖空', '🧩', () => actionCloze(win)));
-      bubble.appendChild(mkB('问答', '❓', () => actionQA(win)));
+      const wk = activeWiki();
+      bubble.appendChild(mkB(lingo(wk, 'read.extract', 'Extract'), '✂️', () => actionExtract(win)));
+      bubble.appendChild(mkB(lingo(wk, 'cloze', 'Cloze'), '🧩', () => actionCloze(win)));
+      bubble.appendChild(mkB(lingo(wk, 'type', 'Q&A'), '❓', () => actionQA(win)));
 
       const scrollX = win.scrollX || win.pageXOffset || 0;
       const scrollY = win.scrollY || win.pageYOffset || 0;

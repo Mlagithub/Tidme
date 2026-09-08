@@ -1,5 +1,5 @@
-caption: New Card
-description: Tidme Omni Card Creator (Alt+N)
+caption: {{$:/language/tidme/creator.title}}
+description: Tidme Omni Card Creator (Alt+K)
 title: $:/plugins/keepone/tidme/creator
 
 \whitespace trim

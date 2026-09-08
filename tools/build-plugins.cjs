@@ -73,7 +73,7 @@ function tiddlerFileName(title) {
       }
     }
     const name = tiddlerFileName(p.title);
-    const json = JSON.stringify(p);
+    const json = JSON.stringify(p).replace(/\r\n/g, '\n');
     fs.writeFileSync(path.join(out, name), json);
     console.log(`built ${p.title} -> ${name} (${json.length} bytes)`);
   }

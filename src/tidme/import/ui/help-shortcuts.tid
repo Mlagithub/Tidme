@@ -4,6 +4,7 @@ type: text/vnd.tiddlywiki
 tags: [[Tidme Manual]]
 
 |!Shortcut |!Function |!Description |
+|[[Alt+K]] |Omni Card Creator |Open global card creator modal anytime|
 |[[Alt+X]] |Extract Card |Create an extract card from selected text (inherits document provenance)|
 |[[Alt+Z]] |Cloze Card |Create a cloze card from selected text in context|
 |[[Alt+Q]] |Q&A Card |Create a question & answer card from selected text|
@@ -40,7 +41,7 @@ tags: [[Tidme Manual]]
 !! Keyboard Shortcuts
 
 * Review: [[1]] Again · [[2]] Hard · [[3]] Good · [[4]] Easy · [[Space]] Flip/Unfold · [[p]] Stop study · [[n]] Next · [[e]] Remove from queue · [[u]] Unfold
-* Reading: [[←]] / [[→]] Previous / Next section · [[Alt+X]] Extract · [[Alt+Z]] Cloze · [[Alt+Q]] Q&A · [[Ctrl+F7]] Set Read Point · [[Alt+F7]] Jump to Read Point · [[Shift+Ctrl+F7]] Clear Read Point
+* Reading: [[←]] / [[→]] Previous / Next section · [[Alt+K]] Omni Creator · [[Alt+X]] Extract · [[Alt+Z]] Cloze · [[Alt+Q]] Q&A · [[Ctrl+F7]] Set Read Point · [[Alt+F7]] Jump to Read Point · [[Shift+Ctrl+F7]] Clear Read Point
 
 > Principle (from SuperMemo): Take a lightweight action on every item (Read / Later / Ignore / Extract), never idle;
 > Never fear high import volume—the system schedules items according to priority.

@@ -26,7 +26,7 @@ export function loadPluginTiddlers({ langs = ['zh-Hans'] } = {}) {
     } else if (n === '$__plugins_keepone_tidme') {
       throw new Error('缺少 bin 产物，先运行 node tools/build-plugins.cjs');
     } else {
-      // 语言包是 git 子模块（src/zh-Hans 等），子模块未初始化时合法缺失 → 警告而非中断
+      // 语言包产物缺失时警告而非中断（若未先运行 build 则会缺失）
       console.warn(`[tidme-test] 语言包产物缺失，跳过: ${n}（中文文案断言失败时先查此警告）`);
     }
   }

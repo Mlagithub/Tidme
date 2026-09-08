@@ -90,6 +90,7 @@ function makeCardViewer(): any {
       this.domNodes.push(root);
       parent.insertBefore(root, nextSibling);
 
+      this.unbindKeyboard();
       this.build();
       this.bindKeyboard();
     }
@@ -353,6 +354,11 @@ function makeCardViewer(): any {
         return true;
       }
       return this.refreshChildren(changedTiddlers);
+    }
+
+    removeChildDomNodes() {
+      this.unbindKeyboard();
+      super.removeChildDomNodes?.();
     }
 
     destroy() {

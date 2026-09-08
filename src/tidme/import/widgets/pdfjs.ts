@@ -153,6 +153,9 @@ export function renderPageToCanvas(
     if (dpr !== 1) {
       canvas.style.width = `${canvas.width / dpr}px`;
       canvas.style.height = `${canvas.height / dpr}px`;
+    } else {
+      canvas.style.width = '';
+      canvas.style.height = '';
     }
     await page.render({ canvasContext: ctx, viewport }).promise;
     return viewport;

@@ -20,7 +20,11 @@ export interface ConfirmOptions {
   danger?: boolean;
 }
 
-function buildModal(doc: Document, opts: { title?: string; message: string; okLabel: string; danger?: boolean; withCancel: boolean }, resolve: (v: boolean) => void): HTMLElement {
+function buildModal(
+  doc: Document,
+  opts: { title?: string; message: string; okLabel: string; cancelLabel?: string; danger?: boolean; withCancel: boolean },
+  resolve: (v: boolean) => void,
+): HTMLElement {
   const overlay = el(doc, 'div', 'tm-card-modal-overlay');
   const modal = el(doc, 'div', 'tm-card-modal');
   if (opts.title) modal.appendChild(el(doc, 'div', 'tm-card-modal-title', opts.title));
@@ -35,7 +39,7 @@ function buildModal(doc: Document, opts: { title?: string; message: string; okLa
     resolve(v);
   };
   if (opts.withCancel) {
-    const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', 'Cancel');
+    const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', opts.cancelLabel || 'Cancel');
     cancelBtn.addEventListener('click', () => done(false));
     actions.appendChild(cancelBtn);
   }
@@ -56,6 +60,7 @@ export function confirmDialog(doc: Document, opts: ConfirmOptions): Promise<bool
       title: opts.title,
       message: opts.message,
       okLabel: opts.confirmLabel || 'Confirm',
+      cancelLabel: opts.cancelLabel || 'Cancel',
       danger: opts.danger,
       withCancel: true,
     }, resolve);

@@ -569,4 +569,61 @@ manager.editparams: 编辑参数
 manager.editparams.tip: 修改下次到期日 / 优先级 / 备注
 manager.col.stability: 稳定度
 manager.col.elapsed: 距上次天数
-
+question: 问题
+answer: 答案
+optional: 可选
+cancel: 取消
+confirm: 确定
+card: 卡片
+cloze.preview: 挖空预览 / 上下文
+question.placeholder: 输入问题...
+answer.placeholder: 输入答案或核心解析...
+modal.imageqa: 图片问答卡
+modal.imgquestion: 问题（框选图片）
+creator.submit: 生成卡片
+creator.btn.insertcloze: 插入挖空 {{C}}
+creator.keepopen: 保持打开（连续添加）
+save: 保存
+delete: 删除
+cardmodal.title.qa: 问答卡
+cardmodal.title.cloze: 挖空卡
+read.page: 页
+read/prev.tip: 上一节（Alt+Left）：
+read/noprev: 无上一节
+read/next.tip: 下一排期节卡（Alt+Right）：
+read/nonext: 无下一节
+read/stats: 统计
+read/stats.tip: 切换卡片学习数据与指标
+read/help: 快捷键与使用手册
+manager.action.read.tip: 移出队列（标为已读）
+manager.action.back.tip: 恢复至学习队列
+manager.action.del.tip: 删除卡片
+manager.done: 完成
+queueops.title: 牌组批量操作（优先级排程）
+queueops.desc: 顺延 = 到期日+7天 · 提前 = 今日复习 · 忽略 = 移出队列 · 搁置 = 暂停 · 遗忘 = 重置为新卡
+settings.reading.mix.desc: 混入阅读材料时，每隔 N 张知识卡插入 1 张材料节卡
+settings.review.maxpriority.desc: 仅优先级数值大于此阈值的卡片才会被自动顺延（0 为最高优先级）
+settings.review.postponedays.desc: 低优先级逾期卡片顺延的天数
+settings.review.threshold.desc: 仅当逾期卡片数超过此阈值时才触发自动顺延（0 表示不设阈值）
+settings.review.logretention.desc: 超过此天数的复习历史记录将在启动时自动清理（0 表示永久保留）
+settings.pdf.split.desc: 仅对未来导入的文档生效；阅读器内随时可自由翻页
+settings.ocr.model.desc: 用于图片 OCR 文本识别的多模态视觉模型
+settings.ocr.baseurl.desc: 留空默认为 https://api.openai.com/v1
+settings.ocr.apikey.desc: 留空则复用 AI 语义切分 API 密钥
+settings.ai.enable.desc: 使用 LLM 语义边界对无结构的散文进行章节智能切分
+settings.ai.key.desc: 语义切分 LLM 服务 API 密钥
+settings.ai.endpoint.desc: 兼容 OpenAI 格式的接口地址，可指向自建服务
+settings.ai.model.desc: 章节边界检测所使用的 LLM 模型名称
+pdf.loading.server: 正在从服务器加载 PDF 数据...
+pdf.loading.external: 正在请求外部 PDF 文件...
+pdf.prevpage: 上一页
+pdf.nextpage: 下一页
+read.zoom.out: 缩小
+read.zoom: 缩放
+read.zoom.in: 放大
+pdf.select: 选取
+pdf.study.next.tip: 保存阅读进度并进入后续学习流
+pdf.load.failed: 加载失败：
+pdf.rendering: 正在渲染...
+pdf.render.failed: 渲染失败：
+workflow.hero.tip: 复习今日到期和新增的知识卡片（挖空 / 问答）

@@ -16,11 +16,10 @@ FSRS 初始字段直接取 core/schema（不再绕 import/parse）；跨 core �
 declare function require(module: string): any;
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const paths = require('$:/plugins/keepone/tidme/core/paths.js');
-const dom = require('$:/plugins/keepone/tidme/core/dom.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
-const escapeHtml = dom.escapeHtml;
+const escapeHtml = schema.escapeHtml;
 
 /** 解析 tidme.anchor（{section, snippet, page}） */
 export function parseAnchor(raw: any): { section: string; snippet: string; page?: number } | null {
@@ -301,7 +300,11 @@ export interface StandaloneCardOptions {
 /** 全局独立卡片构建（无需依附特定阅读材料）。kind 由模板决定，归属于指定牌组或散卡桶 */
 export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Record<string, any> {
   const deck = (opts.deck || 'Inbox').trim();
-  const deckDir = (deck === '散卡' || deck.toLowerCase() === 'inbox') ? ns.NS_DECKS_SCATTER : `Tidme/Decks/${deck}`;
+  const isScatter = !deck ||
+    deck === '__inbox__' ||
+    deck.toLowerCase() === 'inbox' ||
+    deck.toLowerCase() === 'standalone';
+  const deckDir = isScatter ? ns.NS_DECKS_SCATTER : `Tidme/Decks/${deck}`;
 
   // 智能标题基座
   let slug = '';

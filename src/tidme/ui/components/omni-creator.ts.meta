@@ -1,3 +1,4 @@
 title: $:/plugins/keepone/tidme/ui/components/omni-creator.js
 type: application/javascript
-module-type: library
+module-type: widget
+
