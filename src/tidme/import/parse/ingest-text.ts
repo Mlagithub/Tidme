@@ -9,14 +9,11 @@ ingest-text.ts — 文本摄取：Markdown / Wikitext / HTML / TXT → 统一 Bl
 */
 
 import { normalizeText } from '$:/plugins/keepone/tidme/core/ids';
+import { escapeHtml } from '$:/plugins/keepone/tidme/core/schema';
 import type { Block } from './epub';
 import { collectBlocks } from './epub';
 
 export type TextFormat = 'markdown' | 'wikitext' | 'html' | 'txt';
-
-function escapeHtml(s: string): string {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 function virtualBlock(text: string, isHeading = false, level = 0): Block {
   // 合成块没有 DOM；标题块不重复出现在正文 HTML 中（标题进面包屑/卡片名）

@@ -40,7 +40,7 @@ interface DeckOption {
 function listDeckOptions(wiki: any): DeckOption[] {
   const standaloneLabel = lingoMod.lingo(wiki, 'creator.deck.standalone', 'Standalone');
   const options: DeckOption[] = [
-    { value: '__inbox__', label: standaloneLabel },
+    { value: cardFactory.STANDALONE_DECK_TOKEN, label: standaloneLabel },
   ];
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return options;
   try {
@@ -120,11 +120,11 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   const deckLabel = el(doc, 'label', '', `${l('deck', 'Deck')}:`);
   const deckSelect = el(doc, 'select', 'tm-card-modal-input tm-omni-deck-select') as HTMLSelectElement;
   const deckOptions = listDeckOptions(wiki);
-  const targetDefault = (opts.defaultDeck || '__inbox__').trim();
+  const targetDefault = (opts.defaultDeck || cardFactory.STANDALONE_DECK_TOKEN).trim();
   for (const optData of deckOptions) {
     const opt = el(doc, 'option', '', optData.label) as HTMLOptionElement;
     opt.value = optData.value;
-    if (optData.value === targetDefault || (targetDefault !== '__inbox__' && optData.label === targetDefault)) {
+    if (optData.value === targetDefault || (targetDefault !== cardFactory.STANDALONE_DECK_TOKEN && optData.label === targetDefault)) {
       opt.selected = true;
     }
     deckSelect.appendChild(opt);
@@ -252,7 +252,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   };
 
   const submit = () => {
-    const selectedDeck = (deckSelect.value || '__inbox__').trim();
+    const selectedDeck = (deckSelect.value || cardFactory.STANDALONE_DECK_TOKEN).trim();
     const userTitle = titleInput.value.trim();
 
     let draft: Record<string, any> | null = null;

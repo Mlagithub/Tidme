@@ -25,8 +25,32 @@ export const ITEM_FILTER = `[tidme.kind[item]]`;
 /**
  * 阅读列表（topic 队列）过滤器：全库 kind=topic 在队卡（未搁置/未完成/未忽略）。
  * item 卡不在此页（走默认牌组/子集复习）。唯一产地：reading-list 等页面引用此常量，勿手拼。
+ * 文档页的排除在 collectTopicQueue 代码级完成（仅排除存量分节书籍的文档页；
+ * 整本不切分的 PDF 文档页就是阅读卡，必须入队）——「有无节卡」无法在单条过滤器内表达。
  */
 export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!has[tidme.suspended]!has[tidme.done]!has[tidme.ignored]]';
+
+/**
+ * 有节卡的文档页集合（存量分节书籍：文档页只是书籍入口，不入阅读/学习队列，
+ * 否则学习模式要先在文档页绕一圈、读完继续点两次）。PDF 不再切分后，新导入的
+ * 整本文档页（无节卡）正常入队。
+ */
+export function splitDocPageSet(wiki: any): Set<string> {
+  const set = new Set<string>();
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return set;
+  const docIds = new Set(
+    wiki
+      .filterTiddlers('[all[shadows+tiddlers]tidme.subkind[section]]')
+      .map((t: string) => String(wiki.getTiddler(t)?.fields?.['tidme.doc'] || ''))
+      .filter(Boolean),
+  );
+  for (const docId of docIds) {
+    for (const p of wiki.filterTiddlers(`[all[shadows+tiddlers]tag[tidme-import-doc]tidme.doc[${docId}]]`)) {
+      set.add(p);
+    }
+  }
+  return set;
+}
 
 /**
  * 本书 item 在队过滤器（「复习本书」子集牌组的 card 来源 / 文档页计数）。
@@ -45,6 +69,7 @@ export function docItemsFilter(docId: string): string {
  */
 export function collectTopicQueue(wiki: any): Record<string, any>[] {
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
+  const splitDocs = splitDocPageSet(wiki);
   return wiki
     .filterTiddlers(TOPIC_QUEUE_FILTER)
     .map((t: string) => {
@@ -60,7 +85,8 @@ export function collectTopicQueue(wiki: any): Record<string, any>[] {
         breadcrumb: String(f['tidme.breadcrumb'] || t),
       };
     })
-    .filter((c: Record<string, any>) => !isCardDone(c.fields) && c.fields['tidme.suspended'] !== 'yes');
+    .filter((c: Record<string, any>) => !isCardDone(c.fields) && c.fields['tidme.suspended'] !== 'yes')
+    .filter((c: Record<string, any>) => !splitDocs.has(c.title));
 }
 
 /** 阅读队列排序（阅读列表 / 继续阅读入口共用）：优先级（0 最高）→ due（早在前，被动重读）→ 阅读顺序 */

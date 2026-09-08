@@ -325,8 +325,6 @@ rl.docdeleted: Document page deleted (extracts only)
 rl.read: read
 rl.resumetip: Start from read point or first pending section
 rl.nomaterialstodelete: No reading materials to delete.
-pdf/toc: Outline
-pdf/collapse-toc: Collapse Outline
 pdf/loading-pdfjs: Loading pdf.js...
 pdf/page-prefix: p.
 pdf/scanned-hint-ocr: Scanned page (no text layer) — Click "OCR" in toolbar to recognize text
@@ -490,9 +488,6 @@ settings.review.postponedays: Postpone Days
 settings.review.threshold: Overload Trigger Threshold
 settings.pdf.title: PDF & OCR
 settings.pdf.subtitle: Import & Recognition
-settings.pdf.split: PDF Import Mode
-settings.pdf.split.outline: Split by outline
-settings.pdf.split.none: Whole book
 settings.ocr.enable: Enable LLM-OCR
 settings.ocr.enable.desc: Transcribe scanned PDF pages with multimodal vision models
 settings.ocr.model: OCR Model Name
@@ -505,7 +500,6 @@ pdf.firstpage: First Page
 pdf.lastpage: Last Page
 pdf.boxselect: Box select: drag rectangle on page to create image QA card
 pdf.fullscreen: Fullscreen
-pdf.toc: Table of Contents
 pdf.ocr.btn: Scan page recognition (LLM-OCR)
 read.finishandcontinue: Finish & Next
 sidebar.readingmaterials: Reading Materials
@@ -554,7 +548,6 @@ pdf.ocr.tip: Scan page recognition (LLM-OCR)
 pdf.study.next: ✓ Done & Continue ›
 creator.deck.standalone: Standalone
 queueops.autopostpone: Postpone Overdue
-pdf.toc.tip: Table of Contents
 annotate: Annotate
 close: Close
 closetip: Close this dialog
@@ -606,7 +599,6 @@ settings.review.maxpriority.desc: Only cards with priority value greater than th
 settings.review.postponedays.desc: Number of days to postpone low priority overdue cards
 settings.review.threshold.desc: Only trigger auto-postpone when overdue cards exceed this count (0 = no threshold)
 settings.review.logretention.desc: Review logs older than this will be cleaned on startup (0 = keep forever)
-settings.pdf.split.desc: Applies to future imports; you can always flip pages in reader
 settings.ocr.model.desc: Multimodal vision model for text transcription
 settings.ocr.baseurl.desc: Leave empty for https://api.openai.com/v1
 settings.ocr.apikey.desc: Leave empty to reuse AI Semantic Split key
@@ -626,4 +618,15 @@ pdf.study.next.tip: Save reading progress and continue study flow
 pdf.load.failed: Failed to load: 
 pdf.rendering: Rendering...
 pdf.render.failed: Render failed: 
+pdf.reattach: Re-attach PDF
+pdf.reattach.tip: Select the original PDF file to restore it in place (sections and reading progress kept)
+pdf.reattach.done: PDF restored, loading...
+pdf.reattach.failed: Re-attach failed: 
+pdf.import.corrupt: PDF data integrity check failed; import aborted
+import.pdf.progress: Importing PDF
+import.pdf.phase.encode: Encoding
+import.pdf.phase.parse: Parsing
+import.pdf.phase.store: Saving
+import.status: Import Status
+pdf.reattach.encoding: Encoding PDF
 workflow.hero.tip: Review all due and new knowledge cards (cloze / Q&A)

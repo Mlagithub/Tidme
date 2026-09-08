@@ -325,8 +325,6 @@ rl.docdeleted: 文档页已删除（仅剩摘录/手动内容）
 rl.read: 节已读
 rl.resumetip: 从续读点或第一张待读卡开始
 rl.nomaterialstodelete: 没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。
-pdf/toc: 目录
-pdf/collapse-toc: 收起目录
 pdf/loading-pdfjs: 正在加载 pdf.js…
 pdf/page-prefix: 第
 pdf/scanned-hint-ocr: 扫描页（无文本层）——点工具栏「OCR」识别文字
@@ -490,9 +488,6 @@ settings.review.postponedays: 顺延天数
 settings.review.threshold: 过载触发阈值
 settings.pdf.title: PDF 与 OCR
 settings.pdf.subtitle: 导入与扫描页识别
-settings.pdf.split: PDF 导入模式
-settings.pdf.split.outline: 按目录切分（无目录则整本）
-settings.pdf.split.none: 整本导入（不切分）
 settings.ocr.enable: 启用 LLM-OCR
 settings.ocr.enable.desc: 扫描版 PDF 页面转图片并调用多模态大模型转录文字
 settings.ocr.model: OCR 模型名称
@@ -505,7 +500,6 @@ pdf.firstpage: 第一页
 pdf.lastpage: 最后一页
 pdf.boxselect: 框选图片制卡：在页面上拖拽矩形生成图片问答卡
 pdf.fullscreen: 全屏阅读
-pdf.toc: 目录（本书章节）
 pdf.ocr.btn: 扫描页识别 (LLM-OCR)
 read.finishandcontinue: 读完继续
 pdf.select.tip: 框选图片制卡：在页面上拖拽矩形生成图片问答卡
@@ -513,7 +507,6 @@ pdf.ocr.tip: 扫描页识别 (LLM-OCR)
 pdf.study.next: ✓ 读完继续 ›
 creator.deck.standalone: 散卡
 queueops.autopostpone: 立即顺延
-pdf.toc.tip: 目录（本书章节）
 annotate: 标注
 close: 关闭弹窗
 closetip: 关闭此弹窗
@@ -606,7 +599,6 @@ settings.review.maxpriority.desc: 仅优先级数值大于此阈值的卡片才�
 settings.review.postponedays.desc: 低优先级逾期卡片顺延的天数
 settings.review.threshold.desc: 仅当逾期卡片数超过此阈值时才触发自动顺延（0 表示不设阈值）
 settings.review.logretention.desc: 超过此天数的复习历史记录将在启动时自动清理（0 表示永久保留）
-settings.pdf.split.desc: 仅对未来导入的文档生效；阅读器内随时可自由翻页
 settings.ocr.model.desc: 用于图片 OCR 文本识别的多模态视觉模型
 settings.ocr.baseurl.desc: 留空默认为 https://api.openai.com/v1
 settings.ocr.apikey.desc: 留空则复用 AI 语义切分 API 密钥
@@ -626,4 +618,15 @@ pdf.study.next.tip: 保存阅读进度并进入后续学习流
 pdf.load.failed: 加载失败：
 pdf.rendering: 正在渲染...
 pdf.render.failed: 渲染失败：
+pdf.reattach: 重新绑定 PDF
+pdf.reattach.tip: 选择原始 PDF 文件，原位恢复二进制（节卡与阅读进度保留）
+pdf.reattach.done: PDF 已恢复，正在加载…
+pdf.reattach.failed: 恢复失败：
+pdf.import.corrupt: PDF 数据完整性校验未通过，已取消导入
+import.pdf.progress: 正在导入 PDF
+import.pdf.phase.encode: 编码
+import.pdf.phase.parse: 解析
+import.pdf.phase.store: 写入书库
+import.status: 导入状态
+pdf.reattach.encoding: 正在编码 PDF
 workflow.hero.tip: 复习今日到期和新增的知识卡片（挖空 / 问答）

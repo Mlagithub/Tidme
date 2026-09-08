@@ -43,7 +43,6 @@ function makeSettings(): any {
       const ap = () => config.readAutoPostpone(wiki);
       const deckParams = () => config.readDefaultDeckParams(wiki);
       const queueOpts = () => config.readQueueOptions(wiki);
-      const pdfOpts = () => config.readPdfOptions(wiki);
       const ocr = () => config.readOcrConfig(wiki);
       const ss = () => config.readSemanticSplit(wiki);
       const l = (key: string, fallback: string) => lingoMod.lingo(wiki, key, fallback);
@@ -193,18 +192,6 @@ function makeSettings(): any {
           title: l('settings.pdf.title', 'PDF & OCR'),
           subtitle: l('settings.pdf.subtitle', 'Import & Scanned Page Recognition'),
           items: [
-            {
-              id: 'pdf-split',
-              title: l('settings.pdf.split', 'PDF Import Mode'),
-              desc: l('settings.pdf.split.desc', 'Applies to future imports; you can always flip pages in reader'),
-              type: 'select',
-              options: [
-                ['outline', l('settings.pdf.split.outline', 'Split by outline (whole book if no outline)')],
-                ['none', l('settings.pdf.split.none', 'Whole book (no split)')],
-              ],
-              getValue: () => pdfOpts().split,
-              setValue: (v: string) => config.writePdfOptions(wiki, { split: v as 'outline' | 'none' }),
-            },
             {
               id: 'ocr-enable',
               title: l('settings.ocr.enable', 'Enable LLM-OCR'),

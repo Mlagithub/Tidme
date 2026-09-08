@@ -4,6 +4,7 @@ chunker.ts — 大纲树递归切分器（浏览器版，与 Node 版同构）
 */
 
 import { normalizeText } from '$:/plugins/keepone/tidme/core/ids';
+import { escapeHtml } from '$:/plugins/keepone/tidme/core/schema';
 import type { Block } from './epub';
 
 export const DEFAULTS = { maxChars: 4000, minChars: 600 };
@@ -18,10 +19,6 @@ function cleanOptions(options: ChunkOptions = {}): ChunkOptions {
   if (Number.isFinite(options.maxChars) && (options.maxChars as number) > 0) out.maxChars = options.maxChars;
   if (Number.isFinite(options.minChars) && (options.minChars as number) >= 0) out.minChars = options.minChars;
   return out;
-}
-
-function escapeHtml(text: string) {
-  return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 const charsOf = (blocks: Block[]) => blocks.reduce((n, b) => n + normalizeText(b.text).length, 0);

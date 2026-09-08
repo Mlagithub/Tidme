@@ -11,42 +11,12 @@ review log 行格式（repeat 写入 $:/Deck/<deck>/log 单文件，键 = 17 位
 */
 
 declare var require: any;
-let isCardDone: (fields: Record<string, any>) => boolean;
-let normalizePriority: (v: unknown) => number;
-let parseTwDate: (raw: unknown, fallback?: Date) => Date;
-
-try {
-  if (typeof require === 'function') {
-    const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
-    isCardDone = sched.isCardDone;
-    normalizePriority = sched.normalizePriority;
-    parseTwDate = sched.parseTwDate;
-  }
-} catch {
-  // 单元测试 / 无头环境容错
-}
-
-if (!isCardDone) {
-  isCardDone = (fields: Record<string, any>) => fields['tidme.done'] === 'yes' || fields['tidme.ignored'] === 'yes';
-}
-if (!normalizePriority) {
-  normalizePriority = (v: unknown) => {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return 50;
-    return Math.max(0, Math.min(100, Math.round(n)));
-  };
-}
-if (!parseTwDate) {
-  parseTwDate = (raw: unknown, fallback = new Date(0)) => {
-    const s = String(raw || '').trim();
-    if (/^\d{17}$/.test(s)) {
-      const y = Number(s.slice(0, 4)), m = Number(s.slice(4, 6)) - 1, d = Number(s.slice(6, 8));
-      const hh = Number(s.slice(8, 10)), mm = Number(s.slice(10, 12)), ss = Number(s.slice(12, 14)), ms = Number(s.slice(14, 17));
-      return new Date(Date.UTC(y, m, d, hh, mm, ss, ms));
-    }
-    return fallback;
-  };
-}
+// 调度语义唯一实现 = core/scheduler（isCardDone/normalizePriority/parseTwDate 转出），
+// 此处只做引用，绝不本地复制（副本会与正身漂移：fallback 默认值已分歧过一次）
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const isCardDone = sched.isCardDone;
+const normalizePriority = sched.normalizePriority;
+const parseTwDate = sched.parseTwDate;
 
 export interface CardLike {
   title: string;

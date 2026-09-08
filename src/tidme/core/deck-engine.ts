@@ -67,8 +67,15 @@ export interface GlobalQueueOptions {
    * 需要 SM 交错时显式 topics: true。
    */
   topics?: boolean;
+  /**
+   * 从结果中剔除的标题（如存量分节书籍的文档页：书籍入口而非可学习卡；
+   * 整本不切分的 PDF 文档页是阅读卡，不在剔除之列）。由调用方按 wiki 计算。
+   */
+  excludeTitles?: string[];
 }
 
+// 学习队列 Topic 基础过滤（文档页排除走 excludeTitles 代码级剔除：整本不切分的
+// PDF 文档页就是阅读卡，「有无节卡」无法在单条过滤器内表达）
 const TOPIC_BASE = '[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]';
 
 /** 到期/逾期 Topic（has[due] 且 due ≤ 今天；含逾期积压，按优先级升序） */
@@ -96,19 +103,21 @@ export function composeGlobalLearningQueue(
   const defaultDeckFilters = composeDeckFilters(DECK_PREFIX + 'default');
   const mode = opts.mode || 'interleaved';
   const includeTopics = opts.topics === true;
+  const excluded = new Set(opts.excludeTitles || []);
+  const keep = (titles: string[]) => titles.filter((t) => !excluded.has(t));
 
   if (mode === 'strict') {
     const dueItems = evaluate(`${defaultDeckFilters.learn} ${defaultDeckFilters.due}`);
     const newItems = evaluate(defaultDeckFilters.newly);
     if (!includeTopics) return [...dueItems, ...newItems];
-    const dueTopics = evaluate(topicDueFilter());
-    const pendingTopics = evaluate(topicPendingFilter());
+    const dueTopics = keep(evaluate(topicDueFilter()));
+    const pendingTopics = keep(evaluate(topicPendingFilter()));
     return [...dueItems, ...dueTopics, ...newItems, ...pendingTopics];
   }
 
   // interleaved：item 队列为主体；topics:true 时按比例交错优先 topic（否则纯知识卡）
   const rawItems = evaluate(defaultDeckFilters.queue);
-  const rawTopics = includeTopics ? evaluate(`${topicDueFilter()} ${topicPendingFilter()}`) : [];
+  const rawTopics = includeTopics ? keep(evaluate(`${topicDueFilter()} ${topicPendingFilter()}`)) : [];
 
   const itemRatio = opts.itemRatio ?? 4;
   const topicRatio = opts.topicRatio ?? 1;

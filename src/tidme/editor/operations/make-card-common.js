@@ -12,7 +12,6 @@ commitCard），不改写编辑器文本。
   'use strict';
 
   /*jslint node: true, browser: true */
-  /*global $tw: false */
 
   /** 编辑中的 tiddler（草稿态解析 draft.of）→ 制卡父卡 title */
   exports.resolveParent = function(wiki, editTitle) {
@@ -33,16 +32,14 @@ commitCard），不改写编辑器文本。
     var wiki = editWidget.wiki;
     var factory = require('$:/plugins/keepone/tidme/core/card-factory.js');
     var ns = require('$:/plugins/keepone/tidme/core/ns.js');
+    var dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
     var parentTitle = exports.resolveParent(wiki, editWidget.editTitle);
 
     var finish = function(draft) {
       if (!draft) return;
       factory.commitCard(wiki, draft, editWidget);
-      try {
-        if (typeof $tw !== 'undefined' && $tw && $tw.notifier && $tw.notifier.display) {
-          $tw.notifier.display(ns.NOTIFY_CLOZE);
-        }
-      } catch (e) { /* 无头/无 document 环境忽略通知 */ }
+      // 通知统一走 dom.notify（widget 事件派发 tm-notify），不直触 $tw 全局
+      dom.notify(editWidget, ns.NOTIFY_CLOZE);
     };
 
     if (kind === 'qa') {

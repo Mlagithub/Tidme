@@ -614,7 +614,8 @@ function makeSectionBar(): WidgetCtor {
       const sep = () => btnRow.appendChild(el(doc, 'span', 'tm-bar-sep'));
       const gotoSection = (target: string) => {
         this._flushReadTime?.();
-        saveReadPoint(wiki, docId, { t: target, s: '' });
+        // 续读点携带目标卡页码（PDF 节卡 p<start>）：s:'' 会抹掉绝对页 → 下次打开回落首页
+        saveReadPoint(wiki, docId, { t: target, s: docOps.readPointPositionOf(wiki, target) });
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
         this.dispatchEvent({ type: 'tm-navigate', navigateTo: target });
       };
@@ -647,7 +648,7 @@ function makeSectionBar(): WidgetCtor {
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
         if (nxt) {
           docOps.prepareCardFold(wiki, nxt);
-          saveReadPoint(wiki, docId, { t: nxt, s: '' });
+          saveReadPoint(wiki, docId, { t: nxt, s: docOps.readPointPositionOf(wiki, nxt) });
           this.dispatchEvent({ type: 'tm-navigate', navigateTo: nxt });
         }
       };
@@ -661,7 +662,7 @@ function makeSectionBar(): WidgetCtor {
         // （从会话头找）反复拉回 → 摘录↔词卡 1:1 死循环。
         removeTitleFromSession(title);
         docOps.prepareCardFold(wiki, nxt);
-        saveReadPoint(wiki, docId, { t: nxt, s: '' });
+        saveReadPoint(wiki, docId, { t: nxt, s: docOps.readPointPositionOf(wiki, nxt) });
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
         this.dispatchEvent({ type: 'tm-navigate', navigateTo: nxt });
       };

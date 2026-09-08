@@ -216,7 +216,11 @@ test('collectTopicQueue: 队列快照（出队卡兜底过滤 + 排序字段预�
     丙: { 'tidme.subkind': 'extract', 'tidme.suspended': 'yes' },
     丁: { 'tidme.subkind': 'section', 'tidme.priority': '10', due: '20260101000000000', 'tidme.order': '000001' },
   };
-  const wiki = { filterTiddlers: () => ['甲', '乙', '丙', '丁'], getTiddler: (t) => ({ fields: fields[t] }) };
+  // 无节卡 → splitDocPageSet 为空（filterTiddlers 需按过滤器语义返回）
+  const wiki = {
+    filterTiddlers: (f) => (String(f).includes('subkind[section]') ? [] : ['甲', '乙', '丙', '丁']),
+    getTiddler: (t) => ({ fields: fields[t] }),
+  };
   const cards = sched.collectTopicQueue(wiki);
   assert.deepEqual(cards.map((c) => c.title), ['甲', '丁'], '已读/搁置兜底排除（过滤器之外的第二道网）');
   const jia = cards.find((c) => c.title === '甲');

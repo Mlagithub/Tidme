@@ -1,11 +1,18 @@
 /*
-stats.test.mjs — core 统计聚合单元测试（node:test）
+stats.test.mjs — core 统计聚合测试（node:test + 真实 TW boot）
+
+- deckLoad / docProgress / retentionFromLogs / funnelCounts / priorityBuckets / formatDuration
+- recordReadTime 写真实 wiki（$:/plugins/tidme/stats/readtime.json），不再 mock wiki
+- 调度语义（isCardDone/parseTwDate/normalizePriority）引用 core/scheduler 正身，
+  测试跑在真实模块装配上而非本地副本
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { bootPlugin } from '../helpers/tw-boot.mjs';
 import { T } from '../helpers/tw-date.mjs';
 
-const stats = await import('../../src/tidme/core/stats.ts');
+const { wiki, mod } = bootPlugin({ prefix: 'tidme-stats-' });
+const stats = mod('core/stats.js');
 
 test('deckLoad: new/learn/due/overdue 分类（未来排期的 state2 不计 due）', () => {
   const cards = [
@@ -32,7 +39,11 @@ test('docProgress: 已读/剩余', () => {
     { title: 'C', fields: { 'tidme.kind': 'topic', 'tidme.done': 'yes' } }, // 已读
     { title: 'D', fields: { 'tidme.kind': 'topic', 'tidme.ignored': 'yes' } }, // 忽略
   ];
-  assert.deepEqual(stats.docProgress(sections), { total: 4, done: 2, left: 2 });
+  // 跨 realm 对象逐字段比（AGENTS.md 已知陷阱：deepEqual 原型不等）
+  const p = stats.docProgress(sections);
+  assert.equal(p.total, 4);
+  assert.equal(p.done, 2);
+  assert.equal(p.left, 2);
 });
 
 test('retentionFromLogs: 保留率 ≈ 1 - Again 占比', () => {
@@ -50,7 +61,12 @@ test('funnelCounts: 漏斗分层（topic/item 大类 + subkind）', () => {
     { title: '摘录', fields: { 'tidme.kind': 'topic', 'tidme.subkind': 'extract' } },
     { title: '挖空', fields: { 'tidme.kind': 'item', 'tidme.subkind': 'cloze' } },
   ];
-  assert.deepEqual(stats.funnelCounts(items), { docs: 1, sections: 2, extracts: 1, cards: 1 });
+  // 跨 realm 对象逐字段比（AGENTS.md 已知陷阱：deepEqual 原型不等）
+  const f = stats.funnelCounts(items);
+  assert.equal(f.docs, 1);
+  assert.equal(f.sections, 2);
+  assert.equal(f.extracts, 1);
+  assert.equal(f.cards, 1);
 });
 
 test('priorityBuckets: 分桶（缺失/空串 = 未设）', () => {
@@ -76,20 +92,14 @@ test('formatDuration: 格式化时间', () => {
   assert.equal(stats.formatDuration(3720), '1 h 2 m');
 });
 
-test('recordReadTime and getReadTimeStats: 记录与获取阅读时长', () => {
-  const store = new Map();
-  const mockWiki = {
-    getTiddlerText: (title) => store.get(title) || '',
-    addTiddler: (t) => store.set(t.title, t.text),
-  };
+test('recordReadTime and getReadTimeStats: 记录与获取阅读时长（真实 wiki 落库）', () => {
+  stats.recordReadTime(wiki, 'stats-doc-1', 120);
+  stats.recordReadTime(wiki, 'stats-doc-1', 60);
+  stats.recordReadTime(wiki, 'stats-doc-2', 300);
 
-  stats.recordReadTime(mockWiki, 'doc-1', 120);
-  stats.recordReadTime(mockWiki, 'doc-1', 60);
-  stats.recordReadTime(mockWiki, 'doc-2', 300);
-
-  const res = stats.getReadTimeStats(mockWiki);
+  const res = stats.getReadTimeStats(wiki);
   assert.equal(res.totalSeconds, 480);
   assert.equal(res.todaySeconds, 480);
-  assert.equal(res.docSeconds['doc-1'], 180);
-  assert.equal(res.docSeconds['doc-2'], 300);
+  assert.equal(res.docSeconds['stats-doc-1'], 180);
+  assert.equal(res.docSeconds['stats-doc-2'], 300);
 });

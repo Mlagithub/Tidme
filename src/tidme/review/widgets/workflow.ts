@@ -58,6 +58,7 @@ function makeWorkflow(): any {
  */
 function startGlobalLearning(wiki: any, widget: any): void {
   const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
+  const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
   // 队列构成与交错比唯一收口 = core/config（设置页配置；topic 混入 + item:topic 交错比）
   const opts = config.readQueueOptions(wiki);
   const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), {
@@ -65,6 +66,8 @@ function startGlobalLearning(wiki: any, widget: any): void {
     topics: opts.topics,
     itemRatio: opts.itemRatio,
     topicRatio: opts.topicRatio,
+    // 存量分节书籍的文档页是书籍入口而非可学习卡（整本不切分的 PDF 文档页不在其列）
+    excludeTitles: Array.from(sched.splitDocPageSet(wiki)),
   });
 
   if (!queue || queue.length === 0) {

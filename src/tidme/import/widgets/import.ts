@@ -11,6 +11,7 @@ declare function require(module: string): any;
 const parse = require('$:/plugins/keepone/tidme/import/parse.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const binaryMod = require('$:/plugins/keepone/tidme/core/binary.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const commitMod = require('$:/plugins/keepone/tidme/core/import-commit.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
@@ -53,17 +54,6 @@ function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: str
     bag: bag || 'default', // TiddlyWeb server 版同步目标桶
     semanticSplitCfg: hasCfg ? getSemanticSplitConfig(wiki) : null,
   };
-}
-
-/** Uint8Array → base64（浏览器 btoa；分块避免栈溢出） */
-function bytesToBase64(bytes: Uint8Array): string {
-  let bin = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
-  }
-  if (typeof btoa === 'function') return btoa(bin);
-  return bin; // 兜底（无 btoa 环境由服务端容错）
 }
 
 // 共享 DOM 工具（实现收敛于 core/ui-utils）
@@ -458,8 +448,9 @@ function makeFileWidget(): WidgetCtor {
         const statusEl = el(doc, 'span', 'tm-import-muted', lingo(this.wiki, 'import.queueing', 'Queueing...'));
         row.appendChild(statusEl);
         rowsBox.appendChild(row);
+        refreshActions();
         file.arrayBuffer().then((buf) => {
-          const b64 = bytesToBase64(new Uint8Array(buf));
+          const b64 = binaryMod.bytesToBase64(new Uint8Array(buf));
           const title = `${TEMP_IMPORT}pending/${Date.now()}-${file.name.replace(/[\\/:*?"<>|]/g, '_')}`;
           this.wiki.addTiddler({
             title,
@@ -499,8 +490,17 @@ function makeFileWidget(): WidgetCtor {
 
       const refreshActions = () => {
         const hasPending = !!pending.size;
+        // PDF 直传与服务端上传不入 pending：进度/摘要/错误行也挂在 rowsBox，
+        // 预览卡可见性必须计入行数，否则导入反馈渲染在 display:none 的容器里
+        const hasRows = hasPending || rowsBox.childNodes.length > 0;
         actions.style.display = hasPending ? '' : 'none';
-        previewCard.style.display = hasPending ? '' : 'none';
+        previewCard.style.display = hasRows ? '' : 'none';
+        // 卡片语义随内容切换：有待导产物 = 队列；仅状态行 = 导入状态
+        previewTitle.textContent = lingo(
+          this.wiki,
+          hasPending ? 'import.pendingqueue' : 'import.status',
+          hasPending ? 'Pending Queue' : 'Import Status',
+        );
       };
 
       // A：落库单个解析结果。写库统一走 core/import-commit：同 docId 已有旧卡 →
@@ -573,16 +573,44 @@ function makeFileWidget(): WidgetCtor {
         }
         // PDF：浏览器内直传入库（pdf.js 解析 + 阅读器），不经服务端与预览行
         const importLocalPdf = async (file: File) => {
-          const r = await pdfImport.importPdfFile(this.wiki, file, this);
-          rowsBox.appendChild(
-            el(
-              doc,
-              'div',
-              'tm-import-summary tm-import-muted',
-              `-- PDF ${r.docTitle.split('/').pop()} ${lingo(this.wiki, 'import.pdfimported', 'imported')} (${r.pages} ${lingo(this.wiki, 'read.pages', 'pages')})`,
-            ),
-          );
-          this.dispatchEvent({ type: 'tm-navigate', navigateTo: r.docTitle });
+          // 进度卡片：大 PDF 编码/落库耗时数秒，无可视反馈易被误认为导入失败
+          const progressLabel = el(doc, 'div', 'tm-import-file-head', `${lingo(this.wiki, 'import.pdf.progress', 'Importing PDF')} — ${file.name}`);
+          const fill = el(doc, 'div', 'tm-import-progress-fill');
+          fill.style.width = '0%';
+          const track = el(doc, 'div', 'tm-import-progress-track');
+          track.appendChild(fill);
+          const progressCard = el(doc, 'div', 'tm-import-file-card');
+          progressCard.appendChild(progressLabel);
+          progressCard.appendChild(track);
+          rowsBox.appendChild(progressCard);
+          refreshActions(); // 进度卡挂载即亮出预览卡（此前 display:none，进度条不可见）
+          const phaseLabel = (phase: string) =>
+            phase === 'encode'
+              ? lingo(this.wiki, 'import.pdf.phase.encode', 'Encoding')
+              : phase === 'parse'
+              ? lingo(this.wiki, 'import.pdf.phase.parse', 'Parsing')
+              : lingo(this.wiki, 'import.pdf.phase.store', 'Saving');
+          try {
+            const r = await pdfImport.importPdfFile(this.wiki, file, this, (p) => {
+              fill.style.width = `${Math.min(100, Math.max(0, p.percent))}%`;
+              progressLabel.textContent = `${phaseLabel(p.phase)} ${p.percent}% — ${file.name}`;
+            });
+            progressCard.parentNode?.removeChild(progressCard);
+            rowsBox.appendChild(
+              el(
+                doc,
+                'div',
+                'tm-import-summary tm-import-muted',
+                `-- PDF ${r.docTitle.split('/').pop()} ${lingo(this.wiki, 'import.pdfimported', 'imported')} (${r.pages} ${lingo(this.wiki, 'read.pages', 'pages')})`,
+              ),
+            );
+            refreshActions();
+            this.dispatchEvent({ type: 'tm-navigate', navigateTo: r.docTitle });
+          } catch (err: any) {
+            progressCard.parentNode?.removeChild(progressCard);
+            rowsBox.appendChild(buildRow(doc, { error: String(err?.message || err), fileName: file.name }, this.wiki));
+            refreshActions();
+          }
         };
         // 服务端处理模式：上传 → 后台解析（不预览、不阻塞；PDF 仅本地处理）
         if (serverCheck.checked) {
@@ -685,7 +713,8 @@ function makeFileWidget(): WidgetCtor {
 
       // 创建待导预览队列卡片
       const previewCard = el(doc, 'div', 'tm-dashboard-card');
-      previewCard.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(this.wiki, 'import.pendingqueue', 'Pending Queue')));
+      const previewTitle = el(doc, 'div', 'tm-dashboard-card-title', lingo(this.wiki, 'import.pendingqueue', 'Pending Queue'));
+      previewCard.appendChild(previewTitle);
       previewCard.appendChild(rowsBox);
       previewCard.appendChild(actions);
       previewCard.style.display = 'none';

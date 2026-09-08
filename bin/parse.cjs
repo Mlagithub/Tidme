@@ -141,6 +141,29 @@ async function makeSectionId(docId, breadcrumb, ordinal) {
   return "s" + await shortHash(basis, 12);
 }
 
+// src/tidme/core/schema.ts
+function twDateString(d) {
+  const p = (n, l) => String(n).padStart(l, "0");
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}${p(d.getUTCSeconds(), 2)}${p(d.getUTCMilliseconds(), 3)}`;
+}
+function initialFsrsFields(now) {
+  const t = twDateString(now);
+  return {
+    due: t,
+    state: "0",
+    reps: "0",
+    lapses: "0",
+    stability: "0",
+    difficulty: "0",
+    elapsed_days: "0",
+    scheduled_days: "0",
+    last_review: t
+  };
+}
+function escapeHtml(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 // src/tidme/import/parse/chunker.ts
 var DEFAULTS = { maxChars: 4e3, minChars: 600 };
 function cleanOptions(options = {}) {
@@ -150,9 +173,6 @@ function cleanOptions(options = {}) {
   if (Number.isFinite(options.minChars) && options.minChars >= 0)
     out.minChars = options.minChars;
   return out;
-}
-function escapeHtml(text) {
-  return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 var charsOf = (blocks) => blocks.reduce((n, b) => n + normalizeText(b.text).length, 0);
 function serializeChildren(el) {
@@ -708,11 +728,8 @@ function collectBlocks(doc) {
 }
 
 // src/tidme/import/parse/ingest-text.ts
-function escapeHtml2(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 function virtualBlock(text, isHeading = false, level = 0) {
-  return { text, tag: isHeading ? "h" + level : "p", isHeading, level, virtualHtml: isHeading ? "" : `<p>${escapeHtml2(text)}</p>` };
+  return { text, tag: isHeading ? "h" + level : "p", isHeading, level, virtualHtml: isHeading ? "" : `<p>${escapeHtml(text)}</p>` };
 }
 function headingBlock(text, level) {
   return virtualBlock(text, true, Math.max(1, Math.min(6, level)));
@@ -724,7 +741,7 @@ function preBlock(text, cls = "tm-import-code", tag = "pre") {
     isHeading: false,
     level: 0,
     atomic: true,
-    virtualHtml: `<pre class="${cls}">${escapeHtml2(text)}</pre>`
+    virtualHtml: `<pre class="${cls}">${escapeHtml(text)}</pre>`
   };
 }
 function blockquoteBlock(text) {
@@ -733,7 +750,7 @@ function blockquoteBlock(text) {
     tag: "blockquote",
     isHeading: false,
     level: 0,
-    virtualHtml: `<blockquote>${escapeHtml2(text)}</blockquote>`
+    virtualHtml: `<blockquote>${escapeHtml(text)}</blockquote>`
   };
 }
 function splitLines(text) {
@@ -1121,26 +1138,6 @@ function leafIdOf(title) {
 }
 function insertedSectionTitle(bookTitle, docId, sectionCaption) {
   return joinPath(bookRoot(bookTitle, docId), "manual-" + (slugify(sectionCaption) || "untitled"));
-}
-
-// src/tidme/core/schema.ts
-function twDateString(d) {
-  const p = (n, l) => String(n).padStart(l, "0");
-  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}${p(d.getUTCSeconds(), 2)}${p(d.getUTCMilliseconds(), 3)}`;
-}
-function initialFsrsFields(now) {
-  const t = twDateString(now);
-  return {
-    due: t,
-    state: "0",
-    reps: "0",
-    lapses: "0",
-    stability: "0",
-    difficulty: "0",
-    elapsed_days: "0",
-    scheduled_days: "0",
-    last_review: t
-  };
 }
 
 // src/tidme/core/scheduler.ts

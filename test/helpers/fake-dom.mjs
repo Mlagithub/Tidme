@@ -42,9 +42,19 @@ export function fakeElement(tag = 'div') {
       this.children = this.children.filter((x) => x !== c);
       return c;
     },
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {},
+    addEventListener(t, fn) {
+      if (!this._elListeners) this._elListeners = {};
+      (this._elListeners[t] = this._elListeners[t] || []).push(fn);
+    },
+    removeEventListener(t, fn) {
+      if (!this._elListeners || !this._elListeners[t]) return;
+      this._elListeners[t] = this._elListeners[t].filter((x) => x !== fn);
+    },
+    dispatchEvent(e) {
+      if (!this._elListeners || !this._elListeners[e.type]) return false;
+      for (const fn of [...this._elListeners[e.type]]) fn(e);
+      return true;
+    },
     classList: {
       add() {},
       remove() {},

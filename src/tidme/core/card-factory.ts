@@ -288,7 +288,7 @@ export function cleanProcessedText(wiki: any, title: string): number {
 export interface StandaloneCardOptions {
   type: 'qa' | 'cloze' | 'concept';
   title?: string;
-  deck?: string; // 牌组名，默认 '散卡'
+  deck?: string; // 牌组名；空 / STANDALONE_DECK_TOKEN / 'inbox' / '散卡' 均归散卡桶
   question?: string;
   answer?: string;
   clozeContent?: string;
@@ -297,14 +297,21 @@ export interface StandaloneCardOptions {
   priority?: string | number;
 }
 
+/** 独立制卡「散卡桶」的内部标识（omni-creator 下拉 value 与此共用同一来源） */
+export const STANDALONE_DECK_TOKEN = '__inbox__';
+
 /** 全局独立卡片构建（无需依附特定阅读材料）。kind 由模板决定，归属于指定牌组或散卡桶 */
 export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Record<string, any> {
-  const deck = (opts.deck || 'Inbox').trim();
+  const deck = (opts.deck || STANDALONE_DECK_TOKEN).trim();
+  const lower = deck.toLowerCase();
   const isScatter = !deck ||
-    deck === '__inbox__' ||
-    deck.toLowerCase() === 'inbox' ||
-    deck.toLowerCase() === 'standalone';
+    deck === STANDALONE_DECK_TOKEN ||
+    lower === 'inbox' ||
+    lower === 'standalone' ||
+    deck === '散卡'; // 历史存量值兼容
   const deckDir = isScatter ? ns.NS_DECKS_SCATTER : `Tidme/Decks/${deck}`;
+  // tidme.deck/breadcrumb 落展示名：散卡桶不落内部哨兵 token
+  const deckName = isScatter ? String(ns.NS_DECKS_SCATTER).slice(String(ns.NS_DECKS).length) : deck;
 
   // 智能标题基座
   let slug = '';
@@ -357,10 +364,10 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
     text,
     ...schema.initialFsrsFields(new Date()),
     revision: '0',
-    'tidme.deck': deck,
+    'tidme.deck': deckName,
     'tidme.kind': kind,
     'tidme.subkind': subkind,
-    'tidme.breadcrumb': deck,
+    'tidme.breadcrumb': deckName,
     ...(opts.priority !== undefined ? { 'tidme.priority': String(opts.priority) } : {}),
     ...(Array.isArray(opts.tags) && opts.tags.length ? { tags: opts.tags } : {}),
   };

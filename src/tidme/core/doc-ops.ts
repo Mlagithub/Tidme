@@ -89,6 +89,18 @@ export function clearReadPoint(wiki: any, doc: string): void {
   wiki.deleteTiddler(LEGACY_READPOINT_PREFIX + doc);
 }
 
+/**
+ * 阅读目标卡的续读点位置标签：PDF 节卡（有 tidme.pages）携带起始页 `p<start>`，
+ * 文本卡返回空串。推进流（已读/下一节/完成下一张）写续读点必须经此携带页码——
+ * 用 s:'' 覆盖会把上一段的绝对页抹掉，下次打开回落首页（阅读记录丢失）。
+ */
+export function readPointPositionOf(wiki: any, title: string): string {
+  if (!wiki || !title) return '';
+  const pages = String(wiki.getTiddler(title)?.fields?.['tidme.pages'] || '');
+  const m = /^\s*(\d+)\s*-\s*\d+\s*$/.exec(pages);
+  return m ? `p${m[1]}` : '';
+}
+
 /** 写全局续读点（最近打开的阅读卡）；modified 供「最近阅读」排序，唯一写入口 */
 export function saveGlobalReadPoint(wiki: any, title: string): void {
   if (!wiki || !title) return;

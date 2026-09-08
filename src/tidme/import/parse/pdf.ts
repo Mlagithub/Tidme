@@ -1,73 +1,11 @@
 /*
-pdf.ts — PDF 导入纯逻辑（大纲切分 / 扫描页判定 / LLM-OCR 请求构建）
+pdf.ts — PDF 导入纯逻辑（扫描页判定 / 续读点页码解析 / LLM-OCR 请求构建）
 
 - 本模块零依赖（不 require、不碰 DOM/pdf.js）：pdf.js 浏览器适配在
   import/widgets/pdfjs.ts，落库在 core/pdf-ops.ts，阅读器在 read/widgets/pdf-reader.ts。
-- 大纲切分：normalizeOutline 把 pdf.js outline（title/dest/嵌套 items）拍平为
-  {title, page}（page 由调用方注入 resolvePage 回调解析），splitByOutline 按页码升序
-  生成「起始页-结束页」区间，同页起点的后续项折叠。
+- PDF 不再切分节卡：导入即整本一张阅读卡，阅读位置由续读点绝对页码表达。
+  parsePagesField 仅用于兼容存量书籍的 tidme.pages 字段（阅读器区间解析）。
 */
-
-export interface PdfOutlineNode {
-  title: string;
-  page: number;
-}
-
-export interface PdfSectionRange {
-  title: string;
-  startPage: number;
-  endPage: number;
-}
-
-/** tiddler title 非法字符（\ / : * ? " < > |）清理——节卡标题清洁（保留可读性，非 slug） */
-export function sanitizeLeaf(raw: string): string {
-  return String(raw || '')
-    .replace(/[\\/:*?"<>|]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * pdf.js outline → 拍平的 {title, page} 列表。
- * resolvePage(dest) 由调用方注入（dest 解析需要 getDestination/getPageIndex，异步）；
- * 解析失败（返回 <1）的项跳过；嵌套 items 递归展开。
- */
-export function normalizeOutline(raw: any[], resolvePage: (dest: any) => number): PdfOutlineNode[] {
-  const out: PdfOutlineNode[] = [];
-  const walk = (items: any[]) => {
-    for (const it of items || []) {
-      const page = Number(resolvePage(it.dest)) || 0;
-      const title = sanitizeLeaf(it.title);
-      if (page >= 1 && title) out.push({ title, page });
-      if (Array.isArray(it.items) && it.items.length) walk(it.items);
-    }
-  };
-  walk(raw);
-  return out.sort((a, b) => a.page - b.page);
-}
-
-/**
- * 按大纲切分：第 i 节 = [node[i].page, node[i+1].page - 1]（末节到 pageCount）。
- * 同页起点的后续节点折叠（保留首个）；越界节点跳过；nodes 为空返回 []（调用方走「不切分」）。
- */
-export function splitByOutline(nodes: PdfOutlineNode[], pageCount: number): PdfSectionRange[] {
-  const sorted = [...(nodes || [])].sort((a, b) => a.page - b.page || (a.title < b.title ? -1 : 1));
-  const sections: PdfSectionRange[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const node = sorted[i];
-    if (node.page < 1 || node.page > pageCount) continue;
-    if (i > 0 && node.page === sorted[i - 1].page) continue; // 同页折叠
-    const nextPage = i + 1 < sorted.length ? sorted[i + 1].page : pageCount + 1;
-    const endPage = Math.max(node.page, Math.min(nextPage - 1, pageCount));
-    sections.push({ title: node.title, startPage: node.page, endPage });
-  }
-  return sections;
-}
-
-/** 不切分：整本一节（1..pageCount） */
-export function singleSection(pageCount: number): PdfSectionRange[] {
-  return pageCount >= 1 ? [{ title: '全文', startPage: 1, endPage: pageCount }] : [];
-}
 
 /** 扫描页判定：可提取文本过短（阈值 32 字符）视为扫描/图片页，需要 OCR */
 export function isScannedPageText(text: string): boolean {

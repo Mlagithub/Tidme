@@ -1,5 +1,6 @@
 /*
-ui/base/dom.ts — DOM 操作工具（ui/base/dom.ts 唯一真实实现）createElement 帮助。
+ui/base/dom.ts — DOM 操作工具（createElement / 轻量 Toast / TW 事件安全派发）。
+core/dom.js 为向下兼容转发桩，指向本模块；HTML 转义正身在 core/schema.escapeHtml。
 */
 
 export function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
@@ -7,10 +8,6 @@ export function el(doc: Document, tag: string, cls?: string, text?: string): HTM
   if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text;
   return e;
-}
-
-export function escapeHtml(s: string): string {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 /** 轻量 Toast 浮动提示（自动插入容器首部并在定时后淡出销毁） */

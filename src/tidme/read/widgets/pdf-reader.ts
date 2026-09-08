@@ -1,14 +1,16 @@
 /*
 widgets/pdf-reader.ts — PDF 阅读器（tidme-pdf-reader）
 
-数据：currentTiddler 字段 tidme.pdf（二进制标题）/ tidme.pages（"起-止"）/ tidme.doc。
+数据：currentTiddler 字段 tidme.pdf（二进制标题）/ tidme.pages（"起-止"，仅存量
+分节书籍携带）/ tidme.doc。
+- 二进制缺失/为空（服务端 0 字节 .pdf 等）→ 状态条提供「重新绑定 PDF」原位恢复，
+  选原始文件覆写二进制条目，续读点/进度全保留
 - pdf.js CDN 按需加载；canvas 渲染当前页 + 文本层（选中文字 → 既有 Alt+X/Z/Q 制卡
-  链路直接复用：文本层容器带 data-tiddler-title 指向当前节卡/文档页）
-- 界面仿桌面阅读器：深色工具栏（目录/翻页/缩放/框选/OCR/全屏）+ 灰色工作区 + 居中纸页，
+  链路直接复用：文本层容器带 data-tiddler-title 指向当前卡/文档页）
+- 界面仿桌面阅读器：深色工具栏（翻页/缩放/框选/OCR/全屏）+ 灰色工作区 + 居中纸页，
   缩放默认「适合页面」，档位步进与自适应见 pdf-zoom.ts
-- 翻页/页码跳转/续读点：$:/state/tidme-pdf/page/<docId> 记录当前页，打开时若落在
-  本书范围则恢复；节卡打开时落到起始页
-- 目录抽屉：本书节卡（docOps.sectionsOfDoc），点击跳到起始页
+- 翻页/页码跳转/续读点：打开时优先恢复续读点绝对页码（不切分，阅读连续跨节）；
+  $:/state/tidme-pdf/page/<docId> 仅作「回原文」等一次性页码交接（消费即清理）
 - 框选图片制卡：拖拽矩形 → 裁剪 PNG → buildQA 图片问答卡（openCardModal 填答案）
 - OCR 本页：扫描页（无文本层）→ 页面 PNG → LLM-OCR（设置页启用）→ Markdown 文本，
   结果持久化到 <文档页>/ocr-p<页>（清理阅读材料时级联删除），显示在页下方可选区
@@ -18,11 +20,13 @@ import * as zoomMod from './pdf-zoom';
 
 declare function require(module: string): any;
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
+const binaryMod = require('$:/plugins/keepone/tidme/core/binary.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
+const pdfOps = require('$:/plugins/keepone/tidme/core/pdf-ops.js');
 const cardModal = require('$:/plugins/keepone/tidme/ui/components/card-modal.js');
 const parsePdf = require('$:/plugins/keepone/tidme/import/parse/pdf.js');
 const pdfjsMod = require('$:/plugins/keepone/tidme/import/widgets/pdfjs.js');
@@ -86,7 +90,7 @@ async function loadPdfBytesWithWait(
   if (b64.startsWith('data:') && commaIdx !== -1) {
     cleanB64 = b64.slice(commaIdx + 1);
   }
-  return pdfjsMod.base64ToBytes(cleanB64);
+  return binaryMod.base64ToBytes(cleanB64);
 }
 
 function makeReader(): any {
@@ -100,9 +104,6 @@ function makeReader(): any {
     _hint: any = null;
     _status: any = null;
     _ocrBox: any = null;
-    _tocEl: any = null;
-    _tocBtn: any = null;
-    _tocItems: Array<{ el: any; start: number; end: number }> = [];
     _pageInput: any = null;
     _total: any = null;
     _zoomSel: any = null;
@@ -117,6 +118,7 @@ function makeReader(): any {
     _pdfTitle: string = '';
     _docId: string = '';
     _docPageTitle: string = '';
+    _reattachBtn: any = null;
     _ocrBusy = false;
     _mode: zoomMod.ZoomMode = 'fit-page';
     _effScale = 0;
@@ -159,12 +161,9 @@ function makeReader(): any {
       const root = el(doc, 'div', 'tm-pdf');
       this._root = root;
 
-      // ── 工具栏：左=目录+翻页，中=缩放，右=框选/OCR/全屏 ──
+      // ── 工具栏：左=翻页，中=缩放，右=框选/OCR/全屏 ──
       const bar = el(doc, 'div', 'tm-pdf-bar');
       const gNav = el(doc, 'div', 'tm-pdf-bar-group');
-      this._tocBtn = el(doc, 'button', 'tm-pdf-ico', '☰');
-      this._tocBtn.title = lingoMod.lingo(wiki, 'pdf.toc.tip', 'Table of Contents');
-      this._tocBtn.setAttribute('aria-label', lingoMod.lingo(wiki, 'pdf.toc', 'TOC'));
       const firstBtn = el(doc, 'button', 'tm-pdf-ico', '«');
       firstBtn.title = lingoMod.lingo(wiki, 'pdf.firstpage', 'First Page');
       const prevBtn = el(doc, 'button', 'tm-pdf-ico', '‹');
@@ -180,7 +179,7 @@ function makeReader(): any {
       nextBtn.title = lingoMod.lingo(wiki, 'pdf.nextpage', 'Next Page');
       const lastBtn = el(doc, 'button', 'tm-pdf-ico', '»');
       lastBtn.title = lingoMod.lingo(wiki, 'pdf.lastpage', 'Last Page');
-      for (const n of [this._tocBtn, firstBtn, prevBtn, this._pageInput, this._total, nextBtn, lastBtn]) gNav.appendChild(n);
+      for (const n of [firstBtn, prevBtn, this._pageInput, this._total, nextBtn, lastBtn]) gNav.appendChild(n);
 
       const gZoom = el(doc, 'div', 'tm-pdf-bar-group tm-pdf-bar-center');
       const zoomOutBtn = el(doc, 'button', 'tm-pdf-ico', '−');
@@ -256,17 +255,8 @@ function makeReader(): any {
 
       root.appendChild(bar);
 
-      // ── 工作区：目录抽屉 + 灰底滚动区 + 居中纸页（canvas/文本层/框选矩形）+ 悬浮提示 ──
+      // ── 工作区：灰底滚动区 + 居中纸页（canvas/文本层/框选矩形）+ 悬浮提示 ──
       const body = el(doc, 'div', 'tm-pdf-body');
-      this._tocEl = el(doc, 'div', 'tm-pdf-toc');
-      const tocHead = el(doc, 'div', 'tm-pdf-toc-head', lingo(this.wiki, 'pdf/toc', 'Outline'));
-      const tocClose = el(doc, 'button', 'tm-pdf-ico', '✕');
-      tocClose.title = lingo(this.wiki, 'pdf/collapse-toc', 'Collapse Outline');
-      tocHead.appendChild(tocClose);
-      const tocList = el(doc, 'div', 'tm-pdf-toc-list');
-      this._tocEl.appendChild(tocHead);
-      this._tocEl.appendChild(tocList);
-      this._buildToc(tocList, doc);
 
       this._viewer = el(doc, 'div', 'tm-pdf-viewer');
       this._viewer.setAttribute('tabindex', '0');
@@ -284,7 +274,6 @@ function makeReader(): any {
 
       this._hint = el(doc, 'div', 'tm-pdf-hint', '');
       this._status = el(doc, 'div', 'tm-pdf-status', lingo(this.wiki, 'pdf/loading-pdfjs', 'Loading pdf.js...'));
-      body.appendChild(this._tocEl);
       body.appendChild(this._viewer);
       body.appendChild(this._hint);
       body.appendChild(this._status);
@@ -296,8 +285,6 @@ function makeReader(): any {
       root.appendChild(this._ocrBox);
 
       // ── 事件 ──
-      this._tocBtn.addEventListener('click', () => this._toggleToc());
-      tocClose.addEventListener('click', () => this._toggleToc(false));
       firstBtn.addEventListener('click', () => this._setPage(1));
       lastBtn.addEventListener('click', () => this._setPage(this._numPages));
       prevBtn.addEventListener('click', () => this._setPage(this._page - 1));
@@ -336,12 +323,12 @@ function makeReader(): any {
         const rpPage = rp?.s && /^p\d+$/.test(rp.s) ? Number(rp.s.slice(1)) : NaN;
         const statePage = Number(wiki.getTiddlerText('$:/state/tidme-pdf/page/' + this._docId, ''));
 
-        // 1. 若当前卡是真实续读点所在的卡（用户通过继续阅读打开）→ 采用真实续读点记录的页码
+        // 1. 当前卡 = 续读点卡 → 恢复其记录的绝对页码。阅读本就连续跨节（页间防抖
+        //    续存与学习模式「读完继续」都以当前卡记绝对页），页码允许越出本节
+        //    tidme.pages 区间；仅当超过实有页数（如书籍重导入变小）时回退节起始
         if (rp?.t === t && Number.isFinite(rpPage) && rpPage >= 1) {
-          const inRange = !range.end || (rpPage >= range.start && rpPage <= range.end);
-          if (inRange) {
-            return numPages > 0 && rpPage > numPages ? target : rpPage;
-          }
+          if (numPages > 0 && rpPage > numPages) return target;
+          return rpPage;
         }
 
         // 2. 若外部指定了有效页码（如「回原文」临时溯源），且落在本节区间内 → 采用该页并消费清理
@@ -376,6 +363,7 @@ function makeReader(): any {
         });
         if (!bytes || bytes.length === 0) {
           this._status.textContent = lingoMod.lingo(wiki, 'pdf.missing', `Missing PDF data (${this._pdfTitle || 'No associated PDF found'})`);
+          this._wireReattach();
           return;
         }
         this._pdf = await pdfjsMod.loadPdfBytes(bytes);
@@ -386,6 +374,44 @@ function makeReader(): any {
       } catch (e: any) {
         this._status.textContent = lingoMod.lingo(wiki, 'pdf.load.failed', 'Failed to load: ') + String(e?.message || e);
       }
+    }
+
+    /** 二进制缺失/为空时的原位恢复入口：选择原始 PDF 文件覆写二进制条目
+     *  （服务端曾把空二进制写成 0 字节 .pdf；重绑不清空节卡/续读点/复习进度） */
+    _wireReattach() {
+      if (!this._pdfTitle || !this._status) return;
+      if (this._reattachBtn && this._reattachBtn.parentNode) return; // 重复加载失败不叠加按钮
+      const btn = el(this.document, 'button', 'tm-pdf-reattach', lingoMod.lingo(this.wiki, 'pdf.reattach', 'Re-attach PDF'));
+      this._reattachBtn = btn;
+      btn.title = lingoMod.lingo(this.wiki, 'pdf.reattach.tip', 'Select the original PDF file to restore it in place (sections and reading progress kept)');
+      btn.addEventListener('click', () => {
+        const input = this.document.createElement('input');
+        input.type = 'file';
+        input.accept = '.pdf,application/pdf';
+        input.addEventListener('change', async () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          try {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            // 大文件编码耗时数秒：状态条实时显示百分比（textContent 会移除按钮，需清引用）
+            this._reattachBtn = null;
+            const encodingTip = lingoMod.lingo(this.wiki, 'pdf.reattach.encoding', 'Encoding PDF');
+            const dataB64 = await binaryMod.bytesToBase64Async(bytes, (done, total) => {
+              this._status.textContent = `${encodingTip} ${Math.round((done / Math.max(total, 1)) * 100)}%`;
+            });
+            if (!binaryMod.base64RoundtripValid(dataB64, bytes.length)) {
+              throw new Error(lingoMod.lingo(this.wiki, 'pdf.import.corrupt', 'PDF data integrity check failed; import aborted'));
+            }
+            pdfOps.reattachPdfBinary(this.wiki, this._pdfTitle, dataB64);
+            this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.reattach.done', 'PDF restored, loading...');
+            void this._loadPdf();
+          } catch (e: any) {
+            this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.reattach.failed', 'Re-attach failed: ') + String(e?.message || e);
+          }
+        });
+        input.click();
+      });
+      this._status.appendChild(btn);
     }
 
     refresh(changedTiddlers: Record<string, any>) {
@@ -418,6 +444,7 @@ function makeReader(): any {
 
     _cleanup() {
       this._flushReadTime();
+      this._reattachBtn = null;
       if (this._savePageTimer) {
         clearTimeout(this._savePageTimer);
         this._savePageTimer = null;
@@ -475,7 +502,7 @@ function makeReader(): any {
           }
         }, 300);
       }
-      this._updateTocCurrent();
+
       void this._renderPage();
     }
 
@@ -573,47 +600,6 @@ function makeReader(): any {
         if (d.fullscreenElement) void d.exitFullscreen();
         else if (this._root.requestFullscreen) void this._root.requestFullscreen();
       } catch { /* 浏览器不支持全屏则忽略 */ }
-    }
-
-    // ---------- 目录抽屉 ----------
-
-    _buildToc(tocList: any, doc: any) {
-      // sectionsOfDoc 含文档页本体（kind topic 无 subkind）；目录只列带页区间的真节卡，
-      // 整本不切分（仅文档页）→ 无目录可列，按钮隐藏
-      const secs = (this._docId ? docOps.sectionsOfDoc(this.wiki, this._docId) : [])
-        .filter((t: string) => this.wiki.getTiddler(t)?.fields?.['tidme.pages']);
-      if (!secs.length) {
-        this._tocBtn.style.display = 'none';
-        return;
-      }
-      for (const title of secs) {
-        const sf = this.wiki.getTiddler(title)?.fields || {};
-        const r = parsePdf.parsePagesField(String(sf['tidme.pages'] || ''));
-        const label = String(sf.caption || title).trim() || title;
-        const item = el(doc, 'button', 'tm-pdf-toc-item');
-        item.appendChild(el(doc, 'span', 'tm-pdf-toc-name', label));
-        item.appendChild(el(doc, 'span', 'tm-pdf-toc-page', String(r.start)));
-        item.title = `${label} (${lingo(this.wiki, 'pdf/page-prefix', 'p.')} ${r.start})`;
-        item.addEventListener('click', () => {
-          this._toggleToc(false);
-          this._setPage(r.start);
-        });
-        tocList.appendChild(item);
-        this._tocItems.push({ el: item, start: r.start, end: r.end || this._numPages });
-      }
-    }
-
-    _toggleToc(open?: boolean) {
-      const willOpen = open === undefined ? !this._tocEl.classList.contains('tm-pdf-toc--open') : open;
-      this._tocEl.classList.toggle('tm-pdf-toc--open', willOpen);
-      this._tocBtn.classList.toggle('tm-pdf-ico--on', willOpen);
-      if (willOpen) this._updateTocCurrent();
-    }
-
-    _updateTocCurrent() {
-      for (const it of this._tocItems) {
-        it.el.classList.toggle('tm-pdf-toc-cur', this._page >= it.start && this._page <= it.end);
-      }
     }
 
     // ---------- 文本层 / OCR ----------

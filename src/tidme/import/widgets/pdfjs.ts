@@ -3,8 +3,8 @@ widgets/pdfjs.ts — pdf.js CDN 按需加载器与浏览器适配
 
 - Mozilla pdf.js（Apache-2.0）固定版本经 cdnjs 按需注入（不打包进插件，省 ~1.5MB）；
   加载失败（离线/无网）时 promise reject，调用方给出提示。
-- 适配层：loadPdfBytes / extractOutlineNodes（outline → {title,page} 拍平前解析）/
-  pageSize（scale1 原始尺寸）/ renderPageToCanvas（渲染并返回 viewport）/ pageTextItems（文本层数据）。
+- 适配层：loadPdfBytes / pageSize（scale1 原始尺寸）/ renderPageToCanvas（渲染并返回 viewport）/ pageTextItems（文本层数据）。
+- base64 编解码已收口 core/binary（唯一实现），本模块只保留 pdf.js 适配。
 */
 
 const PDFJS_VERSION = '3.11.174';
@@ -48,74 +48,11 @@ export function ensurePdfJs(): Promise<any> {
   return libPromise;
 }
 
-const B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-/** base64 → 字节（纯 JS：TW vm 沙箱无 atob/btoa 全局） */
-export function base64ToBytes(b64: string): Uint8Array {
-  const clean = String(b64 || '').replace(/[^A-Za-z0-9+/=]/g, '');
-  const out = new Uint8Array(Math.floor((clean.length * 6) / 8));
-  let bits = 0;
-  let acc = 0;
-  let len = 0;
-  for (let i = 0; i < clean.length; i++) {
-    const ch = clean[i];
-    if (ch === '=') break;
-    acc = (acc << 6) | B64_CHARS.indexOf(ch);
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out[len++] = (acc >> bits) & 0xff;
-    }
-  }
-  return out.subarray(0, len);
-}
-
-/** 字节 → base64（纯 JS，标准字母表 + padding） */
-export function bytesToBase64(bytes: Uint8Array): string {
-  let out = '';
-  for (let i = 0; i < bytes.length; i += 3) {
-    const b0 = bytes[i];
-    const b1 = bytes[i + 1];
-    const b2 = bytes[i + 2];
-    out += B64_CHARS[b0 >> 2];
-    out += B64_CHARS[((b0 & 3) << 4) | ((b1 || 0) >> 4)];
-    out += b1 === undefined ? '=' : B64_CHARS[((b1 & 15) << 2) | ((b2 || 0) >> 6)];
-    out += b2 === undefined ? '=' : B64_CHARS[b2 & 63];
-  }
-  return out;
-}
-
 /** 字节 → pdf.js 文档对象。传副本：pdf.js 可能转移底层 buffer（detach），
  *  调用方（导入流程的 base64 编码）需要保留可用数据。 */
 export async function loadPdfBytes(bytes: Uint8Array): Promise<any> {
   const lib = await ensurePdfJs();
   return lib.getDocument({ data: bytes.slice() }).promise;
-}
-
-/** dest（字符串命名目标或数组 [ref, {x,y}]）→ 页码（1 起）；无法解析返回 0 */
-export async function resolveDestPage(pdf: any, dest: any): Promise<number> {
-  try {
-    let ref = dest;
-    if (typeof dest === 'string') ref = await pdf.getDestination(dest);
-    if (!Array.isArray(ref) || !ref.length) return 0;
-    const pageIndex = await pdf.getPageIndex(ref[0]);
-    return pageIndex + 1;
-  } catch {
-    return 0;
-  }
-}
-
-/** pdf.js outline → 已解析页码的节点列表（嵌套拍平；未解析页码的项丢弃） */
-export async function extractOutlineNodes(pdf: any): Promise<Array<{ title: string; page: number }>> {
-  const raw = (await pdf.getOutline().catch(() => null)) || [];
-  const resolved: Array<{ title: string; page: number }> = [];
-  for (const it of raw) {
-    const page = await resolveDestPage(pdf, it.dest);
-    const title = String(it.title || '').trim();
-    if (page >= 1 && title) resolved.push({ title, page });
-    // 二级大纲极少用于切分（书内层级一至两层），不再递归以保确定性
-  }
-  return resolved;
 }
 
 /** 页面原始尺寸（scale=1 视口，缩放 fit 计算的基准） */

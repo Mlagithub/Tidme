@@ -135,21 +135,8 @@ export function writeLogRetentionDays(wiki: any, days: number): void {
 
 // ---------- PDF 导入与 LLM-OCR ----------
 
-export const PDF_OPTIONS_TITLE = '$:/config/Tidme/PdfImport';
 export const OCR_TITLE = '$:/config/Tidme/Ocr';
 export const SEMANTIC_SPLIT_TITLE = '$:/config/Tidme/SemanticSplit';
-
-/** PDF 导入方式：outline=按大纲切分（无大纲自动整本）；none=整本不切分 */
-export function readPdfOptions(wiki: any): { split: 'outline' | 'none' } {
-  const raw = String(wiki.getTiddlerText?.(PDF_OPTIONS_TITLE, '') || '').trim();
-  return { split: raw.includes('"none"') || raw === 'none' ? 'none' : 'outline' };
-}
-
-export function writePdfOptions(wiki: any, patch: { split?: 'outline' | 'none' }): void {
-  if (!wiki) return;
-  const split = patch.split ?? readPdfOptions(wiki).split;
-  wiki.addTiddler({ title: PDF_OPTIONS_TITLE, type: 'application/json', text: JSON.stringify({ split }) });
-}
 
 /** OCR 配置；apiKey 留空 = 复用「语义切分」的 Key（同一 OpenAI 兼容账号体系） */
 export function readOcrConfig(wiki: any): { enable: boolean; model: string; baseUrl: string; apiKey: string } {

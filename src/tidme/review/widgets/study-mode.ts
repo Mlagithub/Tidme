@@ -62,10 +62,6 @@ function advanceStudy(widget: any) {
   const cur = getCurrentStudyCard(wiki, widget, study.list);
   if (cur) {
     const f = wiki.getTiddler(cur)?.fields || {};
-    const docId = String(f['tidme.doc'] || '');
-    if (docId) {
-      docOps.saveReadPoint(wiki, docId, { t: cur, s: '' });
-    }
     if (f['tidme.kind'] === 'topic') {
       wiki.addTiddler(sched.doneCard(f));
     }
@@ -79,6 +75,13 @@ function advanceStudy(widget: any) {
   }
   if (list.length > 0) {
     const next = list[0];
+    // 续读点指向下一张卡并携带其页码（PDF 节卡 p<start>）：既不再指向已读完的卡，
+    // 也不用 s:'' 抹掉页码——否则下次继续阅读回落首页（阅读记录丢失）
+    const nf = wiki.getTiddler(next)?.fields || {};
+    const nextDoc = String(nf['tidme.doc'] || '');
+    if (nextDoc) {
+      docOps.saveReadPoint(wiki, nextDoc, { t: next, s: docOps.readPointPositionOf(wiki, next) });
+    }
     docOps.prepareCardFold(wiki, next);
     navigateTo(widget, next);
   } else {
