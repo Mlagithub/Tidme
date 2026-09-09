@@ -38,7 +38,7 @@ test('paths: slugify 处理各种书名', () => {
 });
 
 test('paths: bookRoot + sectionPath 产出符合命名空间（可读叶段 + 稳定 id）', () => {
-  const root = paths.bookRoot('批评性思维', 'd12345678');
+  const root = paths.bookRoot('批评性思维');
   assert.equal(root, 'Tidme/Books/批评性思维');
   // sectionLeaf（A2）：可读 caption slug + "-" + id；唯一性由 id 保证
   assert.equal(paths.sectionLeaf('第一章', 's1234567890ab'), '第一章-s1234567890ab');
@@ -46,27 +46,13 @@ test('paths: bookRoot + sectionPath 产出符合命名空间（可读叶段 + �
   // sectionPath 拍平到书目录
   const sec = paths.sectionPath('批评性思维', '第一章 1.1 思维', 's1234567890ab');
   assert.equal(sec, 'Tidme/Books/批评性思维/第一章-1-1-思维-s1234567890ab');
-});
-
-test('paths: 摘录留在书目录、知识卡进 decks/（拍平+命名空间分流）', () => {
-  // 摘录：Tidme/Books/<书>/<sectionId>--extract（拍平在书目录）
-  const extract = paths.extractPath('书', 'd1', 's1234567890ab');
-  assert.equal(extract, 'Tidme/Books/书/s1234567890ab--extract', '摘录拍平到书目录');
-  // 知识卡（挖空）：Tidme/Decks/<书>/<sectionId>--cloze（单独命名空间）
-  const cloze = paths.cardPath('书', 'd1', 's1234567890ab', 'cloze');
-  assert.equal(cloze, 'Tidme/Decks/书/s1234567890ab--cloze', '挖空进 decks 目录');
-  // 知识卡（问答）：Tidme/Decks/<书>/<sectionId>--qa
-  const qa = paths.cardPath('书', 'd1', 's1234567890ab', 'qa');
-  assert.equal(qa, 'Tidme/Decks/书/s1234567890ab--qa', '问答进 decks 目录');
-});
-
-test('paths: deckSubsetPath 命名空间为 Tidme/Decks/<书>/<用途>', () => {
-  assert.equal(paths.deckSubsetPath('批评性思维', 'd12345678'), 'Tidme/Decks/批评性思维/复习本书');
+  // 摘录/挖空/问答的真实命名在 card-factory.derivedCardBase（从父卡实际位置派生），
+  // 纯形式路径助手（extractPath/cardPath/deckSubsetPath）已随死代码清理删除
 });
 
 test('paths: 拒绝保留字书名', () => {
-  assert.throws(() => paths.bookRoot('index', 'd1'), /reserved/);
-  assert.throws(() => paths.bookRoot('default', 'd1'), /reserved/);
+  assert.throws(() => paths.bookRoot('index'), /reserved/);
+  assert.throws(() => paths.bookRoot('default'), /reserved/);
 });
 
 // === 集成：runSplit 产物 ===
@@ -412,7 +398,7 @@ test('nav: reading-list 跳转到 doc 页用真实命名空间路径（不是 br
   // reading-list 现在的实现：bookTitle 从 breadcrumb 拼，docTiddlerTitle 用 paths.bookRoot
   const breadcrumb = g.cards[0].breadcrumb;
   const bookTitleFromCrumb = breadcrumb.split(' › ')[0] || '';
-  const expectedDocTiddler = paths.bookRoot(bookTitleFromCrumb, g.doc);
+  const expectedDocTiddler = paths.bookRoot(bookTitleFromCrumb);
   assert.equal(expectedDocTiddler, `Tidme/Books/${bookTitle}`, 'reading-list 应该用 paths.bookRoot 重建 doc tiddler title（命名空间路径），不是 breadcrumb 首段');
   // 验证：docTiddlerTitle 真的能在 wiki 里查到 doc 页
   const docTiddler = wiki.getTiddler(expectedDocTiddler);
@@ -429,7 +415,7 @@ test('nav: section.ts 面包屑点击也用真实 doc title（修复同上）', 
   // 模拟 section.ts 内部 crumb click handler：
   const crumbBook = secTiddler.fields['tidme.breadcrumb'].split(' › ')[0];
   const crumbDoc = secTiddler.fields['tidme.doc'];
-  const crumbDocTitle = paths.bookRoot(crumbBook, crumbDoc);
+  const crumbDocTitle = paths.bookRoot(crumbBook);
   const expectedDocTiddler = `Tidme/Books/${bookTitle}`;
   assert.equal(crumbDocTitle, expectedDocTiddler);
   assert.ok(wiki.getTiddler(crumbDocTitle), `doc tiddler 存在: ${crumbDocTitle}`);

@@ -160,11 +160,11 @@ test('commitCard——无 doc 笔记挖空/问答 → item 卡入缺省牌组 + 
   assert.equal(cloze['tidme.kind'], 'item');
   assert.equal(cloze['tidme.parent'], '随手笔记');
   assert.equal(cloze['tidme.doc'], '', '无 doc 来源');
-  assert.ok(sectionMod.commitCard(wiki, cloze, null), '写库成功');
+  assert.ok(sectionMod.commitCard(wiki, cloze), '写库成功');
 
   const qa = sectionMod.buildQA(wiki, '随手笔记', '记忆的核心机制?', '间隔重复');
   assert.equal(qa['tidme.kind'], 'item');
-  assert.ok(sectionMod.commitCard(wiki, qa, null));
+  assert.ok(sectionMod.commitCard(wiki, qa));
 
   // 缺省 input.deck：无 doc item 由默认牌组 card 过滤器自动收录
   const inDeck = deckMod.deckCards(wiki, '$:/Deck/default');

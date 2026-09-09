@@ -2,8 +2,13 @@
 schema.ts — 实体字段规范与校验
 
 - 常量：实体 kind、来源格式、FSRS 字段族、缺省值
-- 校验：isSection / isCard 等 + assertFields（返回缺失字段列表）
+- 校验：missingRequired / assertKind
 - 校验策略：对旧数据（缺字段）宽容（返回缺失清单由调用方补默认），对新数据严格（assertKind 抛错）
+
+本规范只覆盖**导入 parse 产物**（Section 族：tidme.id/order/level/hash 齐全、身份=稳定 id）。
+阅读划词/全局手动制卡的派生卡走 core/card-factory.derivedCardFields（身份=title，
+无 tidme.id/order/hash，FSRS 初值由 initialFsrsFields 提供）——两套规范服务不同实体族，
+assertKind 不得用于工厂产物（必因缺 tidme.id 抛错）；工厂卡的字段契约在 card-factory 声明。
 */
 
 export const FORMATS = ['epub', 'markdown', 'html', 'txt', 'clip', 'paste'] as const;
@@ -16,6 +21,12 @@ export type Format = (typeof FORMATS)[number];
  */
 export const KINDS = ['topic', 'item'] as const;
 export type Kind = (typeof KINDS)[number];
+
+/** 卡实体最小形状（调度/统计/对齐共用的类型契约；仅类型层，无运行时开销） */
+export interface CardLike {
+  title: string;
+  fields: Record<string, any>;
+}
 
 /** 子类型：驱动展示差异（徽章/加工路径/具体按钮），不决定学习模式 */
 export const SUBKINDS = ['section', 'extract', 'cloze', 'qa'] as const;
@@ -32,17 +43,6 @@ export const FSRS_FIELDS = [
   'elapsed_days',
   'scheduled_days',
   'last_review',
-] as const;
-
-/** 溯源继承字段（Document 上维护，派生实体经 parent 链动态显示，不复制） */
-export const PROVENANCE_FIELDS = [
-  'tidme.source',
-  'tidme.author',
-  'tidme.language',
-  'tidme.url',
-  'tidme.date',
-  'tidme.license',
-  'tidme.format',
 ] as const;
 
 export interface SectionRequired {

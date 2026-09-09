@@ -98,7 +98,7 @@ function topicsOfDoc(wiki: any, doc: string): string[] {
     });
 }
 
-/** 已读判定（分类：topic/item 卡 done/ignored 视为完成出队）—— 直接调 sched.isCardDone，无包装 */
+/** 出队判定（done/ignored 视为不再待处理）—— 直接调 sched.isCardOutOfQueue，无包装 */
 
 // 划词/弹窗共享实现（section-bar 与全局制卡气泡共用）
 const frameTitleOfSelection = (win: any) =>
@@ -253,11 +253,11 @@ function highlightCardAnchors(wiki: any, doc: Document, parentTitle: string) {
   }, 250);
 }
 
-/** 本书 item 类（复习流）在队卡过滤器：唯一产地 = core/scheduler.docItemsFilter。
+/** 本书 item 类（复习流）在队卡过滤器：唯一产地 = core/doc-ops.docItemsFilter。
  * 修复：此前在本处把 ITEM_FILTER 拼进同一字符串产生第二个 run（并集），
  * 会把全库 item（含他书/已读）混进"复习本书"子集牌组与计数。 */
 function docItemFilter(wiki: any, docId: string): string {
-  return sched.docItemsFilter(docId);
+  return docOps.docItemsFilter(docId);
 }
 
 // ---------- 动作 ----------
@@ -274,7 +274,7 @@ function refreshAnchorsAfterCard(): void {
  *  清选区 → 刷新锚点高亮 → 通知。draft 为空返回 false（由调用方决定提示语）。 */
 function commitCardAndReadPoint(win: any, tt: string, draft: Record<string, any> | null, selected: string, kind: 'extract' | 'cloze'): boolean {
   if (!draft) return false;
-  commitCard(activeWiki(), draft, active.dispatch);
+  commitCard(activeWiki(), draft);
   const docId = currentDocId(win);
   if (docId) saveReadPoint(activeWiki(), docId, { t: tt, s: selected.replace(/\s+/g, ' ').trim().slice(0, 200) });
   try {
@@ -734,13 +734,13 @@ function makeSectionBar(): WidgetCtor {
       // 2. 阅读主体 (Topic：普通阅读节 + 摘录卡 Extract)
       const fullList = topicsOfDoc(wiki, docId);
       // 过滤出在待读队列中的 Topic（或当前打开卡），使 ◀ / ▶ 导航自动跳过已完成已读的卡片
-      const queueList = fullList.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields) || x === title);
+      const queueList = fullList.filter((x) => !sched.isCardOutOfQueue(wiki.getTiddler(x)?.fields) || x === title);
       const { prev, next } = parse.neighborsOf(queueList, title);
       const index = fullList.indexOf(title);
       // ▶ 下一节目标 = 统一调度（会话优先，与已读后推进一致；无会话=本文档内下一可读）
       const schedNext = getScheduledNext();
       const rp = parseReadPoint(wiki, docId);
-      const left = fullList.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields)).length;
+      const left = fullList.filter((x) => !sched.isCardOutOfQueue(wiki.getTiddler(x)?.fields)).length;
 
       // 第一行：摘录源提示（若为摘录卡）· 面包屑 · 位置 · 本书剩余 · 优先级 · 已读状态 · 自动保存指示
       if (subkind === 'extract') {
@@ -764,7 +764,7 @@ function makeSectionBar(): WidgetCtor {
       const crumbDoc = String(fields['tidme.doc'] || '');
       const crumbDocTitle = String(fields['tidme.docpage'] || '') ||
         docOps.docPageOfDoc(wiki, crumbDoc) ||
-        (crumbBook && crumbDoc ? paths.bookRoot(crumbBook, crumbDoc) : crumbBook);
+        (crumbBook && crumbDoc ? paths.bookRoot(crumbBook) : crumbBook);
       const crumb = el(doc, 'span', 'tm-section-crumb tm-import-muted', crumbBreadcrumb);
       crumb.title = lingo(wiki, 'read/crumb.tip', 'Click to open book summary page');
       crumb.addEventListener('click', () => {
@@ -784,7 +784,7 @@ function makeSectionBar(): WidgetCtor {
       const priVal = sched.normalizePriority(fields['tidme.priority']);
       infoRow.appendChild(el(doc, 'span', 'tm-section-pri tm-import-muted', `p${String(priVal).padStart(2, '0')}`));
 
-      if (sched.isCardDone(fields)) {
+      if (sched.isCardOutOfQueue(fields)) {
         infoRow.appendChild(el(doc, 'span', 'tm-section-state', `✓ ${lingo(wiki, 'read.done', 'Read')}`));
       }
 
@@ -862,7 +862,7 @@ function makeSectionBar(): WidgetCtor {
 
       sep();
 
-      if (sched.isCardDone(fields)) {
+      if (sched.isCardOutOfQueue(fields)) {
         btnRow.appendChild(mkBtn(lingo(wiki, 'read/readd', 'Re-add'), 'undo', lingo(wiki, 'read/readd.tip', 'Restore to study queue'), false, () => {
           this._flushSave();
           wiki.addTiddler(sched.restoreCard(fields));
@@ -1090,7 +1090,7 @@ function makeSectionBar(): WidgetCtor {
 /** 文档页横幅区：进度（大数字 + 进度条）+ 继续阅读 + 复习本书（子集牌组）+ 清理阅读材料 */
 function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElement, title: string, docId: string, all: string[]) {
   // 进度横幅（卡片化）：大数字 + 进度条 + 主按钮
-  const done = all.filter((x) => sched.isCardDone(wiki.getTiddler(x)?.fields)).length;
+  const done = all.filter((x) => sched.isCardOutOfQueue(wiki.getTiddler(x)?.fields)).length;
   const left = all.length - done;
   const banner = el(doc, 'div', 'tm-doc-banner');
   // 左侧：进度数字 + 进度条
@@ -1111,7 +1111,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
   const btn = el(doc, 'button', 'tm-btn tm-btn--primary', lingo(wiki, 'read.resume', 'Continue Reading'));
   btn.addEventListener('click', () => {
     const rp = parseReadPoint(wiki, docId);
-    const list = all.filter((x) => !sched.isCardDone(wiki.getTiddler(x)?.fields));
+    const list = all.filter((x) => !sched.isCardOutOfQueue(wiki.getTiddler(x)?.fields));
     const readable = list.filter((x) => sched.isDueNow(wiki.getTiddler(x)?.fields));
     // 优先跳到续读点（只要该卡在队且未完成，或指向文档页本身），其次第一张当前可读卡；无节卡则退回文档页本身
     const target = (rp && (list.includes(rp.t) || rp.t === title) ? rp.t : null) || readable[0] || list[0] || title;
@@ -1188,7 +1188,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
 
 /** 已读区：列出已读节，可"重新加入"队列（恢复可逆性，替代 8 秒撤销窗口） */
 function appendDocDoneSection(doc: Document, wiki: any, wrap: HTMLElement, all: string[]) {
-  const doneTitles = all.filter((x) => sched.isCardDone(wiki.getTiddler(x)?.fields));
+  const doneTitles = all.filter((x) => sched.isCardOutOfQueue(wiki.getTiddler(x)?.fields));
   if (!doneTitles.length) return;
   const doneBox = el(doc, 'details', 'tm-doc-done');
   const summary = el(doc, 'summary', 'tm-import-muted', `${lingo(wiki, 'read/readcards', 'Read Cards')} (${doneTitles.length})`);

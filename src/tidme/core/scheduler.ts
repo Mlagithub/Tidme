@@ -5,7 +5,8 @@ scheduler.ts — 调度体系（对标 SuperMemo 优先级）
 - 批量操作：postpone / advance / ignore / suspend / resume / forget（返回字段补丁）
 - autoPostpone：按优先级顺延低优先级逾期卡（保留 top N 高优先级）
 
-所有函数纯字段操作（无 $tw 依赖），返回 { title, fields } 补丁由调用方写入。
+所有函数纯字段操作（无 $tw 依赖、不查 wiki），返回 { title, fields } 补丁由调用方写入。
+按 docId 的 wiki 查询（阅读队列快照/分节文档页集合/本书 item 过滤器）在 core/doc-ops。
 */
 
 /** auto-postpone 配置 tiddler（startup 定时器 / queue-ops / card-manager 共用同一产地） */
@@ -22,67 +23,9 @@ export const PRIORITY_TIERS = { high: 10, medium: 50, low: 90 } as const;
  */
 export const ITEM_FILTER = `[tidme.kind[item]]`;
 
-import { TOPIC_QUEUE_FILTER } from './ns.ts';
-export { TOPIC_QUEUE_FILTER };
-
-/**
- * 有节卡的文档页集合（存量分节书籍：文档页只是书籍入口，不入阅读/学习队列，
- * 否则学习模式要先在文档页绕一圈、读完继续点两次）。PDF 不再切分后，新导入的
- * 整本文档页（无节卡）正常入队。
- */
-export function splitDocPageSet(wiki: any): Set<string> {
-  const set = new Set<string>();
-  if (!wiki || typeof wiki.filterTiddlers !== 'function') return set;
-  const docIds = new Set(
-    wiki
-      .filterTiddlers('[all[shadows+tiddlers]tidme.subkind[section]]')
-      .map((t: string) => String(wiki.getTiddler(t)?.fields?.['tidme.doc'] || ''))
-      .filter(Boolean),
-  );
-  for (const docId of docIds) {
-    for (const p of wiki.filterTiddlers(`[all[shadows+tiddlers]tag[tidme-import-doc]tidme.doc[${docId}]]`)) {
-      set.add(p);
-    }
-  }
-  return set;
-}
-
-/**
- * 本书 item 在队过滤器（「复习本书」子集牌组的 card 来源 / 文档页计数）。
- * 出队标记一律在此排除（done/ignored/suspended），与默认牌组 card 口径一致。
- * 注意：过滤器 run 之间是并集——严禁把 ITEM_FILTER 之类片段拼接进单个 run 之外
- * （曾因拼接产生第二个 run，把全库 item 混进"复习本书"子集）。
- */
-export function docItemsFilter(docId: string): string {
-  return `[all[shadows+tiddlers]tidme.doc[${docId}]tidme.kind[item]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]]`;
-}
-
-/**
- * 阅读队列快照：TOPIC_QUEUE_FILTER 求值 + 排序字段预解析（priority/due/order）。
- * 出队三态（done/ignored/suspended）由过滤器排除，此处再兜底一次
- * （shadow 覆盖写回等边缘下过滤器与字段可能不一致）。wiki 为注入参数，无 $tw 全局依赖。
- */
-export function collectTopicQueue(wiki: any): Record<string, any>[] {
-  if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
-  const splitDocs = splitDocPageSet(wiki);
-  return wiki
-    .filterTiddlers(TOPIC_QUEUE_FILTER)
-    .map((t: string) => {
-      const f = wiki.getTiddler(t)?.fields || {};
-      return {
-        title: t,
-        fields: f,
-        kind: String(f['tidme.subkind'] || ''),
-        priority: normalizePriority(f['tidme.priority']),
-        due: parseTwDate(f.due, new Date(0)),
-        order: String(f['tidme.order'] || f['tidme.breadcrumb'] || t),
-        doc: String(f['tidme.doc'] || ''),
-        breadcrumb: String(f['tidme.breadcrumb'] || t),
-      };
-    })
-    .filter((c: Record<string, any>) => !isCardDone(c.fields) && c.fields['tidme.suspended'] !== 'yes')
-    .filter((c: Record<string, any>) => !splitDocs.has(c.title));
-}
+// 日期序列化/解析收敛于 core/schema（唯一实现）；CardLike 类型契约同在 schema（类型级复用）
+import { parseTwDate, twDateString } from './schema.ts';
+import type { CardLike as CardLikeBase } from './schema.ts';
 
 /** 阅读队列排序（阅读列表 / 继续阅读入口共用）：优先级（0 最高）→ due（早在前，被动重读）→ 阅读顺序 */
 export function sortTopicQueue(cards: Record<string, any>[]): Record<string, any>[] {
@@ -137,17 +80,11 @@ export function shiftPriority(priority: unknown, step = 5): string {
   return adjustPriority(priority, step);
 }
 
-// 日期序列化/解析收敛于 core/schema（唯一实现）
-import { parseTwDate, twDateString } from './schema.ts';
-
 function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86400000);
 }
 
-export interface CardLike {
-  title: string;
-  fields: Record<string, any>;
-}
+export interface CardLike extends CardLikeBase {}
 export interface Patch {
   title: string;
   fields: Record<string, any>;
@@ -198,8 +135,10 @@ export function forgetCard(): Record<string, any> {
   };
 }
 
-/** 统一已读 / 完成判定：done（已读/完成）或 ignored（忽略）都视为已出队 */
-export function isCardDone(fields: Record<string, any>): boolean {
+/** 出队判定（done 或 ignored）：已读/完成与忽略都移出所属队列，可经 restoreCard 恢复。
+ *  命名说明：这不是"已读"语义——ignored 的节从未被读，只是不再等待处理；
+ *  进度类口径（docProgress 等）把两者合并计为"不再待处理"。suspended 不在此列（另行判定）。 */
+export function isCardOutOfQueue(fields: Record<string, any>): boolean {
   if (!fields) return false;
   return fields['tidme.done'] === 'yes' || fields['tidme.ignored'] === 'yes';
 }
@@ -402,7 +341,7 @@ export function autoPostpone(cards: CardLike[], opts: AutoPostponeOptions = {}):
     .filter((c) => {
       const f = c.fields;
       if (f['tidme.suspended'] === 'yes') return false;
-      if (isCardDone(f)) return false; // 已出队（done/ignored）
+      if (isCardOutOfQueue(f)) return false; // 已出队（done/ignored）
       return parseTwDate(f.due, new Date(0)).getTime() < now;
     })
     .sort((a, b) => {

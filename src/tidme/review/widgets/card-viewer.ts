@@ -319,19 +319,18 @@ function makeCardViewer(): any {
       const newP = Math.max(0, Math.min(100, curP + pDelta));
       wiki.setText(this.cardTitle, 'tidme.priority', null, String(newP));
 
-      // 4. 更新学习会话列表
-      const sess = wiki.getTiddler(session.SESSION_TIDDLER);
-      let list: string[] = Array.isArray(sess?.fields.list) ? [...sess.fields.list] : [];
-      list = list.filter((t) => t !== this.cardTitle);
-      if (rating === 'Again') {
-        list.push(this.cardTitle);
+      // 4. 更新学习会话列表（经 session 唯一读写口：Again 把当前卡挪到队尾重学）
+      const s = session.getSession(wiki);
+      const list = s ? s.list.filter((t) => t !== this.cardTitle) : [];
+      if (s) {
+        if (rating === 'Again') list.push(this.cardTitle);
+        session.setSession(wiki, { list, mode: s.mode, currentIndex: s.currentIndex });
       }
-      wiki.addTiddler({ ...(sess?.fields || { title: session.SESSION_TIDDLER }), list });
 
       // 5. 清理折叠标记
       wiki.deleteTiddler(ns.FOLDED_STATE_PREFIX + this.cardTitle);
 
-      // 6. 关闭当前卡并切换
+      // 6. 关闭当前卡并切换（无会话时 list 为空 → 直接进入收尾分支）
       dom.closeTiddler(this, this.cardTitle);
 
       if (list.length > 0) {

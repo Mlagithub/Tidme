@@ -41,10 +41,17 @@ export const CRUMB_SEP = ' › ';
 export const DECK_PREFIX = '$:/Deck/';
 
 /**
- * 阅读列表（topic 队列）过滤器唯一契约：全库 kind=topic 在队卡（排除草稿、牌组页、搁置/完成/忽略）。
- * 单条 run 的闭合过滤器字符串；deck-engine / scheduler 等处共用。
+ * 出队三态排除尾段（done/ignored/suspended）——一切"在队"过滤器的公共后缀。
+ * TS 侧组合复用（TOPIC_QUEUE_FILTER / deck.DEFAULT_CARD_FILTER / doc-ops.docItemsFilter /
+ * server 定时器查询），修改出队标记时只改这里；.tid wikitext 内的字面量除外（DSL 无法插值）。
  */
-export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]!has[tidme.suspended]!has[tidme.done]!has[tidme.ignored]]';
+export const QUEUE_EXCLUDE = '!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]';
+
+/**
+ * 阅读列表（topic 队列）过滤器唯一契约：全库 kind=topic 在队卡（排除草稿、牌组页、搁置/完成/忽略）。
+ * 单条 run 的闭合过滤器字符串；deck-engine / doc-ops 等处共用。
+ */
+export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]' + QUEUE_EXCLUDE + ']';
 
 /** 卡折叠态 tiddler 前缀（<prefix><title> = "show"/"hide"，fsrs4tw reveal 语义） */
 export const FOLDED_STATE_PREFIX = '$:/state/folded/';

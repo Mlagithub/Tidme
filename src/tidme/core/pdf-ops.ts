@@ -59,7 +59,7 @@ export async function createPdfBook(
   const dataB64 = String(opts.dataB64 || '').trim();
   if (!dataB64) throw new Error('pdf-ops: dataB64 为空，拒绝落库空 PDF 二进制');
   const docId = await ids.makeDocId({ title: bookTitle, creator: '', language: 'pdf' });
-  const bookRoot = paths.bookRoot(bookTitle, docId);
+  const bookRoot = paths.bookRoot(bookTitle);
   const pdfTitle = pdfBinaryTitle(bookTitle);
   const now = schema.twDateString(new Date());
 
@@ -108,12 +108,13 @@ export function resolvePdfContext(wiki: any, currentTitle: string): PdfContext {
     }
   }
 
-  // 3. 若仍无，尝试从当前路径父级推断文档页（如 Tidme/Books/书名/01 章节 -> Tidme/Books/书名）
+  // 3. 若仍无，尝试从当前路径父级推断文档页（如 Tidme/Books/书名/01 章节 -> Tidme/Books/书名）。
+  //    仅当父级真实存在时才采信——否则会把不存在的路径当文档页返回给调用方导航
   if (!docPageTitle && currentTitle.includes('/')) {
     const parentCandidate = currentTitle.slice(0, currentTitle.lastIndexOf('/'));
-    docPageTitle = parentCandidate;
     const parentTiddler = wiki.getTiddler(parentCandidate);
     if (parentTiddler) {
+      docPageTitle = parentCandidate;
       if (!docId) docId = String(parentTiddler.fields['tidme.doc'] || '');
       if (!pdfTitle) pdfTitle = String(parentTiddler.fields['tidme.pdf'] || '');
     }

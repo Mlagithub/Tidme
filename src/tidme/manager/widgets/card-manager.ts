@@ -129,7 +129,7 @@ function crumbOf(c: Card): string {
 
 function inView(f: Record<string, any>, v: View): boolean {
   const suspended = f['tidme.suspended'] === 'yes';
-  const done = sched.isCardDone(f);
+  const done = sched.isCardOutOfQueue(f);
   if (v === 'inqueue') return !done && !suspended;
   if (v === 'done') return done;
   if (v === 'suspended') return suspended;
@@ -293,7 +293,7 @@ function bindTriStateCb(ctx: Ctx, cb: HTMLInputElement, items: Card[]): void {
 /** 卡片行通用操作：读（移出队列）/ 回（恢复）+ 删除 */
 function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
   const { doc, wiki, st } = ctx;
-  const inQueue = !sched.isCardDone(c.fields) && c.fields['tidme.suspended'] !== 'yes';
+  const inQueue = !sched.isCardOutOfQueue(c.fields) && c.fields['tidme.suspended'] !== 'yes';
   if (inQueue) {
     const readBtn = el(doc, 'button', 'tm-cm-op', lingoMod.lingo(wiki, 'manager.action.read', 'Read'));
     readBtn.title = lingoMod.lingo(wiki, 'manager.action.read.tip', 'Remove from queue (Mark as read)');

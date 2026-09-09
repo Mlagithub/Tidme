@@ -235,8 +235,7 @@ function makeReader(): any {
           }
           let list = Array.isArray(activeStudy.list) ? [...activeStudy.list] : [];
           list = list.filter((x: string) => x !== t);
-          const sessT = wiki.getTiddler(sessionMod.SESSION_TIDDLER);
-          wiki.addTiddler({ ...(sessT?.fields || { title: sessionMod.SESSION_TIDDLER }), list });
+          sessionMod.removeFromSession(wiki, t); // 会话唯一读写口，勿手写 SESSION_TIDDLER
           dom.closeTiddler(this, t);
           if (list.length > 0) {
             const nextCard = list[0];
@@ -763,7 +762,7 @@ function makeReader(): any {
           const qa = cardFactory.buildImageQA
             ? cardFactory.buildImageQA(this.wiki, targetSection, { dataUrl, answer, label, page: this._page })
             : cardFactory.buildQA(this.wiki, targetSection, `<img src="${dataUrl}" style="max-width:100%">`, answer || defaultPending);
-          cardFactory.commitCard(this.wiki, qa, this);
+          cardFactory.commitCard(this.wiki, qa);
           this._status.textContent = lingo(this.wiki, 'pdf/image-card-created', 'Image Q&A card created');
           if (this._selMode) {
             this._selMode = false;

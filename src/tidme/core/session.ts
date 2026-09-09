@@ -12,6 +12,7 @@ declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 
 /** 牌组学习会话列表的 title 后缀（<deck>/study，fsrs4tw 契约） */
 export const DECK_STUDY_SUFFIX = '/study';
@@ -51,9 +52,16 @@ export function setSession(wiki: any, session: { list: string[]; mode?: string; 
 
 /** 从会话移除指定卡（不在则无操作）。返回是否移除 */
 export function removeFromSession(wiki: any, title: string): boolean {
+  return removeFromSessionMany(wiki, [title]);
+}
+
+/** 批量从会话移除（删除阅读材料/推进学习共用；一次读写，mode/currentIndex 保留）。
+ *  会话是本模块唯一读写口——需要剔除卡片的调用方一律走这里，禁止手写 SESSION_TIDDLER。 */
+export function removeFromSessionMany(wiki: any, titles: Iterable<string>): boolean {
   const s = getSession(wiki);
   if (!s) return false;
-  const next = s.list.filter((t) => t !== title);
+  const kill = titles instanceof Set ? titles : new Set(titles);
+  const next = s.list.filter((t) => !kill.has(t));
   if (next.length === s.list.length) return false;
   setSession(wiki, { list: next, mode: s.mode, currentIndex: s.currentIndex });
   return true;
@@ -102,17 +110,22 @@ export function isSessionActive(wiki: any): boolean {
   return getActiveStudy(wiki) !== null;
 }
 
-/** 取当前活动学习队列（全局优先，否则第一个非空牌组会话）。无 → null */
+/** 取当前活动学习队列（全局优先，否则取最近学习过的牌组会话）。无 → null。
+ *  多个牌组同时留有 study 列表时，按 <deck>/study 的 modified 时刻取最新——
+ *  "继续最近一次学习"是确定性行为，不依赖 listDecks 的过滤顺序。 */
 export function getActiveStudy(wiki: any): ActiveStudy | null {
   if (!wiki || typeof wiki.getTiddler !== 'function') return null;
   const s = getSession(wiki);
   if (s && s.list.length) return { list: s.list, source: 'global' };
+  let best: { title: string; list: string[]; at: number } | null = null;
   for (const d of deckMod.listDecks(wiki)) {
     const study = wiki.getTiddler(d + DECK_STUDY_SUFFIX);
     const list = study && Array.isArray(study.fields.list) ? study.fields.list : [];
-    if (list.length) return { list, source: 'deck', deckTitle: d };
+    if (!list.length) continue;
+    const at = schema.parseTwDate(study?.fields?.modified, new Date(0)).getTime();
+    if (!best || at > best.at) best = { title: d, list, at };
   }
-  return null;
+  return best ? { list: best.list, source: 'deck', deckTitle: best.title } : null;
 }
 
 /**

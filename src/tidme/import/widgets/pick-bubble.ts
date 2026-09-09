@@ -59,7 +59,7 @@ function bindGlobal(widget: any) {
 
   const makeCard = (draft: Record<string, any> | null) => {
     if (!draft) return;
-    factory.commitCard(widget.wiki, draft, widget);
+    factory.commitCard(widget.wiki, draft);
     try {
       notify(widget, ns.NOTIFY_CLOZE);
     } catch { /* ignore */ }

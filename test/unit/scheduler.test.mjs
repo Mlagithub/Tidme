@@ -66,7 +66,7 @@ test('advanceCard: due 重置到≈现在（立即到期）', () => {
 test('ignoreCard: 置 tidme.ignored 出队，kind 保留（分类重构后无标签）', () => {
   const ignored = sched.ignoreCard({ title: '卡', 'tidme.kind': 'item', state: '0' });
   assert.equal(ignored['tidme.ignored'], 'yes', '忽略置 tidme.ignored');
-  assert.ok(sched.isCardDone(ignored), '忽略后 isCardDone 返回 true（出队）');
+  assert.ok(sched.isCardOutOfQueue(ignored), '忽略后 isCardOutOfQueue 返回 true（出队）');
   assert.equal(ignored['tidme.kind'], 'item', '保留 kind');
 });
 
@@ -173,7 +173,7 @@ test('doneCard: 置 tidme.done 出队，kind 保留（无标签）', () => {
   const done = sched.doneCard({ title: '节', 'tidme.kind': 'topic', state: '0', 'tidme.suspended': 'yes' });
   assert.equal(done['tidme.done'], 'yes', 'Done 置 tidme.done');
   assert.equal(done['tidme.kind'], 'topic', '保留 kind');
-  assert.ok(sched.isCardDone(done), 'doneCard 后 isCardDone 应返回 true');
+  assert.ok(sched.isCardOutOfQueue(done), 'doneCard 后 isCardOutOfQueue 应返回 true');
 });
 
 test('restoreCard: 清 done/ignored/suspended 可逆恢复，kind 决定归属', () => {
@@ -183,14 +183,14 @@ test('restoreCard: 清 done/ignored/suspended 可逆恢复，kind 决定归属',
   assert.equal(resumed['tidme.ignored'], undefined, '恢复删除 tidme.ignored');
   assert.equal(resumed['tidme.suspended'], undefined, '恢复删除 tidme.suspended');
   assert.equal(resumed['tidme.kind'], 'topic', 'kind 保留（topic 回阅读流）');
-  assert.ok(!sched.isCardDone(resumed), 'restoreCard 后 isCardDone 应返回 false');
+  assert.ok(!sched.isCardOutOfQueue(resumed), 'restoreCard 后 isCardOutOfQueue 应返回 false');
 });
 
 test('restoreCard: item 恢复同样只清标记（回复习流）', () => {
   const done = sched.doneCard({ title: '卡', 'tidme.kind': 'item', state: '0' });
   const resumed = sched.restoreCard({ ...done, 'tidme.kind': 'item' });
   assert.equal(resumed['tidme.kind'], 'item', 'item 保留（回复习流）');
-  assert.ok(!sched.isCardDone(resumed));
+  assert.ok(!sched.isCardOutOfQueue(resumed));
 });
 
 test('ITEM_FILTER: 双轨分流（topic 出、item 进）', () => {
@@ -208,26 +208,6 @@ test('parseTwDate: 17 位 TW 日期串（UTC 语义，与 $tw.utils.parseDate �
   assert.equal(d.getUTCHours(), 20);
   assert.equal(d.getUTCMinutes(), 15);
   assert.equal(d.getUTCSeconds(), 18);
-});
-
-test('collectTopicQueue: 队列快照（出队卡兜底过滤 + 排序字段预解析）', () => {
-  const fields = {
-    甲: { 'tidme.subkind': 'section', 'tidme.priority': '30', due: '20270101000000000', 'tidme.order': '000002', 'tidme.doc': 'd1', 'tidme.breadcrumb': '书 › 甲' },
-    乙: { 'tidme.subkind': 'section', 'tidme.done': 'yes' },
-    丙: { 'tidme.subkind': 'extract', 'tidme.suspended': 'yes' },
-    丁: { 'tidme.subkind': 'section', 'tidme.priority': '10', due: '20260101000000000', 'tidme.order': '000001' },
-  };
-  // 无节卡 → splitDocPageSet 为空（filterTiddlers 需按过滤器语义返回）
-  const wiki = {
-    filterTiddlers: (f) => (String(f).includes('subkind[section]') ? [] : ['甲', '乙', '丙', '丁']),
-    getTiddler: (t) => ({ fields: fields[t] }),
-  };
-  const cards = sched.collectTopicQueue(wiki);
-  assert.deepEqual(cards.map((c) => c.title), ['甲', '丁'], '已读/搁置兜底排除（过滤器之外的第二道网）');
-  const jia = cards.find((c) => c.title === '甲');
-  assert.equal(jia.priority, 30, 'priority 归一化预解析');
-  assert.equal(jia.due.getTime(), schema.parseTwDate('20270101000000000').getTime(), 'due 预解析为 Date');
-  assert.equal(jia.order, '000002');
 });
 
 test('sortTopicQueue: 优先级（0 最高）→ due（早在前）→ 阅读顺序', () => {

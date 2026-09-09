@@ -1,5 +1,5 @@
 /*
-import-commit.test.mjs — core/import-commit（对齐落库唯一实现）+ scheduler.docItemsFilter 回归测试
+import-commit.test.mjs — core/import-commit（对齐落库唯一实现）+ doc-ops.docItemsFilter 回归测试
 
 背景：split.ts / import.ts 曾各自实现"alignCards 三路写库 + 文档页落位"，细节漂移；
 docItemFilter 曾把 ITEM_FILTER 拼出第二个 run（并集），把全库 item 混进"复习本书"。
@@ -9,11 +9,12 @@ import { test } from 'node:test';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-commit-' });
-let parseMod, commitMod, sched;
+let parseMod, commitMod, docOps, nsMod;
 test.before(() => {
   parseMod = mod('import/parse.js');
   commitMod = mod('core/import-commit.js');
-  sched = mod('core/scheduler.js');
+  docOps = mod('core/doc-ops.js');
+  nsMod = mod('core/ns.js');
 });
 
 test.beforeEach(reset);
@@ -117,14 +118,58 @@ test('import-commit: 对齐模式下同 key 换 ID 的新卡不重复写（ordin
   assert.equal(wiki.getTiddler(oldTitle).fields.text, '新内容', '同 key 旧卡内容重挂接为新内容');
 });
 
-test('scheduler.docItemsFilter: 只匹配本书在队 item（回归：拼接并集曾把全库 item 混入复习本书）', () => {
+test('doc-ops.docItemsFilter: 只匹配本书在队 item（回归：拼接并集曾把全库 item 混入复习本书）', () => {
   wiki.addTiddler({ title: 'a1', 'tidme.doc': 'docA', 'tidme.kind': 'item', 'tidme.subkind': 'qa' });
   wiki.addTiddler({ title: 'a2', 'tidme.doc': 'docA', 'tidme.kind': 'item', 'tidme.subkind': 'cloze', 'tidme.done': 'yes' });
   wiki.addTiddler({ title: 'a3', 'tidme.doc': 'docA', 'tidme.kind': 'item', 'tidme.subkind': 'qa', 'tidme.suspended': 'yes' });
   wiki.addTiddler({ title: 'b1', 'tidme.doc': 'docB', 'tidme.kind': 'item', 'tidme.subkind': 'qa' });
   wiki.addTiddler({ title: 't1', 'tidme.doc': 'docA', 'tidme.kind': 'topic', 'tidme.subkind': 'section' });
-  assert.deepEqual([...wiki.filterTiddlers(sched.docItemsFilter('docA'))], ['a1'], '仅本书、未 done/ignored/suspended 的 item；他书卡与 topic 不入');
+  assert.deepEqual([...wiki.filterTiddlers(docOps.docItemsFilter('docA'))], ['a1'], '仅本书、未 done/ignored/suspended 的 item；他书卡与 topic 不入');
   // 阅读队列过滤器常量同样唯一产地
-  assert.equal(wiki.filterTiddlers(sched.TOPIC_QUEUE_FILTER).includes('t1'), true);
-  assert.equal(wiki.filterTiddlers(sched.TOPIC_QUEUE_FILTER).includes('a1'), false, 'item 不进阅读队列');
+  assert.equal(wiki.filterTiddlers(nsMod.TOPIC_QUEUE_FILTER).includes('t1'), true);
+  assert.equal(wiki.filterTiddlers(nsMod.TOPIC_QUEUE_FILTER).includes('a1'), false, 'item 不进阅读队列');
+});
+
+test('import-commit: 词书牌组页（legacy kind=topic + tidme.doc）不进入对齐（回归：曾缺 !tag 排除）', async () => {
+  // 同 docId 的"旧卡"里混入牌组页：带 TidmeDeck 标签 + legacy kind=topic + tidme.doc
+  wiki.addTiddler({
+    title: '$:/Deck/词书A',
+    tags: ['$:/tags/TidmeDeck'],
+    caption: '词书A',
+    'tidme.kind': 'topic',
+    'tidme.doc': 'd-deckpage',
+    'tidme.breadcrumb': '词书A',
+  });
+  const r = await parseMod.runSplit({ text: '# 一\n\n内容一。\n\n# 二\n\n内容二。', title: '词书宿主书', type: 'text/markdown', minChars: 0 });
+  const [doc, ...cards] = r.tiddlers;
+  const res = await commitMod.commitImportToWiki(wiki, {
+    docId: 'd-deckpage',
+    docTiddler: doc,
+    docTitle: doc.title,
+    cards,
+  });
+  assert.equal(res.aligned, false, '牌组页不算旧节卡 → 不走对齐路径');
+  const deck = wiki.getTiddler('$:/Deck/词书A').fields;
+  assert.equal(deck['tidme.done'], undefined, '牌组页不得被归档出队');
+  assert.equal(deck['tidme.obsolete'], undefined, '牌组页不得被标记 obsolete');
+  assert.equal(deck.caption, '词书A', '牌组页内容不得被对齐重写');
+});
+
+test('import-commit: 同名书碰撞检测——旧节无一保留且批量消失时 collisionSuspect 告警', async () => {
+  const r1 = await parseMod.runSplit({ text: '# 一\n\n甲。\n\n# 二\n\n乙。\n\n# 三\n\n丙。', title: '碰撞书', type: 'text/markdown', minChars: 0 });
+  for (const t of r1.tiddlers) wiki.addTiddler(t);
+
+  // 场景 A：完全不同的内容（另一本同名书）→ collisionSuspect
+  const r2 = await parseMod.runSplit({ text: '# X\n\n完全不同一。\n\n# Y\n\n完全不同二。', title: '碰撞书', type: 'text/markdown', minChars: 0 });
+  const [doc2, ...cards2] = r2.tiddlers;
+  const resA = await commitMod.commitImportToWiki(wiki, { docId: r2.docId, docTiddler: doc2, docTitle: doc2.title, cards: cards2 });
+  assert.equal(resA.aligned, true);
+  assert.equal(resA.collisionSuspect, true, '无一保留 + 批量消失 → 疑似另一本书');
+
+  // 场景 B：修订版（有未变节）→ 不告警。重导原始内容
+  const r3 = await parseMod.runSplit({ text: '# 一\n\n甲。\n\n# 二\n\n乙。\n\n# 三\n\n丙。', title: '碰撞书', type: 'text/markdown', minChars: 0 });
+  const [doc3, ...cards3] = r3.tiddlers;
+  const resB = await commitMod.commitImportToWiki(wiki, { docId: r3.docId, docTiddler: doc3, docTitle: doc3.title, cards: cards3 });
+  assert.equal(resB.aligned, true);
+  assert.equal(resB.collisionSuspect, false, '存在未变节 → 视为修订版，不误报');
 });

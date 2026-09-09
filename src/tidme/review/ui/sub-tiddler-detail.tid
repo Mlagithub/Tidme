@@ -1,6 +1,12 @@
 code-body: yes
 title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/tiddler
-<!-- !!同步守护：本 $let 的过滤器组合与 core/deck-engine.composeDeckFilters 保持同构（JS 侧唯一真源）；修改任一侧须同步 review/ui/ViewTemplate/{deck,tiddler,today-deck-row}.tid 三处模板 -->
+<!-- !!同步守护：本 $let 的过滤器组合与 core/deck-engine.composeDeckFilters 保持同构（JS 侧唯一真源）；修改任一侧须同步 review/ui/ViewTemplate/{deck,tiddler}.tid 两处模板。
+     过滤器组合两条铁律（均在真实 TW 踩坑验证）：
+     1. 勿在 run 内用 then<var>else<var> 做"变体选择"——then/else 是逐标题输出映射，
+        每张未命中卡都会把 var 文本当结果项输出（伪标题混入学习队列，被 startstudy 首选）。
+        变体选择用 $let 文本层 ${ [...then<..>else<..>] }$ 内插（输入只有 deckTiddler 一项，恰输出一次）。
+     2. 组合队列各段必须 subfilter<段> 包裹后再并集——段内 -/+ 前缀会越界作用于
+        整个累计结果（裸拼接导致 learn/due 段被后续段的 +[state_*] 交运算洗掉）。 -->
 
 \whitespace trim
 
@@ -14,14 +20,14 @@ title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/tiddler
     leech_action={{{ [<deckTiddler>get[leech_action]else{$:/Deck/default!!leech_action}] }}}
     filter_learn_due=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]`
     filter_learn_random=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sortrandom[]]`
-    filter_learn=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[subfilter{$(deckTiddler)$!!random_learn}match[yes]then<filter_learn_random>else<filter_learn_due>]`
+    filter_learn=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] ${ [<deckTiddler>get[random_learn]match[yes]then<filter_learn_random>else<filter_learn_due>] }$`
     filter_due=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_due}] +[subfilter{$(deckTiddler)$!!order_due}]`
     filter_new=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_new}] +[subfilter{$(deckTiddler)$!!order_new}]`
     filter_unfold=`[subfilter{$(deckTiddler)$!!card_unfold}]`
     filter_random=`[subfilter<filter_due>] [subfilter<filter_new>] +[sortrandom[]]`
-    due-new=`$(filter_learn)$ $(filter_due)$ $(filter_new)$`
-    new-due=`$(filter_learn)$ $(filter_new)$ $(filter_due)$`
-    random=`$(filter_learn)$ [subfilter<filter_random>]`
+    due-new=`[subfilter<filter_learn>] [subfilter<filter_due>] [subfilter<filter_new>]`
+    new-due=`[subfilter<filter_learn>] [subfilter<filter_new>] [subfilter<filter_due>]`
+    random=`[subfilter<filter_learn>] [subfilter<filter_random>]`
     filter_queue=`${ [<deckTiddler>get[order]match[new-due]then<new-due>] [<deckTiddler>get[order]match[random]then<random>] ~[<due-new>] }$`
 >
     <$transclude

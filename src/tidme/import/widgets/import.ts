@@ -187,7 +187,7 @@ function buildRow(
       if (tVal && cVal) {
         // 手动插卡 title 走同一套命名空间/slug（paths.insertedSectionTitle），避免第三套转义；
         // 同 caption 冲突时追加 -N（manualUsed 会话内累积）
-        const mBase = parse.insertedSectionTitle(r.bookTitle, r.docId, tVal);
+        const mBase = parse.insertedSectionTitle(r.bookTitle, tVal);
         let mTitle = mBase;
         let n = 2;
         while (manualUsed.has(mTitle)) mTitle = `${mBase}-${n++}`;

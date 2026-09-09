@@ -14,13 +14,13 @@ declare var require: any;
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const parseTwDate = schema.parseTwDate;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
-const isCardDone = sched.isCardDone;
+const nsMod = require('$:/plugins/keepone/tidme/core/ns.js');
+const isCardOutOfQueue = sched.isCardOutOfQueue;
 const normalizePriority = sched.normalizePriority;
+const todayKey = nsMod.todayKey;
 
-export interface CardLike {
-  title: string;
-  fields: Record<string, any>;
-}
+import type { CardLike } from './schema.ts';
+export type { CardLike };
 
 export interface DeckLoad {
   total: number;
@@ -35,7 +35,7 @@ export function deckLoad(cards: CardLike[], now = new Date()): DeckLoad {
   const nowMs = now.getTime();
   for (const c of cards) {
     const f = c.fields;
-    if (isCardDone(f)) continue; // 已出队（done/ignored）
+    if (isCardOutOfQueue(f)) continue; // 已出队（done/ignored）
     if (f['tidme.suspended'] === 'yes') continue;
     const state = String(f.state || '0');
     if (state === '1' || state === '3') load.learn++;
@@ -60,7 +60,7 @@ export interface DocProgress {
 /** 文档进度：done = 已移出队列（done/ignored） */
 export function docProgress(sections: CardLike[]): DocProgress {
   const total = sections.length;
-  const done = sections.filter((c) => isCardDone(c.fields)).length;
+  const done = sections.filter((c) => isCardOutOfQueue(c.fields)).length;
   return { total, done, left: total - done };
 }
 
@@ -125,41 +125,39 @@ export function formatDuration(seconds: number): string {
   return remMins > 0 ? `${hrs} h ${remMins} m` : `${hrs} h`;
 }
 
+/** 读取阅读时长 tiddler 原始 JSON（get/record 共用；损坏宽容回空对象） */
+function readStatsRaw(wiki: any): any {
+  const raw = wiki.getTiddlerText ? wiki.getTiddlerText(READTIME_TIDDLER, '') : '';
+  if (raw) {
+    try {
+      const v = JSON.parse(raw);
+      if (v && typeof v === 'object') return v;
+    } catch { /* ignore */ }
+  }
+  return {};
+}
+
 export function getReadTimeStats(wiki: any): ReadTimeStats {
   if (!wiki || typeof wiki.getTiddlerText !== 'function') {
     return { totalSeconds: 0, todaySeconds: 0, docSeconds: {} };
   }
-  const raw = wiki.getTiddlerText(READTIME_TIDDLER, '');
-  let data: any = {};
-  if (raw) {
-    try {
-      data = JSON.parse(raw);
-    } catch { /* ignore */ }
-  }
-  const todayKey = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const data = readStatsRaw(wiki);
   const totalSeconds = Number(data.totalSeconds) || 0;
-  const todaySeconds = Number(data.days?.[todayKey]) || 0;
+  const todaySeconds = Number(data.days?.[todayKey()]) || 0;
   const docSeconds = (typeof data.docs === 'object' && data.docs) ? { ...data.docs } : {};
   return { totalSeconds, todaySeconds, docSeconds };
 }
 
 export function recordReadTime(wiki: any, docId: string, seconds: number) {
   if (!wiki || !seconds || seconds <= 0) return;
-  const raw = wiki.getTiddlerText ? wiki.getTiddlerText(READTIME_TIDDLER, '') : '';
-  let data: any = {};
-  if (raw) {
-    try {
-      data = JSON.parse(raw);
-    } catch { /* ignore */ }
-  }
+  const data = readStatsRaw(wiki);
   if (!data.docs) data.docs = {};
   if (!data.days) data.days = {};
 
   const sec = Math.max(1, Math.round(seconds));
-  const todayKey = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
   data.totalSeconds = (Number(data.totalSeconds) || 0) + sec;
-  data.days[todayKey] = (Number(data.days[todayKey]) || 0) + sec;
+  data.days[todayKey()] = (Number(data.days[todayKey()]) || 0) + sec;
   if (docId) {
     data.docs[docId] = (Number(data.docs[docId]) || 0) + sec;
   }

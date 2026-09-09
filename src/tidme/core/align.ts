@@ -13,11 +13,10 @@ align.ts — 重切分对齐（内容未变保 ID 与 SRS 进度、变更重挂�
 
 import { contentFingerprint, normalizeText } from './ids.ts';
 import { CRUMB_SEP } from './ns.ts';
+import type { CardLike } from './schema.ts';
 
-export interface AlignCard {
-  title: string;
-  fields: Record<string, any>;
-}
+/** 对齐用卡实体（类型级复用 schema.CardLike） */
+export type AlignCard = CardLike;
 
 export interface AlignResult {
   /** 保留的新卡（无旧卡对应的新增节），由调用方写库 */

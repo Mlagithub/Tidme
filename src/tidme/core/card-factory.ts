@@ -1,11 +1,10 @@
 /*
 core/card-factory.ts — 派生卡字段工厂（从 section.ts 迁入，行为不变）
 
-- buildExtract / buildCloze / buildQA：阅读制卡（摘录/挖空/问答）的字段构建唯一实现；
-  后续全局手动制卡各触发点直接复用本工厂
-- parseAnchor / processedSnippets / cleanProcessedText：锚点解析与 SM 对齐
-  'Delete processed text' 的加工清理
-- commitCard：制卡统一写库口（addTiddler + CARD_CREATED + item 折叠预备）
+- buildExtract / buildCloze / buildQA / buildImageQA / buildStandaloneCard：制卡的
+  字段构建唯一实现；锚点解析（parseAnchor）与 SM 'Delete processed text' 的加工
+  清理（processedSnippets / cleanProcessedText）在 core/doc-ops
+- commitCard：制卡统一写库口（addTiddler + item 折叠预备）
 - 摘录只属于阅读材料——父卡无 tidme.doc 时 buildExtract 返回 null
   （普通笔记直接挖空/问答，item 卡由缺省牌组自动收录）
 - 纯字段构建 + 指定 wiki 写入；不做 DOM（划词气泡/弹窗留在调用方 widget）
@@ -79,13 +78,15 @@ export function safeCaption(question: string, answer: string, prefix = ''): stri
   return prefix || 'Q&A Card';
 }
 
-/** 派生图片问答卡标题基座：短化命名空间（Tidme/Decks/{书名}/P{页}-{label或QA}），避免深层目录全量冗长堆叠 */
+/** 派生图片问答卡标题基座：短化命名空间（<NS_DECKS>{书名}/P{页}-{label或QA}），避免深层目录全量冗长堆叠。
+ *  与文本卡（derivedCardBase 的 Books→Decks 目录镜像）刻意不同：图片卡只取书名段、
+ *  不镜像深层目录（同书图片卡集中一目录，靠 nextFreeTitle 保证唯一）。 */
 export function derivedImageQABase(pf: Record<string, any>, parentTitle: string, page?: number, label?: string): string {
   let dir = '';
   if (parentTitle.startsWith(ns.NS_BOOKS)) {
     const parts = parentTitle.split('/');
     const bookName = parts[2] || 'doc';
-    dir = `Tidme/Decks/${bookName}/`;
+    dir = ns.NS_DECKS + bookName + '/';
   } else {
     const parentSlug = paths.slugify(parentTitle) || 'untitled';
     dir = paths.joinPath(ns.NS_DECKS_SCATTER, parentSlug) + '/';
@@ -98,6 +99,8 @@ export function derivedImageQABase(pf: Record<string, any>, parentTitle: string,
 /**
  * 派生卡公共字段基座：FSRS 初值 + 溯源继承（source/author/format/priority/afactor）+
  * 命名空间字段（doc/parent/kind/subkind/anchor/breadcrumb）。三个 build* 只提供差异项。
+ * 字段契约：身份 = title（无 tidme.id/order/level/hash——那是导入 parse Section 族的
+ * 规范，见 core/schema 头部声明；本基座不适用 schema.assertKind）。
  */
 function derivedCardFields(opts: {
   parentTitle: string;
@@ -326,11 +329,11 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
 }
 
 /**
- * 制卡统一写库口：addTiddler + CARD_CREATED 事件 + item 折叠态预备。
- * 阅读划词与未来的全局制卡入口共用，禁止各自拼写库与事件顺序。
- * @returns 是否已写库（draft 为空/被拒时 false）
+ * 制卡统一写库口：addTiddler + item 折叠态预备。
+ * 阅读划词与全局制卡入口共用，禁止各自拼写库与折叠顺序。
+ * @returns 是否已写库（draft 为空/缺 title 时 false）
  */
-export function commitCard(wiki: any, draft: Record<string, any> | null, widget?: any): boolean {
+export function commitCard(wiki: any, draft: Record<string, any> | null): boolean {
   if (!draft || !draft.title) return false;
   wiki.addTiddler(draft);
   session.prepareCardFold(wiki, draft.title);

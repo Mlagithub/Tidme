@@ -61,11 +61,12 @@ function getCurrentStudyCard(wiki: any, widget: any, studyList: string[]): strin
 }
 
 /** 推进学习：移出当前卡并导航到下一张。
- *  done 标记只适用于可"读完"的节/摘录卡：
- *  - 整本不切分的 PDF 文档页就是整个文件——读几页 ≠ 读完，不标 done，
- *    留在阅读队列凭续读点继续（与 PDF 阅读器「读完继续」按钮同口径），退出前把
+ *  阅读材料（topic）推进后必须能再次出现（SM 增量阅读的重现语义），一律不标 done：
+ *  - 整本不切分的 PDF 文档页：读几页 ≠ 读完，留在阅读队列凭续读点继续，退出前把
  *    当前页固化进续读点（$:/state 页码由阅读器翻页同步写，防抖窗口内退出也不丢页）；
- *  - 牌组页（词书，legacy kind=topic 残留于旧会话）不是阅读卡，永不标 done。 */
+ *  - 节/摘录卡：SM A-Factor 顺延（due = now + 间隔 × A-Factor，与阅读条栏「稍后」同
+ *    语义），到期自动回归阅读队列；真正"读完出队"走阅读条栏的显式「已读」按钮；
+ *  - 牌组页（词书，legacy kind=topic 残留于旧会话）不是阅读卡，不动调度字段。 */
 function advanceStudy(widget: any) {
   const wiki = widget.wiki;
   const study = session.getActiveStudy(wiki);
@@ -80,15 +81,14 @@ function advanceStudy(widget: any) {
         docOps.saveReadPoint(wiki, docId, { t: cur, s: `p${page}` });
       }
     } else if (f['tidme.kind'] === 'topic' && !deckMod.isDeckFields(f)) {
-      wiki.addTiddler(sched.doneCard(f));
+      wiki.addTiddler({ ...f, ...sched.postponeTopicByAFactor(f) });
     }
     dom.closeTiddler(widget, cur);
   }
   let list: string[] = Array.isArray(study.list) ? [...study.list] : [];
   if (cur) {
+    session.removeFromSession(wiki, cur);
     list = list.filter((t: string) => t !== cur);
-    const sessT = wiki.getTiddler(session.SESSION_TIDDLER);
-    wiki.addTiddler({ ...(sessT?.fields || { title: session.SESSION_TIDDLER }), list });
   }
   if (list.length > 0) {
     const next = list[0];
@@ -156,7 +156,7 @@ function makeStudyModeBar(): WidgetCtor {
 
       if (isReading) {
         const advBtn = el(doc, 'button', 'tm-btn tm-study-mode-next tm-btn--primary', lingo(this.wiki, 'studymode.finishandnext', 'Done, Next ›'));
-        advBtn.title = lingo(this.wiki, 'studymode.finishandnext.tip', 'Save reading progress and continue review');
+        advBtn.title = lingo(this.wiki, 'studymode.finishandnext.tip', 'Save reading progress and continue review; finished topics are rescheduled (A-Factor) and return when due');
         advBtn.addEventListener('click', () => {
           advanceStudy(this);
         });

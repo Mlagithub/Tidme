@@ -51,8 +51,11 @@ export function composeDeckFilters(deckTitle: string, fields: DeckFields = {}): 
   const due = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_due}subfilter{${d}!!order_due}]`;
   const newly = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_new}subfilter{${d}!!order_new}]`;
   const unfold = `[subfilter{${d}!!card_unfold}]`;
-  // random 模式：内联 due/newly 子过滤并随机（不依赖 .tid 中由 $let 注入的 <filter_*>，
-  // 否则纯 JS 评估时变量未定义 → 子过滤崩溃，队列静默塌缩）
+  // random 模式：内联 due/newly 子过滤（不依赖 .tid 中由 $let 注入的 <filter_*>，
+  // 否则纯 JS 评估时变量未定义 → 子过滤崩溃，队列静默塌缩）。
+  // 注意：+[sortrandom[]] 是 run 内链式操作符，只作用于紧邻的 newly run（TW 无 :sortrandom
+  // run 前缀）——"随机"实际语义 = due 段按 due 序在前 + 新卡段乱序，与 fsrs4tw
+  // viewtemplate-deck.tid 的 filter_random 同构（有意保持一致，勿单侧"修复"）
   const random = `${due} ${newly} +[sortrandom[]]`;
   const dueNew = `${learn} ${due} ${newly}`;
   const newDue = `${learn} ${newly} ${due}`;
@@ -81,19 +84,23 @@ export interface GlobalQueueOptions {
   excludeTitles?: string[];
 }
 
-// 学习队列 Topic 基础过滤（以 ns.TOPIC_QUEUE_FILTER 契约为唯一基准，保持 !is[draft] 与排除项一致）
-const TOPIC_BASE = TOPIC_QUEUE_FILTER.endsWith(']') ? TOPIC_QUEUE_FILTER.slice(0, -1) : TOPIC_QUEUE_FILTER;
+// 学习队列 Topic 过滤：直接以 ns.TOPIC_QUEUE_FILTER 完整契约组合（勿对契约字符串做
+// slice 截断拼接——尾部任何改动都会静默产出错误过滤器）。
+// TW 过滤器 run 语义（本文件依赖，已在真实 TW 验证）：
+// - 无前缀 run 与累计结果取并集；:filter[...] 与 +[op] 作用于**累计结果**。
+//   因此"到期段 + 待读段"两段表达式严禁拼进一次求值——后段的 +[!has[due]]
+//   会把累计并集里的到期卡全部滤掉（曾踩坑）。两段各自求值、JS 侧拼接。
+// - compare:date:lt 对无 due 的卡恒真（空串 < 任意时刻）——到期判定必须先 :filter[has[due]]。
+// - 优先级字段是 tidme.priority：nsort[priority] 排的是不存在的 priority 字段（静默不排序）。
 
-/** 到期/逾期 Topic（has[due] 且 due ≤ 今天；含逾期积压，按优先级升序） */
+/** 已到期 Topic（has[due] 且 due < now；与 scheduler.isDueNow 同口径，仅同一毫秒边界差），按优先级升序 */
 function topicDueFilter(): string {
-  return `${TOPIC_BASE}has[due]days:due[0]] ` +
-    `${TOPIC_BASE}has[due]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>] ` +
-    `+[nsort[priority]]`;
+  return `${TOPIC_QUEUE_FILTER} :filter[has[due]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>] +[nsort[tidme.priority]]`;
 }
 
 /** 未排期 Topic（无 due = 从未进入调度，Pending 语义，按优先级升序） */
 function topicPendingFilter(): string {
-  return `${TOPIC_BASE}!has[due]] +[nsort[priority]]`;
+  return `${TOPIC_QUEUE_FILTER} +[!has[due]] +[nsort[tidme.priority]]`;
 }
 
 /**
@@ -121,9 +128,12 @@ export function composeGlobalLearningQueue(
     return [...dueItems, ...dueTopics, ...newItems, ...pendingTopics];
   }
 
-  // interleaved：item 队列为主体；topics:true 时按比例交错优先 topic（否则纯知识卡）
+  // interleaved：item 队列为主体；topics:true 时按比例交错优先 topic（否则纯知识卡）。
+  // 到期/待读两段分别求值再 JS 侧拼接（拼接进同一次求值会触发累计过滤互杀，见文件头部 run 语义说明）
   const rawItems = evaluate(defaultDeckFilters.queue);
-  const rawTopics = includeTopics ? keep(evaluate(`${topicDueFilter()} ${topicPendingFilter()}`)) : [];
+  const rawTopics = includeTopics
+    ? [...keep(evaluate(topicDueFilter())), ...keep(evaluate(topicPendingFilter()))]
+    : [];
 
   const itemRatio = opts.itemRatio ?? 4;
   const topicRatio = opts.topicRatio ?? 1;

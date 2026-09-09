@@ -37,8 +37,8 @@ const sectionsOfDoc = docOps.sectionsOfDoc;
 
 /** 阅读列表过滤（topic 队列）：全库 kind=topic 卡，未搁置/未完成。
  * 忽略（tidme.ignored）与已读（tidme.done）自动出列；item 卡不在此页。
- * 过滤器唯一产地 = core/scheduler.TOPIC_QUEUE_FILTER（勿在此手拼）。 */
-const topicQueueFilter = () => sched.TOPIC_QUEUE_FILTER;
+ * 过滤器唯一产地 = core/ns.TOPIC_QUEUE_FILTER（勿在此手拼）。 */
+const topicQueueFilter = () => ns.TOPIC_QUEUE_FILTER;
 
 interface TopicCard {
   title: string;
@@ -51,9 +51,9 @@ interface TopicCard {
   fields: Record<string, any>;
 }
 
-/** 收集与排序唯一产地 = core/scheduler（collectTopicQueue / sortTopicQueue）；本文件只做分组与渲染 */
+/** 收集与排序唯一产地 = core（doc-ops.collectTopicQueue / scheduler.sortTopicQueue）；本文件只做分组与渲染 */
 function collectTopicCards(wiki: any): TopicCard[] {
-  return sched.collectTopicQueue(wiki);
+  return docOps.collectTopicQueue(wiki);
 }
 
 /** 组内排序：优先级（0 最高）→ due（早的在前，topic 被动重读）→ 阅读顺序 */
@@ -128,12 +128,12 @@ function makeReadingList(): any {
         const det = el(doc, 'details', 'tm-rl-doc');
         // 文档组默认折叠（两本书也不占长页面）；summary = 名 + 进度 + 继续阅读
         const docAll = sectionsOfDoc(wiki, g.doc);
-        const docDone = docAll.filter((t) => sched.isCardDone(wiki.getTiddler(t)?.fields)).length;
+        const docDone = docAll.filter((t) => sched.isCardOutOfQueue(wiki.getTiddler(t)?.fields)).length;
         // 真实 doc tiddler title（命名空间路径，folder 冲突时含 ~docId 后缀）：
         // 按 docId 查真实文档页（B1），不再由书名+docId 重算（slug 规则一变即失配）
         const bookTitle = g.cards[0].breadcrumb.split(ns.CRUMB_SEP)[0] || '';
         const docTiddlerTitle = docOps.docPageOfDoc(wiki, g.doc) ||
-          (bookTitle ? paths.bookRoot(bookTitle, g.doc) : '');
+          (bookTitle ? paths.bookRoot(bookTitle) : '');
         const docLabel = bookTitle || g.doc;
 
         const sum = el(doc, 'summary', 'tm-rl-doc-head');

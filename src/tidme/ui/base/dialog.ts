@@ -1,10 +1,10 @@
 /*
-core/dialog.ts — 统一确认/提示弹窗（替换原生 confirm/alert）
+ui/base/dialog.ts — 统一确认/提示弹窗（替换原生 confirm/alert）
 
 设计系统组件：复用 tm-card-modal 视觉类；Promise 语义（事件处理器内 await）。
 - confirmDialog：双按钮（确定/取消），danger 时确认键红色
 - alertDialog：单按钮（纯提示）
-无状态 DOM 工具（同 core/dom 章位）；不写库、不路由。
+无状态 DOM 工具（同 ui/base/dom 章位）；不写库、不路由。
 */
 
 declare function require(module: string): any;

@@ -1,5 +1,5 @@
 /*
-core/icons.ts — 线性 SVG 图标注册表（设计系统唯一图标产地）
+ui/base/icons.ts — 线性 SVG 图标注册表（设计系统唯一图标产地）
 
 - 24×24 stroke 线性风格（Lucide 风格，跟随 currentColor）
 - 组件内禁止直接写 emoji 图标；按钮 = icon + 文字标签

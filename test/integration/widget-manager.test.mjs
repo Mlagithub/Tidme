@@ -88,7 +88,7 @@ test('card-manager: doneFields 置 tidme.done，restoreCard 可逆恢复（kind 
   const resumed = sched.restoreCard({ ...done });
   assert.equal(resumed['tidme.done'], undefined, '恢复删除 tidme.done');
   assert.equal(resumed['tidme.kind'], 'topic', 'topic 保留（阅读流）');
-  assert.ok(!sched.isCardDone(resumed), '恢复后不在完成态');
+  assert.ok(!sched.isCardOutOfQueue(resumed), '恢复后不在完成态');
 });
 
 test('card-manager: resumePatch 是合并式补丁（三键显式 undefined）', () => {
@@ -99,8 +99,8 @@ test('card-manager: resumePatch 是合并式补丁（三键显式 undefined）',
   assert.equal(resumePatch['tidme.done'], undefined);
   assert.equal(resumePatch['tidme.ignored'], undefined);
   assert.equal(resumePatch['tidme.suspended'], undefined);
-  assert.ok(!sched.isCardDone({ ...done, ...resumePatch, 'tidme.kind': 'item' }), '合并写回后应脱离完成态');
-  assert.ok(!sched.isCardDone({ ...done, ...resumePatch, 'tidme.kind': 'item', 'tidme.suspended': 'yes' }), '合并可覆盖旧搁置值');
+  assert.ok(!sched.isCardOutOfQueue({ ...done, ...resumePatch, 'tidme.kind': 'item' }), '合并写回后应脱离完成态');
+  assert.ok(!sched.isCardOutOfQueue({ ...done, ...resumePatch, 'tidme.kind': 'item', 'tidme.suspended': 'yes' }), '合并可覆盖旧搁置值');
 });
 
 test('card-manager: 全部卡片可见（含已读卡与手动散卡）', () => {

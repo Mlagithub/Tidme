@@ -141,18 +141,7 @@ test('card-modal: 新路径与向后兼容 shim 均能导出 openCardModal', () 
 });
 
 test('向下兼容转发桩 (Shims) 完整性验证', () => {
-  // core shims
-  const coreDom = mod('core/dom.js');
-  assert.equal(typeof coreDom.el, 'function');
-  assert.equal(typeof coreDom.showToast, 'function');
-
-  const coreIcons = mod('core/icons.js');
-  assert.equal(typeof coreIcons.iconSvg, 'function');
-
-  const coreDialog = mod('core/dialog.js');
-  assert.equal(typeof coreDialog.confirmDialog, 'function');
-
-  // manager & import shims
+  // manager & import shims（core 侧三个转发桩已随死代码清理删除）
   const managerPrim = mod('manager/widgets/ui-primitives.js');
   assert.equal(typeof managerPrim.renderEmpty, 'function');
 

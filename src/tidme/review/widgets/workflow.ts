@@ -67,7 +67,7 @@ function startGlobalLearning(wiki: any, widget: any): void {
     itemRatio: opts.itemRatio,
     topicRatio: opts.topicRatio,
     // 存量分节书籍的文档页是书籍入口而非可学习卡（整本不切分的 PDF 文档页不在其列）
-    excludeTitles: Array.from(sched.splitDocPageSet(wiki)),
+    excludeTitles: Array.from(docOps.splitDocPageSet(wiki)),
   });
 
   if (!queue || queue.length === 0) {

@@ -1,6 +1,6 @@
 /*
-core/doc-ops.ts — 文档/卡片运维操作（文档查询、删除阅读材料、折叠态、阅读入口目标）
-只依赖 wiki 对象与 core/session（常量），不渲染 DOM。
+core/doc-ops.ts — 文档/卡片运维操作（按 docId 的 wiki 查询、删除阅读材料、折叠态、阅读入口目标）
+只依赖 wiki 对象与 core 常量/纯函数（ns/scheduler/schema），不渲染 DOM。
 跨 core 模块引用一律显式 require（避免 esbuild 内联复制）。
 */
 
@@ -9,10 +9,71 @@ const session = require('$:/plugins/keepone/tidme/core/session.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 
 export const READPOINT_PREFIX = '$:/config/tidme/readpoint/';
 /** 全局续读点（最近打开的阅读卡；section-bar 写、workflow「开始阅读」读） */
 export const GLOBAL_READPOINT = READPOINT_PREFIX + 'global';
+
+/**
+ * 有节卡的文档页集合（存量分节书籍：文档页只是书籍入口，不入阅读/学习队列，
+ * 否则学习模式要先在文档页绕一圈、读完继续点两次）。PDF 不再切分后，新导入的
+ * 整本文档页（无节卡）正常入队。
+ * 两次全库扫描完成（节卡 docId 集 ∩ 文档页），勿按 docId 逐个查询（1+N）。
+ */
+export function splitDocPageSet(wiki: any): Set<string> {
+  const set = new Set<string>();
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return set;
+  const docIds = new Set(
+    wiki
+      .filterTiddlers('[all[shadows+tiddlers]tidme.subkind[section]]')
+      .map((t: string) => String(wiki.getTiddler(t)?.fields?.['tidme.doc'] || ''))
+      .filter(Boolean),
+  );
+  if (!docIds.size) return set;
+  for (const p of wiki.filterTiddlers('[all[shadows+tiddlers]tag[tidme-import-doc]]')) {
+    const docId = String(wiki.getTiddler(p)?.fields?.['tidme.doc'] || '');
+    if (docIds.has(docId)) set.add(p);
+  }
+  return set;
+}
+
+/**
+ * 本书 item 在队过滤器（「复习本书」子集牌组的 card 来源 / 文档页计数）。
+ * 出队标记一律在此排除（done/ignored/suspended），与默认牌组 card 口径一致。
+ * 注意：过滤器 run 之间是并集——严禁把 ITEM_FILTER 之类片段拼接进单个 run 之外
+ * （曾因拼接产生第二个 run，把全库 item 混进"复习本书"子集）。
+ */
+export function docItemsFilter(docId: string): string {
+  return `[all[shadows+tiddlers]tidme.doc[${docId}]tidme.kind[item]${ns.QUEUE_EXCLUDE}]`;
+}
+
+/**
+ * 阅读队列快照：TOPIC_QUEUE_FILTER 求值 + 排序字段预解析（priority/due/order）。
+ * 出队三态（done/ignored/suspended）由过滤器排除，此处再兜底一次
+ * （shadow 覆盖写回等边缘下过滤器与字段可能不一致）。wiki 为注入参数，无 $tw 全局依赖。
+ */
+export function collectTopicQueue(wiki: any): Record<string, any>[] {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
+  const splitDocs = splitDocPageSet(wiki);
+  return wiki
+    .filterTiddlers(ns.TOPIC_QUEUE_FILTER)
+    .map((t: string) => {
+      const f = wiki.getTiddler(t)?.fields || {};
+      return {
+        title: t,
+        fields: f,
+        kind: String(f['tidme.subkind'] || ''),
+        priority: sched.normalizePriority(f['tidme.priority']),
+        due: schema.parseTwDate(f.due, new Date(0)),
+        order: String(f['tidme.order'] || f['tidme.breadcrumb'] || t),
+        doc: String(f['tidme.doc'] || ''),
+        breadcrumb: String(f['tidme.breadcrumb'] || t),
+      };
+    })
+    .filter((c: Record<string, any>) => !sched.isCardOutOfQueue(c.fields) && c.fields['tidme.suspended'] !== 'yes')
+    .filter((c: Record<string, any>) => !splitDocs.has(c.title));
+}
 
 /** 各书的章节进度（一次全库扫描按书聚合；口径与 sectionsOfDoc 一致：topic 且非摘录）。
  * 供「最近阅读」等聚合视图使用——避免每书一次全库扫描（书多时 O(书数×全库)）。 */
@@ -27,7 +88,7 @@ export function sectionsProgressByDoc(wiki: any): Map<string, { done: number; to
     const docId = String(f['tidme.doc'] || '');
     const a = agg.get(docId) || { done: 0, total: 0 };
     a.total += 1;
-    if (sched.isCardDone(f)) a.done += 1;
+    if (sched.isCardOutOfQueue(f)) a.done += 1;
     agg.set(docId, a);
   }
   return agg;
@@ -120,11 +181,11 @@ export function docReadingTarget(wiki: any, docId: string): string {
   const rp = parseReadPoint(wiki, docId);
   if (rp && wiki.getTiddler(rp.t)) {
     const f = wiki.getTiddler(rp.t).fields || {};
-    if (!sched.isCardDone(f) && f['tidme.suspended'] !== 'yes') return rp.t;
+    if (!sched.isCardOutOfQueue(f) && f['tidme.suspended'] !== 'yes') return rp.t;
   }
   const first = sectionsOfDoc(wiki, docId).find((t: string) => {
     const f = wiki.getTiddler(t)?.fields;
-    return !!f && !sched.isCardDone(f) && f['tidme.suspended'] !== 'yes';
+    return !!f && !sched.isCardOutOfQueue(f) && f['tidme.suspended'] !== 'yes';
   });
   return first || docPageOfDoc(wiki, docId) || '';
 }
@@ -163,14 +224,8 @@ export function deleteDocContent(wiki: any, docId: string): number {
     if (deckMod.isSubset(dd) && String(dd?.fields['tidme.subset-doc'] || '') === docId) targets.add(d);
   }
 
-  // 学习会话：剔除被删卡（保留其余卡与队列语义）
-  const sess = wiki.getTiddler(session.SESSION_TIDDLER);
-  if (sess && Array.isArray(sess.fields.list)) {
-    const keep = sess.fields.list.filter((t: string) => !targets.has(t));
-    if (keep.length !== sess.fields.list.length) {
-      wiki.addTiddler({ ...sess.fields, title: session.SESSION_TIDDLER, list: keep });
-    }
-  }
+  // 学习会话：剔除被删卡（保留其余卡与队列语义；session 是唯一读写口）
+  session.removeFromSessionMany(wiki, targets);
   // 续读点：仅当指向被删内容时清除（指向保留的摘录/卡则保留）
   const rpTarget = parseReadPointRaw(String(wiki.getTiddler(READPOINT_PREFIX + docId)?.fields.text || ''));
   if (rpTarget && targets.has(rpTarget.t)) {
@@ -238,18 +293,18 @@ export function globalReadingTarget(wiki: any): string {
   const gIsDeck = g && deckMod.isDeckFields(wiki.getTiddler(g)?.fields || {});
   if (g && !gIsDeck && wiki.getTiddler(g)) {
     const f = wiki.getTiddler(g).fields || {};
-    if (!sched.isCardDone(f) && f['tidme.suspended'] !== 'yes') return g;
+    if (!sched.isCardOutOfQueue(f) && f['tidme.suspended'] !== 'yes') return g;
     // 续读点卡已出队：按本书阅读顺序顺延到下一张在队卡；本书读完则落入全局队列
     const docId = String(f['tidme.doc'] || '');
     if (docId) {
       const next = sched.nextSchedulable(sectionsOfDoc(wiki, docId), g, (t: string) => {
         const nf = wiki.getTiddler(t)?.fields;
-        return !!nf && !sched.isCardDone(nf) && nf['tidme.suspended'] !== 'yes';
+        return !!nf && !sched.isCardOutOfQueue(nf) && nf['tidme.suspended'] !== 'yes';
       });
       if (next) return next;
     }
   }
-  const queue = sched.sortTopicQueue(sched.collectTopicQueue(wiki));
+  const queue = sched.sortTopicQueue(collectTopicQueue(wiki));
   const readable = queue.find((c: any) => sched.isDueNow(c.fields));
   return (readable || queue[0])?.title || ns.PAGE_READING_LIST;
 }

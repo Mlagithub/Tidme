@@ -25,6 +25,7 @@ const cardModal = mod('ui/components/card-modal.js');
 const workflow = mod('review/widgets/workflow.js');
 const sessionMod = mod('core/session.js');
 const sched = mod('core/scheduler.js');
+const schema = mod('core/schema.js');
 const deckEngine = mod('core/deck-engine.js');
 
 test('parse/pdf: 扫描页判定与 pages 字段解析（存量分节书籍兼容）', () => {
@@ -70,7 +71,7 @@ test('core/pdf-ops: createPdfBook 整本落库 —— 二进制/文档页就位�
   assert.ok(/^\d{17}$/.test(String(doc.due)), 'due=now（17 位）→ 整本阅读卡进入阅读队列');
   // 不切分：无节卡，文档页即唯一阅读卡并入队
   assert.equal(docOps.sectionsOfDoc(wiki, r.docId).length, 1, 'sectionsOfDoc 回退到文档页本身');
-  const titles = sched.collectTopicQueue(wiki).map((c) => c.title);
+  const titles = docOps.collectTopicQueue(wiki).map((c) => c.title);
   assert.ok(titles.includes(r.docTitle), '整本文档页进入阅读队列');
   assert.equal(workflow.globalReadingTarget(wiki), r.docTitle, '继续阅读落到整本文档页');
 });
@@ -443,24 +444,24 @@ test('pdf: 存量分节书 —— 文档页不入队（入口而非可学习卡�
     });
   }
 
-  const titles = sched.collectTopicQueue(wiki).map((c) => c.title);
+  const titles = docOps.collectTopicQueue(wiki).map((c) => c.title);
   assert.ok(!titles.includes(docTitle), '存量分节书文档页不入队（入口而非可学习卡）');
   assert.ok(titles.includes(sec1) && titles.includes(sec2), '节卡在队');
 
   const queue = deckEngine.composeGlobalLearningQueue(
     (filter) => wiki.filterTiddlers(filter),
-    { topics: true, itemRatio: 1, topicRatio: 1, excludeTitles: Array.from(sched.splitDocPageSet(wiki)) },
+    { topics: true, itemRatio: 1, topicRatio: 1, excludeTitles: Array.from(docOps.splitDocPageSet(wiki)) },
   );
   assert.ok(!queue.includes(docTitle), '学习会话不含存量分节书文档页');
   assert.ok(queue.includes(sec1), '学习会话含节卡');
 
   // 整本不切分的 PDF 文档页（无节卡）必须入队：不受存量排除逻辑误伤
   const r2 = await pdfOps.createPdfBook(wiki, { bookTitle: '队列排除测试书', dataB64: 'JVBERi0xLjQK' });
-  const titles2 = sched.collectTopicQueue(wiki).map((c) => c.title);
+  const titles2 = docOps.collectTopicQueue(wiki).map((c) => c.title);
   assert.ok(titles2.includes(r2.docTitle), '整本不切分的 PDF 文档页入队');
   const queue2 = deckEngine.composeGlobalLearningQueue(
     (filter) => wiki.filterTiddlers(filter),
-    { topics: true, itemRatio: 1, topicRatio: 1, excludeTitles: Array.from(sched.splitDocPageSet(wiki)) },
+    { topics: true, itemRatio: 1, topicRatio: 1, excludeTitles: Array.from(docOps.splitDocPageSet(wiki)) },
   );
   assert.ok(queue2.includes(r2.docTitle), '学习会话含整本文档页');
 });
@@ -519,7 +520,9 @@ test('pdf: 学习模式「完成，下一张」续读点指向下一节并携带
   assert.ok(nextBtn, '「完成，下一张」按钮存在');
   nextBtn.dispatchEvent({ type: 'click' });
 
-  assert.equal(wiki.getTiddler(sec1).fields['tidme.done'], 'yes', '当前节标记已读');
+  const f1 = wiki.getTiddler(sec1).fields;
+  assert.notEqual(f1['tidme.done'], 'yes', '读完不永久出队（A-Factor 顺延，到期回归）');
+  assert.ok(schema.parseTwDate(f1.due).getTime() > Date.now(), 'due 顺延到未来');
   const rp = docOps.parseReadPoint(wiki, r.docId);
   assert.equal(rp.t, sec2, '续读点指向下一节（不再指向刚读完的卡）');
   assert.equal(rp.s, 'p4', '携带下一节起始页 p4');

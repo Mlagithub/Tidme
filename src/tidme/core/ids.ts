@@ -78,15 +78,3 @@ export async function makeSectionId(docId: string, breadcrumb: string[], ordinal
   const basis = [docId, breadcrumb.join(CRUMB_SEP), String(ordinal)].join('|');
   return 's' + (await shortHash(basis, 12));
 }
-
-/** 摘录 ID：'e' + 12 位短哈希(parentId | 内容指纹 | 序号) */
-export async function makeExtractId(parentId: string, text: string, ordinal: number): Promise<string> {
-  const basis = [parentId, await contentFingerprint(text), String(ordinal)].join('|');
-  return 'e' + (await shortHash(basis, 12));
-}
-
-/** 卡片 ID：'c' + 12 位短哈希(parentId | 内容指纹(caption+text) | 序号) */
-export async function makeCardId(parentId: string, caption: string, text: string, ordinal: number): Promise<string> {
-  const basis = [parentId, await contentFingerprint(caption + '\n' + text), String(ordinal)].join('|');
-  return 'c' + (await shortHash(basis, 12));
-}

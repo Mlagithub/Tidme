@@ -3,14 +3,13 @@ widgets/today.ts — 「今天」主入口页组件
 
 产品定位：打开今天 = 回答"现在该做什么"。
 - today-hero：双主 CTA（开始学习 / 继续阅读）+ 今日反馈条（复习卡数/专注时长）。
-  数据全部来自 core（deck-engine 计数、scheduler.TOPIC_QUEUE_FILTER、workflow 目标、
+  数据全部来自 core（deck-engine 计数、ns.TOPIC_QUEUE_FILTER、workflow 目标、
   stats 今日统计）；点击只调 core action，不复制任何调度逻辑。
 - today-recent：最近阅读（有节卡进度且未读完的文档，前 3 本），进度条 + 继续。
 刷新：唯一机制（TW 原生 refresh 嗅探 + core/reactive 谓词）。
 */
 
 declare function require(module: string): any;
-const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
@@ -56,7 +55,7 @@ function todayCounts(wiki: any): { learn: number; due: number; newly: number; to
     learn: count(f.learn),
     due: count(f.due),
     newly: count(f.newly),
-    toRead: count(sched.TOPIC_QUEUE_FILTER),
+    toRead: count(ns.TOPIC_QUEUE_FILTER),
   };
 }
 

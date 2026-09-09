@@ -1,6 +1,6 @@
 /*
 ui/base/dom.ts — DOM 操作工具（createElement / 轻量 Toast / TW 事件安全派发）。
-core/dom.js 为向下兼容转发桩，指向本模块；HTML 转义正身在 core/schema.escapeHtml。
+HTML 转义正身在 core/schema.escapeHtml。
 */
 
 export function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {

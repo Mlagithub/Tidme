@@ -68,7 +68,7 @@ export interface SplitInput {
  * （paths 纯函数不带 docId 后缀；占用的判定与追加都在此导入期完成）
  */
 function resolveDocRoot(bookTitle: string, docId: string, folderOccupied?: (baseFolder: string) => string | null): string {
-  const base = bookRoot(bookTitle, docId);
+  const base = bookRoot(bookTitle);
   const owner = folderOccupied ? folderOccupied(base) : null;
   if (owner && String(owner) !== String(docId)) {
     return base + '~' + String(docId).replace(/^d/, '').slice(0, 6);

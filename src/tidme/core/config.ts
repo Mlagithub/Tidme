@@ -164,10 +164,10 @@ export function writeOcrConfig(wiki: any, patch: { enable?: boolean; model?: str
   wiki.addTiddler({ title: OCR_TITLE, type: 'application/json', text: JSON.stringify(stored) });
 }
 
-// ---------- 默认牌组参数 ----------
+// ---------- 默认牌组参数（读写一律经 core/deck 唯一入口） ----------
 
 export function readDefaultDeckParams(wiki: any): Record<string, any> {
-  const f = wiki.getTiddler(deckMod.DEFAULT_DECK)?.fields || {};
+  const f = deckMod.getDeck(wiki, deckMod.DEFAULT_DECK)?.fields || {};
   let p: Record<string, any> = {};
   try {
     const v = JSON.parse(f.p || '{}');
@@ -186,20 +186,20 @@ export function readDefaultDeckParams(wiki: any): Record<string, any> {
 
 export function writeDefaultDeckParams(wiki: any, patch: Record<string, any>): void {
   if (!wiki) return;
-  const deck = wiki.getTiddler(deckMod.DEFAULT_DECK);
+  const deck = deckMod.getDeck(wiki, deckMod.DEFAULT_DECK);
   if (!deck) return;
-  const fields: Record<string, any> = { ...deck.fields, title: deckMod.DEFAULT_DECK };
+  const out: Record<string, any> = {};
   if (patch.order !== undefined && DECK_ORDERS.includes(String(patch.order))) {
-    fields.order = String(patch.order);
+    out.order = String(patch.order);
   }
   if (patch.leech_threshold !== undefined) {
     const n = Number(patch.leech_threshold);
-    if (Number.isFinite(n)) fields.leech_threshold = String(Math.max(1, Math.floor(n)));
+    if (Number.isFinite(n)) out.leech_threshold = String(Math.max(1, Math.floor(n)));
   }
   if (patch.learn_random !== undefined) {
     // 学习步随机（对齐 SuperMemo 的 Randomize final drill）：重写 state_learn 消费方读取的标记字段
-    if (patch.learn_random) fields.random_learn = 'yes';
-    else delete fields.random_learn;
+    // null = 删除标记（updateDeck 的删字段语义）
+    out.random_learn = patch.learn_random ? 'yes' : null;
   }
   if (patch.request_retention !== undefined || patch.maximum_interval !== undefined) {
     let p: Record<string, any> = {};
@@ -217,7 +217,7 @@ export function writeDefaultDeckParams(wiki: any, patch: Record<string, any>): v
       const m = Number(patch.maximum_interval);
       if (Number.isFinite(m)) p.maximum_interval = Math.max(1, Math.floor(m));
     }
-    fields.p = JSON.stringify(p);
+    out.p = JSON.stringify(p);
   }
-  wiki.addTiddler(fields);
+  deckMod.updateDeck(wiki, deckMod.DEFAULT_DECK, out);
 }

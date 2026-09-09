@@ -13,7 +13,7 @@ const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 
 export function badgeOf(fields: Record<string, any>, wiki?: any): { text: string; cls: string } {
   if (fields['tidme.suspended'] === 'yes') return { text: '⏸', cls: 'tm-badge-suspended' };
-  if (sched.isCardDone(fields)) return { text: '✓', cls: 'tm-badge-done' };
+  if (sched.isCardOutOfQueue(fields)) return { text: '✓', cls: 'tm-badge-done' };
   const state = String(fields.state || '0');
   if (state === '1' || state === '3') {
     return { text: wiki ? lingoMod.lingo(wiki, 'badge.learn', 'L') : 'L', cls: 'tm-badge-learn' };
@@ -36,10 +36,10 @@ export function kindMark(fields: Record<string, any>, wiki?: any): string {
 }
 
 export function stateLabel(fields: Record<string, any>, wiki?: any): string {
-  const b = badgeOf(fields, wiki);
-  // 出队语义优先（done/ignored/suspended）—— 否则 done 卡仍显示 "到期/已逾期" 误导
-  if (b.text === '✓') return wiki ? lingoMod.lingo(wiki, 'state.read', 'Read') : 'Read';
-  if (b.text === '⏸') return wiki ? lingoMod.lingo(wiki, 'state.suspended', 'Suspended') : 'Suspended';
+  // 出队语义优先（done/ignored/suspended）—— 否则 done 卡仍显示 "到期/已逾期" 误导。
+  // 直接按字段判定（与 badgeOf 同一口径），不反推徽章字形（本地化/字形调整不影响判定）
+  if (fields['tidme.suspended'] === 'yes') return wiki ? lingoMod.lingo(wiki, 'state.suspended', 'Suspended') : 'Suspended';
+  if (sched.isCardOutOfQueue(fields)) return wiki ? lingoMod.lingo(wiki, 'state.read', 'Read') : 'Read';
   const state = String(fields.state || '0');
   if (state === '1' || state === '3') return wiki ? lingoMod.lingo(wiki, 'state.learning', 'Learning') : 'Learning';
   if (state === '2') {

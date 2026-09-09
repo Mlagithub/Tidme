@@ -60,11 +60,8 @@ __export(main_exports, {
   IMPORT_BAG_TITLE: () => IMPORT_BAG_TITLE,
   bookCardsRoot: () => bookCardsRoot,
   bookRoot: () => bookRoot,
-  cardPath: () => cardPath,
   cleanTitle: () => cleanTitle,
   contentFingerprint: () => contentFingerprint,
-  deckSubsetPath: () => deckSubsetPath,
-  extractPath: () => extractPath,
   insertedSectionTitle: () => insertedSectionTitle,
   joinPath: () => joinPath,
   leafIdOf: () => leafIdOf,
@@ -84,6 +81,8 @@ var NS_BOOKS = "Tidme/Books/";
 var NS_DECKS = "Tidme/Decks/";
 var NS_DECKS_SCATTER = NS_DECKS + "\u6563\u5361";
 var CRUMB_SEP = " \u203A ";
+var QUEUE_EXCLUDE = "!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]";
+var TOPIC_QUEUE_FILTER = "[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]" + QUEUE_EXCLUDE + "]";
 var IMPORT_BAG_TITLE = "$:/temp/tidme-import/bag";
 
 // src/tidme/core/ids.ts
@@ -1103,18 +1102,14 @@ function joinPath(...parts) {
   }
   return clean.join("/");
 }
-function bookRoot(bookTitle, _docId) {
+function bookRoot(bookTitle) {
   const slug = slugify(bookTitle) || "untitled";
   if (RESERVED.has(slug.toLowerCase()))
     throw new Error("bookRoot: reserved book title: " + slug);
   return NS_BOOKS + slug;
 }
-function bookCardsRoot(bookTitle, _docId) {
+function bookCardsRoot(bookTitle) {
   return NS_DECKS + (slugify(bookTitle) || "untitled");
-}
-function deckSubsetPath(bookTitle, docId, purpose = "\u590D\u4E60\u672C\u4E66") {
-  const root = bookCardsRoot(bookTitle, docId);
-  return joinPath(root, slugify(purpose));
 }
 function sectionLeaf(caption, sectionId) {
   const slug = slugify(caption);
@@ -1123,21 +1118,13 @@ function sectionLeaf(caption, sectionId) {
 function sectionPath(bookTitle, caption, sectionId) {
   return joinPath(bookRoot(bookTitle), sectionLeaf(caption, sectionId));
 }
-function extractPath(bookTitle, docId, sectionId) {
-  const root = bookRoot(bookTitle, docId);
-  return joinPath(root, sectionId + "--extract");
-}
-function cardPath(bookTitle, docId, sectionId, subkind) {
-  const root = bookCardsRoot(bookTitle, docId);
-  return joinPath(root, sectionId + "--" + subkind);
-}
 function leafIdOf(title) {
   const t = String(title ?? "");
   const i = t.lastIndexOf("/");
   return i >= 0 ? t.slice(i + 1) : t;
 }
-function insertedSectionTitle(bookTitle, docId, sectionCaption) {
-  return joinPath(bookRoot(bookTitle, docId), "manual-" + (slugify(sectionCaption) || "untitled"));
+function insertedSectionTitle(bookTitle, sectionCaption) {
+  return joinPath(bookRoot(bookTitle), "manual-" + (slugify(sectionCaption) || "untitled"));
 }
 
 // src/tidme/core/scheduler.ts
@@ -1175,7 +1162,7 @@ function cleanTitle(title) {
   return t || title;
 }
 function resolveDocRoot(bookTitle, docId, folderOccupied) {
-  const base = bookRoot(bookTitle, docId);
+  const base = bookRoot(bookTitle);
   const owner = folderOccupied ? folderOccupied(base) : null;
   if (owner && String(owner) !== String(docId)) {
     return base + "~" + String(docId).replace(/^d/, "").slice(0, 6);

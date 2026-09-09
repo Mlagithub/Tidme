@@ -17,14 +17,16 @@ import { bootPlugin } from '../helpers/tw-boot.mjs';
 import { twDate } from '../helpers/tw-date.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-queue-' });
+const { tw, wiki, mod, reset } = bootPlugin({ prefix: 'tidme-queue-' });
 let deckEngine;
 let sched;
 let sessionMod;
+let docOps;
 test.before(() => {
   deckEngine = mod('core/deck-engine.js');
   sched = mod('core/scheduler.js');
   sessionMod = mod('core/session.js');
+  docOps = mod('core/doc-ops.js');
 });
 
 function mkCard(title, opts = {}) {
@@ -253,7 +255,7 @@ test('词书牌组页（learning-package legacy kind=topic）不混入学习流�
   assert.ok(!q.includes('$:/Deck/IELTS_T'), '牌组页不得混入学习流（词卡走牌组复习）');
   assert.ok(q.includes('Tidme/Books/整本书'), '整本 PDF 文档页照常入队');
 
-  const readQueue = [...sched.collectTopicQueue(wiki).map((c) => c.title)];
+  const readQueue = [...docOps.collectTopicQueue(wiki).map((c) => c.title)];
   assert.ok(!readQueue.includes('$:/Deck/IELTS_T'), '牌组页不入阅读队列');
   assert.ok(readQueue.includes('Tidme/Books/整本书'), '整本 PDF 文档页仍在阅读队列');
 });
@@ -275,4 +277,109 @@ test('全局续读点指向牌组页时跳过，回落到真实阅读队列', ()
   });
   const docOps = mod('core/doc-ops.js');
   assert.equal(docOps.globalReadingTarget(wiki), 'Tidme/Books/在读书', '牌组页不是阅读目标，继续阅读落到在队阅读卡');
+});
+
+test('collectTopicQueue: 队列快照（出队卡兜底过滤 + 排序字段预解析）', () => {
+  // 自 doc-ops 迁入（wiki 查询统一在 core/doc-ops）；用真实 wiki 复现原单测语义
+  wiki.addTiddler({
+    title: 'tidme快照甲',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.priority': '30',
+    due: '20270101000000000',
+    'tidme.order': '000002',
+    'tidme.doc': 'd-snap',
+    'tidme.breadcrumb': '书 › 甲',
+  });
+  wiki.addTiddler({
+    title: 'tidme快照乙',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.done': 'yes',
+  });
+  wiki.addTiddler({
+    title: 'tidme快照丙',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'extract',
+    'tidme.suspended': 'yes',
+  });
+  wiki.addTiddler({
+    title: 'tidme快照丁',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.priority': '10',
+    due: '20260101000000000',
+    'tidme.order': '000001',
+  });
+  const cards = docOps.collectTopicQueue(wiki).filter((c) => String(c.title).startsWith('tidme快照'));
+  // 跨 realm 数组：先展开再比较（快照本身未排序，按集合比；排序是 sortTopicQueue 的职责）
+  assert.deepEqual([...cards.map((c) => c.title)].sort(), ['tidme快照丁', 'tidme快照甲'].sort(), 'done/suspended 出队兜底过滤');
+  const jia = cards.find((c) => c.title === 'tidme快照甲');
+  assert.equal(jia.priority, 30, 'priority 归一化预解析');
+  assert.equal(jia.due.getTime(), Date.UTC(2027, 0, 1), 'due 预解析为 Date');
+  assert.equal(jia.order, '000002');
+});
+
+// ---------- deck 复习帧过滤器组合回归（viewtemplate-deck / ViewTemplate.tiddler 的 $let 管道） ----------
+
+// 模拟模板文本层：变量经 widget parent 链注入，subfilter<var> 求值（与 $let + backtick 同构）
+function evalWithVars(vars, filter) {
+  const WidgetCtor = tw.modules.execute('$:/core/modules/widgets/widget.js').widget;
+  const parent = new WidgetCtor({ type: 'widget', attributes: {}, children: [] }, { wiki });
+  parent.variables = Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, { value: v }]));
+  const child = new WidgetCtor({ type: 'widget', attributes: {}, children: [] }, { wiki, parentWidget: parent });
+  return [...wiki.filterTiddlers(filter, child)];
+}
+
+test('deck 过滤器组合: filter_learn 段产出真实卡标题而非过滤器文本（回归: then/else run 伪标题）', () => {
+  wiki.addTiddler({
+    title: '$:/Deck/T1',
+    tags: ['$:/tags/TidmeDeck'],
+    card: '[all[tiddlers]tidme.kind[item]]',
+    card_exclude: '',
+    state_learn: '[state[1]] [state[3]]',
+    state_due: '[state[2]has[due]]',
+    state_new: '[!has[state]] [state[0]]',
+    order_learn: '[sort[due]]',
+    order_due: '[sort[due]]',
+    order_new: '[sortan[title]]',
+  });
+  wiki.addTiddler({ title: 'T1-learning', 'tidme.kind': 'item', state: '1', due: '20260101000000000' });
+  // 修复后：变体选择在 $let 文本层（${ [...then<..>else<..>] }$ 内插，输入仅 deckTiddler 一项）
+  const FLR = '[subfilter{$:/Deck/T1!!card}] -[subfilter{$:/Deck/T1!!card_exclude}] +[subfilter{$:/Deck/T1!!state_learn}] +[sortrandom[]]';
+  const FLD = '[subfilter{$:/Deck/T1!!card}] -[subfilter{$:/Deck/T1!!card_exclude}] +[subfilter{$:/Deck/T1!!state_learn}] +[sort[due]]';
+  const chosen = evalWithVars({ filter_learn_random: FLR, filter_learn_due: FLD }, '[[$:/Deck/T1]get[random_learn]match[yes]then<filter_learn_random>else<filter_learn_due>]')[0];
+  const filterLearn = `[subfilter{$:/Deck/T1!!card}] -[subfilter{$:/Deck/T1!!card_exclude}] +[subfilter{$:/Deck/T1!!state_learn}] ${chosen}`;
+  const out = evalWithVars({ filter_learn: filterLearn }, '[subfilter<filter_learn>]');
+  assert.deepEqual(out, ['T1-learning'], 'learning 卡是标题本身，无伪标题');
+});
+
+test('deck 过滤器组合: 队列各段 subfilter 包裹后并集齐全（回归: 裸拼接被段内 +[state_*] 洗成只剩新卡）', () => {
+  wiki.addTiddler({
+    title: '$:/Deck/T2',
+    tags: ['$:/tags/TidmeDeck'],
+    card: '[all[tiddlers]tidme.kind[item]]',
+    card_exclude: '',
+    state_learn: '[state[1]] [state[3]]',
+    state_due: '[state[2]has[due]]',
+    state_new: '[!has[state]] [state[0]]',
+    order_learn: '[sort[due]]',
+    order_due: '[sort[due]]',
+    order_new: '[sortan[title]]',
+  });
+  wiki.addTiddler({ title: 'T2-learning', 'tidme.kind': 'item', state: '1', due: '20260101000000000' });
+  wiki.addTiddler({ title: 'T2-due', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });
+  wiki.addTiddler({ title: 'T2-new', 'tidme.kind': 'item' });
+  const seg = (st, order) => `[subfilter{$:/Deck/T2!!card}] -[subfilter{$:/Deck/T2!!card_exclude}] +[subfilter{$:/Deck/T2!!${st}}] +[subfilter{$:/Deck/T2!!${order}}]`;
+  const learn = `[subfilter{$:/Deck/T2!!card}] -[subfilter{$:/Deck/T2!!card_exclude}] +[subfilter{$:/Deck/T2!!state_learn}] +[sort[due]]`;
+  const composite = '[subfilter<filter_learn>] [subfilter<filter_due>] [subfilter<filter_new>]';
+  const out = evalWithVars(
+    { filter_learn: learn, filter_due: seg('state_due', 'order_due'), filter_new: seg('state_new', 'order_new') },
+    composite,
+  );
+  assert.deepEqual([...out].sort(), ['T2-due', 'T2-learning', 'T2-new'], 'learn/due/new 三段齐全');
+  // 裸拼接对照（修复前形态）：段内 +[state_*] 越界作用于整个累计结果，只剩最后的 new 段
+  const rawJoin = `${learn} ${seg('state_due', 'order_due')} ${seg('state_new', 'order_new')}`;
+  const outOld = evalWithVars({ queue_old: rawJoin }, '[subfilter<queue_old>]');
+  assert.deepEqual(outOld, ['T2-new'], '旧裸拼接形态只产出新卡段（缺陷对照）');
 });

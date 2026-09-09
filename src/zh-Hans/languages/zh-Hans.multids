@@ -93,7 +93,7 @@ today.focusprefix: 专注：
 today.norecentbooks: 暂无在读书籍——去导入中心添加材料。
 studymode.learning: 学习中
 studymode.finishandnext: 读完，继续复习 ›
-studymode.finishandnext.tip: 保存当前阅读进度，继续复习后续卡片
+studymode.finishandnext.tip: 保存阅读进度并继续复习后续卡片；读完的材料按 A-Factor 顺延，到期自动回归队列
 studymode.end: 结束学习
 studymode.end.tip: 结束本次学习：清空会话与排期队列，返回渐进学习
 rate.again: 重来

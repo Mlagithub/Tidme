@@ -222,7 +222,7 @@ test('模式条: 整本 PDF 文档页推进 —— 不标 done，留在阅读队
 
   const f = wiki.getTiddler('Tidme/Books/长书')?.fields || {};
   assert.notEqual(f['tidme.done'], 'yes', '只读了几页 ≠ 读完整个文件：不得标记 done');
-  const titles = [...sched.collectTopicQueue(wiki).map((c) => c.title)];
+  const titles = [...docOps.collectTopicQueue(wiki).map((c) => c.title)];
   assert.ok(titles.includes('Tidme/Books/长书'), '仍在阅读队列（凭续读点继续读）');
   const rp = docOps.parseReadPoint(wiki, 'dp-long');
   assert.equal(rp?.t, 'Tidme/Books/长书', '续读点指向文档页');
@@ -253,7 +253,9 @@ test('模式条: 牌组页（词书 legacy kind=topic）推进 —— 永不标 
   assert.deepEqual([...sess.fields.list], ['卡甲'], '已移出当前学习会话');
 });
 
-test('模式条: 节卡推进 —— 标记已读出队（「读完此节」语义保持）', () => {
+test('模式条: 节卡推进 —— A-Factor 顺延出队，到期自动回归（不永久 done）', () => {
+  const docOps = mod('core/doc-ops.js');
+  const schema = mod('core/schema.js');
   wiki.addTiddler({
     title: '节卡一',
     'tidme.kind': 'topic',
@@ -268,9 +270,40 @@ test('模式条: 节卡推进 —— 标记已读出队（「读完此节」语�
   const advBtn = holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›');
   advBtn._listeners.click();
 
-  assert.equal(wiki.getTiddler('节卡一')?.fields['tidme.done'], 'yes', '节卡读完标记 done（移出阅读队列）');
+  const f = wiki.getTiddler('节卡一')?.fields || {};
+  assert.notEqual(f['tidme.done'], 'yes', '阅读材料不标 done（永久出队违背 SM 重现语义）');
+  assert.ok(f.due && schema.parseTwDate(f.due).getTime() > Date.now(), 'due 顺延到未来（到期自动回归阅读队列）');
+  assert.ok(f.last_review, 'last_review 记录本次阅读');
+  const deckEngine = mod('core/deck-engine.js');
+  const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
+  assert.ok(!q.includes('节卡一'), '顺延后离开当前学习队列（到期自动回归）');
   const sess = wiki.getTiddler(session.SESSION_TIDDLER);
   assert.deepEqual([...sess.fields.list], ['卡甲'], '已移出当前学习会话');
+});
+
+test('模式条: 节卡顺延后到期回归学习队列（topic 重现语义闭环）', () => {
+  const schema = mod('core/schema.js');
+  const deckEngine = mod('core/deck-engine.js');
+  const twDate = (d) => schema.twDateString(d);
+  wiki.addTiddler({
+    title: '节卡二',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'doc-sec',
+  });
+  wiki.addTiddler({ title: '卡甲', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });
+  wiki.addTiddler({ title: session.SESSION_TIDDLER, list: ['节卡二', '卡甲'] });
+  const { w, holder } = renderBar('节卡二');
+  w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
+  holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›')._listeners.click();
+
+  const queueNow = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
+  assert.ok(!queueNow.includes('节卡二'), '顺延后立刻不再出现');
+
+  // 模拟数天后到期：due 回到过去 → topic 重新进入学习队列（第二次出现）
+  wiki.addTiddler({ ...wiki.getTiddler('节卡二').fields, due: twDate(new Date(Date.now() - 86400000)) });
+  const queueLater = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
+  assert.ok(queueLater.includes('节卡二'), '到期后 topic 回归学习队列（可第二次出现）');
 });
 
 test('模式条: 当前卡跟随故事顶层（修复列表序嗅探滞留在旧词卡）', () => {

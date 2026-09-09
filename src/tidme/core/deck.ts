@@ -155,9 +155,10 @@ export function previewMembership(wiki: any, card: string, selfTitle?: string): 
   return { hits: hits.length, overlap: hits.filter((t) => others.has(t)).length };
 }
 
-/** 默认成员过滤器：全部在队 item + 无 kind 手动卡（与 default deck 一致） */
-export const DEFAULT_CARD_FILTER = '[all[shadows+tiddlers]tidme.kind[item]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]] ' +
-  '[all[shadows+tiddlers]!has[tidme.kind]has[state]has[due]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]]';
+/** 默认成员过滤器：全部在队 item + 无 kind 手动卡（与 default deck 一致）；
+ *  出队三态排除复用 ns.QUEUE_EXCLUDE（与阅读队列同口径） */
+export const DEFAULT_CARD_FILTER = `[all[shadows+tiddlers]tidme.kind[item]${ns.QUEUE_EXCLUDE}] ` +
+  `[all[shadows+tiddlers]!has[tidme.kind]has[state]has[due]${ns.QUEUE_EXCLUDE}]`;
 
 /** 创建牌组；名称已存在抛错。返回标题。 */
 export function createDeck(wiki: any, cfg: DeckConfig): string {

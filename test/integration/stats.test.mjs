@@ -3,7 +3,7 @@ stats.test.mjs — core 统计聚合测试（node:test + 真实 TW boot）
 
 - deckLoad / docProgress / retentionFromLogs / funnelCounts / priorityBuckets / formatDuration
 - recordReadTime 写真实 wiki（$:/plugins/tidme/stats/readtime.json），不再 mock wiki
-- 调度语义（isCardDone/parseTwDate/normalizePriority）引用 core/scheduler 正身，
+- 调度语义（isCardOutOfQueue/parseTwDate/normalizePriority）引用 core/scheduler 正身，
   测试跑在真实模块装配上而非本地副本
 */
 import assert from 'node:assert/strict';
