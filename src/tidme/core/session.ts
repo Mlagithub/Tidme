@@ -11,6 +11,7 @@ core/session.ts — 学习会话（$:/state/tidme/learning-session）读写与�
 declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
 /** 牌组学习会话列表的 title 后缀（<deck>/study，fsrs4tw 契约） */
 export const DECK_STUDY_SUFFIX = '/study';
@@ -138,4 +139,28 @@ export function endSession(wiki: any): number {
     n++;
   }
   return n;
+}
+
+/**
+ * 跳转复习卡（item）前设置折叠态：$:/state/folded/<title> = "hide"（折叠，先看问题）
+ * 除非该卡命中其所属 deck 的 card_unfold（"show"）。与 startstudy.tid / fsrs4tw
+ * 折叠语义一致——否则 state 缺失时 reveal 默认展开（答案直接显示）。
+ * 非 item 卡（阅读/文档页）不设（不影响阅读界面）。
+ */
+export function prepareCardFold(wiki: any, title: string): void {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function' || !title) return;
+  const f = wiki.getTiddler(title)?.fields;
+  if (!f || f['tidme.kind'] !== 'item') return;
+  // 卡所属 deck（同复习帧 decktiddler 语义：card 收录它的第一个 deck）；取该 deck 的 card_unfold
+  const decks = deckMod.listDecks(wiki);
+  for (const d of decks) {
+    if (!deckMod.deckCards(wiki, d).includes(title)) continue;
+    const deckFields = deckMod.getDeck(wiki, d)?.fields || {};
+    const unfoldFilter = String(deckFields.card_unfold || '');
+    const unfold = unfoldFilter && wiki.filterTiddlers(`[subfilter{${d}!!card_unfold}]`).includes(title);
+    wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text: unfold ? 'show' : 'hide' });
+    return;
+  }
+  // 兜底：默认折叠
+  wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text: 'hide' });
 }

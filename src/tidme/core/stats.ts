@@ -11,12 +11,11 @@ review log 行格式（repeat 写入 $:/Deck/<deck>/log 单文件，键 = 17 位
 */
 
 declare var require: any;
-// 调度语义唯一实现 = core/scheduler（isCardDone/normalizePriority/parseTwDate 转出），
-// 此处只做引用，绝不本地复制（副本会与正身漂移：fallback 默认值已分歧过一次）
+const schema = require('$:/plugins/keepone/tidme/core/schema.js');
+const parseTwDate = schema.parseTwDate;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const isCardDone = sched.isCardDone;
 const normalizePriority = sched.normalizePriority;
-const parseTwDate = sched.parseTwDate;
 
 export interface CardLike {
   title: string;

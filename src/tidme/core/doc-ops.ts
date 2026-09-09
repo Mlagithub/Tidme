@@ -254,26 +254,62 @@ export function globalReadingTarget(wiki: any): string {
   return (readable || queue[0])?.title || ns.PAGE_READING_LIST;
 }
 
-/**
- * 跳转复习卡（item）前设置折叠态：$:/state/folded/<title> = "hide"（折叠，先看问题）
- * 除非该卡命中其所属 deck 的 card_unfold（"show"）。与 startstudy.tid / fsrs4tw
- * 折叠语义一致——否则 state 缺失时 reveal 默认展开（答案直接显示）。
- * 非 item 卡（阅读/文档页）不设（不影响阅读界面）。
- */
-export function prepareCardFold(wiki: any, title: string): void {
-  if (!wiki || typeof wiki.filterTiddlers !== 'function' || !title) return;
-  const f = wiki.getTiddler(title)?.fields;
-  if (!f || f['tidme.kind'] !== 'item') return;
-  // 卡所属 deck（同复习帧 decktiddler 语义：card 收录它的第一个 deck）；取该 deck 的 card_unfold
-  const decks = deckMod.listDecks(wiki);
-  for (const d of decks) {
-    if (!deckMod.deckCards(wiki, d).includes(title)) continue;
-    const deckFields = deckMod.getDeck(wiki, d)?.fields || {};
-    const unfoldFilter = String(deckFields.card_unfold || '');
-    const unfold = unfoldFilter && wiki.filterTiddlers(`[subfilter{${d}!!card_unfold}]`).includes(title);
-    wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text: unfold ? 'show' : 'hide' });
-    return;
+/** 解析 tidme.anchor 提取 snippet（内部纯函数） */
+function parseAnchorSnippet(raw: any): string {
+  if (!raw) return '';
+  try {
+    const o = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return String(o?.snippet || '');
+  } catch {
+    return '';
   }
-  // 兜底：默认折叠
-  wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text: 'hide' });
+}
+
+/**
+ * 收集本卡全部衍生卡（摘录/挖空/问答）的 anchor 片段（SM 'Delete processed text' 的清理对象）。
+ * 对应官方帮助：Delete processed text - delete all texts that have already been extracted or ignored。
+ */
+export function processedSnippets(wiki: any, title: string): string[] {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
+  const childTitles = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, '')}]]`);
+  const out: string[] = [];
+  for (const c of childTitles) {
+    const f = wiki.getTiddler(c)?.fields;
+    if (!f) continue;
+    const snippet = parseAnchorSnippet(f['tidme.anchor']);
+    if (snippet) out.push(snippet);
+  }
+  return out;
+}
+
+/**
+ * SM 对齐 'Delete processed text'：从本卡原文中删除已被摘录/挖空/问答的文本片段。
+ * 衍生卡不受影响（SM：Done! 删正文但保留 extracted material）；snippet 不在原文中时跳过，幂等。
+ * @returns 实际删除的片段数
+ */
+export function cleanProcessedText(wiki: any, title: string): number {
+  if (!wiki || typeof wiki.getTiddler !== 'function') return 0;
+  const t = wiki.getTiddler(title);
+  if (!t) return 0;
+  let out = String(t.fields.text || '');
+  const snippets = processedSnippets(wiki, title);
+  let removed = 0;
+  for (const s of snippets) {
+    let at = out.indexOf(s);
+    if (at === -1) continue;
+    let end = at + s.length;
+    // 顺带吸收邻接的单个空白，避免删除后两段文字粘连
+    if (at > 0 && /\s/.test(out[at - 1])) at--;
+    if (end < out.length && /\s/.test(out[end])) end++;
+    out = out.slice(0, at) + out.slice(end);
+    removed++;
+  }
+  if (removed) {
+    out = out
+      .replace(/<p>\s*<\/p>/g, '') // 清理整段被删后遗留的空 <p>
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    wiki.addTiddler({ ...t.fields, text: out });
+  }
+  return removed;
 }

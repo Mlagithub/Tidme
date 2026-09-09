@@ -87,8 +87,8 @@ function startGlobalLearning(wiki: any, widget: any): void {
 
   // <deck>/study 会话列表（fsrs4tw 契约后缀见 core/session）
   wiki.addTiddler({ title: DEFAULT_DECK + sessionMod.DECK_STUDY_SUFFIX, list: queue });
-  // 首卡折叠态统一走 core/doc-ops.prepareCardFold（item → hide/show，按所属 deck card_unfold）
-  docOps.prepareCardFold(wiki, first);
+  // 首卡折叠态统一走 core/session.prepareCardFold（item → hide/show，按所属 deck card_unfold）
+  sessionMod.prepareCardFold(wiki, first);
 
   widget.dispatchEvent({ type: 'tm-navigate', navigateTo: first });
 }

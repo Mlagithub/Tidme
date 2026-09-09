@@ -40,6 +40,12 @@ export const CRUMB_SEP = ' › ';
 /** fsrs4tw 牌组标题前缀（$:/Deck/<name>，学习循环运行时依赖） */
 export const DECK_PREFIX = '$:/Deck/';
 
+/**
+ * 阅读列表（topic 队列）过滤器唯一契约：全库 kind=topic 在队卡（排除草稿、牌组页、搁置/完成/忽略）。
+ * 单条 run 的闭合过滤器字符串；deck-engine / scheduler 等处共用。
+ */
+export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]!has[tidme.suspended]!has[tidme.done]!has[tidme.ignored]]';
+
 /** 卡折叠态 tiddler 前缀（<prefix><title> = "show"/"hide"，fsrs4tw reveal 语义） */
 export const FOLDED_STATE_PREFIX = '$:/state/folded/';
 

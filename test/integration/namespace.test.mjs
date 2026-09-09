@@ -11,7 +11,7 @@ import { twDate } from '../helpers/tw-date.mjs';
 
 // tw.utils（generateTiddlerFileInfo）在测试体内直接使用，故保留 tw
 const { tw, wiki, mod, reset } = bootPlugin({ prefix: 'tidme-ns-' });
-let parseMod, paths, factoryMod, docOps, display, align, sched;
+let parseMod, paths, factoryMod, docOps, display, align, sched, schemaMod;
 test.before(() => {
   parseMod = mod('import/parse.js');
   paths = mod('core/paths.js');
@@ -20,6 +20,7 @@ test.before(() => {
   display = mod('core/display.js');
   align = mod('core/align.js');
   sched = mod('core/scheduler.js');
+  schemaMod = mod('core/schema.js');
 });
 
 test.beforeEach(reset);
@@ -601,12 +602,12 @@ test('re-split 保留已有摘录（不被归档为 obsolete/done）', async () 
 /* 回归测试：card-manager 写 17 位 due 串（YYYYMMDD + 9 位 0）能被 parseTwDate 正确解析到所选日期 */
 test('parseTwDate 接受 card-manager 的 17 位 due 串', () => {
   const due = '20261231000000000';
-  const d = sched.parseTwDate(due);
+  const d = schemaMod.parseTwDate(due);
   assert.equal(d.getUTCFullYear(), 2026);
   assert.equal(d.getUTCMonth(), 11);
   assert.equal(d.getUTCDate(), 31);
   // 旧 buggy 19 位版本会被 fallback 到 now —— 回归保险
-  const oldBuggy = sched.parseTwDate('2026123100000000000');
+  const oldBuggy = schemaMod.parseTwDate('2026123100000000000');
   assert.equal(Number.isNaN(oldBuggy.getTime()) || oldBuggy.getUTCFullYear() !== 1970, true, '19 位非合法日期');
 });
 
@@ -629,19 +630,19 @@ test('prepareCardFold: item 复习卡默认 hide（折叠先看问题）；命�
     last_review: twDate(new Date()),
   };
   wiki.addTiddler(card);
-  // 默认（card_unfold 未命中）→ hide
-  docOps.prepareCardFold(wiki, card.title);
-  assert.equal(wiki.getTiddler('$:/state/folded/' + card.title)?.fields?.text, 'hide', '复习卡默认折叠');
+  const sessionMod = mod('core/session.js');
+  sessionMod.prepareCardFold(wiki, card.title);
+  assert.equal(wiki.getTiddler('$:/state/folded/' + card.title)?.fields?.text, 'hide', '复习卡默认折叠 (session)');
   // 命中 card_unfold → show
   const deck = wiki.getTiddler('$:/Deck/default');
   wiki.addTiddler({ ...deck?.fields, title: '$:/Deck/default', card_unfold: `[all[]match[${card.title}]]` });
-  docOps.prepareCardFold(wiki, card.title);
+  sessionMod.prepareCardFold(wiki, card.title);
   assert.equal(wiki.getTiddler('$:/state/folded/' + card.title)?.fields?.text, 'show', '命中 unfold 过滤器 → show');
   // 还原 default deck 覆盖（防影响后续）
   if (deck) wiki.addTiddler({ ...deck.fields, title: '$:/Deck/default' });
   // topic 卡不设折叠态（阅读界面无关）
   const topic = 'Tidme/Books/折叠测试/s1-s1--topic';
   wiki.addTiddler({ title: topic, 'tidme.kind': 'topic', caption: 't', text: 'x', state: '0', due: twDate(new Date()) });
-  docOps.prepareCardFold(wiki, topic);
+  sessionMod.prepareCardFold(wiki, topic);
   assert.equal(wiki.getTiddler('$:/state/folded/' + topic), undefined, 'topic 卡不设折叠态');
 });

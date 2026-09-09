@@ -6,6 +6,7 @@ core/display.ts — 展示层纯函数（徽章/标签/标题/日期）
 
 declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
@@ -18,7 +19,7 @@ export function badgeOf(fields: Record<string, any>, wiki?: any): { text: string
     return { text: wiki ? lingoMod.lingo(wiki, 'badge.learn', 'L') : 'L', cls: 'tm-badge-learn' };
   }
   if (state === '2') {
-    const overdue = sched.parseTwDate(fields.due).getTime() < Date.now();
+    const overdue = schema.parseTwDate(fields.due).getTime() < Date.now();
     return overdue
       ? { text: wiki ? lingoMod.lingo(wiki, 'badge.overdue', '!') : '!', cls: 'tm-badge-overdue' }
       : { text: wiki ? lingoMod.lingo(wiki, 'badge.due', 'D') : 'D', cls: 'tm-badge-due' };
@@ -42,7 +43,7 @@ export function stateLabel(fields: Record<string, any>, wiki?: any): string {
   const state = String(fields.state || '0');
   if (state === '1' || state === '3') return wiki ? lingoMod.lingo(wiki, 'state.learning', 'Learning') : 'Learning';
   if (state === '2') {
-    const overdue = sched.parseTwDate(fields.due).getTime() < Date.now();
+    const overdue = schema.parseTwDate(fields.due).getTime() < Date.now();
     return overdue
       ? (wiki ? lingoMod.lingo(wiki, 'state.overdue', 'Overdue') : 'Overdue')
       : (wiki ? lingoMod.lingo(wiki, 'state.due', 'Due') : 'Due');
@@ -52,7 +53,7 @@ export function stateLabel(fields: Record<string, any>, wiki?: any): string {
 
 export function dueLabel(fields: Record<string, any>): string {
   if (String(fields.state || '0') !== '2') return '—';
-  const d = sched.parseTwDate(fields.due);
+  const d = schema.parseTwDate(fields.due);
   return Number.isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
 }
 
@@ -78,7 +79,7 @@ export function diffLabel(fields: Record<string, any>): string {
 
 export function dateLabel(raw: any): string {
   if (raw === undefined || raw === null || raw === '') return '—';
-  const d = sched.parseTwDate(raw);
+  const d = schema.parseTwDate(raw);
   return Number.isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
 }
 

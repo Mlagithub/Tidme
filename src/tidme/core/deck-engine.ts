@@ -7,7 +7,7 @@ deck-engine.ts — deck 队列组合逻辑（纯函数）
 本模块被 node 测试直接 import，禁用 require；仅 ES 引零依赖的 core/ns 常量。
 */
 
-import { DECK_PREFIX } from './ns.ts';
+import { DECK_PREFIX, TOPIC_QUEUE_FILTER } from './ns.ts';
 
 export interface DeckFields {
   // 1. 范围界定
@@ -81,11 +81,8 @@ export interface GlobalQueueOptions {
   excludeTitles?: string[];
 }
 
-// 学习队列 Topic 基础过滤（文档页排除走 excludeTitles 代码级剔除：整本不切分的
-// PDF 文档页就是阅读卡，「有无节卡」无法在单条过滤器内表达）。牌组页
-// （tag $:/tags/TidmeDeck，learning-package 词书常带 legacy kind=topic）是词卡
-// 管理单元而非阅读材料，不混入学习流。
-const TOPIC_BASE = '[all[shadows+tiddlers]tidme.kind[topic]!tag[$:/tags/TidmeDeck]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]';
+// 学习队列 Topic 基础过滤（以 ns.TOPIC_QUEUE_FILTER 契约为唯一基准，保持 !is[draft] 与排除项一致）
+const TOPIC_BASE = TOPIC_QUEUE_FILTER.endsWith(']') ? TOPIC_QUEUE_FILTER.slice(0, -1) : TOPIC_QUEUE_FILTER;
 
 /** 到期/逾期 Topic（has[due] 且 due ≤ 今天；含逾期积压，按优先级升序） */
 function topicDueFilter(): string {

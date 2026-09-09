@@ -10,10 +10,12 @@ import { test } from 'node:test';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-section-' });
-let sectionMod; // = core/card-factory（测试目标即唯一实现）
+let sectionMod; // = core/card-factory（制卡唯一实现）
+let docOps; // = core/doc-ops（正文清洗唯一实现）
 let deckMod;
 test.before(() => {
   sectionMod = mod('core/card-factory.js');
+  docOps = mod('core/doc-ops.js');
   deckMod = mod('core/deck.js');
 });
 
@@ -104,7 +106,7 @@ test('processedSnippets: 收集本卡全部衍生卡 anchor 片段', () => {
     'tidme.anchor': JSON.stringify({ section: '书 › 第二章', snippet: '14 摄氏度' }),
   });
   wiki.addTiddler({ title: '无关卡', 'tidme.kind': 'topic' });
-  const snips = sectionMod.processedSnippets(wiki, '书 › 第二章');
+  const snips = docOps.processedSnippets(wiki, '书 › 第二章');
   assert.deepEqual([...snips].sort(), ['14 摄氏度', '地球平均表面温度']);
 });
 
@@ -124,13 +126,13 @@ test('cleanProcessedText: 删除已提取片段、保留其余、幂等', () => 
     'tidme.subkind': 'extract',
     'tidme.anchor': JSON.stringify({ section: '书 › 第三章', snippet: '一个被摘录' }),
   });
-  const n = sectionMod.cleanProcessedText(wiki, '书 › 第三章');
+  const n = docOps.cleanProcessedText(wiki, '书 › 第三章');
   assert.equal(n, 1);
   const text = wiki.getTiddler('书 › 第三章').fields.text;
   assert.ok(!text.includes('一个被摘录'), '片段已从原文删除');
   assert.ok(text.includes('这句话包含') && text.includes('后面还有内容'), '其余内容保留');
   // 幂等：片段已不在原文，再次执行不再删除
-  assert.equal(sectionMod.cleanProcessedText(wiki, '书 › 第三章'), 0);
+  assert.equal(docOps.cleanProcessedText(wiki, '书 › 第三章'), 0);
 });
 
 test('cleanProcessedText: 整段被摘录后清理遗留空 <p>', () => {
@@ -142,7 +144,7 @@ test('cleanProcessedText: 整段被摘录后清理遗留空 <p>', () => {
     'tidme.subkind': 'extract',
     'tidme.anchor': JSON.stringify({ section: '书 › 第四章', snippet: '整段被摘录的内容。' }),
   });
-  sectionMod.cleanProcessedText(wiki, '书 › 第四章');
+  docOps.cleanProcessedText(wiki, '书 › 第四章');
   const text = wiki.getTiddler('书 › 第四章').fields.text;
   assert.ok(!text.includes('<p></p>') && !text.includes('整段被摘录'), '空 <p> 与片段均已清理');
   assert.ok(text.includes('保留段'), '保留段不受影响');

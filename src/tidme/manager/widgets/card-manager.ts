@@ -16,6 +16,7 @@ Done 语义：移出队列 = 置 tidme.done（kind 决定归属：item 出默认
 
 declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
@@ -132,7 +133,7 @@ function inView(f: Record<string, any>, v: View): boolean {
   if (v === 'inqueue') return !done && !suspended;
   if (v === 'done') return done;
   if (v === 'suspended') return suspended;
-  if (v === 'overdue') return String(f.state || '0') === '2' && sched.parseTwDate(f.due).getTime() < Date.now();
+  if (v === 'overdue') return String(f.state || '0') === '2' && schema.parseTwDate(f.due).getTime() < Date.now();
   return true;
 }
 
@@ -531,8 +532,8 @@ function cmpCards(ctx: Ctx): (a: Card, b: Card) => number {
       const pb = Number(b.fields['tidme.priority'] ?? 99);
       r = pa - pb;
     } else if (st.sortKey === 'due') {
-      const da = String(a.fields.state || '0') === '2' ? sched.parseTwDate(a.fields.due).getTime() : Infinity;
-      const db = String(b.fields.state || '0') === '2' ? sched.parseTwDate(b.fields.due).getTime() : Infinity;
+      const da = String(a.fields.state || '0') === '2' ? schema.parseTwDate(a.fields.due).getTime() : Infinity;
+      const db = String(b.fields.state || '0') === '2' ? schema.parseTwDate(b.fields.due).getTime() : Infinity;
       r = da - db;
     } else if (st.sortKey === 'deck') {
       r = cmpStr((c: Card) => decksOf(st, c).map((d) => d.caption).join('·'))(a, b);

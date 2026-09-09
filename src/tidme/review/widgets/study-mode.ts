@@ -105,7 +105,7 @@ function advanceStudy(widget: any) {
       }
       docOps.saveReadPoint(wiki, nextDoc, { t: next, s });
     }
-    docOps.prepareCardFold(wiki, next);
+    session.prepareCardFold(wiki, next);
     navigateTo(widget, next);
   } else {
     widget.dispatchEvent?.({ type: 'tm-confetti-launch' });

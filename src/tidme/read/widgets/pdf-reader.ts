@@ -44,8 +44,7 @@ const el = dom.el;
 const FS_SVG =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-const pdfContextMod = require('$:/plugins/keepone/tidme/core/pdf-context.js');
-const resolvePdfContext = pdfContextMod.resolvePdfContext;
+const resolvePdfContext = pdfOps.resolvePdfContext;
 
 /** 获取 PDF 字节数组（支持 base64、服务端懒加载 _is_skinny 轮询等待、_canonical_uri fetch） */
 async function loadPdfBytesWithWait(
@@ -241,7 +240,7 @@ function makeReader(): any {
           dom.closeTiddler(this, t);
           if (list.length > 0) {
             const nextCard = list[0];
-            docOps.prepareCardFold(wiki, nextCard);
+            sessionMod.prepareCardFold(wiki, nextCard);
             dom.navigateTo(this, nextCard);
           } else {
             this.dispatchEvent({ type: 'tm-confetti-launch' });

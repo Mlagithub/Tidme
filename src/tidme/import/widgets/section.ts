@@ -13,6 +13,7 @@ widgets/section.ts — 阅读闭环组件 v3.2
 declare function require(module: string): any;
 const parse = require('$:/plugins/keepone/tidme/import/parse.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
@@ -64,8 +65,8 @@ const el = dom.el;
 /** 某文档的全部正文章节（排除摘录等衍生卡） */
 const sectionsOfDoc = docOps.sectionsOfDoc;
 const parseAnchor = factory.parseAnchor;
-const processedSnippets = factory.processedSnippets;
-const cleanProcessedText = factory.cleanProcessedText;
+const processedSnippets = docOps.processedSnippets;
+const cleanProcessedText = docOps.cleanProcessedText;
 const buildExtract = factory.buildExtract;
 const buildCloze = factory.buildCloze;
 const buildQA = factory.buildQA;
@@ -646,7 +647,7 @@ function makeSectionBar(): WidgetCtor {
         removeTitleFromSession(title);
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
         if (nxt) {
-          docOps.prepareCardFold(wiki, nxt);
+          sessionMod.prepareCardFold(wiki, nxt);
           saveReadPoint(wiki, docId, { t: nxt, s: docOps.readPointPositionOf(wiki, nxt) });
           this.dispatchEvent({ type: 'tm-navigate', navigateTo: nxt });
         }
@@ -660,7 +661,7 @@ function makeSectionBar(): WidgetCtor {
         // ▶ 会话中 = 明确"跳过本卡"：移出会话，避免滞留卡被复习流"下一张"
         // （从会话头找）反复拉回 → 摘录↔词卡 1:1 死循环。
         removeTitleFromSession(title);
-        docOps.prepareCardFold(wiki, nxt);
+        sessionMod.prepareCardFold(wiki, nxt);
         saveReadPoint(wiki, docId, { t: nxt, s: docOps.readPointPositionOf(wiki, nxt) });
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
         this.dispatchEvent({ type: 'tm-navigate', navigateTo: nxt });
@@ -1045,7 +1046,7 @@ function makeSectionBar(): WidgetCtor {
         rawState === '0'
           ? lingo(wiki, 'field.due.unrated', 'Scheduled after first review')
           : fields.due
-          ? sched.parseTwDate(fields.due).toLocaleString()
+          ? schema.parseTwDate(fields.due).toLocaleString()
           : lingo(wiki, 'field.due.none', 'Not scheduled'),
       );
       addStat(lingo(wiki, 'field.stability', 'Stability (S)'), fields.stability ? Number(fields.stability).toFixed(2) : '-');

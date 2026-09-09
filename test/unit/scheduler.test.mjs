@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { FUTURE, PAST, T } from '../helpers/tw-date.mjs';
 
 const sched = await import('../../src/tidme/core/scheduler.ts');
+const schema = await import('../../src/tidme/core/schema.ts');
 
 test('normalizePriority: 边界与非法值', () => {
   assert.equal(sched.normalizePriority(0), 0);
@@ -54,12 +55,12 @@ test('shiftPriority: 字符串优先级位移', () => {
 
 test('postponeCard: 顺延 N 天后 due 落在未来', () => {
   const postponed = sched.postponeCard({ due: PAST() }, 7);
-  assert.ok(sched.parseTwDate(postponed.due).getTime() > Date.now(), '顺延 7 天后应在未来');
+  assert.ok(schema.parseTwDate(postponed.due).getTime() > Date.now(), '顺延 7 天后应在未来');
 });
 
 test('advanceCard: due 重置到≈现在（立即到期）', () => {
   const advanced = sched.advanceCard();
-  assert.ok(sched.parseTwDate(advanced.due).getTime() <= Date.now() + 60000, 'advance 到期时间≈现在');
+  assert.ok(schema.parseTwDate(advanced.due).getTime() <= Date.now() + 60000, 'advance 到期时间≈现在');
 });
 
 test('ignoreCard: 置 tidme.ignored 出队，kind 保留（分类重构后无标签）', () => {
@@ -126,7 +127,7 @@ test('autoPostpone: 保留 top N 高优先级，顺延其余低优先级逾期�
   assert.equal(r.stats.postponed, 2, '保留 top2（A/B），顺延 C/D');
   assert.deepEqual(r.patches.map((p) => p.title).sort(), ['低优C', '低优D']);
   for (const p of r.patches) {
-    assert.ok(sched.parseTwDate(p.fields.due).getTime() > Date.now(), `${p.title} 被顺延到未来`);
+    assert.ok(schema.parseTwDate(p.fields.due).getTime() > Date.now(), `${p.title} 被顺延到未来`);
   }
 });
 
@@ -148,7 +149,7 @@ test('autoPostpone: topic 阅读卡按 A-Factor 顺延（SM: auto-postpone 主�
   const r = sched.autoPostpone(cards, { maxPriority: 60, keepTop: 0 });
   assert.deepEqual(r.patches.map((p) => p.title), ['可顺延', '阅读卡'], 'item 加权 -15 排前，topic 阅读卡同样顺延');
   for (const p of r.patches) {
-    assert.ok(sched.parseTwDate(p.fields.due).getTime() > Date.now(), `${p.title} 被顺延到未来`);
+    assert.ok(schema.parseTwDate(p.fields.due).getTime() > Date.now(), `${p.title} 被顺延到未来`);
   }
   const topicPatch = r.patches.find((p) => p.title === '阅读卡');
   assert.ok(topicPatch.fields.scheduled_days, 'topic 走 A-Factor 展期（写 scheduled_days）');
@@ -200,7 +201,7 @@ test('ITEM_FILTER: 双轨分流（topic 出、item 进）', () => {
 });
 
 test('parseTwDate: 17 位 TW 日期串（UTC 语义，与 $tw.utils.parseDate 一致）', () => {
-  const d = sched.parseTwDate('20260824201518283');
+  const d = schema.parseTwDate('20260824201518283');
   assert.equal(d.getUTCFullYear(), 2026);
   assert.equal(d.getUTCMonth(), 7); // 8 月（0-based）
   assert.equal(d.getUTCDate(), 24);
@@ -225,12 +226,12 @@ test('collectTopicQueue: 队列快照（出队卡兜底过滤 + 排序字段预�
   assert.deepEqual(cards.map((c) => c.title), ['甲', '丁'], '已读/搁置兜底排除（过滤器之外的第二道网）');
   const jia = cards.find((c) => c.title === '甲');
   assert.equal(jia.priority, 30, 'priority 归一化预解析');
-  assert.equal(jia.due.getTime(), sched.parseTwDate('20270101000000000').getTime(), 'due 预解析为 Date');
+  assert.equal(jia.due.getTime(), schema.parseTwDate('20270101000000000').getTime(), 'due 预解析为 Date');
   assert.equal(jia.order, '000002');
 });
 
 test('sortTopicQueue: 优先级（0 最高）→ due（早在前）→ 阅读顺序', () => {
-  const mk = (title, priority, due, order) => ({ title, priority, due: sched.parseTwDate(due), order });
+  const mk = (title, priority, due, order) => ({ title, priority, due: schema.parseTwDate(due), order });
   const cards = [
     mk('B', 50, '20270101000000000', '000002'),
     mk('A', 10, '20270201000000000', '000003'),

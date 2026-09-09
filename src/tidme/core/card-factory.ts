@@ -16,7 +16,7 @@ FSRS 初始字段直接取 core/schema（不再绕 import/parse）；跨 core �
 declare function require(module: string): any;
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const paths = require('$:/plugins/keepone/tidme/core/paths.js');
-const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
+const session = require('$:/plugins/keepone/tidme/core/session.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
 const escapeHtml = schema.escapeHtml;
@@ -238,53 +238,6 @@ export function buildImageQA(wiki: any, parentTitle: string, opts: ImageQAOption
   return card;
 }
 
-/**
- * 收集本卡全部衍生卡（摘录/挖空/问答）的 anchor 片段（SM 'Delete processed text' 的清理对象）。
- * 对应官方帮助：Delete processed text - delete all texts that have already been extracted or ignored。
- */
-export function processedSnippets(wiki: any, title: string): string[] {
-  const childTitles = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, '')}]]`);
-  const out: string[] = [];
-  for (const c of childTitles) {
-    const f = wiki.getTiddler(c)?.fields;
-    if (!f) continue;
-    const anchor = parseAnchor(f['tidme.anchor']);
-    if (anchor?.snippet) out.push(anchor.snippet);
-  }
-  return out;
-}
-
-/**
- * SM 对齐 'Delete processed text'：从本卡原文中删除已被摘录/挖空/问答的文本片段。
- * 衍生卡不受影响（SM：Done! 删正文但保留 extracted material）；snippet 不在原文中时跳过，幂等。
- * @returns 实际删除的片段数
- */
-export function cleanProcessedText(wiki: any, title: string): number {
-  const t = wiki.getTiddler(title);
-  if (!t) return 0;
-  let out = String(t.fields.text || '');
-  const snippets = processedSnippets(wiki, title);
-  let removed = 0;
-  for (const s of snippets) {
-    let at = out.indexOf(s);
-    if (at === -1) continue;
-    let end = at + s.length;
-    // 顺带吸收邻接的单个空白，避免删除后两段文字粘连
-    if (at > 0 && /\s/.test(out[at - 1])) at--;
-    if (end < out.length && /\s/.test(out[end])) end++;
-    out = out.slice(0, at) + out.slice(end);
-    removed++;
-  }
-  if (removed) {
-    out = out
-      .replace(/<p>\s*<\/p>/g, '') // 清理整段被删后遗留的空 <p>
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    wiki.addTiddler({ ...t.fields, text: out });
-  }
-  return removed;
-}
-
 export interface StandaloneCardOptions {
   type: 'qa' | 'cloze' | 'concept';
   title?: string;
@@ -380,6 +333,6 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
 export function commitCard(wiki: any, draft: Record<string, any> | null, widget?: any): boolean {
   if (!draft || !draft.title) return false;
   wiki.addTiddler(draft);
-  docOps.prepareCardFold(wiki, draft.title);
+  session.prepareCardFold(wiki, draft.title);
   return true;
 }

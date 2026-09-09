@@ -22,15 +22,8 @@ export const PRIORITY_TIERS = { high: 10, medium: 50, low: 90 } as const;
  */
 export const ITEM_FILTER = `[tidme.kind[item]]`;
 
-/**
- * 阅读列表（topic 队列）过滤器：全库 kind=topic 在队卡（未搁置/未完成/未忽略）。
- * item 卡不在此页（走默认牌组/子集复习）。唯一产地：reading-list 等页面引用此常量，勿手拼。
- * 牌组页（tag $:/tags/TidmeDeck，learning-package 词书常带 legacy kind=topic）是词卡
- * 管理单元，不是阅读材料，一律不入队。
- * 文档页的排除在 collectTopicQueue 代码级完成（仅排除存量分节书籍的文档页；
- * 整本不切分的 PDF 文档页就是阅读卡，必须入队）——「有无节卡」无法在单条过滤器内表达。
- */
-export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]!has[tidme.suspended]!has[tidme.done]!has[tidme.ignored]]';
+import { TOPIC_QUEUE_FILTER } from './ns.ts';
+export { TOPIC_QUEUE_FILTER };
 
 /**
  * 有节卡的文档页集合（存量分节书籍：文档页只是书籍入口，不入阅读/学习队列，
@@ -144,9 +137,8 @@ export function shiftPriority(priority: unknown, step = 5): string {
   return adjustPriority(priority, step);
 }
 
-// 日期序列化/解析收敛于 core/schema（唯一实现），此处转发保 API 兼容
+// 日期序列化/解析收敛于 core/schema（唯一实现）
 import { parseTwDate, twDateString } from './schema.ts';
-export { parseTwDate };
 
 function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86400000);

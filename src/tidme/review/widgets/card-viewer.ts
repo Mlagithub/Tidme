@@ -17,7 +17,6 @@ function lingo(wiki: any, key: string, fallback: string): string {
 const fsrs = require('$:/plugins/keepone/tidme/core/fsrs.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
-const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 
@@ -337,7 +336,7 @@ function makeCardViewer(): any {
 
       if (list.length > 0) {
         const next = list[0];
-        docOps.prepareCardFold(wiki, next);
+        session.prepareCardFold(wiki, next);
         dom.navigateTo(this, next);
       } else {
         this.dispatchEvent({ type: 'tm-confetti-launch' });
