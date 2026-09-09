@@ -5,8 +5,8 @@ paths.ts — tiddler 命名空间路径生成（章节隔离）
 - 每本书放进独立目录（TW 原生 title 路径语义）
 - 一本书的目录内不再分子目录：文档页/节卡/摘录都拍平（章层次靠 breadcrumb 字段）
 - 知识型卡片（挖空/问答）单独走 Tidme/Decks/<书>/ 命名空间（避免污染阅读材料目录）
-- title 唯一稳定：叶段 = 可读 caption slug + "-" + tidme.id（A2，核心 UI 可读）
-- 显示用 caption / tidme.breadcrumb 保持可读（不动 UI）
+- title 唯一稳定：叶段 = 可读 caption slug + "-" + tidme.id
+- 显示用 caption / tidme.breadcrumb 保持可读
 - 现有过滤器全部基于字段（tidme.doc / tidme.parent / tags），零依赖 title 路径
 
 布局：

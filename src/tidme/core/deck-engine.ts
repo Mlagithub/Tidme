@@ -10,16 +10,23 @@ deck-engine.ts — deck 队列组合逻辑（纯函数）
 import { DECK_PREFIX } from './ns.ts';
 
 export interface DeckFields {
+  // 1. 范围界定
   card?: string;
   card_exclude?: string;
   card_unfold?: string;
+
+  // 2. FSRS 状态空间切分
   state_learn?: string;
   state_due?: string;
   state_new?: string;
-  order?: string;
+
+  // 3. 队列组内排序与配额
   order_learn?: string;
   order_due?: string;
   order_new?: string;
+
+  // 4. 宏观调度
+  order?: string;
 }
 
 export interface DeckFilters {
@@ -75,8 +82,10 @@ export interface GlobalQueueOptions {
 }
 
 // 学习队列 Topic 基础过滤（文档页排除走 excludeTitles 代码级剔除：整本不切分的
-// PDF 文档页就是阅读卡，「有无节卡」无法在单条过滤器内表达）
-const TOPIC_BASE = '[all[shadows+tiddlers]tidme.kind[topic]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]';
+// PDF 文档页就是阅读卡，「有无节卡」无法在单条过滤器内表达）。牌组页
+// （tag $:/tags/TidmeDeck，learning-package 词书常带 legacy kind=topic）是词卡
+// 管理单元而非阅读材料，不混入学习流。
+const TOPIC_BASE = '[all[shadows+tiddlers]tidme.kind[topic]!tag[$:/tags/TidmeDeck]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]';
 
 /** 到期/逾期 Topic（has[due] 且 due ≤ 今天；含逾期积压，按优先级升序） */
 function topicDueFilter(): string {

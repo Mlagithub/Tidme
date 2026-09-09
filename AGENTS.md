@@ -35,7 +35,7 @@ Node ≥22（类型剥离直跑 .ts）；本机 node 由 fnm 管理。CI = build
 ## 测试约定
 
 - 分层：`unit/` 直测 TS 源码；`integration/` boot 真实 TW + bin 产物；`e2e/` 真实 TiddlyWeb / 学习流
-- 用例基线**只增不减**（当前 305+）；五条黄金法则：AAA / 一测一概念 / 命名即文档 / 谨慎 Mock / 测试独立
+- 用例基线**只增不减**（当前 305+；随过时兼容/迁移代码清理而删除的用例除外）；五条黄金法则：AAA / 一测一概念 / 命名即文档 / 谨慎 Mock / 测试独立
 - 永不 mock `$tw`/wiki（boot 真实 TW）；setup 一律走 `test/helpers/`（bootPlugin/fake-dom/tw-date 等），禁止手写第二份
 - 已知陷阱：
   - TW 经 vm 沙箱 boot，`filterTiddlers` 返回跨 realm 数组 → 断言前先 `[...out]` 展开，对象逐字段比

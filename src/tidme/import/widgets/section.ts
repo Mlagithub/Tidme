@@ -63,7 +63,6 @@ function activeWiki(): any {
 const el = dom.el;
 /** 某文档的全部正文章节（排除摘录等衍生卡） */
 const sectionsOfDoc = docOps.sectionsOfDoc;
-// 制卡与加工的唯一实现 = core/card-factory；本文件只保留 DOM/事件壳
 const parseAnchor = factory.parseAnchor;
 const processedSnippets = factory.processedSnippets;
 const cleanProcessedText = factory.cleanProcessedText;
@@ -701,7 +700,7 @@ function makeSectionBar(): WidgetCtor {
                 if (targetPage > 0 && docId) {
                   const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
                   if (matched) targetSection = matched;
-                  wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
+                  wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: String(targetPage) });
                 }
                 this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
                 this.dispatchEvent({ type: 'tm-navigate', navigateTo: targetSection });
@@ -804,7 +803,7 @@ function makeSectionBar(): WidgetCtor {
             if (targetPage > 0 && docId) {
               const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
               if (matched) targetSection = matched;
-              wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
+              wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: String(targetPage) });
             }
             this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
             this.dispatchEvent({ type: 'tm-navigate', navigateTo: targetSection });
@@ -1118,7 +1117,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
     if (target) {
       const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
       if (pageMatch) {
-        wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: pageMatch[1] });
+        wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: pageMatch[1] });
       }
       if (target !== title) {
         widget.dispatchEvent({ type: 'tm-close-tiddler' }); // 关闭文档页，进入节卡
@@ -1288,7 +1287,7 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
       if (targetPage > 0 && docId) {
         const matched = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(wiki, docId, targetPage) : null;
         if (matched) target = matched;
-        wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: String(targetPage) });
+        wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: String(targetPage) });
       }
       if (target) {
         widget.dispatchEvent({ type: 'tm-navigate', navigateTo: target });

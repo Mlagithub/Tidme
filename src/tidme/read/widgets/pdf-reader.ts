@@ -232,7 +232,7 @@ function makeReader(): any {
         studyNextBtn.addEventListener('click', () => {
           if (this._docId && this._page) {
             docOps.saveReadPoint(wiki, this._docId, { t, s: `p${this._page}` });
-            wiki.addTiddler({ title: `$:/state/tidme-pdf/page/${this._docId}`, text: String(this._page) });
+            wiki.addTiddler({ title: ns.pdfPageStateTitle(this._docId), text: String(this._page) });
           }
           let list = Array.isArray(activeStudy.list) ? [...activeStudy.list] : [];
           list = list.filter((x: string) => x !== t);
@@ -321,7 +321,7 @@ function makeReader(): any {
       if (this._docId) {
         const rp = docOps.parseReadPoint(wiki, this._docId);
         const rpPage = rp?.s && /^p\d+$/.test(rp.s) ? Number(rp.s.slice(1)) : NaN;
-        const statePage = Number(wiki.getTiddlerText('$:/state/tidme-pdf/page/' + this._docId, ''));
+        const statePage = Number(wiki.getTiddlerText(ns.pdfPageStateTitle(this._docId), ''));
 
         // 1. 当前卡 = 续读点卡 → 恢复其记录的绝对页码。阅读本就连续跨节（页间防抖
         //    续存与学习模式「读完继续」都以当前卡记绝对页），页码允许越出本节
@@ -336,7 +336,7 @@ function makeReader(): any {
           const inRange = !range.end || (statePage >= range.start && statePage <= range.end);
           if (inRange) {
             // 消费即清理，防止误劫持后续打开的其他节卡
-            this.wiki.deleteTiddler('$:/state/tidme-pdf/page/' + this._docId);
+            this.wiki.deleteTiddler(ns.pdfPageStateTitle(this._docId));
             return numPages > 0 && statePage > numPages ? target : statePage;
           }
         }
@@ -428,8 +428,9 @@ function makeReader(): any {
         void this._loadPdf();
         return true;
       }
-      if (this._docId && changedTiddlers['$:/state/tidme-pdf/page/' + this._docId]) {
-        const p = Number(this.wiki.getTiddlerText('$:/state/tidme-pdf/page/' + this._docId, ''));
+      const pageStateTitle = this._docId ? ns.pdfPageStateTitle(this._docId) : '';
+      if (pageStateTitle && changedTiddlers[pageStateTitle]) {
+        const p = Number(this.wiki.getTiddlerText(pageStateTitle, ''));
         const curT = this.getVariable('currentTiddler') || '';
         const f = this.wiki.getTiddler(curT)?.fields || {};
         const range = parsePdf.parsePagesField(String(f['tidme.pages'] || ''));
@@ -488,7 +489,7 @@ function makeReader(): any {
       this._page = Math.min(Math.max(1, Math.floor(n) || 1), max || 1);
       this._pageInput.value = String(this._page);
       if (save && this._docId) {
-        this.wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + this._docId, text: String(this._page) });
+        this.wiki.addTiddler({ title: ns.pdfPageStateTitle(this._docId), text: String(this._page) });
         // 防抖持久化续读点与全局续读点（章节跨越自动感知）
         if (this._savePageTimer) clearTimeout(this._savePageTimer);
         this._savePageTimer = setTimeout(() => {

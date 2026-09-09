@@ -27,7 +27,7 @@ test('reactive: hasCardDataChange 精化谓词 —— 卡片/牌组配置/续读
   assert.equal(reactive.hasCardDataChange(wiki, ch('$:/Deck/词书A')), true, '牌组配置相关');
   assert.equal(reactive.hasCardDataChange(wiki, ch('$:/Deck/词书A/study')), false, '学习列表不重建列表');
   assert.equal(reactive.hasCardDataChange(wiki, ch('$:/state/tidme/learning-session')), false, '会话写入不重建列表');
-  assert.equal(reactive.hasCardDataChange(wiki, ch('$:/state/tidme-import/readpoint/global')), true, '续读点相关');
+  assert.equal(reactive.hasCardDataChange(wiki, ch('$:/config/tidme/readpoint/global')), true, '续读点相关');
   // 宽谓词：日志/会话仍相关（统计面板与 Today 反馈条要读日志）
   assert.equal(reactive.hasRelevantChange(wiki, ch('$:/Deck/default/log/20260906')), true);
   assert.equal(reactive.hasRelevantChange(wiki, ch('$:/state/tidme/learning-session')), true);

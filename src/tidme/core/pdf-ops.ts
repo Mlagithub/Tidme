@@ -19,6 +19,15 @@ export function pdfBinaryTitle(bookTitle: string): string {
 }
 
 /**
+ * 整本不切分的 PDF 阅读卡判定：文档页自身即阅读卡（tidme.type=pdf 且无 subkind，
+ * 与 pdf-context 文档页分支同口径）。这类卡代表整个文件——「读完继续」只推进度
+ * 不标 done（读几页 ≠ 读完整个文件），与分节书籍的节卡（读完即出队）相区分。
+ */
+export function isWholePdfCard(fields: Record<string, any> | null | undefined): boolean {
+  return !!fields && String(fields['tidme.type'] || '') === 'pdf' && !fields['tidme.subkind'];
+}
+
+/**
  * 原位恢复 PDF 二进制（阅读器「重新绑定」入口）：仅覆写二进制条目，
  * 文档页/节卡/续读点全部保留。空 base64 拒绝写入——空二进制经同步层
  * 落盘即 0 字节 .pdf，重载后阅读器将永久报「缺少 PDF 数据」。

@@ -8,6 +8,7 @@ docId 以及文档页标题。带书名/路径/多级回退与防护。
 declare function require(module: string): any;
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
+const pdfOps = require('$:/plugins/keepone/tidme/core/pdf-ops.js');
 
 export interface PdfContext {
   pdfTitle: string;
@@ -23,8 +24,8 @@ export function resolvePdfContext(wiki: any, currentTitle: string): PdfContext {
   let pdfTitle = String(f['tidme.pdf'] || '');
   let docPageTitle = '';
 
-  // 1. 若当前卡是文档页
-  if (String(f['tidme.type'] || '') === 'pdf' && !f['tidme.subkind']) {
+  // 1. 若当前卡是文档页（整本 PDF 阅读卡判定唯一产地 = pdf-ops.isWholePdfCard）
+  if (pdfOps.isWholePdfCard(f)) {
     docPageTitle = currentTitle;
   }
 

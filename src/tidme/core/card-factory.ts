@@ -288,7 +288,7 @@ export function cleanProcessedText(wiki: any, title: string): number {
 export interface StandaloneCardOptions {
   type: 'qa' | 'cloze' | 'concept';
   title?: string;
-  deck?: string; // 牌组名；空 / STANDALONE_DECK_TOKEN / 'inbox' / '散卡' 均归散卡桶
+  deck?: string; // 牌组名；空 / STANDALONE_DECK_TOKEN / 'inbox' / 'standalone' 均归散卡桶
   question?: string;
   answer?: string;
   clozeContent?: string;
@@ -307,8 +307,7 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
   const isScatter = !deck ||
     deck === STANDALONE_DECK_TOKEN ||
     lower === 'inbox' ||
-    lower === 'standalone' ||
-    deck === '散卡'; // 历史存量值兼容
+    lower === 'standalone';
   const deckDir = isScatter ? ns.NS_DECKS_SCATTER : `Tidme/Decks/${deck}`;
   // tidme.deck/breadcrumb 落展示名：散卡桶不落内部哨兵 token
   const deckName = isScatter ? String(ns.NS_DECKS_SCATTER).slice(String(ns.NS_DECKS).length) : deck;

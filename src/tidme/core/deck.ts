@@ -18,6 +18,15 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 export const DECK_TAG = '$:/tags/TidmeDeck';
 export const DEFAULT_DECK = ns.DECK_PREFIX + 'default';
 
+/**
+ * 牌组判定（字段级，无需 wiki）：tag $:/tags/TidmeDeck 的 tiddler 即牌组。
+ * learning-package 词书页（如 $:/Deck/IELTS_3）带 legacy tidme.kind=topic，
+ * 但它是词卡管理单元而非阅读材料——阅读/学习队列与「读完」标记一律按牌组排除。
+ */
+export function isDeckFields(fields: Record<string, any> | null | undefined): boolean {
+  return Array.isArray(fields?.tags) && fields.tags.includes(DECK_TAG);
+}
+
 export interface DeckConfig {
   /** 牌组名（不含 $:/Deck/ 前缀；slug 化落标题） */
   name: string;

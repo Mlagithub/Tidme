@@ -169,7 +169,7 @@ function makeReadingList(): any {
           const rp = docOps.parseReadPoint(wiki, g.doc);
           const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
           if (pageMatch && g.doc) {
-            wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + g.doc, text: pageMatch[1] });
+            wiki.addTiddler({ title: ns.pdfPageStateTitle(g.doc), text: pageMatch[1] });
           }
           if (targetCard) navigateTo(this, targetCard);
         });

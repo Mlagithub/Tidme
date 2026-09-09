@@ -518,8 +518,8 @@ test('deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
   // 子集牌组
   wiki.addTiddler({ title: 'Tidme/Decks/删书A/复习本书', tags: ['$:/tags/TidmeDeck'], card: '[tidme.kind[item]]', 'tidme.subset-doc': rA.docId });
   // 续读点：一个指向普通节（应删）、一个指向摘录（应留）
-  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/' + rA.docId, text: JSON.stringify({ t: secA.title, s: '' }) });
-  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/keep', text: JSON.stringify({ t: ext.title, s: '' }) });
+  wiki.addTiddler({ title: '$:/config/tidme/readpoint/' + rA.docId, text: JSON.stringify({ t: secA.title, s: '' }) });
+  wiki.addTiddler({ title: '$:/config/tidme/readpoint/keep', text: JSON.stringify({ t: ext.title, s: '' }) });
   wiki.addTiddler({ title: '$:/state/tidme/learning-session', list: [secA.title, ext.title, '其它书卡'] });
   // 书 B 不受影响
   const rB = await parseMod.runSplit({ text: '# 唯一章\n\n内容乙。', title: '别书B', type: 'text/markdown', minChars: 0 });
@@ -540,8 +540,8 @@ test('deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
   // 文档页删除
   assert.equal(wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${rA.docId}]]`).length, 0, '文档页删除');
   // 续读点：指向节 → 删；指向摘录（保留）→ 留
-  assert.equal(wiki.getTiddler('$:/state/tidme-import/readpoint/' + rA.docId), undefined, '指向被删节的续读点删除');
-  assert.ok(wiki.getTiddler('$:/state/tidme-import/readpoint/keep'), '指向保留摘录的续读点保留');
+  assert.equal(wiki.getTiddler('$:/config/tidme/readpoint/' + rA.docId), undefined, '指向被删节的续读点删除');
+  assert.ok(wiki.getTiddler('$:/config/tidme/readpoint/keep'), '指向保留摘录的续读点保留');
   // 会话：剔除被删节，保留摘录与其它的
   const sess = wiki.getTiddler('$:/state/tidme/learning-session');
   assert.ok(!sess.fields.list.includes(secA.title), '会话剔除被删节');

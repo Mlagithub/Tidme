@@ -35,6 +35,11 @@ test('parse/pdf: 扫描页判定与 pages 字段解析（存量分节书籍兼�
   assert.equal(JSON.stringify({ ...parsePdf.parsePagesField('') }), JSON.stringify({ start: 1, end: 0 }));
 });
 
+test('ns: PDF 临时跳转页码契约（前缀与生成函数）', () => {
+  assert.equal(ns.PDF_PAGE_STATE_PREFIX, '$:/state/tidme-pdf/page/');
+  assert.equal(ns.pdfPageStateTitle('d123'), '$:/state/tidme-pdf/page/d123');
+});
+
 test('parse/pdf: LLM-OCR 请求构建与响应解析', () => {
   const req = parsePdf.buildOcrRequest({ baseUrl: 'https://api.x.com/v1/', apiKey: 'k1', model: 'vision-m' }, 'IMGB64', '第 3 页');
   assert.equal(req.url, 'https://api.x.com/v1/chat/completions');
@@ -255,7 +260,7 @@ test('pdf-reader: 翻页自动持久化续读点与精准恢复（整本文档�
   w.destroy?.();
 
   // 模拟会话级临时条目失效（跨刷新）：清空 $:/state/tidme-pdf/page/ 条目
-  for (const t of wiki.filterTiddlers('[prefix[$:/state/tidme-pdf/page/]]')) {
+  for (const t of wiki.filterTiddlers(`[prefix[${ns.PDF_PAGE_STATE_PREFIX}]]`)) {
     wiki.deleteTiddler(t);
   }
 

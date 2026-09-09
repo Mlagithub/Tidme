@@ -2,7 +2,7 @@
 widgets/study-mode.ts — 学习模式条（固定底部 pill；会话激活时常驻全局可见）
 
 产品语义：学习是一个**模式**而非页面——会话激活期间无论在看哪个 tiddler，
-模式条都提供进度与「结束学习」出口（修复"复习中无结束按钮"断点）。
+模式条都提供进度与「结束学习」出口。
 
 - 可见性：core/session.getActiveStudy 判定；刷新走唯一机制（core/reactive 谓词嗅探）
 - 进度：currentTiddler 在活动队列中的位置；不在队列时只显示"学习中"
@@ -23,6 +23,8 @@ const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
+const pdfOps = require('$:/plugins/keepone/tidme/core/pdf-ops.js');
+const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const el = dom.el;
 const navigateTo = dom.navigateTo;
 const notify = dom.notify;
@@ -40,7 +42,7 @@ function endStudy(widget: any) {
   } catch { /* 无头环境忽略 */ }
 }
 
-/** 获取当前学习活动卡片（优先取 widget 变量，在全局 PageTemplate 时从 $:/StoryList 嗅探） */
+/** 获取当前学习活动卡片（优先取 widget 变量，在全局 PageTemplate 时按故事栈顶层取会话卡） */
 function getCurrentStudyCard(wiki: any, widget: any, studyList: string[]): string {
   const varTitle = widget.getVariable('currentTiddler');
   if (varTitle && studyList.includes(varTitle)) {
@@ -48,13 +50,22 @@ function getCurrentStudyCard(wiki: any, widget: any, studyList: string[]): strin
   }
   const story = wiki.getTiddler('$:/StoryList')?.fields?.list;
   if (Array.isArray(story)) {
-    const found = studyList.find((t) => story.includes(t));
-    if (found) return found;
+    // 用户正在看的卡 = 故事最顶层：从顶层向下找第一张会话卡。按列表序嗅探
+    // （find 第一张在场的卡）会指向更早入栈的旧卡——打开 PDF 阅读时模式条
+    // 仍停在词卡进度、不出现「读完，继续复习」，学习模式与所见卡脱节。
+    for (const t of story) {
+      if (studyList.includes(t)) return t;
+    }
   }
   return varTitle || studyList[0] || '';
 }
 
-/** 推进学习：移出当前卡并导航到下一张（若是阅读材料自动保存续读点并置已读） */
+/** 推进学习：移出当前卡并导航到下一张。
+ *  done 标记只适用于可"读完"的节/摘录卡：
+ *  - 整本不切分的 PDF 文档页就是整个文件——读几页 ≠ 读完，不标 done，
+ *    留在阅读队列凭续读点继续（与 PDF 阅读器「读完继续」按钮同口径），退出前把
+ *    当前页固化进续读点（$:/state 页码由阅读器翻页同步写，防抖窗口内退出也不丢页）；
+ *  - 牌组页（词书，legacy kind=topic 残留于旧会话）不是阅读卡，永不标 done。 */
 function advanceStudy(widget: any) {
   const wiki = widget.wiki;
   const study = session.getActiveStudy(wiki);
@@ -62,7 +73,13 @@ function advanceStudy(widget: any) {
   const cur = getCurrentStudyCard(wiki, widget, study.list);
   if (cur) {
     const f = wiki.getTiddler(cur)?.fields || {};
-    if (f['tidme.kind'] === 'topic') {
+    if (pdfOps.isWholePdfCard(f)) {
+      const docId = String(f['tidme.doc'] || '');
+      const page = Number(wiki.getTiddlerText(ns.pdfPageStateTitle(docId), ''));
+      if (docId && Number.isFinite(page) && page >= 1) {
+        docOps.saveReadPoint(wiki, docId, { t: cur, s: `p${page}` });
+      }
+    } else if (f['tidme.kind'] === 'topic' && !deckMod.isDeckFields(f)) {
       wiki.addTiddler(sched.doneCard(f));
     }
     dom.closeTiddler(widget, cur);
@@ -80,7 +97,13 @@ function advanceStudy(widget: any) {
     const nf = wiki.getTiddler(next)?.fields || {};
     const nextDoc = String(nf['tidme.doc'] || '');
     if (nextDoc) {
-      docOps.saveReadPoint(wiki, nextDoc, { t: next, s: docOps.readPointPositionOf(wiki, next) });
+      // 整本 PDF 文档页无 tidme.pages：页码从 state 取，避免 s:'' 抹掉既有续读页
+      let s = docOps.readPointPositionOf(wiki, next);
+      if (!s && pdfOps.isWholePdfCard(nf)) {
+        const p = Number(wiki.getTiddlerText(ns.pdfPageStateTitle(nextDoc), ''));
+        if (Number.isFinite(p) && p >= 1) s = `p${p}`;
+      }
+      docOps.saveReadPoint(wiki, nextDoc, { t: next, s });
     }
     docOps.prepareCardFold(wiki, next);
     navigateTo(widget, next);

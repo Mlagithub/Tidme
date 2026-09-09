@@ -167,16 +167,13 @@ function makeTodayRecent(): WidgetCtor {
       const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
       // 最近打开时间：全局续读点所属书置顶（每次打开阅读卡都会刷新全局续读点）；
       // 其余书回退各自续读点的写入时间（制卡/设续读点时更新）
-      const globalTiddler = [wiki.getTiddler(docOps.GLOBAL_READPOINT), wiki.getTiddler(docOps.LEGACY_GLOBAL_READPOINT)]
-        .filter(Boolean)
-        .sort((a, b) => new Date(b.fields.modified || 0).getTime() - new Date(a.fields.modified || 0).getTime())[0];
-      const globalFields = globalTiddler?.fields || {};
+      const globalFields = wiki.getTiddler(docOps.GLOBAL_READPOINT)?.fields || {};
       const globalCard = wiki.getTiddler(String(globalFields.text || ''));
       const globalDoc = String(globalCard?.fields?.['tidme.doc'] || '');
       const globalTime = globalFields.modified ? new Date(globalFields.modified).getTime() : 0;
       const lastOpen = (docId: string): number => {
         if (docId && docId === globalDoc) return globalTime;
-        const m = (wiki.getTiddler(docOps.READPOINT_PREFIX + docId) || wiki.getTiddler(docOps.LEGACY_READPOINT_PREFIX + docId))?.fields?.modified;
+        const m = wiki.getTiddler(docOps.READPOINT_PREFIX + docId)?.fields?.modified;
         return m ? new Date(m).getTime() : 0;
       };
       const rows: { title: string; label: string; done: number; total: number; last: number }[] = [];
@@ -198,7 +195,7 @@ function makeTodayRecent(): WidgetCtor {
           const rp = docOps.parseReadPoint(wiki, docId);
           const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
           if (pageMatch && docId) {
-            wiki.addTiddler({ title: '$:/state/tidme-pdf/page/' + docId, text: pageMatch[1] });
+            wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: pageMatch[1] });
           }
         };
         return {

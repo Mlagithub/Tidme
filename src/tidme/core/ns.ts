@@ -43,6 +43,13 @@ export const DECK_PREFIX = '$:/Deck/';
 /** 卡折叠态 tiddler 前缀（<prefix><title> = "show"/"hide"，fsrs4tw reveal 语义） */
 export const FOLDED_STATE_PREFIX = '$:/state/folded/';
 
+/** PDF 临时跳转页码 state tiddler 前缀（<prefix><docId>，跨 widget 一次性交接，消费即清理） */
+export const PDF_PAGE_STATE_PREFIX = '$:/state/tidme-pdf/page/';
+
+export function pdfPageStateTitle(docId: string): string {
+  return PDF_PAGE_STATE_PREFIX + docId;
+}
+
 /**
  * Books → Decks 镜像推导：某阅读材料的测试卡（挖空/问答）所在牌组目录根。
  * 文档页 title == folder 根（folder 冲突带 ~docId 后缀时后缀原样保留）。
@@ -55,8 +62,7 @@ export function booksToDecksRoot(title: string): string | null {
 }
 
 /** 复习日志契约（按文件）：<deck>/log —— 单个 data tiddler（type application/json），
- *  键 = 17 位复习时刻（YYYY0MM0DD0hh0mm0ssXXX），值 = review_log JSON。
- *  旧版按天（<deck>/log/<YYYYMMDD>）由启动调度器迁移合并进本文件并删除旧 tiddler。 */
+ *  键 = 17 位复习时刻（YYYY0MM0DD0hh0mm0ssXXX），值 = review_log JSON。 */
 export const DECK_LOG_SUFFIX = '/log';
 
 export function deckLogTitle(deck: string): string {

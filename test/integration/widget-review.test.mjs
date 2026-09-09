@@ -13,6 +13,7 @@ import { FUTURE, PAST, twDate } from '../helpers/tw-date.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-wgt-rev-' });
 const parseMod = mod('import/parse.js');
+const nsMod = mod('core/ns.js');
 
 /** 渲染并返回根节点（冒烟断言用） */
 function renderWidget(wiki, mod_, name, opts = {}) {
@@ -218,7 +219,7 @@ test('workflow: $:/Decks 工作流中心（全局交错学习流 + 阅读目标�
   const target1 = wf.globalReadingTarget(wiki);
   assert.ok(target1 && wiki.getTiddler(target1), '开始阅读跳到一张存在节卡');
   // 有全局续读点 → 用它（用命名空间化的 extract 路径）
-  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/global', text: F.extractTitle });
+  wiki.addTiddler({ title: '$:/config/tidme/readpoint/global', text: F.extractTitle });
   const target2 = wf.globalReadingTarget(wiki);
   assert.equal(target2, F.extractTitle, '有续读点则跳续读点卡');
   // 全无 → 阅读列表页
@@ -247,7 +248,7 @@ test('workflow: 继续阅读目标 —— 续读点卡已读/忽略/搁置时按
   mk('顺延S2', '000002', { 'tidme.ignored': 'yes' });
   mk('顺延S3', '000003', { 'tidme.suspended': 'yes' });
   mk('顺延S4', '000004');
-  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/global', text: '顺延S1' });
+  wiki.addTiddler({ title: '$:/config/tidme/readpoint/global', text: '顺延S1' });
   assert.equal(wf.globalReadingTarget(wiki), '顺延S4', '已读/忽略/搁置的续读点不回跳，按本书顺序顺延');
 });
 
@@ -278,14 +279,14 @@ test('workflow: 继续阅读目标 —— 续读点所在文档读完时回退�
     state: '0',
     due: twDate(),
   });
-  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/global', text: '读完S1' });
+  wiki.addTiddler({ title: '$:/config/tidme/readpoint/global', text: '读完S1' });
   assert.equal(wf.globalReadingTarget(wiki), '他书待读卡', '本书读完 → 落入全局队列（不再跳回已读卡）');
 });
 
 test('workflow: 继续阅读目标 —— 无续读点时当前可读卡优先于高优先级未来排期卡', () => {
   const wf = mod('review/widgets/workflow.js');
   reset(); // 丢弃标准书夹具，隔离优先级对比
-  wiki.deleteTiddler('$:/state/tidme-import/readpoint/global');
+  wiki.deleteTiddler('$:/config/tidme/readpoint/global');
   wiki.addTiddler({ title: '高优未来', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '5', due: FUTURE(), state: '0' });
   wiki.addTiddler({ title: '低优可读', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '90', due: PAST(), state: '0' });
   assert.equal(wf.globalReadingTarget(wiki), '低优可读', '真实队列口径：当前可读（due≤now）优先，而非单纯 priority');
@@ -294,7 +295,7 @@ test('workflow: 继续阅读目标 —— 无续读点时当前可读卡优先�
 test('workflow: 继续阅读目标 —— 全部未来排期时回退排序第一张（允许显式打开）', () => {
   const wf = mod('review/widgets/workflow.js');
   reset();
-  wiki.deleteTiddler('$:/state/tidme-import/readpoint/global');
+  wiki.deleteTiddler('$:/config/tidme/readpoint/global');
   wiki.addTiddler({ title: '未来卡乙', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '50', due: FUTURE(), state: '0' });
   wiki.addTiddler({ title: '未来卡甲', 'tidme.kind': 'topic', 'tidme.subkind': 'section', 'tidme.priority': '5', due: FUTURE(), state: '0' });
   assert.equal(wf.globalReadingTarget(wiki), '未来卡甲');
@@ -363,7 +364,7 @@ test('doc-ops: 续读点写入携带 modified（最近阅读排序的时间源�
   const m = wiki.getTiddler(docOps.READPOINT_PREFIX + 'dmod')?.fields?.modified;
   assert.ok(m && !Number.isNaN(new Date(m).getTime()), 'per-doc 续读点带 modified');
   docOps.saveGlobalReadPoint(wiki, '某卡');
-  const g = wiki.getTiddler('$:/state/tidme-import/readpoint/global');
+  const g = wiki.getTiddler('$:/config/tidme/readpoint/global');
   assert.equal(g?.fields?.text, '某卡');
   assert.ok(g?.fields?.modified && !Number.isNaN(new Date(g.fields.modified).getTime()), '全局续读点带 modified');
 });
@@ -398,8 +399,8 @@ test('today-recent: 最近阅读按最近打开排序，全局续读点所属书
   mkBook('docA', '书甲', '甲节');
   mkBook('docB', '书乙', '乙节');
   // 书甲：续读点写于一小时前；书乙：全局续读点（最近打开）
-  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/docA', type: 'application/json', text: JSON.stringify({ t: '甲节1' }), modified: new Date(Date.now() - 3600000) });
-  wiki.addTiddler({ title: '$:/state/tidme-import/readpoint/global', text: '乙节1', modified: new Date() });
+  wiki.addTiddler({ title: '$:/config/tidme/readpoint/docA', type: 'application/json', text: JSON.stringify({ t: '甲节1' }), modified: new Date(Date.now() - 3600000) });
+  wiki.addTiddler({ title: '$:/config/tidme/readpoint/global', text: '乙节1', modified: new Date() });
   // 主 CTA 与列表第一行同书：全局续读点在队 → 目标即乙节1（书乙）
   assert.equal(docOps.globalReadingTarget(wiki), '乙节1');
   const root = renderWidget(wiki, todayMod, 'tidme-today-recent');
@@ -461,7 +462,7 @@ test('today-recent: 项目书名渲染为超链接并支持点击导航到文档
     };
     assert.ok(clickHandler, '应绑定点击事件');
     clickHandler({ preventDefault() {}, stopPropagation() {} });
-    assert.equal(wiki.getTiddlerText('$:/state/tidme-pdf/page/docTest'), '5');
+    assert.equal(wiki.getTiddlerText(nsMod.pdfPageStateTitle('docTest')), '5');
     assert.equal(navTarget, 'Tidme/Books/测试书');
   } finally {
     fakeDocument.createElement = origCreateElement;
@@ -470,7 +471,6 @@ test('today-recent: 项目书名渲染为超链接并支持点击导航到文档
 
 test('today-hero: 已复习卡片时专注时间保底不为 0 秒', () => {
   const todayMod = mod('review/widgets/today.js');
-  const nsMod = mod('core/ns.js');
   reset();
   const logData = {};
   const todayK = nsMod.todayKey();
