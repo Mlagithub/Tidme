@@ -54,15 +54,17 @@ test('pdf-import: 端到端 —— 整本落库且 PDF 二进制非空（不切�
   assert.equal(r.pages, 2, 'pdf.js 解析出 2 页');
 
   // 回归主断言：二进制非空（base64 编码时序错误时为空 → 阅读器报「缺少 PDF 数据」）
-  const bin = wiki.getTiddler('Tidme/PDFs/未来简史');
+  const bin = wiki.getTiddler('Tidme/Assets/未来简史');
   assert.ok(bin, 'PDF 二进制 tiddler 存在');
   assert.equal(bin.fields.type, 'application/pdf');
   assert.ok(String(bin.fields.text).length > 100, `二进制非空（实际 ${String(bin.fields.text).length} 字符）`);
 
   // 文档页 = 整本阅读卡；不切分 → 无节卡
   const doc = wiki.getTiddler(r.docTitle).fields;
-  assert.equal(doc['tidme.type'], 'pdf');
-  assert.equal(doc['tidme.pdf'], 'Tidme/PDFs/未来简史');
+  assert.equal(doc['tidme.format'], 'pdf');
+  assert.equal(doc['tidme.asset'], 'Tidme/Assets/未来简史');
+  assert.equal(doc['tidme.structure'], 'continuous');
+  assert.ok((doc.tags || []).includes('tidme-doc'), '文档页带 tidme-doc');
   assert.ok(/^\d{17}$/.test(String(doc.due)), 'due=now 进入阅读队列');
   const sections = wiki.filterTiddlers(`[tidme.doc[${doc['tidme.doc']}]tidme.subkind[section]]`);
   assert.equal(sections.length, 0, '不切分：无节卡');
@@ -86,7 +88,7 @@ test('pdf-import: 进度回调 —— encode/parse/store 三阶段，百分比�
   assert.equal(last.phase, 'store', '末回调为落库阶段');
   assert.equal(last.percent, 100, '收尾 100%');
   // 回调本身不得破坏导入结果
-  const bin = wiki.getTiddler('Tidme/PDFs/进度测试书');
+  const bin = wiki.getTiddler('Tidme/Assets/进度测试书');
   assert.ok(bin && String(bin.fields.text).length > 100, '带进度回调时二进制仍非空');
 });
 

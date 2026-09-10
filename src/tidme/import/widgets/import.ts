@@ -510,7 +510,7 @@ function makeFileWidget(): WidgetCtor {
         const validTiddlers = result.tiddlers.filter((x: any) => !x._deleted);
         const [doc, ...cards] = validTiddlers;
         // 文档页复用旧标题（引用稳定）：已存在 docPage 时以其为最终 title
-        const docPage = this.wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${result.docId}]]`)[0] || '';
+        const docPage = this.wiki.filterTiddlers(`[tag[tidme-doc]tidme.doc[${result.docId}]]`)[0] || '';
         const r = await commitMod.commitImportToWiki(this.wiki, {
           docId: result.docId,
           docTiddler: { ...doc, 'tidme.doc': result.docId },
@@ -531,7 +531,7 @@ function makeFileWidget(): WidgetCtor {
           updated += r.updated;
           archived += r.archived;
           if (!firstDocTitle) {
-            firstDocTitle = this.wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${item.result.docId}]]`)[0] ||
+            firstDocTitle = this.wiki.filterTiddlers(`[tag[tidme-doc]tidme.doc[${item.result.docId}]]`)[0] ||
               item.result.tiddlers[0]?.title || '';
           }
           pending.delete(token);

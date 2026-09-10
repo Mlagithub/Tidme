@@ -23,7 +23,6 @@ const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
-const pdfOps = require('$:/plugins/keepone/tidme/core/pdf-ops.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const el = dom.el;
 const navigateTo = dom.navigateTo;
@@ -79,7 +78,7 @@ function advanceStudy(widget: any) {
   const next = session.advanceSession(wiki, cur);
   if (cur) {
     const f = wiki.getTiddler(cur)?.fields || {};
-    if (pdfOps.isWholePdfCard(f)) {
+    if (docOps.isContinuousCard(f)) {
       const docId = String(f['tidme.doc'] || '');
       const page = Number(wiki.getTiddlerText(ns.pdfPageStateTitle(docId), ''));
       if (docId && Number.isFinite(page) && page >= 1) {
@@ -97,9 +96,9 @@ function advanceStudy(widget: any) {
     const nf = wiki.getTiddler(next)?.fields || {};
     const nextDoc = String(nf['tidme.doc'] || '');
     if (nextDoc) {
-      // 整本 PDF 文档页无 tidme.pages：页码从 state 取，避免 s:'' 抹掉既有续读页
+      // 整本连续文档页无 tidme.pages：页码从 state 取，避免 s:'' 抹掉既有续读页
       let s = docOps.readPointPositionOf(wiki, next);
-      if (!s && pdfOps.isWholePdfCard(nf)) {
+      if (!s && docOps.isContinuousCard(nf)) {
         const p = Number(wiki.getTiddlerText(ns.pdfPageStateTitle(nextDoc), ''));
         if (Number.isFinite(p) && p >= 1) s = `p${p}`;
       }
@@ -152,7 +151,7 @@ function makeStudyModeBar(): WidgetCtor {
       }
 
       const curFields = this.wiki.getTiddler(curTitle)?.fields;
-      const isReading = curFields && (curFields['tidme.kind'] === 'topic' || curFields['tidme.pdf']);
+      const isReading = curFields && curFields['tidme.kind'] === 'topic';
 
       if (isReading) {
         const advBtn = el(doc, 'button', 'tm-btn tm-study-mode-next tm-btn--primary', lingo(this.wiki, 'studymode.finishandnext', 'Done, Next ›'));

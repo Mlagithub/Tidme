@@ -71,6 +71,6 @@ export function parseOcrResponse(json: any): string {
 
 /** OCR 转写结果 tiddler（每页一个；文档页标题作前缀，清理阅读材料时级联删除） */
 export function ocrTiddlerTitle(docPageTitle: string, page: number): string {
-  const prefix = String(docPageTitle || '').trim() || 'Tidme/Books/Unknown';
+  const prefix = String(docPageTitle || '').trim() || 'Tidme/Docs/Unknown';
   return `${prefix}/ocr-p${page}`;
 }

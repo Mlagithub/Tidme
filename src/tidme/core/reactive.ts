@@ -21,7 +21,7 @@ function isTidmeCardFields(f: Record<string, any> | null | undefined): boolean {
   if (!f) return false;
   return f['tidme.kind'] !== undefined ||
     (f.state !== undefined && f.due !== undefined) ||
-    (Array.isArray(f.tags) && f.tags.indexOf('tidme-import-doc') >= 0);
+    (Array.isArray(f.tags) && f.tags.indexOf('tidme-doc') >= 0);
 }
 
 /** 学习会话相关变化（全局会话 tiddler / 任一 <deck>/study 列表）——学习模式条、workflow 主按钮 */

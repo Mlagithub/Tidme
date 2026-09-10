@@ -58,10 +58,10 @@ var __async = (__this, __arguments, generator) => {
 var main_exports = {};
 __export(main_exports, {
   IMPORT_BAG_TITLE: () => IMPORT_BAG_TITLE,
-  bookCardsRoot: () => bookCardsRoot,
-  bookRoot: () => bookRoot,
   cleanTitle: () => cleanTitle,
   contentFingerprint: () => contentFingerprint,
+  docCardsRoot: () => docCardsRoot,
+  docRoot: () => docRoot,
   insertedSectionTitle: () => insertedSectionTitle,
   joinPath: () => joinPath,
   leafIdOf: () => leafIdOf,
@@ -77,7 +77,7 @@ __export(main_exports, {
 module.exports = __toCommonJS(main_exports);
 
 // src/tidme/core/ns.ts
-var NS_BOOKS = "Tidme/Books/";
+var NS_DOCS = "Tidme/Docs/";
 var NS_DECKS = "Tidme/Decks/";
 var NS_DECKS_SCATTER = NS_DECKS + "\u6563\u5361";
 var CRUMB_SEP = " \u203A ";
@@ -1102,29 +1102,29 @@ function joinPath(...parts) {
   }
   return clean.join("/");
 }
-function bookRoot(bookTitle) {
-  const slug = slugify(bookTitle) || "untitled";
+function docRoot(docTitle) {
+  const slug = slugify(docTitle) || "untitled";
   if (RESERVED.has(slug.toLowerCase()))
-    throw new Error("bookRoot: reserved book title: " + slug);
-  return NS_BOOKS + slug;
+    throw new Error("docRoot: reserved doc title: " + slug);
+  return NS_DOCS + slug;
 }
-function bookCardsRoot(bookTitle) {
-  return NS_DECKS + (slugify(bookTitle) || "untitled");
+function docCardsRoot(docTitle) {
+  return NS_DECKS + (slugify(docTitle) || "untitled");
 }
 function sectionLeaf(caption, sectionId) {
   const slug = slugify(caption);
   return (slug ? slug + "-" : "") + sectionId;
 }
-function sectionPath(bookTitle, caption, sectionId) {
-  return joinPath(bookRoot(bookTitle), sectionLeaf(caption, sectionId));
+function sectionPath(docTitle, caption, sectionId) {
+  return joinPath(docRoot(docTitle), sectionLeaf(caption, sectionId));
 }
 function leafIdOf(title) {
   const t = String(title ?? "");
   const i = t.lastIndexOf("/");
   return i >= 0 ? t.slice(i + 1) : t;
 }
-function insertedSectionTitle(bookTitle, sectionCaption) {
-  return joinPath(bookRoot(bookTitle), "manual-" + (slugify(sectionCaption) || "untitled"));
+function insertedSectionTitle(docTitle, sectionCaption) {
+  return joinPath(docRoot(docTitle), "manual-" + (slugify(sectionCaption) || "untitled"));
 }
 
 // src/tidme/core/scheduler.ts
@@ -1162,7 +1162,7 @@ function cleanTitle(title) {
   return t || title;
 }
 function resolveDocRoot(bookTitle, docId, folderOccupied) {
-  const base = bookRoot(bookTitle);
+  const base = docRoot(bookTitle);
   const owner = folderOccupied ? folderOccupied(base) : null;
   if (owner && String(owner) !== String(docId)) {
     return base + "~" + String(docId).replace(/^d/, "").slice(0, 6);
@@ -1197,7 +1197,7 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
     const nowFields = initialFsrsFields(new Date());
     const syncFields = { bag, revision: "0" };
     const bookT = bookTitle || "Untitled Import";
-    const docRoot = resolveDocRoot(bookT, docId, folderOccupied);
+    const docRoot2 = resolveDocRoot(bookT, docId, folderOccupied);
     const docTitle = bookT;
     const cards = [];
     for (const s of sections) {
@@ -1208,7 +1208,7 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
       const hash = yield contentFingerprint(s.text);
       const joined = trail.join(CRUMB_SEP);
       const capText = s.title || trail[trail.length - 1] || "";
-      const title = joinPath(docRoot, sectionLeaf(capText, id));
+      const title = joinPath(docRoot2, sectionLeaf(capText, id));
       cards.push(__spreadValues(__spreadValues(__spreadProps(__spreadValues(__spreadValues({
         title,
         type: "text/vnd.tiddlywiki",
@@ -1216,7 +1216,7 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
         text: s.html
       }, nowFields), syncFields), {
         "tidme.doc": docId,
-        "tidme.docpage": docRoot,
+        "tidme.docpage": docRoot2,
         "tidme.id": id,
         "tidme.hash": hash,
         "tidme.order": String(s.ordinal).padStart(6, "0"),
@@ -1243,15 +1243,17 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
     docLines.push("Document ID: " + docId);
     docLines.push(`Total ${cards.length} sections:`, "", links);
     const docTiddler = __spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({
-      title: docRoot,
+      title: docRoot2,
       caption: docTitle,
       type: "text/vnd.tiddlywiki",
-      tags: ["tidme-import-doc"],
+      tags: ["tidme-doc"],
       text: docLines.join("\n"),
       bag,
       revision: "0",
       "tidme.doc": docId,
-      "tidme.docpage": docRoot
+      "tidme.docpage": docRoot2,
+      "tidme.format": format,
+      "tidme.structure": "sectioned"
     }, meta.title ? { "tidme.source": meta.title } : {}), meta.author || meta.creator ? { "tidme.author": meta.author || meta.creator } : {}), meta.language ? { "tidme.language": meta.language } : {}), meta.url ? { "tidme.url": meta.url } : {}), meta.date ? { "tidme.date": meta.date } : {}), meta.license ? { "tidme.license": meta.license } : {});
     const tiddlers = [docTiddler, ...cards];
     return { tiddlers, warnings };

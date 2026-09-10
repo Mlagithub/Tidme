@@ -50,19 +50,19 @@ test('dueLabel/intervalLabel: 非 due 态与缺字段显示 —', () => {
 });
 
 test('displayTitle: caption > breadcrumb 末段 > title 末段', () => {
-  assert.equal(display.displayTitle({ caption: '自定义名' }, 'Tidme/Books/x'), '自定义名');
+  assert.equal(display.displayTitle({ caption: '自定义名' }, 'Tidme/Docs/x'), '自定义名');
   assert.equal(
-    display.displayTitle({ 'tidme.breadcrumb': '书 › 第一章 › 第二节' }, 'Tidme/Books/x/s1'),
+    display.displayTitle({ 'tidme.breadcrumb': '书 › 第一章 › 第二节' }, 'Tidme/Docs/x/s1'),
     '第二节',
     '无 caption 用面包屑末段',
   );
-  assert.equal(display.displayTitle({}, 'Tidme/Books/书/s99'), 's99', '兜底 title 末段');
+  assert.equal(display.displayTitle({}, 'Tidme/Docs/书/s99'), 's99', '兜底 title 末段');
   assert.equal(display.displayTitle(null, 'T/单段'), '单段');
 });
 
 test('displayTitle: 空 caption 回落到下一优先级', () => {
   assert.equal(
-    display.displayTitle({ caption: '  ', 'tidme.breadcrumb': '书 › 节' }, 'Tidme/Books/x'),
+    display.displayTitle({ caption: '  ', 'tidme.breadcrumb': '书 › 节' }, 'Tidme/Docs/x'),
     '节',
     '空白 caption 视为缺失',
   );

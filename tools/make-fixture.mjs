@@ -1,5 +1,5 @@
 /*
-make-fixture.mjs — 构造最小合法 EPUB 测试夹具（源自 D:\work\tidme-import\tools\build-fixture.js）
+make-fixture.mjs — 构造最小合法 EPUB 测试夹具
 
 结构覆盖：
   ch1.xhtml  有 h1/h2/h3 标题、碎行段落（验证 smartMerge）、超长单段（验证句读硬切）、
@@ -8,9 +8,9 @@ make-fixture.mjs — 构造最小合法 EPUB 测试夹具（源自 D:\work\tidme
 
 用法：node tools/make-fixture.mjs <out.epub>
 */
-import { writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import JSZip from "jszip";
+import JSZip from 'jszip';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const CONTAINER = `<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -45,8 +45,8 @@ const NCX = `<?xml version="1.0" encoding="UTF-8"?>
   </navMap>
 </ncx>`;
 
-const longSentence = "这是一个用于触发超长切分的完整句子，它以句号结尾。";
-const LONG_P = Array.from({ length: 60 }, (_, i) => `第${i + 1}遍。` + longSentence).join("");
+const longSentence = '这是一个用于触发超长切分的完整句子，它以句号结尾。';
+const LONG_P = Array.from({ length: 60 }, (_, i) => `第${i + 1}遍。` + longSentence).join('');
 
 const CH1 = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><head><title>c1</title></head><body>
@@ -114,35 +114,38 @@ const CH3 = `<?xml version="1.0" encoding="UTF-8"?>
 </body></html>`;
 
 export async function buildFixtureEpub() {
-	const zip = new JSZip();
-	zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
-	zip.file("META-INF/container.xml", CONTAINER);
-	zip.file("OEBPS/content.opf", OPF);
-	zip.file("OEBPS/toc.ncx", NCX);
-	zip.file("OEBPS/ch1.xhtml", CH1);
-	zip.file("OEBPS/ch2.xhtml", CH2);
-	return await zip.generateAsync({ type: "uint8array", mimeType: "application/epub+zip" });
+  const zip = new JSZip();
+  zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+  zip.file('META-INF/container.xml', CONTAINER);
+  zip.file('OEBPS/content.opf', OPF);
+  zip.file('OEBPS/toc.ncx', NCX);
+  zip.file('OEBPS/ch1.xhtml', CH1);
+  zip.file('OEBPS/ch2.xhtml', CH2);
+  return await zip.generateAsync({ type: 'uint8array', mimeType: 'application/epub+zip' });
 }
 
 /** EPUB3（nav-only，无 NCX）夹具 */
 export async function buildFixtureEpub3() {
-	const zip = new JSZip();
-	zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
-	zip.file("META-INF/container.xml", CONTAINER.replace("content.opf", "content3.opf"));
-	zip.file("OEBPS/content3.opf", OPF3);
-	zip.file("OEBPS/nav.xhtml", NAV);
-	zip.file("OEBPS/ch1.xhtml", CH3);
-	return await zip.generateAsync({ type: "uint8array", mimeType: "application/epub+zip" });
+  const zip = new JSZip();
+  zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+  zip.file('META-INF/container.xml', CONTAINER.replace('content.opf', 'content3.opf'));
+  zip.file('OEBPS/content3.opf', OPF3);
+  zip.file('OEBPS/nav.xhtml', NAV);
+  zip.file('OEBPS/ch1.xhtml', CH3);
+  return await zip.generateAsync({ type: 'uint8array', mimeType: 'application/epub+zip' });
 }
 
 // 直接执行：node tools/make-fixture.mjs <out.epub> [out3.epub ...]
-if (process.argv[1] && process.argv[1].endsWith("make-fixture.mjs")) {
-	const outs = process.argv.slice(2);
-	if (!outs.length) { console.error("用法: node make-fixture.mjs out.epub [out3.epub ...]"); process.exit(1); }
-	for (const o of outs) {
-		const bytes = o.includes("3") && o !== outs[0] ? await buildFixtureEpub3() : await buildFixtureEpub();
-		mkdirSync(dirname(o), { recursive: true });
-		writeFileSync(o, bytes);
-		console.log("已生成夹具:", o, bytes.length, "bytes");
-	}
+if (process.argv[1] && process.argv[1].endsWith('make-fixture.mjs')) {
+  const outs = process.argv.slice(2);
+  if (!outs.length) {
+    console.error('用法: node make-fixture.mjs out.epub [out3.epub ...]');
+    process.exit(1);
+  }
+  for (const o of outs) {
+    const bytes = o.includes('3') && o !== outs[0] ? await buildFixtureEpub3() : await buildFixtureEpub();
+    mkdirSync(dirname(o), { recursive: true });
+    writeFileSync(o, bytes);
+    console.log('已生成夹具:', o, bytes.length, 'bytes');
+  }
 }

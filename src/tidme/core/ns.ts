@@ -24,12 +24,12 @@ wikitext 侧仍是字面量；改名必须人工同步两侧（grep 全仓核对
 */
 
 /** 阅读材料命名空间（文档页 + 节卡 + 摘录卡） */
-export const NS_BOOKS = 'Tidme/Books/';
+export const NS_DOCS = 'Tidme/Docs/';
 
-/** PDF 二进制命名空间（type application/pdf 的原文件） */
-export const NS_PDFS = 'Tidme/PDFs/';
+/** 附件/二进制命名空间（type application/pdf 等原文件） */
+export const NS_ASSETS = 'Tidme/Assets/';
 
-/** 知识卡命名空间（挖空/问答/散卡；与 Books 平行镜像） */
+/** 知识卡命名空间（挖空/问答/散卡；与 Docs 平行镜像） */
 export const NS_DECKS = 'Tidme/Decks/';
 
 /** 无来源散卡桶（普通笔记上挖空/问答的落点） */
@@ -70,13 +70,13 @@ export function pdfPageStateTitle(docId: string): string {
 }
 
 /**
- * Books → Decks 镜像推导：某阅读材料的测试卡（挖空/问答）所在牌组目录根。
+ * Docs → Decks 镜像推导：某阅读材料的测试卡（挖空/问答）所在牌组目录根。
  * 文档页 title == folder 根（folder 冲突带 ~docId 后缀时后缀原样保留）。
- * 非 Books 来源返回 null（调用方走散卡桶等兜底）。
+ * 非 Docs 来源返回 null（调用方走散卡桶等兜底）。
  */
-export function booksToDecksRoot(title: string): string | null {
-  return title.startsWith(NS_BOOKS)
-    ? NS_DECKS + title.slice(NS_BOOKS.length)
+export function docsToDecksRoot(title: string): string | null {
+  return title.startsWith(NS_DOCS)
+    ? NS_DECKS + title.slice(NS_DOCS.length)
     : null;
 }
 

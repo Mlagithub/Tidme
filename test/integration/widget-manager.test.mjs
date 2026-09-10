@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { collectButtons, collectText, fakeDocument, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
 import { makeBookFixture } from '../helpers/fixtures.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
+import { twDate } from '../helpers/tw-date.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-wgt-mgr-' });
 const parseMod = mod('import/parse.js');
@@ -58,6 +59,29 @@ test('stats-panel: 渲染负载/文档进度/漏斗', () => {
   assert.ok(text.includes('书名甲'), '应含文档进度');
   assert.ok(text.includes('漏斗'), '应有漏斗');
   assert.ok(text.includes('保留率'), '应有保留率');
+});
+
+test('stats-panel: 支持连续型文档（PDF 等）页码进度展示', () => {
+  wiki.addTiddler({
+    title: 'Tidme/Docs/手册PDF',
+    tags: ['tidme-doc'],
+    'tidme.doc': 'docPdfManual',
+    'tidme.format': 'pdf',
+    'tidme.structure': 'continuous',
+    'tidme.kind': 'topic',
+    'tidme.pages-total': '80',
+    state: '0',
+    due: twDate(),
+  });
+  wiki.addTiddler({
+    title: '$:/config/tidme/readpoint/docPdfManual',
+    type: 'application/json',
+    text: JSON.stringify({ t: 'Tidme/Docs/手册PDF', s: 'p20' }),
+  });
+  const root = renderWidget(wiki, statsPanel, 'stats-panel');
+  const text = collectText(root);
+  assert.ok(text.includes('手册PDF'), '文档表格应含连续型 PDF 文档');
+  assert.ok(text.includes('p.20/80'), '应显示连续型文档的页码进度');
 });
 
 test('card-manager: 渲染视图过滤/树/批量工具条', () => {

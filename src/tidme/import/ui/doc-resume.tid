@@ -6,7 +6,7 @@ code-body: yes
 \whitespace trim
 
 <$list filter="[<currentTiddler>has[tidme.doc]]" variable="ignore">
-</$list><$list filter="[<currentTiddler>tag[tidme-import-doc]]" variable="ignore">
+</$list><$list filter="[<currentTiddler>tag[tidme-doc]]" variable="ignore">
 <div class="tm-doc-resume-row">
 <$doc-resume/>
 </div>

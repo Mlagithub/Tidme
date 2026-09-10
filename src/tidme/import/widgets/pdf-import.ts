@@ -1,7 +1,7 @@
 /*
 widgets/pdf-import.ts — PDF 导入编排（import.ts 的 .pdf 分支入口）
 
-流程：pdf.js（CDN 按需）解析页数 → core/pdf-ops.createPdfBook 落库
+流程：pdf.js（CDN 按需）解析页数 → core/pdf-ops.createPdfDoc 落库
 （二进制 + 文档页阅读卡，不切分）→ 导航到文档页。PDF 直传入库不走预览行
 （PDF 的预览就是阅读器本身）。onProgress 进度回调（编码/解析/落库三段百分比），
 驱动导入中心的进度条。
@@ -56,8 +56,8 @@ export async function importPdfFile(
   const numPages = Number(pdf.numPages) || 0;
 
   onProgress?.({ phase: 'store', percent: PHASE_PERCENT.store[0] });
-  const bookTitle = String(file.name || '').replace(/\.pdf$/i, '');
-  const r = await pdfOps.createPdfBook(wiki, { bookTitle, dataB64 });
+  const docTitle = String(file.name || '').replace(/\.pdf$/i, '');
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle, dataB64, pagesTotal: numPages });
   onProgress?.({ phase: 'store', percent: PHASE_PERCENT.store[1] });
 
   widget?.dispatchEvent?.({ type: 'tm-navigate', navigateTo: r.docTitle });

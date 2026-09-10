@@ -127,7 +127,7 @@ test('server E2E: 后台导入任务（pending → importer → 文档/卡）', 
   assert.equal(doneT.fields['tidme.pending'], undefined, '处理完成去掉 pending 标记');
 
   // 断言文档页 + 节卡生成（短内容默认合并 → 至少 1 节）
-  const doc = tw.wiki.filterTiddlers('[tag[tidme-import-doc]]')[0];
+  const doc = tw.wiki.filterTiddlers('[tag[tidme-doc]]')[0];
   assert.ok(doc, '文档页生成');
   const cards = tw.wiki.filterTiddlers(`[tidme.doc[${doneT.fields['tidme.import-docId']}]tidme.kind[topic]]`);
   assert.ok(cards.length >= 1, `至少切出 1 节: ${cards.length}`);

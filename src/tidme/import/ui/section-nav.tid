@@ -5,7 +5,7 @@ code-body: yes
 
 \whitespace trim
 
-<$list filter="[<currentTiddler>tidme.kind[topic]!tag[tidme-import-doc]]" variable="ignore">
+<$list filter="[<currentTiddler>tidme.kind[topic]!tag[tidme-doc]]" variable="ignore">
 <$section-bar/>
 <$section-body/>
 </$list>

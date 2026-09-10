@@ -25,7 +25,7 @@ paths.ts — tiddler 命名空间路径生成（章节隔离）
 title 的真实位置派生（兼容带后缀 folder），不经本模块。
 */
 
-import { NS_BOOKS, NS_DECKS } from './ns.ts';
+import { NS_DECKS, NS_DOCS } from './ns.ts';
 
 // 保留 TW 系统 tiddler 段
 const RESERVED = new Set([
@@ -68,16 +68,16 @@ export function joinPath(...parts: (string | undefined | null)[]): string {
   return clean.join('/');
 }
 
-/** 文档根路径：Tidme/Books/<bookSlug>。同名书冲突的 ~docId6 后缀由导入期 resolveDocRoot 追加（本模块纯函数）。 */
-export function bookRoot(bookTitle: string): string {
-  const slug = slugify(bookTitle) || 'untitled';
-  if (RESERVED.has(slug.toLowerCase())) throw new Error('bookRoot: reserved book title: ' + slug);
-  return NS_BOOKS + slug;
+/** 文档根路径：Tidme/Docs/<docSlug>。同名书冲突的 ~docId6 后缀由导入期 resolveDocRoot 追加（本模块纯函数）。 */
+export function docRoot(docTitle: string): string {
+  const slug = slugify(docTitle) || 'untitled';
+  if (RESERVED.has(slug.toLowerCase())) throw new Error('docRoot: reserved doc title: ' + slug);
+  return NS_DOCS + slug;
 }
 
-/** 知识型卡片根：Tidme/Decks/<bookSlug>（挖空/问答统一进这里；与 bookRoot 平行） */
-export function bookCardsRoot(bookTitle: string): string {
-  return NS_DECKS + (slugify(bookTitle) || 'untitled');
+/** 知识型卡片根：Tidme/Decks/<docSlug>（挖空/问答统一进这里；与 docRoot 平行） */
+export function docCardsRoot(docTitle: string): string {
+  return NS_DECKS + (slugify(docTitle) || 'untitled');
 }
 
 /** 节卡叶段（A2：核心 UI 可读）：可读 caption slug + "-" + 稳定 id；caption 空时退化为纯 id。
@@ -87,12 +87,12 @@ export function sectionLeaf(caption: string, sectionId: string): string {
   return (slug ? slug + '-' : '') + sectionId;
 }
 
-/** 节卡路径（纯形式）：Tidme/Books/<bookSlug>/<sectionLeaf(caption, sectionId)>。 */
-export function sectionPath(bookTitle: string, caption: string, sectionId: string): string {
-  return joinPath(bookRoot(bookTitle), sectionLeaf(caption, sectionId));
+/** 节卡路径（纯形式）：Tidme/Docs/<docSlug>/<sectionLeaf(caption, sectionId)>。 */
+export function sectionPath(docTitle: string, caption: string, sectionId: string): string {
+  return joinPath(docRoot(docTitle), sectionLeaf(caption, sectionId));
 }
 
-/** 取命名空间 title 的叶段（末段）：Tidme/Books/<slug>/s123… → s123…。
+/** 取命名空间 title 的叶段（末段）：Tidme/Docs/<slug>/s123… → s123…。
  *  集中"反解析"（生成在 paths，解析也在 paths），避免各处 substring 手切。 */
 export function leafIdOf(title: string): string {
   const t = String(title ?? '');
@@ -101,6 +101,6 @@ export function leafIdOf(title: string): string {
 }
 
 /** 插入式新建节（在已有文档内手填时使用；拍平到书目录，叶段带 manual 前缀） */
-export function insertedSectionTitle(bookTitle: string, sectionCaption: string): string {
-  return joinPath(bookRoot(bookTitle), 'manual-' + (slugify(sectionCaption) || 'untitled'));
+export function insertedSectionTitle(docTitle: string, sectionCaption: string): string {
+  return joinPath(docRoot(docTitle), 'manual-' + (slugify(sectionCaption) || 'untitled'));
 }

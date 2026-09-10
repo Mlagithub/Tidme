@@ -55,7 +55,7 @@ test('视图互斥: 阅读条栏只显示 topic，复习帧只接管 item', () =
   // section-nav.tid（阅读条栏）只匹配 kind=topic
   const secNav = wiki.getTiddler('$:/plugins/keepone/tidme/import/ui/section-nav').fields.text;
   assert.ok(secNav.includes('tidme.kind[topic]'), '阅读条栏只显示 topic 卡');
-  assert.ok(!secNav.includes('has[tidme.doc]!tag[tidme-import-doc]'), '不再按 doc 判定（避免 item 卡混入）');
+  assert.ok(!secNav.includes('has[tidme.doc]!tag[tidme-doc]'), '不再按 doc 判定（避免 item 卡混入）');
   // card.tid（复习帧）排除 topic
   const cardFilter = wiki.getTiddler('$:/config/Tidme/StoryTiddlerTemplateFilters/card').fields.text;
   assert.ok(cardFilter.includes('!tidme.kind[topic]'), '复习帧不接管 topic 卡');
@@ -374,7 +374,7 @@ test('today-recent: 最近阅读按最近打开排序，全局续读点所属书
   const todayMod = mod('review/widgets/today.js');
   reset(); // 丢弃标准书夹具，自建两本可控的书
   const mkBook = (docId, bookLabel, prefix) => {
-    wiki.addTiddler({ title: `Tidme/Books/${bookLabel}`, tags: ['tidme-import-doc'], 'tidme.doc': docId });
+    wiki.addTiddler({ title: `Tidme/Docs/${bookLabel}`, tags: ['tidme-doc'], 'tidme.doc': docId });
     wiki.addTiddler({
       title: `${prefix}1`,
       'tidme.kind': 'topic',
@@ -411,7 +411,7 @@ test('today-recent: 最近阅读按最近打开排序，全局续读点所属书
 test('today-recent: 项目书名渲染为超链接并支持点击导航到文档页且同步阅读点', () => {
   const todayMod = mod('review/widgets/today.js');
   reset();
-  wiki.addTiddler({ title: 'Tidme/Books/测试书', tags: ['tidme-import-doc'], 'tidme.doc': 'docTest' });
+  wiki.addTiddler({ title: 'Tidme/Docs/测试书', tags: ['tidme-doc'], 'tidme.doc': 'docTest' });
   wiki.addTiddler({
     title: '测试节1',
     'tidme.kind': 'topic',
@@ -463,7 +463,7 @@ test('today-recent: 项目书名渲染为超链接并支持点击导航到文档
     assert.ok(clickHandler, '应绑定点击事件');
     clickHandler({ preventDefault() {}, stopPropagation() {} });
     assert.equal(wiki.getTiddlerText(nsMod.pdfPageStateTitle('docTest')), '5');
-    assert.equal(navTarget, 'Tidme/Books/测试书');
+    assert.equal(navTarget, 'Tidme/Docs/测试书');
   } finally {
     fakeDocument.createElement = origCreateElement;
   }
@@ -488,4 +488,30 @@ test('today-hero: 已复习卡片时专注时间保底不为 0 秒', () => {
   assert.ok(text.includes('今日已复习 45 卡'), '正确统计今日复习卡数');
   assert.ok(!text.includes('专注 0 秒') && !text.includes('0 s'), '已复习 45 卡时绝不显示专注 0');
   assert.ok(text.includes('45 s') || text.includes('45 秒'), '获得 45 秒基础保底时长');
+});
+
+test('today-recent: 支持连续型文档（PDF 等）展示页码进度与跳转', () => {
+  const todayMod = mod('review/widgets/today.js');
+  reset();
+  wiki.addTiddler({
+    title: 'Tidme/Docs/测试PDF',
+    tags: ['tidme-doc'],
+    'tidme.doc': 'docPdf',
+    'tidme.format': 'pdf',
+    'tidme.structure': 'continuous',
+    'tidme.kind': 'topic',
+    'tidme.pages-total': '100',
+    state: '0',
+    due: twDate(),
+  });
+  wiki.addTiddler({
+    title: '$:/config/tidme/readpoint/docPdf',
+    type: 'application/json',
+    text: JSON.stringify({ t: 'Tidme/Docs/测试PDF', s: 'p35' }),
+  });
+
+  const root = renderWidget(wiki, todayMod, 'tidme-today-recent');
+  const text = collectText(root);
+  assert.ok(text.includes('测试PDF'), '最近阅读应包含连续型 PDF 文档');
+  assert.ok(text.includes('p.35/100'), '进度应显示页码进度 p.35/100');
 });

@@ -12,7 +12,7 @@ docId 由源标题派生（同一 tiddler 重切分 ID 稳定；标题唯一性�
 import { contentFingerprint, makeDocId, makeSectionId, normalizeText } from '$:/plugins/keepone/tidme/core/ids';
 import type { BookMeta } from '$:/plugins/keepone/tidme/core/ids';
 import { CRUMB_SEP } from '$:/plugins/keepone/tidme/core/ns';
-import { bookRoot, joinPath, sectionLeaf } from '$:/plugins/keepone/tidme/core/paths';
+import { docRoot, joinPath, sectionLeaf } from '$:/plugins/keepone/tidme/core/paths';
 import { afactorForText, normalizePriority, PRIORITY_DEFAULT } from '$:/plugins/keepone/tidme/core/scheduler';
 import { initialFsrsFields, twDateString } from '$:/plugins/keepone/tidme/core/schema';
 import { applyOverrides, chunkBook } from './chunker';
@@ -55,7 +55,7 @@ export interface SplitInput {
    * 但导入预览 UI 走 _deleted/_renamed 标记，未经 runSplit 传入——UI 接入时在此恢复参数。
    */
   /**
-   * 命名空间冲突探测：给定候选 book folder（Tidme/Books/<slug>），返回占用它的 docId（无占用返回 null）。
+   * 命名空间冲突探测：给定候选 doc folder（Tidme/Docs/<slug>），返回占用它的 docId（无占用返回 null）。
    * 同名书（不同 docId）导入时据此加 ~docId 后缀，避免文档页互相覆盖；同一 docId 重导入幂等复用。
    * 纯解析无 wiki 时不传（视为无冲突）。
    */
@@ -63,12 +63,12 @@ export interface SplitInput {
 }
 
 /**
- * 解析最终文档根路径：folder 被其它 docId 占用 → bookRoot + "~" + docId 短哈希；否则原样。
+ * 解析最终文档根路径：folder 被其它 docId 占用 → docRoot + "~" + docId 短哈希；否则原样。
  * 重导入（占用者为同一 docId）不加后缀 —— 幂等。
  * （paths 纯函数不带 docId 后缀；占用的判定与追加都在此导入期完成）
  */
 function resolveDocRoot(bookTitle: string, docId: string, folderOccupied?: (baseFolder: string) => string | null): string {
-  const base = bookRoot(bookTitle);
+  const base = docRoot(bookTitle);
   const owner = folderOccupied ? folderOccupied(base) : null;
   if (owner && String(owner) !== String(docId)) {
     return base + '~' + String(docId).replace(/^d/, '').slice(0, 6);
@@ -179,15 +179,17 @@ export async function emitTiddlers(
   docLines.push(`Total ${cards.length} sections:`, '', links);
 
   const docTiddler: Record<string, any> = {
-    title: docRoot, // 文档页落 Tidme/Books/<书名>[/~docId] 命名空间
+    title: docRoot, // 文档页落 Tidme/Docs/<书名>[/~docId] 命名空间
     caption: docTitle, // 可读名：标题模板/列表显示用（title 是路径）
     type: 'text/vnd.tiddlywiki',
-    tags: ['tidme-import-doc'],
+    tags: ['tidme-doc'],
     text: docLines.join('\n'),
     bag,
     revision: '0',
     'tidme.doc': docId,
     'tidme.docpage': docRoot,
+    'tidme.format': format,
+    'tidme.structure': 'sectioned',
     ...(meta.title ? { 'tidme.source': meta.title } : {}),
     ...(meta.author || meta.creator ? { 'tidme.author': meta.author || meta.creator } : {}),
     ...(meta.language ? { 'tidme.language': meta.language } : {}),

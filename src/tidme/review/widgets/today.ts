@@ -163,7 +163,7 @@ function makeTodayRecent(): WidgetCtor {
       container.textContent = '';
 
       container.appendChild(el(doc, 'div', 'tm-today-section-title', lingo(wiki, 'read.recent', 'Recent Reading')));
-      const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
+      const docs = wiki.filterTiddlers('[tag[tidme-doc]]');
       // 最近打开时间：全局续读点所属书置顶（每次打开阅读卡都会刷新全局续读点）；
       // 其余书回退各自续读点的写入时间（制卡/设续读点时更新）
       const globalFields = wiki.getTiddler(docOps.GLOBAL_READPOINT)?.fields || {};
@@ -175,17 +175,26 @@ function makeTodayRecent(): WidgetCtor {
         const m = wiki.getTiddler(docOps.READPOINT_PREFIX + docId)?.fields?.modified;
         return m ? new Date(m).getTime() : 0;
       };
-      const rows: { title: string; label: string; done: number; total: number; last: number }[] = [];
+      const rows: { title: string; label: string; done: number; total: number; last: number; text?: string }[] = [];
       for (const d of docs) {
         const docId = String(wiki.getTiddler(d)?.fields['tidme.doc'] || '');
         if (!docId) continue;
-        const prog = docOps.sectionsProgressByDoc(wiki).get(docId);
-        if (!prog || !prog.total) continue;
+        const prog = docOps.docReadingProgress(wiki, docId);
+        if (!prog) continue;
+        if (prog.total > 0 && prog.current >= prog.total) continue;
+        if (prog.total === 0 && prog.current === 0) continue;
         const f = wiki.getTiddler(d)?.fields || {};
-        rows.push({ title: d, label: display.displayTitle(f, d), done: prog.done, total: prog.total, last: lastOpen(docId) });
+        rows.push({
+          title: d,
+          label: display.displayTitle(f, d),
+          done: prog.current,
+          total: prog.total,
+          last: lastOpen(docId),
+          text: prog.doneText,
+        });
       }
-      rows.sort((a, b) => b.last - a.last || (a.done / a.total) - (b.done / b.total) || b.total - a.total);
-      const top = rows.filter((r) => r.done < r.total).slice(0, 3);
+      rows.sort((a, b) => b.last - a.last || (a.total > 0 ? a.done / a.total : 0) - (b.total > 0 ? b.done / b.total : 0) || b.total - a.total);
+      const top = rows.slice(0, 3);
 
       const items: any[] = top.map((r) => {
         const docId = String(wiki.getTiddler(r.title)?.fields['tidme.doc'] || '');
@@ -205,7 +214,7 @@ function makeTodayRecent(): WidgetCtor {
             syncPdfPage();
             navigateTo(this, r.title);
           },
-          progress: { done: r.done, total: r.total },
+          progress: { done: r.done, total: r.total, text: r.text },
           action: {
             label: lingo(wiki, 'read.continue', 'Continue'),
             onClick: () => {

@@ -31,7 +31,7 @@ export function splitDocPageSet(wiki: any): Set<string> {
       .filter(Boolean),
   );
   if (!docIds.size) return set;
-  for (const p of wiki.filterTiddlers('[all[shadows+tiddlers]tag[tidme-import-doc]]')) {
+  for (const p of wiki.filterTiddlers('[all[shadows+tiddlers]tag[tidme-doc]]')) {
     const docId = String(wiki.getTiddler(p)?.fields?.['tidme.doc'] || '');
     if (docIds.has(docId)) set.add(p);
   }
@@ -94,7 +94,7 @@ export function sectionsProgressByDoc(wiki: any): Map<string, { done: number; to
   return agg;
 }
 
-/** 某 book folder（Tidme/Books/<slug>）下第一张带 tidme.doc 的卡所属 docId（无占用返回 null）——同名书冲突探测 */
+/** 某 doc folder（Tidme/Docs/<slug>）下第一张带 tidme.doc 的卡所属 docId（无占用返回 null）——同名书冲突探测 */
 export function docFolderOwner(wiki: any, baseFolder: string): string | null {
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return null;
   const first = wiki.filterTiddlers(`[all[shadows+tiddlers]prefix[${baseFolder}]has[tidme.doc]]`)[0];
@@ -106,12 +106,81 @@ export function docFolderOwner(wiki: any, baseFolder: string): string | null {
 /** 按 docId 查真实文档页 title（folder 含 ~docId 后缀时亦准确）；找不到返回 "" */
 export function docPageOfDoc(wiki: any, docId: string): string {
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return '';
-  return wiki.filterTiddlers(`[tag[tidme-import-doc]tidme.doc[${docId}]]`)[0] || '';
+  return wiki.filterTiddlers(`[tag[tidme-doc]tidme.doc[${docId}]]`)[0] || '';
 }
 
-/** 文档页判定：带 tidme-import-doc 标签 */
-function isDocPage(f: Record<string, any>): boolean {
-  return Array.isArray(f.tags) && f.tags.includes('tidme-import-doc');
+/** 文档页判定：带 tidme-doc 标签 */
+export function isDocPage(f: Record<string, any> | null | undefined): boolean {
+  return !!f && Array.isArray(f.tags) && f.tags.includes('tidme-doc');
+}
+
+/**
+ * 连续型阅读卡判定（整本/整篇不切分的阅读材料：如整本 PDF 或未切分长文）：
+ * 文档页自身即阅读卡（带 tidme-doc 且 kind=topic，无 subkind 或 structure=continuous 或 format=pdf）。
+ * 这类卡代表整个连续阅读单元——推进只更新阅读点（页码/偏移）不标 done。
+ */
+export function isContinuousCard(fields: Record<string, any> | null | undefined): boolean {
+  if (!fields) return false;
+  if (fields['tidme.structure'] === 'continuous') return true;
+  const format = String(fields['tidme.format'] || '');
+  const isDoc = isDocPage(fields);
+  return isDoc && fields['tidme.kind'] === 'topic' && (!fields['tidme.subkind'] || format === 'pdf');
+}
+
+export interface DocReadingProgress {
+  type: 'sections' | 'continuous';
+  current: number;
+  total: number;
+  percent: number;
+  doneText: string;
+}
+
+/**
+ * 获取文档真实阅读进度：
+ * - 连续型文档（PDF 或整篇长文）：当前阅读页/偏移 vs 总页数/总长；
+ * - 分节型文档：已完成节数 vs 总节数。
+ */
+export function docReadingProgress(wiki: any, docId: string): DocReadingProgress {
+  if (!wiki || !docId) return { type: 'sections', current: 0, total: 0, percent: 0, doneText: '0/0' };
+  const docPage = docPageOfDoc(wiki, docId);
+  const docFields = docPage ? wiki.getTiddler(docPage)?.fields : null;
+
+  if (docFields && isContinuousCard(docFields)) {
+    const rp = parseReadPoint(wiki, docId);
+    let currentPage = 1;
+    if (rp && rp.s) {
+      const m = /^p(\d+)$/.exec(rp.s);
+      if (m) currentPage = Number(m[1]);
+    }
+    let totalPages = Number(docFields['tidme.pages-total'] || 0);
+    if (!totalPages && docFields['tidme.pages']) {
+      const m = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(String(docFields['tidme.pages']));
+      if (m) totalPages = Number(m[2]);
+    }
+    if (!totalPages && currentPage > 1) {
+      totalPages = Math.max(currentPage, 1);
+    }
+    const percent = totalPages > 0 ? Math.min(100, Math.round((currentPage / totalPages) * 100)) : 0;
+    return {
+      type: 'continuous',
+      current: currentPage,
+      total: totalPages,
+      percent,
+      doneText: totalPages > 0 ? `p.${currentPage}/${totalPages}` : `p.${currentPage}`,
+    };
+  }
+
+  const all = sectionsOfDoc(wiki, docId);
+  const done = all.filter((t: string) => sched.isCardOutOfQueue(wiki.getTiddler(t)?.fields)).length;
+  const total = all.length;
+  const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  return {
+    type: 'sections',
+    current: done,
+    total,
+    percent,
+    doneText: `${done}/${total}`,
+  };
 }
 
 /** 正文章节判定（阅读进度口径）：topic 节卡；摘录与牌组页（词书 tidme.doc 的宿主）不算 */
@@ -211,8 +280,8 @@ export function deleteDocContent(wiki: any, docId: string): number {
     // 阅读材料：文档页 + topic 节卡（subkind!==extract → 摘录保留；kind=item/无 kind 保留）
     if (isDocPage(f)) {
       targets.add(t);
-      // PDF：二进制与 OCR 转写页同属阅读材料，级联清理
-      if (f['tidme.pdf']) targets.add(String(f['tidme.pdf']));
+      // PDF/附件：二进制与 OCR 转写页同属阅读材料，级联清理
+      if (f['tidme.asset']) targets.add(String(f['tidme.asset']));
       for (const o of wiki.filterTiddlers(`[all[shadows+tiddlers]prefix[${t}/ocr-p]]`)) targets.add(o);
       continue;
     }

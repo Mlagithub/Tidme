@@ -764,7 +764,7 @@ function makeSectionBar(): WidgetCtor {
       const crumbDoc = String(fields['tidme.doc'] || '');
       const crumbDocTitle = String(fields['tidme.docpage'] || '') ||
         docOps.docPageOfDoc(wiki, crumbDoc) ||
-        (crumbBook && crumbDoc ? paths.bookRoot(crumbBook) : crumbBook);
+        (crumbBook && crumbDoc ? paths.docRoot(crumbBook) : crumbBook);
       const crumb = el(doc, 'span', 'tm-section-crumb tm-import-muted', crumbBreadcrumb);
       crumb.title = lingo(wiki, 'read/crumb.tip', 'Click to open book summary page');
       crumb.addEventListener('click', () => {
@@ -1140,7 +1140,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
     subsetBtn.addEventListener('click', () => {
       // 子集牌组放"文档页所在 folder 的 Decks 镜像"（folder 冲突带 ~docId 后缀时亦准确）：
       // 文档页 title == folder 根（含后缀），Books→Decks 即 decks 根（镜像推导见 core/ns）
-      const deckRoot = ns.booksToDecksRoot(String(title)) || `${ns.NS_DECKS}${paths.leafIdOf(title)}`;
+      const deckRoot = ns.docsToDecksRoot(String(title)) || `${ns.NS_DECKS}${paths.leafIdOf(title)}`;
       const deckTitle = `${deckRoot}/` + lingo(wiki, 'read/review.book', 'Review Book');
       const docFields = wiki.getTiddler(title)?.fields || {};
       // 统一走 core/deck（低层 fsrs4tw 字段由 configToFields 生成；重复点击 = 刷新 card）
@@ -1395,7 +1395,8 @@ function makeSectionBody(): WidgetCtor {
       this._title = title;
 
       const rawText = String(t.fields.text || '');
-      if (t.fields['tidme.pdf'] || t.fields['tidme.pages'] || rawText.includes('<$tidme-pdf-reader')) {
+      const format = String(t.fields['tidme.format'] || '');
+      if (format === 'pdf' || t.fields['tidme.asset'] || t.fields['tidme.pages'] || rawText.includes('<$tidme-pdf-reader')) {
         const parser = this.wiki.parseText('text/vnd.tiddlywiki', rawText || '<$tidme-pdf-reader/>', {
           parentWidget: this,
           document: doc,

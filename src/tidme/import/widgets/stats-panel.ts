@@ -14,6 +14,7 @@ const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
+const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 function lingo(wiki: any, key: string, fallback: string): string {
@@ -46,9 +47,9 @@ function makeStatsPanel(): WidgetCtor {
         const cardLikes = (filter: string) => wiki.filterTiddlers(filter).map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
 
         const decks = deckMod.listDecks(wiki);
-        const docs = wiki.filterTiddlers('[tag[tidme-import-doc]]');
+        const docs = wiki.filterTiddlers('[tag[tidme-doc]]');
         // 漏斗只消费卡片与文档页（[!is[system]] 会把状态/配置/临时 tiddler 全部载入）
-        const all = cardLikes('[all[shadows+tiddlers]!is[draft]has[tidme.kind]] [all[shadows+tiddlers]!is[draft]tag[tidme-import-doc]]');
+        const all = cardLikes('[all[shadows+tiddlers]!is[draft]has[tidme.kind]] [all[shadows+tiddlers]!is[draft]tag[tidme-doc]]');
         const funnel = stats.funnelCounts(all);
         // log tiddler title 形如 $:/Deck/<deck>/log（repeat.tid 写入，单文件），用 prefix + JS 后过滤匹配
         const logTitles = wiki.filterTiddlers('[all[shadows+tiddlers]prefix[$:/Deck/]]')
@@ -119,14 +120,16 @@ function makeStatsPanel(): WidgetCtor {
         for (const d of docs) {
           const docId = wiki.getTiddler(d)?.fields['tidme.doc'];
           if (!docId) continue;
-          const sections = cardLikes(`[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]]`);
-          const p = stats.docProgress(sections);
+          const prog = docOps.docReadingProgress(wiki, docId);
           const docFields = wiki.getTiddler(d)?.fields || {};
+          const isContinuous = prog.type === 'continuous';
           docRows.push({
             name: displayTitle(docFields, d),
-            done: p.done,
-            total: p.total,
-            left: p.left,
+            done: prog.current,
+            total: prog.total,
+            left: Math.max(0, prog.total - prog.current),
+            isContinuous,
+            doneText: prog.doneText,
           });
         }
         const docTableWrap = primitives.renderTable(doc, cardDoc, {
@@ -140,7 +143,15 @@ function makeStatsPanel(): WidgetCtor {
             {
               key: 'info',
               title: lingo(wiki, 'state.read', 'Read'),
-              render: (row: any) => el(doc, 'span', 'tm-import-muted', `${row.done} / ${row.total} (${row.left} ${lingo(wiki, 'today.sectionsleft', 'left')})`),
+              render: (row: any) =>
+                el(
+                  doc,
+                  'span',
+                  'tm-import-muted',
+                  row.isContinuous
+                    ? (row.total > 0 ? `${row.doneText} (${row.left} ${lingo(wiki, 'read.pages', 'pages')})` : row.doneText)
+                    : `${row.done} / ${row.total} (${row.left} ${lingo(wiki, 'today.sectionsleft', 'left')})`,
+                ),
             },
           ],
           data: docRows,

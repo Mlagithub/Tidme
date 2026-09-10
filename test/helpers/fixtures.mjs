@@ -21,10 +21,10 @@ export async function makeBookFixture(wiki, parseMod) {
   const section = r.tiddlers.find((x) => x['tidme.kind'] === 'topic');
   const docTitle = r.tiddlers[0].title;
   const sectionTitle = section.title;
-  // 摘录留在书目录（拍平）：<bookRoot>/<sectionId>--extract
+  // 摘录留在书目录（拍平）：<docRoot>/<sectionId>--extract
   const extractTitle = section.title + '--extract';
   // 知识卡进 decks 命名空间：<Tidme/Decks/<书>/<sectionId>--cloze
-  const clozeTitle = section.title.replace(/^Tidme\/Books\//, 'Tidme/Decks/') + '--cloze';
+  const clozeTitle = section.title.replace(/^Tidme\/Docs\//, 'Tidme/Decks/') + '--cloze';
   wiki.addTiddler({
     title: extractTitle,
     caption: '摘',

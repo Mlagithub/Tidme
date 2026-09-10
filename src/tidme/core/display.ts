@@ -85,7 +85,7 @@ export function dateLabel(raw: any): string {
 
 /**
  * 显示名（命名空间 title 可读化）：caption ?? breadcrumb 末段 ?? title 末段。
- * title=路径（Tidme/Books/<slug>/<hash>）后，所有列表/表格显示一律经此，禁止裸显 title。
+ * title=路径（Tidme/Docs/<slug>/<hash>）后，所有列表/表格显示一律经此，禁止裸显 title。
  */
 export function displayTitle(fields: Record<string, any> | null | undefined, title?: string): string {
   const cap = fields && fields.caption !== undefined && fields.caption !== '' ? String(fields.caption).trim() : '';

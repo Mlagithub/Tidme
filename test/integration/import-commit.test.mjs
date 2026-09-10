@@ -72,7 +72,7 @@ test('import-commit: 重导入对齐——未变节保 SRS 进度、内容变重
 
 test('import-commit: 对齐模式下同 key 换 ID 的新卡不重复写（ordinal 漂移防御）', async () => {
   // 旧卡：key = "漂移书 › 章"（title 带旧 ID）
-  const oldTitle = 'Tidme/Books/漂移书/旧s000';
+  const oldTitle = 'Tidme/Docs/漂移书/旧s000';
   wiki.addTiddler({
     title: oldTitle,
     caption: '章',
@@ -83,11 +83,11 @@ test('import-commit: 对齐模式下同 key 换 ID 的新卡不重复写（ordin
     'tidme.subkind': 'section',
     'tidme.breadcrumb': '漂移书 › 章',
     'tidme.order': '000000',
-    'tidme.docpage': 'Tidme/Books/漂移书',
+    'tidme.docpage': 'Tidme/Docs/漂移书',
   });
   // 新产物：同 trail key 但 ID 漂移 → 新 title；另有 1 张 keyless 卡（应防御性补写）
   const newSameKey = {
-    title: 'Tidme/Books/漂移书/新s111',
+    title: 'Tidme/Docs/漂移书/新s111',
     caption: '章',
     text: '新内容',
     'tidme.doc': 'ddrift',
@@ -97,14 +97,14 @@ test('import-commit: 对齐模式下同 key 换 ID 的新卡不重复写（ordin
     'tidme.order': '000001',
   };
   const keyless = {
-    title: 'Tidme/Books/漂移书/manual-手记',
+    title: 'Tidme/Docs/漂移书/manual-手记',
     caption: '手记',
     text: '手写',
     'tidme.doc': 'ddrift',
     'tidme.kind': 'topic',
     'tidme.subkind': 'section',
   };
-  const doc = { title: 'Tidme/Books/漂移书', tags: ['tidme-import-doc'], 'tidme.doc': 'ddrift', text: '' };
+  const doc = { title: 'Tidme/Docs/漂移书', tags: ['tidme-doc'], 'tidme.doc': 'ddrift', text: '' };
   const res = await commitMod.commitImportToWiki(wiki, {
     docId: 'ddrift',
     docTiddler: doc,

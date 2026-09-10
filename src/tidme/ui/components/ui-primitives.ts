@@ -190,7 +190,7 @@ export interface ActionListItem {
   titleHref?: string;
   titleTooltip?: string;
   onTitleClick?: (e: MouseEvent) => void;
-  progress?: { done: number; total: number };
+  progress?: { done: number; total: number; text?: string };
   badge?: { text: string; cls?: string };
   action?: {
     label: string;
@@ -241,16 +241,19 @@ export function renderActionList(
     row.appendChild(nameEl);
 
     // 进度条
-    if (item.progress && item.progress.total > 0) {
-      const { done, total } = item.progress;
-      const barWrap = el(doc, 'span', 'tm-progress tm-stat-bar');
-      const bar = el(doc, 'span', 'tm-progress-fill tm-stat-bar-fill', '');
-      bar.style.width = `${Math.round((done / total) * 100)}%`;
-      barWrap.appendChild(bar);
-      row.appendChild(barWrap);
-
-      const countEl = el(doc, 'span', 'tm-today-read-count', `${done}/${total}`);
-      row.appendChild(countEl);
+    if (item.progress) {
+      const { done, total, text } = item.progress;
+      if (total > 0) {
+        const barWrap = el(doc, 'span', 'tm-progress tm-stat-bar');
+        const bar = el(doc, 'span', 'tm-progress-fill tm-stat-bar-fill', '');
+        bar.style.width = `${Math.round((done / total) * 100)}%`;
+        barWrap.appendChild(bar);
+        row.appendChild(barWrap);
+      }
+      if (text || total > 0) {
+        const countEl = el(doc, 'span', 'tm-today-read-count', text || `${done}/${total}`);
+        row.appendChild(countEl);
+      }
     }
 
     // 徽章

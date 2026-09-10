@@ -133,7 +133,7 @@ function makeReadingList(): any {
         // 按 docId 查真实文档页（B1），不再由书名+docId 重算（slug 规则一变即失配）
         const bookTitle = g.cards[0].breadcrumb.split(ns.CRUMB_SEP)[0] || '';
         const docTiddlerTitle = docOps.docPageOfDoc(wiki, g.doc) ||
-          (bookTitle ? paths.bookRoot(bookTitle) : '');
+          (bookTitle ? paths.docRoot(bookTitle) : '');
         const docLabel = bookTitle || g.doc;
 
         const sum = el(doc, 'summary', 'tm-rl-doc-head');
@@ -150,10 +150,19 @@ function makeReadingList(): any {
         sum.appendChild(info);
 
         const meta = el(doc, 'div', 'tm-rl-doc-meta');
-        meta.appendChild(el(doc, 'span', 'tm-rl-doc-count', `${g.cards.length} ${lingo(wiki, 'today.sectionsleft', 'sections left')}`));
-        if (!compact && docAll.length) {
-          meta.appendChild(el(doc, 'span', 'tm-rl-doc-prog', `${docDone}/${docAll.length} ${lingo(wiki, 'rl.read', 'read')}`));
-          meta.appendChild(renderProgressBar(doc, docDone, docAll.length, { className: 'tm-rl-doc-bar' }));
+        const prog = docOps.docReadingProgress ? docOps.docReadingProgress(wiki, g.doc) : null;
+        if (prog && prog.type === 'continuous') {
+          meta.appendChild(el(doc, 'span', 'tm-rl-doc-count', `${prog.doneText} ${lingo(wiki, 'read.pages', 'pages')}`));
+          if (!compact && prog.total > 0) {
+            meta.appendChild(el(doc, 'span', 'tm-rl-doc-prog', `${prog.percent}%`));
+            meta.appendChild(renderProgressBar(doc, prog.current, prog.total, { className: 'tm-rl-doc-bar' }));
+          }
+        } else {
+          meta.appendChild(el(doc, 'span', 'tm-rl-doc-count', `${g.cards.length} ${lingo(wiki, 'today.sectionsleft', 'sections left')}`));
+          if (!compact && docAll.length) {
+            meta.appendChild(el(doc, 'span', 'tm-rl-doc-prog', `${docDone}/${docAll.length} ${lingo(wiki, 'rl.read', 'read')}`));
+            meta.appendChild(renderProgressBar(doc, docDone, docAll.length, { className: 'tm-rl-doc-bar' }));
+          }
         }
         sum.appendChild(meta);
 

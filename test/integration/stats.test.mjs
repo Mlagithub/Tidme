@@ -55,7 +55,7 @@ test('retentionFromLogs: 保留率 ≈ 1 - Again 占比', () => {
 
 test('funnelCounts: 漏斗分层（topic/item 大类 + subkind）', () => {
   const items = [
-    { title: '文档', fields: { tags: ['tidme-import-doc'] } },
+    { title: '文档', fields: { tags: ['tidme-doc'] } },
     { title: '节', fields: { 'tidme.kind': 'topic', 'tidme.subkind': 'section' } },
     { title: '节2', fields: { 'tidme.kind': 'topic', 'tidme.subkind': 'section' } },
     { title: '摘录', fields: { 'tidme.kind': 'topic', 'tidme.subkind': 'extract' } },

@@ -17,7 +17,7 @@ function cardsOf(r) {
   return r.tiddlers.filter((t) => t['tidme.kind'] === 'topic');
 }
 function docOf(r) {
-  return r.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes('tidme-import-doc'));
+  return r.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes('tidme-doc'));
 }
 function stripTime(tiddlers) {
   return tiddlers.map((t) => {

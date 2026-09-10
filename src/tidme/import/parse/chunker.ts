@@ -1,6 +1,5 @@
 /*
 chunker.ts — 大纲树递归切分器（浏览器版，与 Node 版同构）
-规则详见 D:\work\tidme-import\src\chunk\outline-chunker.js 头注。
 */
 
 import { normalizeText } from '$:/plugins/keepone/tidme/core/ids';

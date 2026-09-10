@@ -243,9 +243,11 @@ test('词书牌组页（learning-package legacy kind=topic）不混入学习流�
   });
   // 对照：整本不切分的 PDF 文档页是阅读卡，必须照常入队
   wiki.addTiddler({
-    title: 'Tidme/Books/整本书',
+    title: 'Tidme/Docs/整本书',
+    tags: ['tidme-doc'],
     'tidme.kind': 'topic',
-    'tidme.type': 'pdf',
+    'tidme.format': 'pdf',
+    'tidme.structure': 'continuous',
     'tidme.doc': 'dp-whole',
     due: twDate(new Date(Date.now() - 3600000)),
   });
@@ -253,11 +255,11 @@ test('词书牌组页（learning-package legacy kind=topic）不混入学习流�
 
   const q = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
   assert.ok(!q.includes('$:/Deck/IELTS_T'), '牌组页不得混入学习流（词卡走牌组复习）');
-  assert.ok(q.includes('Tidme/Books/整本书'), '整本 PDF 文档页照常入队');
+  assert.ok(q.includes('Tidme/Docs/整本书'), '整本 PDF 文档页照常入队');
 
   const readQueue = [...docOps.collectTopicQueue(wiki).map((c) => c.title)];
   assert.ok(!readQueue.includes('$:/Deck/IELTS_T'), '牌组页不入阅读队列');
-  assert.ok(readQueue.includes('Tidme/Books/整本书'), '整本 PDF 文档页仍在阅读队列');
+  assert.ok(readQueue.includes('Tidme/Docs/整本书'), '整本 PDF 文档页仍在阅读队列');
 });
 
 test('全局续读点指向牌组页时跳过，回落到真实阅读队列', () => {
@@ -269,14 +271,16 @@ test('全局续读点指向牌组页时跳过，回落到真实阅读队列', ()
   });
   wiki.addTiddler({ title: '$:/config/tidme/readpoint/global', text: '$:/Deck/IELTS_R' });
   wiki.addTiddler({
-    title: 'Tidme/Books/在读书',
+    title: 'Tidme/Docs/在读书',
+    tags: ['tidme-doc'],
     'tidme.kind': 'topic',
-    'tidme.type': 'pdf',
+    'tidme.format': 'pdf',
+    'tidme.structure': 'continuous',
     'tidme.doc': 'dp-reading',
     due: twDate(new Date(Date.now() - 3600000)),
   });
   const docOps = mod('core/doc-ops.js');
-  assert.equal(docOps.globalReadingTarget(wiki), 'Tidme/Books/在读书', '牌组页不是阅读目标，继续阅读落到在队阅读卡');
+  assert.equal(docOps.globalReadingTarget(wiki), 'Tidme/Docs/在读书', '牌组页不是阅读目标，继续阅读落到在队阅读卡');
 });
 
 test('collectTopicQueue: 队列快照（出队卡兜底过滤 + 排序字段预解析）', () => {

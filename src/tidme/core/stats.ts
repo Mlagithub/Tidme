@@ -99,7 +99,7 @@ export function funnelCounts(items: CardLike[]): Funnel {
       if (sub === 'extract') f.extracts++;
       else f.sections++;
     } else if (kind === 'item') f.cards++;
-    else if (Array.isArray(c.fields.tags) && c.fields.tags.includes('tidme-import-doc')) f.docs++;
+    else if (Array.isArray(c.fields.tags) && c.fields.tags.includes('tidme-doc')) f.docs++;
   }
   return f;
 }

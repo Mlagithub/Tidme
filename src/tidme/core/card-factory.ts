@@ -39,16 +39,16 @@ export function parseAnchor(raw: any): { section: string; snippet: string; page?
 /**
  * 派生卡命名空间解析：从父卡 title 的实际位置派生（folder 冲突时可能带 ~docId 后缀，slug 重算会错位）。
  * - 摘录：与父卡同目录，叶段 += "--extract"
- * - 挖空/问答（阅读材料来源）：目录 Books→Decks 镜像，叶段 += "--cloze"/"--qa"
- * - 普通笔记（非 Tidme/Books 来源）：统一收进 Tidme/Decks/散卡/<笔记名>--<类型>
+ * - 挖空/问答（阅读材料来源）：目录 Docs→Decks 镜像，叶段 += "--cloze"/"--qa"
+ * - 普通笔记（非 Tidme/Docs 来源）：统一收进 Tidme/Decks/散卡/<笔记名>--<类型>
  *   （item 类卡片全部入 Decks 命名空间，不再散落在来源目录） */
 export function derivedCardBase(pf: Record<string, any>, parentTitle: string, kind: 'extract' | 'cloze' | 'qa'): string {
   const leaf = paths.leafIdOf(parentTitle);
-  // 阅读材料（Tidme/Books/ 下）：摘录留原目录，挖空/问答镜像到平行 Decks
-  if (parentTitle.startsWith(ns.NS_BOOKS) && leaf) {
+  // 阅读材料（Tidme/Docs/ 下）：摘录留原目录，挖空/问答镜像到平行 Decks
+  if (parentTitle.startsWith(ns.NS_DOCS) && leaf) {
     const dir = parentTitle.slice(0, parentTitle.lastIndexOf('/') + 1);
     if (kind === 'extract') return dir + leaf + '--extract';
-    return ns.booksToDecksRoot(dir) + leaf + '--' + kind;
+    return ns.docsToDecksRoot(dir) + leaf + '--' + kind;
   }
   // 普通笔记（无 doc 来源）→ 散卡桶：Tidme/Decks/散卡/<笔记名 slug>--<类型>
   const parentSlug = paths.slugify(parentTitle) || 'untitled';
@@ -79,14 +79,14 @@ export function safeCaption(question: string, answer: string, prefix = ''): stri
 }
 
 /** 派生图片问答卡标题基座：短化命名空间（<NS_DECKS>{书名}/P{页}-{label或QA}），避免深层目录全量冗长堆叠。
- *  与文本卡（derivedCardBase 的 Books→Decks 目录镜像）刻意不同：图片卡只取书名段、
+ *  与文本卡（derivedCardBase 的 Docs→Decks 目录镜像）刻意不同：图片卡只取书名段、
  *  不镜像深层目录（同书图片卡集中一目录，靠 nextFreeTitle 保证唯一）。 */
 export function derivedImageQABase(pf: Record<string, any>, parentTitle: string, page?: number, label?: string): string {
   let dir = '';
-  if (parentTitle.startsWith(ns.NS_BOOKS)) {
+  if (parentTitle.startsWith(ns.NS_DOCS)) {
     const parts = parentTitle.split('/');
-    const bookName = parts[2] || 'doc';
-    dir = ns.NS_DECKS + bookName + '/';
+    const docName = parts[2] || 'doc';
+    dir = ns.NS_DECKS + docName + '/';
   } else {
     const parentSlug = paths.slugify(parentTitle) || 'untitled';
     dir = paths.joinPath(ns.NS_DECKS_SCATTER, parentSlug) + '/';

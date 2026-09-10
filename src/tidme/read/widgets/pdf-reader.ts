@@ -1,7 +1,7 @@
 /*
 widgets/pdf-reader.ts — PDF 阅读器（tidme-pdf-reader）
 
-数据：currentTiddler 字段 tidme.pdf（二进制标题）/ tidme.pages（"起-止"，仅存量
+数据：currentTiddler 字段 tidme.asset（二进制标题）/ tidme.pages（"起-止"，仅存量
 分节书籍携带）/ tidme.doc。
 - 二进制缺失/为空（服务端 0 字节 .pdf 等）→ 状态条提供「重新绑定 PDF」原位恢复，
   选原始文件覆写二进制条目，续读点/进度全保留
@@ -367,6 +367,12 @@ function makeReader(): any {
         this._pdf = await pdfjsMod.loadPdfBytes(bytes);
         this._numPages = Number(this._pdf.numPages) || 0;
         this._total.textContent = ` / ${this._numPages}`;
+        if (this._docPageTitle && this._numPages > 0) {
+          const docT = wiki.getTiddler(this._docPageTitle);
+          if (docT && !docT.fields['tidme.pages-total']) {
+            wiki.addTiddler({ ...docT.fields, 'tidme.pages-total': String(this._numPages) });
+          }
+        }
         const start = this._resolveInitialPage(r, this._numPages);
         this._setPage(start, false);
       } catch (e: any) {
