@@ -15,13 +15,11 @@ const session = require('$:/plugins/keepone/tidme/core/session.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 
-/** 字段级判别：本 tiddler 是否 tidme 卡数据（kind / FSRS 双字段 / 文档页标签）。
- *  宽/精两套谓词的共享尾部，禁止在组件里散写第二份。 */
+/** 字段级判别：本 tiddler 是否 tidme 卡数据。卡片一律带 tidme.kind（制卡工厂与各文档页
+ *  构建处保证），故 kind 即唯一判据。宽/精两套谓词的共享尾部，禁止在组件里散写第二份。 */
 function isTidmeCardFields(f: Record<string, any> | null | undefined): boolean {
   if (!f) return false;
-  return f['tidme.kind'] !== undefined ||
-    (f.state !== undefined && f.due !== undefined) ||
-    (Array.isArray(f.tags) && f.tags.indexOf('tidme-doc') >= 0);
+  return f['tidme.kind'] !== undefined;
 }
 
 /** 学习会话相关变化（全局会话 tiddler / 任一 <deck>/study 列表）——学习模式条、workflow 主按钮 */

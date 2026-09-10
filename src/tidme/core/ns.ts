@@ -51,11 +51,22 @@ export const QUEUE_EXCLUDE = '!has[tidme.done]!has[tidme.ignored]!has[tidme.susp
 /**
  * 阅读列表（topic 队列）过滤器唯一契约：全库 kind=topic 在队卡（排除草稿、牌组页、搁置/完成/忽略）。
  * 单条 run 的闭合过滤器字符串；deck-engine / doc-ops 等处共用。
+ *
+ * 排除两类非阅读单元：
+ *  - tag[$:/tags/TidmeDeck]：牌组实体（legacy 词书页 kind=topic）；
+ *  - structure=sectioned：分节型文档页——阅读材料的宿主/入口页（节卡才是阅读单元），
+ *    连续型文档页（structure=continuous，如整本 PDF）自身即阅读卡，须留在队列。
+ *  卡片一律带 tidme.kind（见 core/card-factory 与各文档页构建处），无需"无 kind 兜底"。
  */
-export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]' + QUEUE_EXCLUDE + ']';
+export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]!tidme.structure[sectioned]' +
+  QUEUE_EXCLUDE + ']';
 
 /** 卡折叠态 tiddler 前缀（<prefix><title> = "show"/"hide"，fsrs4tw reveal 语义） */
 export const FOLDED_STATE_PREFIX = '$:/state/folded/';
+
+/** TW 故事河列表（Story river）：当前打开的 tiddler 顺序。tm-navigate 只追加不替换，
+ *  故「结束学习后还剩哪些卡开着」只能从这里读（session.openItemCards）。 */
+export const STORY_LIST_TITLE = '$:/StoryList';
 
 /** 卡片专注计时锚点（UTC 17 位时刻）：导航到学习卡时写入（session.prepareCardFold /
  *  startstudy.tid），评分写路径（core/grade）读取差值记专注时长后删除。

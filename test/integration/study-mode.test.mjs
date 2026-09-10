@@ -2,8 +2,9 @@
 study-mode.test.mjs — 学习模式条与统一结束学习
 
 - core/session：endSession 三清（全局会话 + 全部 <deck>/study + $:/temp/tidme/*）、
-  isSessionActive / getActiveStudy（global 与 deck 两个来源）
-- 学习模式条 widget：未激活隐藏 / 激活显示进度 / 结束点击清场（走唯一刷新机制嗅探）
+  isSessionActive / getActiveStudy（global 与 deck 两个来源）、openItemCards（遗留复习卡）
+- 学习模式条 widget：未激活隐藏 / 激活显示进度 / 结束点击清场（走唯一刷新机制嗅探）/
+  会话由激活转结束（结束按钮、队列耗尽、牌组停止）时关闭故事河遗留的 item 卡
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -391,4 +392,66 @@ test('模式条: 当前卡跟随故事顶层（修复列表序嗅探滞留在旧
   w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
 
   assert.equal(barText(holder), '学习中|2/2|读完，继续复习 ›|结束学习', '进度与推进按钮跟随故事顶层的会话阅读卡');
+});
+
+// ---- 结束学习后关闭故事河遗留的复习卡（item） ----
+
+/** 包装实例 dispatchEvent 以记录事件（dom.closeTiddler 走 widget.dispatchEvent） */
+function spyEvents(w) {
+  const seen = [];
+  const orig = w.dispatchEvent.bind(w);
+  w.dispatchEvent = (e) => {
+    seen.push(e);
+    return orig(e);
+  };
+  return seen;
+}
+
+/** 从事件流里取被关闭的 title（tm-close-tiddler 的 param） */
+function closedTitles(events) {
+  return events.filter((e) => e.type === 'tm-close-tiddler' && e.param).map((e) => e.param);
+}
+
+test('session.openItemCards: 只挑故事河里真实存在的 item 卡（topic 与幽灵标题排除）', () => {
+  wiki.addTiddler({ title: '卡甲', 'tidme.kind': 'item' });
+  wiki.addTiddler({ title: 'Tidme/Docs/书', 'tidme.kind': 'topic' });
+  wiki.addTiddler({ title: '$:/StoryList', list: ['卡甲', 'Tidme/Docs/书', '幽灵卡'] });
+
+  assert.deepEqual([...session.openItemCards(wiki)], ['卡甲'], 'story 里的幽灵标题与阅读材料都不算遗留复习卡');
+
+  wiki.deleteTiddler('$:/StoryList');
+  assert.deepEqual([...session.openItemCards(wiki)], [], '无故事河返回空（幂等安全）');
+});
+
+test('模式条: 结束学习关闭故事河里遗留的 item 卡（阅读材料保留）', () => {
+  wiki.addTiddler({ title: '遗留卡', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });
+  wiki.addTiddler({ title: '卡甲', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });
+  wiki.addTiddler({ title: 'Tidme/Docs/在读文档', 'tidme.kind': 'topic', 'tidme.doc': 'dp-open' });
+  setupActive(); // 会话激活（此时故事河尚未建立）
+  // 学习中途离开当前卡：故事河下方压着两张 item 卡 + 一张正在读的文档页
+  wiki.addTiddler({ title: '$:/StoryList', list: ['遗留卡', 'Tidme/Docs/在读文档', '卡甲'] });
+
+  const { w, holder } = renderBar('卡乙'); // render 时已激活 → _wasActive = true
+  const events = spyEvents(w);
+  holder.children[0].childNodes.find((c) => c.textContent === '结束学习')._listeners.click();
+
+  assert.equal(session.isSessionActive(wiki), false, '会话已结束');
+  const closed = closedTitles(events);
+  assert.deepEqual([...closed], ['遗留卡', '卡甲'], '故事河里的遗留 item 卡按序全部关闭');
+  assert.ok(!closed.includes('Tidme/Docs/在读文档'), '阅读材料（topic）保留——用户可能正在读');
+});
+
+test('模式条: 队列评分耗尽（非结束按钮）同样关闭遗留 item 卡', () => {
+  wiki.addTiddler({ title: '遗留卡', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });
+  // 只建全局会话（不加 <deck>/study：牌组会话回退会让模式仍处激活，不属于「结束」）
+  wiki.addTiddler({ title: session.SESSION_TIDDLER, list: ['卡甲', '卡乙'], mode: 'items-only' });
+  wiki.addTiddler({ title: '$:/StoryList', list: ['遗留卡'] });
+  const { w } = renderBar('卡甲'); // 激活态下 render → _wasActive = true
+  const events = spyEvents(w);
+
+  // 模拟最后一张卡评分后会话列表清空（core/grade → session.setSession(list: [])）
+  wiki.addTiddler({ title: session.SESSION_TIDDLER, list: [] });
+  w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
+
+  assert.deepEqual(closedTitles(events), ['遗留卡'], '会话激活→结束的跃迁是唯一收口，不依赖结束按钮');
 });

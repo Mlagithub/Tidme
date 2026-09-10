@@ -86,7 +86,8 @@ function iconSvgOf(wiki: any, name: string): string {
   return svg;
 }
 
-/** 某文档的全部阅读 Topic（包含正文章节及摘录卡，统一纳入阅读队列与 ◀/▶ 导航调度） */
+/** 某文档的全部阅读 Topic（正文章节 + 摘录卡，统一纳入阅读队列与 ◀/▶ 导航调度）。
+ *  文档页（宿主页）虽同为 kind=topic，但不是阅读单元，须排除。 */
 function topicsOfDoc(wiki: any, doc: string): string[] {
   return wiki
     .filterTiddlers('[has[tidme.doc]nsort[tidme.order]]')
@@ -94,7 +95,7 @@ function topicsOfDoc(wiki: any, doc: string): string[] {
       const f = wiki.getTiddler(t)?.fields;
       if (!f) return false;
       if (String(f['tidme.doc']) !== String(doc)) return false;
-      return f['tidme.kind'] === 'topic';
+      return f['tidme.kind'] === 'topic' && !docOps.isDocPage(f);
     });
 }
 

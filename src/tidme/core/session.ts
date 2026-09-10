@@ -133,6 +133,10 @@ export function getActiveStudy(wiki: any): ActiveStudy | null {
  * + $:/temp/tidme/* 临时项。学习模式条「结束学习」与 stopstudy 的全局收场都走这里；
  * 禁止各处自行拼删除逻辑。子集牌组（tidme.subset-doc）是「复习本书」的临时复习
  * 脚手架，随学习结束一并焚烧（普通牌组仅清 study 列表，定义保留）。
+ *
+ * 注意：本函数只管 wiki 数据。故事河里还开着的复习卡（item）不在其中——关条目是
+ * UI 层的事（core 无 DOM），由 session.openItemCards 判定、学习模式条在「会话由
+ * 激活转结束」时派发 tm-close-tiddler 关闭（见 review/widgets/study-mode.ts）。
  * @returns 清理的 tiddler 数
  */
 export function endSession(wiki: any): number {
@@ -167,10 +171,33 @@ export function endSession(wiki: any): number {
 }
 
 /**
+ * 故事河里还开着的复习卡（kind=item）——结束学习后必须关闭的遗留卡。
+ *
+ * 为什么需要：tm-navigate 只**追加**故事河、不替换（TW story.addToStory），而学习
+ * 过程中用户可能离开当前卡（如去读 PDF/文档页）把 item 卡留在河里；会话一结束，
+ * 这些卡既无评分入口也无进度（两者都依赖会话），只剩死界面堆在下面。
+ * 阅读材料（kind=topic）不算：用户可能正在读，留着。
+ *
+ * 本函数只做判定（core 无 DOM）；关闭由 UI 层派发 tm-close-tiddler（见
+ * review/widgets/study-mode.ts 的「会话由激活转结束」分支）。
+ */
+export function openItemCards(wiki: any): string[] {
+  if (!wiki || typeof wiki.getTiddler !== 'function') return [];
+  const story = wiki.getTiddler(ns.STORY_LIST_TITLE)?.fields?.list;
+  if (!Array.isArray(story)) return [];
+  return story.filter((t: string) => wiki.getTiddler(t)?.fields?.['tidme.kind'] === 'item');
+}
+
+/**
  * 跳转复习卡（item）前设置折叠态：$:/state/folded/<title> = "hide"（折叠，先看问题）
- * 除非该卡命中其所属 deck 的 card_unfold（"show"）。与 startstudy.tid / fsrs4tw
- * 折叠语义一致——否则 state 缺失时 reveal 默认展开（答案直接显示）。
+ * 除非命中某张 deck 的 card_unfold（"show"）。与 startstudy.tid / fsrs4tw 折叠语义
+ * 一致——否则 state 缺失时 reveal 默认展开（答案直接显示）。
  * 非 item 卡（阅读/文档页）不设（不影响阅读界面）。
+ *
+ * 多牌组归属口径：只要**任一**配置了 card_unfold 的牌组命中当前卡即展开（旧口径是
+ * 「listDecks 顺序里第一个包含该卡的牌组说了算」，多牌组卡片的展开态会因此不同）。
+ * 这里不为「首个所属牌组」重算全库 deckCards——那正是本函数此前每次导航 O(全库) 的
+ * 来源；无 unfold 字段的牌组直接短路跳过。
  */
 export function prepareCardFold(wiki: any, title: string): void {
   if (!wiki || typeof wiki.filterTiddlers !== 'function' || !title) return;
@@ -179,8 +206,8 @@ export function prepareCardFold(wiki: any, title: string): void {
   // 专注计时锚点：评分时（core/grade）按锚点差值记本卡专注时长；
   // $:/temp/tidme/ 前缀使 endSession/stopstudy 清场自动带走残留
   wiki.addTiddler({ title: ns.CARD_OPEN_AT_TITLE, text: schema.twDateString(new Date()) });
-  // 默认折叠（先看问题）；仅当存在配置了 card_unfold 的牌组且命中当前卡时展开
-  // （反转原先先算 O(全库) deckCards 的逻辑，无 unfold 字段直接短路跳过，耗时近 0）
+  // 默认折叠（先看问题）；任一配置了 card_unfold 的 deck 命中即展开（见函数头注：
+  // 与「首个所属牌组」旧口径的差异），无 unfold 字段的 deck 直接短路跳过，耗时近 0
   let text = 'hide';
   for (const d of deckMod.listDecks(wiki)) {
     const unfoldFilter = String(wiki.getTiddler(d)?.fields?.card_unfold || '').trim();

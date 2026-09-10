@@ -2,24 +2,26 @@
 paths.ts — tiddler 命名空间路径生成（章节隔离）
 
 设计目标：
-- 每本书放进独立目录（TW 原生 title 路径语义）
-- 一本书的目录内不再分子目录：文档页/节卡/摘录都拍平（章层次靠 breadcrumb 字段）
-- 知识型卡片（挖空/问答）单独走 Tidme/Decks/<书>/ 命名空间（避免污染阅读材料目录）
+- 每个文档放进独立目录（TW 原生 title 路径语义）
+- 一个文档的目录内不再分子目录：文档页/节卡/摘录都拍平（章层次靠 breadcrumb 字段）
+- 知识型卡片（挖空/问答）单独走 Tidme/Decks/<doc>/ 命名空间（避免污染阅读材料目录）
 - title 唯一稳定：叶段 = 可读 caption slug + "-" + tidme.id
 - 显示用 caption / tidme.breadcrumb 保持可读
 - 现有过滤器全部基于字段（tidme.doc / tidme.parent / tags），零依赖 title 路径
 
 布局：
   Tidme/                                              根（用户内容）
-    Books/
-      <bookSlug>[/~docId6]/                           文档页 + 节卡 + 摘录（拍平）
+    Docs/
+      <docSlug>[/~docId6]/                            文档页 + 节卡 + 摘录（拍平）
         <sectionId>                                   节卡（如 s1234567890ab）
         <sectionId>--extract                          摘录（-- 分隔；同层冲突 -N 后缀）
+    Assets/
+      <docName>                                       PDF 等原文件二进制（tidme.asset 指向）
     Decks/
-      <bookSlug>[/~docId6]/                           知识型卡片（拍平；与 Books 平行）
+      <docSlug>[/~docId6]/                           知识型卡片（拍平；与 Docs 平行）
         <sectionId>--cloze / --qa                     挖空 / 问答
       ...                                             用户自建牌组
-冲突处理：同名书（slug 相同、docId 不同）的 ~docId6 后缀在导入期解析（split.ts resolveDocRoot，
+冲突处理：同名文档（slug 相同、docId 不同）的 ~docId6 后缀在导入期解析（split.ts resolveDocRoot，
 经调用方 folderOccupied 探测真实占用后追加）；本模块为纯函数，不做状态探测。
 派生卡（摘录/挖空/问答）的实际命名在 core/card-factory.derivedCardBase —— 从父卡
 title 的真实位置派生（兼容带后缀 folder），不经本模块。

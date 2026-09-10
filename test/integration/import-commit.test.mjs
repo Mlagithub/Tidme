@@ -19,8 +19,11 @@ test.before(() => {
 
 test.beforeEach(reset);
 
+/** 文档页（宿主页）也是 kind=topic，故按 tidme-doc 标签排除，只取节卡 */
 function sectionTitles(docId) {
-  return wiki.filterTiddlers(`[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]nsort[tidme.order]]`);
+  return wiki.filterTiddlers(
+    `[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]!tag[tidme-doc]nsort[tidme.order]]`,
+  );
 }
 
 test('import-commit: 首次导入全量写库；rewriteDocPage 把卡 docpage 统一改写为最终文档页 title', async () => {

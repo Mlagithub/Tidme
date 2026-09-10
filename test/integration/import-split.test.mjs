@@ -13,8 +13,9 @@ import { loadImportBundle } from '../helpers/jsdom-env.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const importBundle = await loadImportBundle();
 
+/** 节卡：kind=topic 且非文档页宿主（文档页同为 topic，靠 tidme-doc 标签区分） */
 function cardsOf(r) {
-  return r.tiddlers.filter((t) => t['tidme.kind'] === 'topic');
+  return r.tiddlers.filter((t) => t['tidme.kind'] === 'topic' && !(Array.isArray(t.tags) && t.tags.includes('tidme-doc')));
 }
 function docOf(r) {
   return r.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes('tidme-doc'));
@@ -117,9 +118,29 @@ test('split: 不再生成自动阅读牌组（topic 走阅读列表，不进牌�
   const deck = r.tiddlers.find((t) => t.title === '$:/Deck/read/自动牌组书');
   assert.equal(deck, undefined, '不生成自动阅读牌组（topic 由阅读列表管理）');
   // 节卡：kind=topic + subkind=section，无学习标签，无 deck 引用
-  const sec = r.tiddlers.find((t) => t['tidme.kind'] === 'topic');
+  const sec = cardsOf(r)[0];
   assert.equal(sec['tidme.subkind'], 'section', '节卡 subkind=section');
   assert.equal(sec.tags, undefined, '节卡无 ?/. 学习标签');
+});
+
+test('split: 导入产物一律带 tidme.kind（文档页 topic+tidme-doc 标签，节卡 topic/section）', async () => {
+  const r = await importBundle.runSplit({
+    text: '# 章一\n\n内容一。\n\n## 小节\n\n内容二。',
+    title: '带kind书',
+    type: 'text/markdown',
+    minChars: 0,
+  });
+  assert.ok(r.tiddlers.length >= 2, '文档页 + 节卡');
+  // 卡片一律带 kind：任何新增产物漏写 kind 都会在这里被抓住
+  for (const t of r.tiddlers) {
+    assert.ok(['topic', 'item'].includes(t['tidme.kind']), `产物缺/非法 tidme.kind: ${t.title}`);
+  }
+  const doc = docOf(r);
+  assert.equal(doc['tidme.kind'], 'topic', '文档页 kind=topic（与节卡同大类）');
+  assert.ok(doc.tags.includes('tidme-doc'), '文档页靠 tidme-doc 标签与节卡区分');
+  const secs = cardsOf(r);
+  assert.ok(secs.length >= 2, `节卡 ≥2，实际 ${secs.length}`);
+  assert.ok(secs.every((s) => s['tidme.subkind'] === 'section'), '节卡 subkind=section');
 });
 
 test('split: 溯源字段继承（url/author → Document）', async () => {

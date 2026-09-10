@@ -89,17 +89,18 @@ export interface Funnel {
   cards: number;
 }
 
-/** 漏斗：文档 / Topic 节 / 摘录 / 测试卡（按 kind 大类 + subkind 子类型） */
+/** 漏斗：文档页（tidme-doc 标签，宿主/阅读单元）/ Topic 节 / 摘录 / 测试卡。
+ *  文档页优先于 kind 判定——文档页是 kind=topic 的宿主页，按 kind 会误记成"节"。 */
 export function funnelCounts(items: CardLike[]): Funnel {
   const f: Funnel = { docs: 0, sections: 0, extracts: 0, cards: 0 };
   for (const c of items) {
     const kind = String(c.fields['tidme.kind'] || '');
     const sub = String(c.fields['tidme.subkind'] || '');
-    if (kind === 'topic') {
+    if (Array.isArray(c.fields.tags) && c.fields.tags.includes('tidme-doc')) f.docs++;
+    else if (kind === 'topic') {
       if (sub === 'extract') f.extracts++;
       else f.sections++;
     } else if (kind === 'item') f.cards++;
-    else if (Array.isArray(c.fields.tags) && c.fields.tags.includes('tidme-doc')) f.docs++;
   }
   return f;
 }

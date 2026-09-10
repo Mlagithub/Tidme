@@ -7,7 +7,8 @@ ids.ts — 确定性 ID 与内容指纹（双端：浏览器 WebCrypto / Node / 
 
 import { CRUMB_SEP } from './ns.ts';
 
-export interface BookMeta {
+/** 文档元信息（EPUB/PDF/Markdown 导入的公共字段；docId 由 title+creator+language 派生） */
+export interface DocMeta {
   title?: string;
   creator?: string;
   language?: string;
@@ -67,8 +68,8 @@ export async function contentFingerprint(text: string): Promise<string> {
   return shortHash(normalizeText(text), 16);
 }
 
-/** 书目文档 ID：'d' + 8 位短哈希（只由元数据派生，不含全文） */
-export async function makeDocId(meta: BookMeta): Promise<string> {
+/** 文档 ID：'d' + 8 位短哈希（只由元数据派生，不含全文） */
+export async function makeDocId(meta: DocMeta): Promise<string> {
   const basis = ['tidme-doc/v1', meta.title || '', meta.creator || '', meta.language || ''].join('\n');
   return 'd' + (await shortHash(basis, 8));
 }

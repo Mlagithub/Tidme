@@ -12,13 +12,23 @@ export async function importMarkdown(wiki, parseMod, markdown, { title = '导入
   return r;
 }
 
+/** 解析产物里的文档页（宿主页）：带 tidme-doc 标签——它同样是 kind=topic，故不能用 kind 区分 */
+export function isDocPageTiddler(t) {
+  return Array.isArray(t?.tags) && t.tags.includes('tidme-doc');
+}
+
+/** 解析产物里的节卡：kind=topic 且非文档页宿主（卡片一律带 kind，文档页靠标签区分） */
+export function parsedSections(result) {
+  return result.tiddlers.filter((t) => t['tidme.kind'] === 'topic' && !isDocPageTiddler(t));
+}
+
 /**
  * 标准书夹具「书名甲」：一书两节（markdown 切分）+ 1 摘录卡（topic）+ 1 挖空卡（item）。
  * title 由确定性 ID 派生，reset+重建后引用不变。返回关键 title 引用。
  */
 export async function makeBookFixture(wiki, parseMod) {
   const r = await importMarkdown(wiki, parseMod, '# 书名甲\n\n第一章正文。\n\n## 小节乙\n\n第二节正文。', { title: '书名甲' });
-  const section = r.tiddlers.find((x) => x['tidme.kind'] === 'topic');
+  const section = parsedSections(r)[0];
   const docTitle = r.tiddlers[0].title;
   const sectionTitle = section.title;
   // 摘录留在书目录（拍平）：<docRoot>/<sectionId>--extract

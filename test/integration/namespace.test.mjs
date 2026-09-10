@@ -25,6 +25,11 @@ test.before(() => {
 
 test.beforeEach(reset);
 
+/** 文档页判定：带 tidme-doc 标签（它同为 kind=topic，不能用 kind 区分） */
+const isDocPageTiddler = (t) => Array.isArray(t?.tags) && t.tags.includes('tidme-doc');
+/** 节卡判定：kind=topic 且非文档页宿主 */
+const isSectionTiddler = (t) => t['tidme.kind'] === 'topic' && !isDocPageTiddler(t);
+
 // === 单元：纯函数 ===
 
 test('paths: slugify 处理各种书名', () => {
@@ -64,7 +69,7 @@ test('runSplit: 文档页落在 Tidme/Docs/<书名>', async () => {
     type: 'text/markdown',
     minChars: 0,
   });
-  const doc = r.tiddlers.find((t) => t['tidme.kind'] === undefined);
+  const doc = r.tiddlers.find(isDocPageTiddler);
   assert.equal(doc.title, 'Tidme/Docs/测试书');
   assert.equal(doc.tags[0], 'tidme-doc');
 });
@@ -76,7 +81,7 @@ test('runSplit: 节卡 title 拍平到书目录（章层次在 breadcrumb 字段
     type: 'text/markdown',
     minChars: 0,
   });
-  const section = r.tiddlers.find((t) => t['tidme.kind'] === 'topic');
+  const section = r.tiddlers.find(isSectionTiddler);
   // 拍平：节卡 title = Tidme/Docs/<书>/<可读 caption>-<sectionId>（A2）
   assert.match(section.title, /^Tidme\/Docs\/测试书2\/章一-s[a-f0-9]+$/);
   assert.ok(section['tidme.id'].startsWith('s'), 'tidme.id 以 s 开头');
@@ -88,8 +93,8 @@ test('runSplit: 同一输入重切分 ID/title 稳定（确定性 → 重导入�
   const input = { text: '# 章\n\n内容。', title: '稳定书', type: 'text/markdown', minChars: 0 };
   const r1 = await parseMod.runSplit(input);
   const r2 = await parseMod.runSplit(input);
-  const s1 = r1.tiddlers.find((t) => t['tidme.kind'] === 'topic');
-  const s2 = r2.tiddlers.find((t) => t['tidme.kind'] === 'topic');
+  const s1 = r1.tiddlers.find(isSectionTiddler);
+  const s2 = r2.tiddlers.find(isSectionTiddler);
   assert.equal(s1.title, s2.title, '同输入 title 稳定');
   assert.equal(s1['tidme.id'], s2['tidme.id'], '同输入 tidme.id 稳定');
 });
@@ -104,7 +109,7 @@ test('runSplit: 字段过滤器不依赖 title 结构（向后兼容契约）', 
   for (const t of r.tiddlers) wiki.addTiddler(t);
   const byDoc = wiki.filterTiddlers(`[tidme.doc[${r.docId}]]`);
   assert.ok(byDoc.length >= 2, '按 tidme.doc 能找到所有卡');
-  const byKind = wiki.filterTiddlers(`[tidme.doc[${r.docId}]tidme.kind[topic]]`);
+  const byKind = wiki.filterTiddlers(`[tidme.doc[${r.docId}]tidme.kind[topic]!tag[tidme-doc]]`);
   assert.ok(byKind.length >= 1, '按 tidme.doc+tidme.kind 能找到节卡');
 });
 
@@ -131,7 +136,7 @@ test('runSplit: 中文长书名 + 特殊字符全部安全 slug', async () => {
     minChars: 0,
   });
   // runSplit 不自动 cleanTitle（widget 在更外层做），所以 title 含括号但仍合法
-  const doc = r.tiddlers.find((t) => t['tidme.kind'] === undefined);
+  const doc = r.tiddlers.find(isDocPageTiddler);
   // 括号被 slugify 剥除（保留内容），但要保持中文段落紧凑
   assert.ok(doc.title.startsWith('Tidme/Docs/批判性思维'), `doc title 格式: ${doc.title}`);
   // 经 cleanTitle 后的版本应该是 Tidme/Docs/批判性思维
@@ -143,13 +148,13 @@ test('runSplit: 中文长书名 + 特殊字符全部安全 slug', async () => {
     type: 'text/markdown',
     minChars: 0,
   });
-  const doc2 = r2.tiddlers.find((t) => t['tidme.kind'] === undefined);
+  const doc2 = r2.tiddlers.find(isDocPageTiddler);
   assert.equal(doc2.title, 'Tidme/Docs/批判性思维', 'cleanTitle 后 doc title 精确');
 });
 
 test('runSplit: 节卡叶段 = 可读 caption slug + 稳定 id（A2；同 caption 仍唯一）', async () => {
   const r = await parseMod.runSplit({ text: '# 第一章\n\n内容甲。\n\n# 第一章\n\n内容乙。', title: '叶段书', type: 'text/markdown', minChars: 0 });
-  const secs = r.tiddlers.filter((t) => t['tidme.kind'] === 'topic');
+  const secs = r.tiddlers.filter(isSectionTiddler);
   assert.ok(secs.length >= 2, `应有 ≥2 节（同 caption 两节），实际 ${secs.length}`);
   const leaves = secs.map((s) => String(s.title).split('/').pop());
   for (const lf of leaves) assert.ok(lf.startsWith('第一章-s'), `叶段可读且含 id: ${lf}`);
@@ -310,13 +315,13 @@ test('UI: 重复导入 bookTitle 冲突时对齐 alignCards 仍能用 breadcrumb
   const r1 = await parseMod.runSplit(input);
   for (const t of r1.tiddlers) wiki.addTiddler(t);
   // 给首张节卡设 SRS 进度
-  const sec = r1.tiddlers.find((t) => t['tidme.kind'] === 'topic');
+  const sec = r1.tiddlers.find(isSectionTiddler);
   wiki.addTiddler({ ...wiki.getTiddler(sec.title).fields, state: '2', reps: '3', due: twDate(new Date(Date.now() + 86400000)) });
   // 再次切分
   const r2 = await parseMod.runSplit(input);
-  const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]]`)
+  const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]!tag[tidme-doc]]`)
     .map((t) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
-  const sectionCards = r2.tiddlers.filter((x) => x['tidme.kind'] === 'topic');
+  const sectionCards = r2.tiddlers.filter(isSectionTiddler);
   const aligned = await align.alignCards(oldCards, r1.bookTitle, sectionCards.map((c) => ({ title: c.title, fields: c })));
   assert.ok(aligned.unchanged >= 1, '重切分对齐：未变节卡通过 breadcrumb trail 匹配（SRS 进度保留）');
 });
@@ -410,7 +415,7 @@ test('nav: section.ts 面包屑点击也用真实 doc title（修复同上）', 
   const bookTitle = '面包屑测试书';
   const r = await parseMod.runSplit({ text: '# 第一章\n\n内容。', title: bookTitle, type: 'text/markdown', minChars: 0 });
   for (const t of r.tiddlers) wiki.addTiddler(t);
-  const sec = r.tiddlers.find((t) => t['tidme.kind'] === 'topic');
+  const sec = r.tiddlers.find(isSectionTiddler);
   const secTiddler = wiki.getTiddler(sec.title);
   // 模拟 section.ts 内部 crumb click handler：
   const crumbBook = secTiddler.fields['tidme.breadcrumb'].split(' › ')[0];
@@ -431,7 +436,7 @@ test('A1: 同名书不同 docId folder 冲突 → ~docId 后缀；同 docId 重�
   const docA = rA.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes('tidme-doc'));
   assert.ok(docA.title.startsWith('Tidme/Docs/同名书~'), `被其它 doc 占用 → 加后缀：${docA.title}`);
   assert.notEqual(docA.title, 'Tidme/Docs/同名书');
-  const secA = rA.tiddlers.find((t) => t['tidme.kind'] === 'topic');
+  const secA = rA.tiddlers.find(isSectionTiddler);
   assert.ok(secA.title.startsWith(docA.title + '/'), '节卡落在带后缀 docRoot 下');
   assert.equal(secA['tidme.docpage'], docA.title, '节卡带 tidme.docpage（= 真实 doc 页）');
   assert.equal(docA['tidme.docpage'], docA.title, 'doc 页自指 docpage');
@@ -471,7 +476,7 @@ test('deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
   // 书 A：2 普通节 + 1 大纲手动"新节"（topic/section/manual-）+ 1 摘录 + 1 挖空 + 1 无 kind 散卡
   const rA = await parseMod.runSplit({ text: '# 章一\n\n内容一。\n\n# 章二\n\n内容二。', title: '删书A', type: 'text/markdown', minChars: 0 });
   for (const t of rA.tiddlers) wiki.addTiddler(t); // 文档页 + 2 节
-  const secA = rA.tiddlers.find((t) => t['tidme.kind'] === 'topic');
+  const secA = rA.tiddlers.find(isSectionTiddler);
   const manualSec = {
     title: `${secA.title.slice(0, secA.title.lastIndexOf('/') + 1)}manual-新笔记`,
     caption: '新笔记',
@@ -491,6 +496,8 @@ test('deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
     title: '手动散卡A',
     caption: 'Q?',
     text: 'A',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
     'tidme.doc': rA.docId,
     state: '0',
     due: twDate(),
@@ -511,7 +518,7 @@ test('deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
   // 书 B 不受影响
   const rB = await parseMod.runSplit({ text: '# 唯一章\n\n内容乙。', title: '别书B', type: 'text/markdown', minChars: 0 });
   for (const t of rB.tiddlers) wiki.addTiddler(t);
-  const secB = rB.tiddlers.find((t) => t['tidme.kind'] === 'topic');
+  const secB = rB.tiddlers.find(isSectionTiddler);
 
   const n = docOps.deleteDocContent(wiki, rA.docId);
   // 删除 5 个：文档页 + 2 普通节 + 1 大纲新节 + 1 子集牌组
@@ -519,9 +526,13 @@ test('deleteDocContent: 删阅读材料、保留知识产物（摘录/挖空/问
   // 保留的知识产物仍存在
   assert.ok(wiki.getTiddler(ext.title), '摘录保留');
   assert.ok(wiki.getTiddler(cloze.title), '挖空保留');
-  assert.ok(wiki.getTiddler('手动散卡A'), '无 kind 手动散卡保留');
+  assert.ok(wiki.getTiddler('手动散卡A'), '手动制的 item 卡保留');
   // 被删的不存在
-  assert.equal(wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${rA.docId}]tidme.kind[topic]!tidme.subkind[extract]]`).length, 0, '普通节卡/大纲新节全删');
+  assert.equal(
+    wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${rA.docId}]tidme.kind[topic]!tidme.subkind[extract]!tag[tidme-doc]]`).length,
+    0,
+    '普通节卡/大纲新节全删',
+  );
   assert.equal(wiki.getTiddler(manualSec.title), undefined, '大纲手动新节删除');
   assert.equal(wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.subset-doc[${rA.docId}]]`).length, 0, '子集牌组删除');
   // 文档页删除
@@ -544,7 +555,7 @@ test('re-split 保留已有摘录（不被归档为 obsolete/done）', async () 
   const text = '# 章节 1\n\n第一段内容。\n\n## 子节 A\n\n子节 A 内容。';
   const r1 = await parseMod.runSplit({ text, title: '重切分测试书', folderOccupied: () => null });
   const [doc, ...cards1] = r1.tiddlers;
-  const sec1 = cards1.find((c) => c['tidme.kind'] === 'topic');
+  const sec1 = cards1.find(isSectionTiddler);
   for (const t of r1.tiddlers) wiki.addTiddler({ ...t });
   // 模拟用户做的摘录（手动建，挂在第一张节卡下）
   const ext = {
@@ -563,8 +574,8 @@ test('re-split 保留已有摘录（不被归档为 obsolete/done）', async () 
   const text2 = '# 1\n\n第一段新内容。\n\n## 子节 A\n\n子节 A 改后内容。\n\n## 新增子节 B\n\nB 内容。';
   const r2 = await parseMod.runSplit({ text: text2, title: '重切分测试书', folderOccupied: (base) => docOps.docFolderOwner(wiki, base) });
   const [doc2, ...cards2] = r2.tiddlers;
-  const sectionCards2 = cards2.filter((c) => c['tidme.kind'] === 'topic');
-  const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]!tidme.subkind[extract]!is[draft]]`)
+  const sectionCards2 = cards2.filter(isSectionTiddler);
+  const oldCards = wiki.filterTiddlers(`[tidme.doc[${r1.docId}]tidme.kind[topic]!tidme.subkind[extract]!tag[tidme-doc]!is[draft]]`)
     .map((ot) => ({ title: ot, fields: wiki.getTiddler(ot).fields }));
   const aligned = await align.alignCards(oldCards, doc.title, sectionCards2.map((c) => ({ title: c.title, fields: c })));
   // 写入对齐结果

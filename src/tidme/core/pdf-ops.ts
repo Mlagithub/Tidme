@@ -1,10 +1,11 @@
 /*
 core/pdf-ops.ts — PDF 文档落库收口（二进制 + 文档页阅读卡）
 
-- 二进制：Tidme/Assets/<书名>（type application/pdf，base64；ns.NS_ASSETS）
-- 文档页：Tidme/Docs/<书名>（kind topic + tag tidme-doc + tidme.format=pdf +
-  tidme.asset=二进制标题 + tidme.structure=continuous），text = <$tidme-pdf-reader/>，due=now
-  作为整本阅读卡进入阅读/学习队列。PDF 不再切分节卡：阅读位置由续读点绝对页码表达。
+- 二进制：Tidme/Assets/<文档名>（type application/pdf，base64；ns.NS_ASSETS）
+- 文档页：Tidme/Docs/<文档名>（kind topic + tag tidme-doc + tidme.format=pdf +
+  tidme.asset=二进制标题 + tidme.structure=continuous），text = <$tidme-pdf-reader/>，
+  完整 FSRS 初值（due=now）作为整本阅读卡进入阅读/学习队列。
+  PDF 不再切分节卡：阅读位置由续读点绝对页码表达。
 跨 core 模块引用一律显式 require（避免 esbuild 内联复制）。
 */
 
@@ -16,8 +17,8 @@ const ids = require('$:/plugins/keepone/tidme/core/ids.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 
-export function pdfBinaryTitle(bookTitle: string): string {
-  return ns.NS_ASSETS + bookTitle;
+export function pdfBinaryTitle(docTitle: string): string {
+  return ns.NS_ASSETS + docTitle;
 }
 
 /**
@@ -40,20 +41,19 @@ export interface CreatePdfDocResult {
 
 /**
  * PDF 文档落库：二进制 + 文档页阅读卡（不切分）。阅读位置由续读点绝对页码表达，
- * 文档页 due=now 进入阅读/学习队列。
+ * 文档页带完整 FSRS 初值（schema.initialFsrsFields，due=now）进入阅读/学习队列。
  */
 export async function createPdfDoc(
   wiki: any,
-  opts: { docTitle?: string; bookTitle?: string; dataB64: string; pagesTotal?: number },
+  opts: { docTitle: string; dataB64: string; pagesTotal?: number },
 ): Promise<CreatePdfDocResult> {
-  const docTitle = String(opts?.docTitle || opts?.bookTitle || '');
+  const docTitle = String(opts?.docTitle || '');
   if (!wiki || !opts || !docTitle) throw new Error('pdf-ops: 缺少参数');
   const dataB64 = String(opts.dataB64 || '').trim();
   if (!dataB64) throw new Error('pdf-ops: dataB64 为空，拒绝落库空 PDF 二进制');
   const docId = await ids.makeDocId({ title: docTitle, creator: '', language: 'pdf' });
   const docRootTitle = paths.docRoot(docTitle);
   const pdfTitle = pdfBinaryTitle(docTitle);
-  const now = schema.twDateString(new Date());
 
   wiki.addTiddler({ title: pdfTitle, type: 'application/pdf', text: dataB64 });
   const nowFields = schema.initialFsrsFields(new Date());
@@ -67,7 +67,7 @@ export async function createPdfDoc(
     'tidme.asset': pdfTitle,
     'tidme.structure': 'continuous',
     'tidme.priority': String(sched.PRIORITY_DEFAULT),
-    'tidme.afactor': '1.3',
+    'tidme.afactor': String(sched.AFACTOR_CONTINUOUS),
     caption: docTitle,
     'tidme.breadcrumb': docTitle,
     text: '<$tidme-pdf-reader/>',

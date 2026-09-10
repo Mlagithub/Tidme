@@ -9,7 +9,7 @@ widgets/card-manager.ts — 统一卡片管理器 v3
 
 结构（原 render 闭包拆件）：状态收进 CMState（原 16 个闭包可变量），视图构建为
 模块级函数（统一收 Ctx），事件处理器早退扁平化。
-卡片 = 任何带 tidme.kind 的 tiddler 或无 kind 有 FSRS 字段的手动散卡（含 ?/. 时代旧卡）。
+卡片 = 任何带 tidme.kind 的 tiddler（topic 节卡 / item 测试卡）；文档页（宿主页）不列入。
 "全部"视图计数与实际显示一致：按文档树全量；按牌组树由各牌组分支 + 未入组分支兜底全量。
 Done 语义：移出队列 = 置 tidme.done（kind 决定归属：item 出默认牌组，topic 出阅读列表）。
 */
@@ -104,9 +104,9 @@ const lapsesLabel = display.lapsesLabel;
 const diffLabel = display.diffLabel;
 const dateLabel = display.dateLabel;
 
-/** 卡片收集：带 tidme.kind 的 tiddler（topic/item）+ 无 kind 但有 FSRS 字段的手动卡。排除文档汇总页。 */
-const CARD_FILTER = '[all[shadows+tiddlers]!is[draft]has[tidme.kind]] ' +
-  '[all[shadows+tiddlers]!is[draft]!has[tidme.kind]has[state]has[due]]';
+/** 卡片收集：带 tidme.kind 的 tiddler（topic/item）。卡片一律带 kind——制卡工厂
+ *  （core/card-factory）与文档页构建处保证。排除文档汇总页（文档页宿主不是可管理卡片）。 */
+const CARD_FILTER = '[all[shadows+tiddlers]!is[draft]has[tidme.kind]!tag[tidme-doc]]';
 
 /** Done：字段补丁（core scheduler 实现） */
 function doneFields(fields: Record<string, any>): Record<string, any> {
@@ -189,7 +189,7 @@ function docGroupsOf(cards: Card[], wiki?: any): [string, Card[]][] {
 
 function collectAll(ctx: Ctx) {
   const { wiki, st } = ctx;
-  // 两个 run 按 tidme.kind 互斥（item / 无 kind 手动卡），TW 按标题去重，无需再过滤
+  // 单条 run 即可：卡片一律带 tidme.kind（含 topic 节卡与 item 测试卡），文档页已排除
   st.allCards = wiki.filterTiddlers(CARD_FILTER)
     .map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
   // card/card_exclude 各求值一次：strict = loose − exclude（省去 strict 内部对 card 的二次求值）

@@ -81,14 +81,6 @@ test('schema: assertKind 严格校验', () => {
   assert.throws(() => schema.assertKind({ ...good, state: undefined }, 'topic'), /FSRS/);
 });
 
-test('schema: inferKind 只认 topic/item 大类', () => {
-  assert.equal(schema.inferKind({ 'tidme.kind': 'topic' }), 'topic');
-  assert.equal(schema.inferKind({ 'tidme.kind': 'item' }), 'item');
-  assert.equal(schema.inferKind({ 'tidme.kind': 'extract' }), null, '旧子类型不算大类');
-  assert.equal(schema.inferKind({ 'tidme.order': '000001' }), null, '无 kind 返回 null');
-  assert.equal(schema.inferKind({}), null);
-});
-
 test('deck-engine: 组合过滤器与队列顺序（due-new）', () => {
   const fields = {
     card: '[tidme.kind[item]]',

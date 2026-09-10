@@ -51,13 +51,16 @@ export async function commitImportToWiki(wiki: any, opts: CommitImportOptions): 
     if (rewriteDocPage && c['tidme.docpage'] && c['tidme.docpage'] !== docTitle) c['tidme.docpage'] = docTitle;
   };
 
-  // 对齐前置查询（写库前取旧状态）：文档页真实 title + 同 docId 的普通节旧卡（排除摘录与
-  // 牌组页——learning-package 词书页带 legacy kind=topic + tidme.doc，但它是牌组实体，
-  // 绝不能作为"旧节卡"进入对齐被归档/重写；口径同 ns.TOPIC_QUEUE_FILTER 的 !tag 排除）
+  // 对齐前置查询（写库前取旧状态）：文档页真实 title + 同 docId 的普通节旧卡（排除摘录、
+  // 文档页（宿主页 kind=topic）与牌组页——learning-package 词书页带 legacy kind=topic +
+  // tidme.doc，但它是牌组实体，绝不能作为"旧节卡"进入对齐被归档/重写；口径同
+  // ns.TOPIC_QUEUE_FILTER 的 !tag 排除）
   const docPage = wiki.filterTiddlers(`[tag[tidme-doc]tidme.doc[${docId}]]`)[0] || '';
   const alignDocTitle = docPage || docTitle;
   const oldCards: { title: string; fields: Record<string, any> }[] = wiki
-    .filterTiddlers(`[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]!tag[$:/tags/TidmeDeck]!is[draft]]`)
+    .filterTiddlers(
+      `[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]!tag[$:/tags/TidmeDeck]!tag[tidme-doc]!is[draft]]`,
+    )
     .map((ot: string) => ({ title: ot, fields: wiki.getTiddler(ot)?.fields || {} }));
 
   const result: CommitImportResult = { created: 0, updated: 0, archived: 0, aligned: false, collisionSuspect: false };

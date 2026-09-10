@@ -14,13 +14,15 @@ export const AUTOPOSTPONE_CONFIG_TITLE = '$:/config/Tidme/AutoPostpone';
 
 export const PRIORITY_DEFAULT = 50;
 export const AFACTOR_DEFAULT = 1.5;
+/** 连续型长材料（整本 PDF/未切分长文）的 A-Factor：与 afactorForText 的 10000+ 字档一致 */
+export const AFACTOR_CONTINUOUS = 1.3;
 export const PRIORITY_TIERS = { high: 10, medium: 50, low: 90 } as const;
 
 /**
  * 复习流（item 类）的 kind 过滤片段（分类对齐 SuperMemo：Topic=阅读 / Item=测试）。
  * topic（阅读流）不进主动复习流；item（复习流）进默认牌组。
  * 拼进 deck card / 子集过滤器，如 `[all[...]tidme.kind[item]] <ITEM_FILTER>`。
- * 注：无 kind 的手动卡由默认牌组 card 过滤器的兜底分支收录（has[state]has[due]），不在此处。
+ * 卡片一律带 kind（制卡工厂与各文档页构建处保证），无需"无 kind 兜底分支"。
  */
 export const ITEM_FILTER = `[tidme.kind[item]]`;
 
@@ -91,11 +93,11 @@ export interface Patch {
   fields: Record<string, any>;
 }
 
-/** 顺延：due 推后 byDays 天（相对当前 due 或 now；已逾期卡相对 now 顺延，确保落入未来） */
-export function postponeCard(fields: Record<string, any>, byDays = 7): Record<string, any> {
+/** 顺延：due 推后 byDays 天（相对当前 due 或 now；已逾期卡相对 now 顺延，确保落入未来）。
+ *  now 可注入，便于测试固定时钟（与 isDueNow(fields, now) 同风格）。 */
+export function postponeCard(fields: Record<string, any>, byDays = 7, now = new Date()): Record<string, any> {
   const d = parseTwDate(fields.due);
-  const now = Date.now();
-  const base = d.getTime() < now ? new Date(now) : d;
+  const base = d.getTime() < now.getTime() ? now : d;
   return { due: twDateString(addDays(base, byDays)) };
 }
 
@@ -277,7 +279,7 @@ export function afactorForText(chars: number): number {
   if (c < 800) return 2.0; // 短文：快速展期
   if (c < 3000) return 1.6;
   if (c < 10000) return 1.4;
-  return 1.3; // 长文/书：平缓
+  return AFACTOR_CONTINUOUS; // 长文/书：平缓
 }
 
 /** 读取卡片的 A-Factor：字段（tidme.afactor）优先，其次按字符数启发式，最后默认 1.5 */
@@ -290,16 +292,16 @@ export function afactorOf(fields: Record<string, any>, fallback = 1.5): number {
 /**
  * Topic 专属 A-Factor 展期函数（对标 SuperMemo 优先级漏斗调度）：
  * 下一次间隔 = 当前间隔 * A-Factor（最小 3 天），顺延后将低优先阅读材料自动推后，释放队列空间给更高优先内容。
- * A-Factor 读取卡片 tidme.afactor（无则按字符数启发式，再回默认 1.5）。
+ * A-Factor 读取卡片 tidme.afactor（无则按字符数启发式，再回默认 1.5）。now 可注入（测试固定时钟）。
  */
 export function postponeTopicByAFactor(
   fields: Record<string, any>,
   aFactor?: number,
   minDays = 3,
+  now = new Date(),
 ): Record<string, any> {
   const factor = aFactor !== undefined ? normalizeAFactor(aFactor) : afactorOf(fields);
-  const lastDate = parseTwDate(fields.last_review || fields.due, new Date());
-  const now = new Date();
+  const lastDate = parseTwDate(fields.last_review || fields.due, new Date(now));
   const elapsedDays = Math.max(1, Math.round((now.getTime() - lastDate.getTime()) / 86400000));
   const currentInterval = Number(fields.scheduled_days) || elapsedDays;
   const newInterval = Math.max(minDays, Math.round(currentInterval * factor));

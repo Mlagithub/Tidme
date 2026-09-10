@@ -27,15 +27,28 @@ test.beforeEach(async () => {
 });
 
 test('双轨分类: 默认牌组只装 item（含挖空，不含节卡/摘录）；topic 不进任何牌组', () => {
-  // 无 kind 手动散卡（模拟用户手动建卡，按 item 兜底）
-  wiki.addTiddler({ title: '手动散卡甲', state: '0', due: '20261231000000000', reps: '0', lapses: '0', stability: '0', difficulty: '0' });
+  // 手动制的散卡 = 标准 item 卡（制卡工厂产物形态）
+  wiki.addTiddler({
+    title: '手动散卡甲',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
+    state: '0',
+    due: '20261231000000000',
+    reps: '0',
+    lapses: '0',
+    stability: '0',
+    difficulty: '0',
+  });
+  // 无 kind 的 tiddler 不是卡：即使带 FSRS 字段也不进任何队列（卡片一律带 kind）
+  wiki.addTiddler({ title: '无kind散落', state: '0', due: '20261231000000000' });
   const deck = wiki.getTiddler('$:/Deck/default');
   assert.ok(deck, '默认牌组存在');
   const queue = wiki.filterTiddlers(String(deck.fields.card));
   assert.ok(queue.includes(F.clozeTitle), '挖空卡（item）进复习流');
   assert.ok(!queue.includes(F.extractTitle), '摘录卡（topic）不进复习流');
   assert.ok(!queue.some((t) => wiki.getTiddler(t)?.fields?.['tidme.kind'] === 'topic'), '节卡（topic）不进复习流');
-  assert.ok(queue.includes('手动散卡甲'), '无 kind 手动卡按 item 进复习流');
+  assert.ok(queue.includes('手动散卡甲'), '手动制的 item 卡进复习流');
+  assert.ok(!queue.includes('无kind散落'), '无 kind 的 tiddler 不是卡，不入队');
   // topic（阅读材料）不进任何 TidmeDeck：不生成自动阅读牌组，也不出现在牌组库
   const autoDeck = wiki.getTiddler('$:/Deck/read/书名甲');
   assert.equal(autoDeck, undefined, '不生成自动阅读牌组（书只出现在阅读列表）');

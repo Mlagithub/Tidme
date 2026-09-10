@@ -10,7 +10,7 @@ docId 由源标题派生（同一 tiddler 重切分 ID 稳定；标题唯一性�
 */
 
 import { contentFingerprint, makeDocId, makeSectionId, normalizeText } from '$:/plugins/keepone/tidme/core/ids';
-import type { BookMeta } from '$:/plugins/keepone/tidme/core/ids';
+import type { DocMeta } from '$:/plugins/keepone/tidme/core/ids';
 import { CRUMB_SEP } from '$:/plugins/keepone/tidme/core/ns';
 import { docRoot, joinPath, sectionLeaf } from '$:/plugins/keepone/tidme/core/paths';
 import { afactorForText, normalizePriority, PRIORITY_DEFAULT } from '$:/plugins/keepone/tidme/core/scheduler';
@@ -79,7 +79,7 @@ function resolveDocRoot(bookTitle: string, docId: string, folderOccupied?: (base
 export interface SplitResult {
   bookTitle: string;
   docId: string;
-  meta: BookMeta;
+  meta: DocMeta;
   format: TextFormat;
   sectionCount: number;
   stats: { sections: number; hardSplitCount: number };
@@ -113,7 +113,7 @@ function blocksFor(format: TextFormat, text: string) {
  */
 export async function emitTiddlers(
   docId: string,
-  meta: BookMeta & { __format?: string },
+  meta: DocMeta & { __format?: string },
   bookTitle: string,
   sections: RawSection[],
   bag: string,
@@ -182,7 +182,8 @@ export async function emitTiddlers(
     title: docRoot, // 文档页落 Tidme/Docs/<书名>[/~docId] 命名空间
     caption: docTitle, // 可读名：标题模板/列表显示用（title 是路径）
     type: 'text/vnd.tiddlywiki',
-    tags: ['tidme-doc'],
+    tags: ['tidme-doc'], // 文档页标记（与 kind=topic 并存：kind 定大类，tag 定"文档宿主页"）
+    'tidme.kind': 'topic', // 阅读材料大类（与 pdf-ops.createPdfDoc 的文档页一致）
     text: docLines.join('\n'),
     bag,
     revision: '0',
@@ -214,7 +215,7 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
   const blocks = blocksFor(format, text);
   if (!blocks.length) throw new Error('Cannot parse any content blocks');
 
-  const meta: BookMeta & Record<string, string> = {
+  const meta: DocMeta & Record<string, string> = {
     title: input.title || guessTitle(text, format) || 'Untitled Import',
     ...(input.sourceFields || {}),
   };

@@ -37,9 +37,19 @@ test.beforeEach(async () => {
   F = await makeBookFixture(wiki, parseMod);
 });
 
-/** 无 kind 手动散卡（模拟用户手动建卡，按 item 兜底进复习流） */
+/** 手动制的散卡 = 标准 item 卡（制卡工厂产物形态：kind=item + FSRS 字段） */
 function addLooseCard() {
-  wiki.addTiddler({ title: '手动散卡甲', state: '0', due: '20261231000000000', reps: '0', lapses: '0', stability: '0', difficulty: '0' });
+  wiki.addTiddler({
+    title: '手动散卡甲',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
+    state: '0',
+    due: '20261231000000000',
+    reps: '0',
+    lapses: '0',
+    stability: '0',
+    difficulty: '0',
+  });
 }
 
 test('queue-ops: 每牌组渲染批量操作按钮（只剩默认牌组）', () => {

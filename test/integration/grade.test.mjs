@@ -2,7 +2,7 @@
 grade.test.mjs — 评分写路径 core/grade（唯一实现）
 
 - gradeCard：FSRS 写回 / <deck>/log / 优先级动态 / 会话推进（Again 挪队尾）/
-  专注时长（计时锚点消费）/ 折叠态清理 / 子集牌组清理（fsrs4tw 契约）
+  专注时长（计时锚点消费）/ 折叠态清理（子集牌组不在评分时清理——见 session/deck 用例）
 - 防盲评与跨端契约：repeat.tid 经 <$tidme-grade/> 走唯一写路径且折叠态禁用；
   startstudy.tid 写同一计时锚点标题（ns.CARD_OPEN_AT_TITLE）
 - widget 测试：<$tidme-grade> invokeAction 连通性与参数读取
@@ -105,7 +105,7 @@ test('gradeCard：会话最后一张 → finished；缺锚点不记专注时长'
   assert.equal(stats.getReadTimeStats(wiki).totalSeconds, 0, '无锚点不记时长');
 });
 
-test('gradeCard leech：新 lapses ≥ leech_threshold 返回标记（配置动作留 wikitext）', () => {
+test('gradeCard：高 lapses 卡照常写库（leech 阈值判定留在 wikitext 渲染期，core 不做）', () => {
   // state=2 到期卡，lapses 8 = default 阈值；Good 不产生 lapse → 预测 lapses 仍 8
   wiki.addTiddler({
     title: '蠕虫卡',
@@ -124,7 +124,12 @@ test('gradeCard leech：新 lapses ≥ leech_threshold 返回标记（配置动�
   });
   const r = grade.gradeCard(wiki, { title: '蠕虫卡', deckTitle: '$:/Deck/default', rating: 'Good' });
   assert.equal(r.ok, true);
-  assert.equal(r.leech, true, 'lapses 8 ≥ 阈值 8');
+  // leech 判定依赖 lapses，但 leech_action 是 wikitext 动作、必须在渲染期挂载，
+  // 故 core 不再返回无人消费的 leech 标记（旧实现算了又丢，属重复阈值实现）
+  assert.equal('leech' in r, false, 'core 不再返回 leech 标记');
+  const f = wiki.getTiddler('蠕虫卡').fields;
+  assert.equal(Number(f.reps), 13, 'reps 照常递增（与 lapses 无关）');
+  assert.ok(/^\d{17}$/.test(String(f.due)), 'due 照常写入');
 });
 
 test('gradeCard：无关评分不删子集牌组（评分不是子集生命周期的合法事件）', () => {

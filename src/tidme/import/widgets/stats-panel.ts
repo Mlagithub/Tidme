@@ -48,8 +48,9 @@ function makeStatsPanel(): WidgetCtor {
 
         const decks = deckMod.listDecks(wiki);
         const docs = wiki.filterTiddlers('[tag[tidme-doc]]');
-        // 漏斗只消费卡片与文档页（[!is[system]] 会把状态/配置/临时 tiddler 全部载入）
-        const all = cardLikes('[all[shadows+tiddlers]!is[draft]has[tidme.kind]] [all[shadows+tiddlers]!is[draft]tag[tidme-doc]]');
+        // 漏斗只消费卡片与文档页（[!is[system]] 会把状态/配置/临时 tiddler 全部载入）；
+        // 文档页同样是 kind=topic 的卡片，一个 run 即可
+        const all = cardLikes('[all[shadows+tiddlers]!is[draft]has[tidme.kind]]');
         const funnel = stats.funnelCounts(all);
         // log tiddler title 形如 $:/Deck/<deck>/log（repeat.tid 写入，单文件），用 prefix + JS 后过滤匹配
         const logTitles = wiki.filterTiddlers('[all[shadows+tiddlers]prefix[$:/Deck/]]')

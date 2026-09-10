@@ -82,7 +82,7 @@ var NS_DECKS = "Tidme/Decks/";
 var NS_DECKS_SCATTER = NS_DECKS + "\u6563\u5361";
 var CRUMB_SEP = " \u203A ";
 var QUEUE_EXCLUDE = "!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]";
-var TOPIC_QUEUE_FILTER = "[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]" + QUEUE_EXCLUDE + "]";
+var TOPIC_QUEUE_FILTER = "[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]!tidme.structure[sectioned]" + QUEUE_EXCLUDE + "]";
 var IMPORT_BAG_TITLE = "$:/temp/tidme-import/bag";
 
 // src/tidme/core/ids.ts
@@ -1129,6 +1129,7 @@ function insertedSectionTitle(docTitle, sectionCaption) {
 
 // src/tidme/core/scheduler.ts
 var PRIORITY_DEFAULT = 50;
+var AFACTOR_CONTINUOUS = 1.3;
 function normalizePriority(v) {
   if (typeof v === "number" && Number.isFinite(v))
     return Math.max(0, Math.min(100, Math.round(v)));
@@ -1149,7 +1150,7 @@ function afactorForText(chars) {
     return 1.6;
   if (c < 1e4)
     return 1.4;
-  return 1.3;
+  return AFACTOR_CONTINUOUS;
 }
 
 // src/tidme/import/parse/split.ts
@@ -1247,6 +1248,7 @@ function emitTiddlers(_0, _1, _2, _3, _4) {
       caption: docTitle,
       type: "text/vnd.tiddlywiki",
       tags: ["tidme-doc"],
+      "tidme.kind": "topic",
       text: docLines.join("\n"),
       bag,
       revision: "0",

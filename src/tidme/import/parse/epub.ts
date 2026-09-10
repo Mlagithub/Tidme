@@ -13,7 +13,7 @@ function JSZipLib(): any {
   if (!_JSZip) _JSZip = require('$:/plugins/keepone/tidme/import/jszip');
   return _JSZip;
 }
-import type { BookMeta } from '$:/plugins/keepone/tidme/core/ids';
+import type { DocMeta } from '$:/plugins/keepone/tidme/core/ids';
 
 const XHTML_TYPE = 'application/xhtml+xml';
 
@@ -63,7 +63,7 @@ export function normalizePath(p: string): string {
 
 export interface EpubBook {
   zip: any;
-  meta: BookMeta;
+  meta: DocMeta;
   spine: { idref: string; href: string }[];
   ncxHref: string | null;
   navHref: string | null;
@@ -82,7 +82,7 @@ export async function readEpubBytes(bytes: ArrayBuffer | Uint8Array): Promise<Ep
   const opfDoc = new DOMParser().parseFromString(await zip.file(opfPath).async('string'), 'text/xml');
   const opfDir = opfPath.replace(/[^/]*$/, '');
 
-  const meta: BookMeta = {};
+  const meta: DocMeta = {};
   const metaNode = findNode(opfDoc, ['package', 'metadata']);
   if (metaNode) {
     for (const child of Array.from(metaNode.childNodes || [])) {

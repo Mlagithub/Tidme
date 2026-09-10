@@ -2,7 +2,7 @@ title: $:/Deck/default
 tags: $:/tags/TidmeDeck
 caption: {{$:/language/tidme/default}}
 description: {{$:/language/tidme/defaulttip}}
-card: [all[shadows+tiddlers]tidme.kind[item]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]] [all[shadows+tiddlers]!has[tidme.kind]has[state]has[due]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]]
+card: [all[shadows+tiddlers]tidme.kind[item]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]]
 card_unfold:
 card_exclude: [field:tidme.done[yes]] [field:tidme.ignored[yes]]
 order: due-new

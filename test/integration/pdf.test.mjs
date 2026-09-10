@@ -65,6 +65,7 @@ test('core/pdf-ops: createPdfDoc 整本落库 —— 二进制/文档页就位�
   const doc = wiki.getTiddler(r.docTitle).fields;
   assert.equal(r.docTitle, 'Tidme/Docs/未来简史');
   assert.equal(doc['tidme.format'], 'pdf');
+  assert.equal(doc['tidme.kind'], 'topic', '文档页 kind=topic（卡片一律带 kind）');
   assert.equal(doc['tidme.asset'], r.pdfTitle);
   assert.equal(doc['tidme.structure'], 'continuous');
   assert.ok((doc.tags || []).includes('tidme-doc'), '文档页带导入标记');
@@ -204,6 +205,37 @@ test('pdf-reader: 节卡缺少 tidme.asset 时通过 docId 回退解析，且学
   assert.equal(w.refresh({ [secTitle]: {} }), true, '当前卡片变更触发 refresh');
   assert.equal(w.refresh({ [r.pdfTitle]: {} }), true, 'PDF 二进制条目变更触发 refresh');
   assert.equal(w.refresh({ 无关卡片: {} }), false, '无关变更不触发 refresh');
+
+  w.destroy?.();
+  sessionMod.endSession(wiki);
+});
+
+test('pdf-reader: 学习模式「读完继续」顺延整本文档 due 并累加 reps（与模式条同口径）', async () => {
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '阅读器顺延书', dataB64: 'JVBERi0xLjQK' });
+  const before = wiki.getTiddler(r.docTitle).fields;
+  // 会话里再放一张「当前可学」卡：避免推进落到空队收尾分支，聚焦本用例要锁的顺延行为
+  wiki.addTiddler({
+    title: '后续可学卡',
+    'tidme.kind': 'item',
+    due: schema.twDateString(new Date(Date.now() - 60000)),
+  });
+  sessionMod.setSession(wiki, { list: [r.docTitle, '后续可学卡'] });
+
+  const { root, w } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: r.docTitle },
+  });
+  const nextBtn = collectButtons(root).find((b) => String(b.textContent || '').includes('读完继续'));
+  assert.ok(nextBtn, '学习会话中工具栏展示「读完继续」按钮');
+  nextBtn.dispatchEvent({ type: 'click' });
+
+  const f = wiki.getTiddler(r.docTitle).fields;
+  assert.ok(schema.parseTwDate(f.due).getTime() > Date.now(), 'due 顺延到未来（杜绝同日无限重现）');
+  assert.equal(Number(f.reps), Number(before.reps || 0) + 1, 'Topic 顺延累加 reps 计数');
+  assert.ok(Number(f.scheduled_days) >= 3, 'A-Factor 间隔下限 3 天');
+  const rp = docOps.parseReadPoint(wiki, r.docId);
+  assert.equal(rp.t, r.docTitle, '续读点仍指向本文档页');
+  assert.equal(String(rp.s), 'p1', '记录当前阅读页');
+  assert.deepEqual([...sessionMod.getSession(wiki).list], ['后续可学卡'], '文档页移出会话，后续卡留下');
 
   w.destroy?.();
   sessionMod.endSession(wiki);

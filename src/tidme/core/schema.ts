@@ -120,13 +120,6 @@ export function missingFsrsFields(fields: Record<string, unknown>): string[] {
   return FSRS_FIELDS.filter((f) => fields[f] === undefined || fields[f] === null || fields[f] === '');
 }
 
-/** kind 判断（宽容：缺 kind 的手动卡返回 null，由调用方按 item 兜底） */
-export function inferKind(fields: Record<string, unknown>): Kind | null {
-  const kind = fields['tidme.kind'];
-  if (typeof kind === 'string' && (KINDS as readonly string[]).includes(kind)) return kind as Kind;
-  return null;
-}
-
 /** 返回必填字段缺失清单（宽容模式：不抛错，由调用方补默认）
  * 注：tidme.path 已废止（与 tidme.breadcrumb 全程同值、无任何读取方）；路径显示一律走 tidme.breadcrumb */
 export function missingRequired(fields: Record<string, unknown>, kind: Kind): string[] {

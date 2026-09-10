@@ -116,15 +116,14 @@ export function isDocPage(f: Record<string, any> | null | undefined): boolean {
 
 /**
  * 连续型阅读卡判定（整本/整篇不切分的阅读材料：如整本 PDF 或未切分长文）：
- * 文档页自身即阅读卡（带 tidme-doc 且 kind=topic，无 subkind 或 structure=continuous 或 format=pdf）。
+ * 文档页自身即阅读卡（带 tidme-doc、kind=topic，且 structure=continuous 或 format=pdf）。
  * 这类卡代表整个连续阅读单元——推进只更新阅读点（页码/偏移）不标 done。
+ * 分节型文档页（structure=sectioned）是宿主/入口页，不是阅读卡。
  */
 export function isContinuousCard(fields: Record<string, any> | null | undefined): boolean {
   if (!fields) return false;
   if (fields['tidme.structure'] === 'continuous') return true;
-  const format = String(fields['tidme.format'] || '');
-  const isDoc = isDocPage(fields);
-  return isDoc && fields['tidme.kind'] === 'topic' && (!fields['tidme.subkind'] || format === 'pdf');
+  return isDocPage(fields) && fields['tidme.kind'] === 'topic' && String(fields['tidme.format'] || '') === 'pdf';
 }
 
 export interface DocReadingProgress {
@@ -183,9 +182,10 @@ export function docReadingProgress(wiki: any, docId: string): DocReadingProgress
   };
 }
 
-/** 正文章节判定（阅读进度口径）：topic 节卡；摘录与牌组页（词书 tidme.doc 的宿主）不算 */
+/** 正文章节判定（阅读进度口径）：topic 节卡；摘录、牌组页与文档页（宿主页）不算 */
 function isContentSection(f: Record<string, any>): boolean {
   return f['tidme.kind'] === 'topic' &&
+    !isDocPage(f) &&
     String(f['tidme.subkind'] || '') !== 'extract' &&
     !deckMod.isDeckFields(f);
 }
@@ -262,7 +262,7 @@ export function docReadingTarget(wiki: any, docId: string): string {
 /**
  * 删除一本书的"阅读材料"，保留全部"知识产物"：
  * 删除：文档页 + 全部 topic/subkind=section 节卡（导入切分节 + 大纲手动插入的"新节"；含 obsolete 归档）
- * 保留：摘录（topic/extract）、挖空/问答（item）、无 kind 手动散卡、子集牌组外的知识对象
+ * 保留：摘录（topic/extract）、挖空/问答（item）、子集牌组外的知识对象
  * 附带：删除本书子集牌组（tidme.subset-doc）；续读点仅当其指向被删内容时清除；
  *       学习会话列表剔除被删卡（保留其余队列语义）。
  * 一律按 docId 字段筛选（不依赖 title 结构，folder 后缀/历史格式均覆盖）。
@@ -277,7 +277,7 @@ export function deleteDocContent(wiki: any, docId: string): number {
     // 牌组页（词书宿主，learning-package 词卡按 tidme.doc 挂其下）是牌组体系实体，
     // 不属阅读材料——绝不随文档清理删除（其子集牌组仍按下文单独清理）
     if (deckMod.isDeckFields(f)) continue;
-    // 阅读材料：文档页 + topic 节卡（subkind!==extract → 摘录保留；kind=item/无 kind 保留）
+    // 阅读材料：文档页 + topic 节卡（subkind!==extract → 摘录保留；item 保留）
     if (isDocPage(f)) {
       targets.add(t);
       // PDF/附件：二进制与 OCR 转写页同属阅读材料，级联清理
@@ -315,17 +315,18 @@ export function deleteDocContent(wiki: any, docId: string): number {
   return n;
 }
 
-/** 某文档全部正文章节（阅读进度口径，与文档页一致；topic 卡中排除摘录与牌组页） */
+/** 文档的阅读单元集合：分节书 → 节卡；连续型文档（整本 PDF/未切分长文）→ 文档页自身。
+ *  文档页与节卡同为 kind=topic，靠 tidme-doc 标签区分（文档页不是节卡）。 */
 export function sectionsOfDoc(wiki: any, docId: string): string[] {
-  const all = wiki
+  const owned = wiki
     .filterTiddlers('[has[tidme.doc]nsort[tidme.order]]')
     .filter((t: string) => {
       const f = wiki.getTiddler(t)?.fields;
-      if (!f) return false;
-      return String(f['tidme.doc']) === docId && isContentSection(f);
+      return !!f && String(f['tidme.doc']) === docId;
     });
-  const nonDoc = all.filter((t: string) => !isDocPage(wiki.getTiddler(t)?.fields || {}));
-  return nonDoc.length > 0 ? nonDoc : all;
+  const sections = owned.filter((t: string) => isContentSection(wiki.getTiddler(t)?.fields || {}));
+  if (sections.length) return sections;
+  return owned.filter((t: string) => isContinuousCard(wiki.getTiddler(t)?.fields || {}));
 }
 
 /** 根据页码查找该页所属的节卡（若无匹配则返回 null） */

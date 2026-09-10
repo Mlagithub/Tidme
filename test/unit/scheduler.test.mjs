@@ -127,6 +127,29 @@ test('postponeTopicByAFactor: 读取卡片 tidme.afactor（字段优先 → 篇�
   assert.equal(Number(sched.postponeTopicByAFactor(f6).scheduled_days), 3, '最小 3 天');
 });
 
+test('顺延时钟可注入：postponeCard / postponeTopicByAFactor 按传入 now 计算（不读真实时钟）', () => {
+  const fixed = new Date('2026-03-01T00:00:00Z');
+
+  // 1. 逾期卡：以注入的 now 为基准顺延 7 天（而非卡片自身 due）
+  const overdue = sched.postponeCard({ due: '20260101000000000' }, 7, fixed);
+  assert.equal(String(overdue.due), '20260308000000000', '逾期卡 = now + 7d');
+
+  // 2. 未来卡：仍以卡片自身 due 为基准累加
+  const future = sched.postponeCard({ due: '20260305000000000' }, 7, fixed);
+  assert.equal(String(future.due), '20260312000000000', '未来卡 = 自身 due + 7d');
+
+  // 3. Topic 顺延：due = now + 间隔 × A-Factor，last_review 固定为注入时刻
+  const topic = sched.postponeTopicByAFactor(
+    { due: '20260101000000000', 'tidme.afactor': '2', scheduled_days: '10' },
+    undefined,
+    3,
+    fixed,
+  );
+  assert.equal(Number(topic.scheduled_days), 20, '10 × A-Factor 2 = 20');
+  assert.equal(String(topic.due), '20260321000000000', 'due = now + 20d');
+  assert.equal(String(topic.last_review), '20260301000000000', 'last_review = 注入的 now');
+});
+
 test('autoPostpone: 保留 top N 高优先级，顺延其余低优先级逾期卡', () => {
   const mk = (title, priority, due) => ({
     title,

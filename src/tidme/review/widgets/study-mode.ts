@@ -41,13 +41,25 @@ function endStudy(widget: any) {
   } catch { /* 无头环境忽略 */ }
 }
 
+/**
+ * 会话由激活转结束：关闭故事河里遗留的复习卡（item）。
+ * tm-navigate 只追加不替换故事河，学习中途离开的 item 卡（如去读 PDF）会一直堆在
+ * 下面；会话一结束它们既无评分入口也无进度 → 只剩死界面。阅读材料（topic）保留。
+ * 覆盖全部结束路径：结束学习按钮 / 队列评分耗尽 / advanceStudy 无后续卡 / 牌组停止
+ * （stopstudy 删除 <deck>/study 同样触发本分支）。
+ */
+function closeLeftoverCards(widget: any, wasActive: boolean, active: boolean): void {
+  if (!wasActive || active) return;
+  for (const t of session.openItemCards(widget.wiki)) dom.closeTiddler(widget, t);
+}
+
 /** 获取当前学习活动卡片（优先取 widget 变量，在全局 PageTemplate 时按故事栈顶层取会话卡） */
 function getCurrentStudyCard(wiki: any, widget: any, studyList: string[]): string {
   const varTitle = widget.getVariable('currentTiddler');
   if (varTitle && studyList.includes(varTitle)) {
     return varTitle;
   }
-  const story = wiki.getTiddler('$:/StoryList')?.fields?.list;
+  const story = wiki.getTiddler(ns.STORY_LIST_TITLE)?.fields?.list;
   if (Array.isArray(story)) {
     // 用户正在看的卡 = 故事最顶层：从顶层向下找第一张会话卡。按列表序嗅探
     // （find 第一张在场的卡）会指向更早入栈的旧卡——打开 PDF 阅读时模式条
@@ -119,6 +131,8 @@ type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 function makeStudyModeBar(): WidgetCtor {
   class StudyModeBarWidget extends Widget {
     _container: HTMLElement | null = null;
+    /** 上一次 build 时会话是否激活：用于识别「激活 → 结束」跃迁（关闭遗留复习卡） */
+    _wasActive: boolean = false;
 
     render(parent: any, nextSibling: any) {
       this.parentDomNode = parent;
@@ -133,11 +147,15 @@ function makeStudyModeBar(): WidgetCtor {
     }
 
     build() {
+      // 先判定会话状态并关闭遗留卡（早于 container 缺失的短路返回，保证状态机不漏拍）：
+      // 本分支是「结束学习」各条路径的唯一收口——结束按钮/队列耗尽/牌组停止都汇到这里
+      const study = session.getActiveStudy(this.wiki);
+      closeLeftoverCards(this, this._wasActive, !!study);
+      this._wasActive = !!study;
       const container = this._container;
       if (!container) return;
       const doc = this.document;
       container.textContent = '';
-      const study = session.getActiveStudy(this.wiki);
       if (!study) {
         container.style.display = 'none';
         return;

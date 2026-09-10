@@ -129,7 +129,7 @@ test('server E2E: 后台导入任务（pending → importer → 文档/卡）', 
   // 断言文档页 + 节卡生成（短内容默认合并 → 至少 1 节）
   const doc = tw.wiki.filterTiddlers('[tag[tidme-doc]]')[0];
   assert.ok(doc, '文档页生成');
-  const cards = tw.wiki.filterTiddlers(`[tidme.doc[${doneT.fields['tidme.import-docId']}]tidme.kind[topic]]`);
+  const cards = tw.wiki.filterTiddlers(`[tidme.doc[${doneT.fields['tidme.import-docId']}]tidme.kind[topic]!tag[tidme-doc]]`);
   assert.ok(cards.length >= 1, `至少切出 1 节: ${cards.length}`);
   const cardFields = tw.wiki.getTiddler(cards[0]).fields;
   assert.ok(cardFields['tidme.breadcrumb'], '卡含面包屑');
