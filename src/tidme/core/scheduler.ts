@@ -13,6 +13,7 @@ scheduler.ts — 调度体系（对标 SuperMemo 优先级）
 export const AUTOPOSTPONE_CONFIG_TITLE = '$:/config/Tidme/AutoPostpone';
 
 export const PRIORITY_DEFAULT = 50;
+export const AFACTOR_DEFAULT = 1.5;
 export const PRIORITY_TIERS = { high: 10, medium: 50, low: 90 } as const;
 
 /**
@@ -90,9 +91,11 @@ export interface Patch {
   fields: Record<string, any>;
 }
 
-/** 顺延：due 推后 byDays 天（相对当前 due 或 now） */
+/** 顺延：due 推后 byDays 天（相对当前 due 或 now；已逾期卡相对 now 顺延，确保落入未来） */
 export function postponeCard(fields: Record<string, any>, byDays = 7): Record<string, any> {
-  const base = parseTwDate(fields.due);
+  const d = parseTwDate(fields.due);
+  const now = Date.now();
+  const base = d.getTime() < now ? new Date(now) : d;
   return { due: twDateString(addDays(base, byDays)) };
 }
 
@@ -301,10 +304,12 @@ export function postponeTopicByAFactor(
   const currentInterval = Number(fields.scheduled_days) || elapsedDays;
   const newInterval = Math.max(minDays, Math.round(currentInterval * factor));
   const due = twDateString(addDays(now, newInterval));
+  const reps = String((Number(fields.reps) || 0) + 1);
   return {
     due,
     scheduled_days: String(newInterval),
     last_review: twDateString(now),
+    reps,
   };
 }
 

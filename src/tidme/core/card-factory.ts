@@ -16,6 +16,7 @@ declare function require(module: string): any;
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const paths = require('$:/plugins/keepone/tidme/core/paths.js');
 const session = require('$:/plugins/keepone/tidme/core/session.js');
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
 const escapeHtml = schema.escapeHtml;
@@ -131,11 +132,20 @@ function derivedCardFields(opts: {
     'tidme.breadcrumb': `${crumbTail}${ns.CRUMB_SEP}${opts.breadcrumbSuffix}`,
     'tidme.source': pf['tidme.source'] || '',
     'tidme.author': pf['tidme.author'] || '',
-    'tidme.format': pf['tidme.format'] || '',
-    // 派生卡继承父卡优先级（SM 摘录/挖空继承文章优先）
-    ...(pf['tidme.priority'] !== undefined ? { 'tidme.priority': String(pf['tidme.priority']) } : {}),
-    // SM 对齐：派生卡继承父卡 A-Factor（摘录/挖空作为独立材料沿用父文章的展期节奏）
-    ...(pf['tidme.afactor'] !== undefined ? { 'tidme.afactor': String(pf['tidme.afactor']) } : {}),
+    // 派生卡继承父卡优先级（SM 摘录/挖空继承文章优先，缺省归一回默认 50）
+    'tidme.priority': String(sched.normalizePriority(pf['tidme.priority'])),
+    // SM 对齐：Topic 派生卡继承父卡 A-Factor（若无则按自身篇幅启发式设定，默认 1.5）
+    ...(opts.kind === 'topic'
+      ? {
+        'tidme.afactor': String(
+          pf['tidme.afactor'] !== undefined
+            ? sched.normalizeAFactor(pf['tidme.afactor'])
+            : sched.afactorForText(opts.text?.length || 0),
+        ),
+      }
+      : pf['tidme.afactor'] !== undefined
+      ? { 'tidme.afactor': String(pf['tidme.afactor']) }
+      : {}),
   };
 }
 
@@ -323,7 +333,13 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
     'tidme.kind': kind,
     'tidme.subkind': subkind,
     'tidme.breadcrumb': deckName,
-    ...(opts.priority !== undefined ? { 'tidme.priority': String(opts.priority) } : {}),
+    'tidme.priority': String(sched.normalizePriority(opts.priority)),
+    ...(opts.type === 'concept'
+      ? {
+        'tidme.afactor': String(sched.AFACTOR_DEFAULT),
+        'tidme.chars': String(text.length),
+      }
+      : {}),
     ...(Array.isArray(opts.tags) && opts.tags.length ? { tags: opts.tags } : {}),
   };
 }

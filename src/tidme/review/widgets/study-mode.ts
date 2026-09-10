@@ -61,10 +61,10 @@ function getCurrentStudyCard(wiki: any, widget: any, studyList: string[]): strin
 
 /** 推进学习：移出当前卡并导航到下一张。
  *  阅读材料（topic）推进后必须能再次出现（SM 增量阅读的重现语义），一律不标 done：
- *  - 整本不切分的 PDF 文档页：读几页 ≠ 读完，留在阅读队列凭续读点继续，退出前把
- *    当前页固化进续读点（$:/state 页码由阅读器翻页同步写，防抖窗口内退出也不丢页）；
- *  - 节/摘录卡：SM A-Factor 顺延（due = now + 间隔 × A-Factor，与阅读条栏「稍后」同
- *    语义），到期自动回归阅读队列；真正"读完出队"走阅读条栏的显式「已读」按钮；
+ *  - 连续型文档页：退出前把当前页固化进续读点（$:/state 页码防抖窗口内退出不丢页）；
+ *  - 调度顺延：所有 topic 阅读卡（含整本连续文档与分节卡）推进后一律走 SM A-Factor
+ *    顺延（due = now + 间隔 × A-Factor），到期自动回归阅读/学习队列（避免同一天无限循环）；
+ *    真正"读完出队"走阅读条栏的显式「已读」按钮；
  *  - 牌组页（词书，legacy kind=topic 残留于旧会话）不是阅读卡，不动调度字段。 */
 function advanceStudy(widget: any) {
   const wiki = widget.wiki;
@@ -84,7 +84,8 @@ function advanceStudy(widget: any) {
       if (docId && Number.isFinite(page) && page >= 1) {
         docOps.saveReadPoint(wiki, docId, { t: cur, s: `p${page}` });
       }
-    } else if (f['tidme.kind'] === 'topic' && !deckMod.isDeckFields(f)) {
+    }
+    if (f['tidme.kind'] === 'topic' && !deckMod.isDeckFields(f)) {
       wiki.addTiddler({ ...f, ...sched.postponeTopicByAFactor(f) });
     }
     dom.closeTiddler(widget, cur);

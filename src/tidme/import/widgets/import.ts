@@ -17,6 +17,7 @@ const commitMod = require('$:/plugins/keepone/tidme/core/import-commit.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const semMod = require('$:/plugins/keepone/tidme/core/server/semantic-split');
 const pdfImport = require('$:/plugins/keepone/tidme/import/widgets/pdf-import.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
@@ -192,13 +193,18 @@ function buildRow(
         let n = 2;
         while (manualUsed.has(mTitle)) mTitle = `${mBase}-${n++}`;
         manualUsed.add(mTitle);
+        const nowFields = schema.initialFsrsFields(new Date());
         const newTiddler = {
           title: mTitle,
           caption: tVal,
           text: cVal,
+          ...nowFields,
           'tidme.doc': r.docId,
           'tidme.kind': 'topic',
           'tidme.subkind': 'section',
+          'tidme.chars': String(cVal.length),
+          'tidme.priority': String(sched.PRIORITY_DEFAULT),
+          'tidme.afactor': String(sched.afactorForText(cVal.length)),
           'tidme.breadcrumb': `${r.bookTitle}${ns.CRUMB_SEP}${tVal}`,
         };
         if (insertAfterIdx === -1) {

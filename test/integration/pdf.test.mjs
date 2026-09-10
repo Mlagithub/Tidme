@@ -525,6 +525,30 @@ test('pdf: 学习模式「完成，下一张」续读点指向下一节并携带
   assert.equal(rp.s, 'p4', '携带下一节起始页 p4');
 });
 
+test('pdf: 连续文档在学习模式推进时不仅保存续读点，还顺延 due 到未来（杜绝永久逾期入队死循环）', async () => {
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '顺延死循环测试书', dataB64: 'JVBERi0xLjQK' });
+  // 模拟翻页到第 12 页
+  wiki.addTiddler({ title: ns.pdfPageStateTitle(r.docId), text: '12' });
+  sessionMod.setSession(wiki, { list: [r.docTitle], mode: 'global-interleaved' });
+
+  const { root } = renderWidgetBase(wiki, mod('review/widgets/study-mode.js'), 'tidme-study-mode-bar', {
+    variables: { currentTiddler: r.docTitle },
+  });
+  const nextBtn = collectButtons(root).find((b) => String(b.className || '').includes('tm-study-mode-next'));
+  assert.ok(nextBtn, '「完成，下一张」按钮存在');
+  nextBtn.dispatchEvent({ type: 'click' });
+
+  const f = wiki.getTiddler(r.docTitle).fields;
+  assert.notEqual(f['tidme.done'], 'yes', '不标 done（仍留在阅读库）');
+  assert.ok(schema.parseTwDate(f.due).getTime() > Date.now(), 'due 必须顺延到未来');
+  const rp = docOps.parseReadPoint(wiki, r.docId);
+  assert.equal(rp.s, 'p12', '续读点记录当前页 p12');
+
+  // 再次生成全局学习队列，因排期已在未来，不再重复入队
+  const q = deckEngine.composeGlobalLearningQueue((filter) => wiki.filterTiddlers(filter), { topics: true });
+  assert.ok(!q.includes(r.docTitle), '排期推迟到未来后不再立即重现于新队列');
+});
+
 test('core/doc-ops: isContinuousCard 连续型阅读卡判定（PDF 与未切分长文）', () => {
   // 1. PDF 文档页
   assert.equal(docOps.isContinuousCard({ tags: ['tidme-doc'], 'tidme.kind': 'topic', 'tidme.format': 'pdf' }), true);
@@ -561,4 +585,19 @@ test('core/ns + paths: 统一 Doc 命名空间与 Decks 镜像推导', () => {
   assert.equal(paths.docRoot('通用架构'), 'Tidme/Docs/通用架构');
   assert.equal(paths.docCardsRoot('通用架构'), 'Tidme/Decks/通用架构');
   assert.equal(ns.docsToDecksRoot('Tidme/Docs/我的文档'), 'Tidme/Decks/我的文档');
+});
+
+test('core/pdf-ops: createPdfDoc 初始化字段完整性（含 FSRS 字段、优先级与 A-Factor）', async () => {
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '字段完整性测试书', dataB64: 'JVBERi0xLjQK' });
+  const f = wiki.getTiddler(r.docTitle).fields;
+  assert.equal(f['tidme.kind'], 'topic');
+  assert.equal(f['tidme.format'], 'pdf');
+  assert.equal(f['tidme.structure'], 'continuous');
+  assert.equal(f['tidme.priority'], '50', '默认优先级为 50');
+  assert.equal(f['tidme.afactor'], '1.3', '默认 A-Factor 为 1.3');
+  assert.equal(f.state, '0', '初始 state 为 0');
+  assert.equal(f.reps, '0', '初始 reps 为 0');
+  assert.equal(f.scheduled_days, '0', '初始 scheduled_days 为 0');
+  assert.ok(f.due, '包含 due 日期串');
+  assert.ok(f.last_review, '包含 last_review 日期串');
 });

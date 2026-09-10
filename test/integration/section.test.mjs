@@ -58,6 +58,8 @@ test('buildExtract: 嵌套摘录（parent = 摘录卡）', () => {
   const card = sectionMod.buildExtract(wiki, '书 › 第一章 › 摘录', '更细的一层摘录。');
   assert.equal(card['tidme.parent'], '书 › 第一章 › 摘录', '嵌套 parent');
   assert.ok(card['tidme.breadcrumb'].endsWith('摘录 › 摘录') || card['tidme.breadcrumb'].endsWith('摘录 › Extract'), '面包屑继续追加');
+  assert.equal(card['tidme.priority'], '50', '父卡无 priority 时默认归一为 50（防止 TW nsort 误当作 0 最高优）');
+  assert.ok(card['tidme.afactor'], '包含 A-Factor');
 });
 
 test('buildCloze: anchor + parent', () => {

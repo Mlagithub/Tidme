@@ -23,6 +23,7 @@ const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const binaryMod = require('$:/plugins/keepone/tidme/core/binary.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
@@ -232,6 +233,10 @@ function makeReader(): any {
           if (this._docId && this._page) {
             docOps.saveReadPoint(wiki, this._docId, { t, s: `p${this._page}` });
             wiki.addTiddler({ title: ns.pdfPageStateTitle(this._docId), text: String(this._page) });
+          }
+          const f = wiki.getTiddler(t)?.fields;
+          if (f && f['tidme.kind'] === 'topic') {
+            wiki.addTiddler({ ...f, ...sched.postponeTopicByAFactor(f) });
           }
           // 推进决策统一走 session.advanceSession（nextSchedulable + isDueNow）：
           // 先在当前卡之后找下一张可学卡（会话快照中被顺延的卡不提前重放），再移出当前卡

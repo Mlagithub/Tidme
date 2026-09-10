@@ -13,6 +13,7 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const paths = require('$:/plugins/keepone/tidme/core/paths.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const ids = require('$:/plugins/keepone/tidme/core/ids.js');
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 
 export function pdfBinaryTitle(bookTitle: string): string {
@@ -55,19 +56,21 @@ export async function createPdfDoc(
   const now = schema.twDateString(new Date());
 
   wiki.addTiddler({ title: pdfTitle, type: 'application/pdf', text: dataB64 });
+  const nowFields = schema.initialFsrsFields(new Date());
   const docTiddler: Record<string, any> = {
     title: docRootTitle,
     tags: ['tidme-doc'],
+    ...nowFields,
     'tidme.kind': 'topic',
     'tidme.doc': docId,
     'tidme.format': 'pdf',
     'tidme.asset': pdfTitle,
     'tidme.structure': 'continuous',
+    'tidme.priority': String(sched.PRIORITY_DEFAULT),
+    'tidme.afactor': '1.3',
     caption: docTitle,
     'tidme.breadcrumb': docTitle,
     text: '<$tidme-pdf-reader/>',
-    due: now,
-    state: '0',
   };
   if (opts.pagesTotal && opts.pagesTotal > 0) {
     docTiddler['tidme.pages-total'] = String(opts.pagesTotal);

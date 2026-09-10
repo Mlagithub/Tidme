@@ -53,9 +53,19 @@ test('shiftPriority: 字符串优先级位移', () => {
   assert.equal(sched.shiftPriority('50', 5), '55');
 });
 
-test('postponeCard: 顺延 N 天后 due 落在未来', () => {
-  const postponed = sched.postponeCard({ due: PAST() }, 7);
-  assert.ok(schema.parseTwDate(postponed.due).getTime() > Date.now(), '顺延 7 天后应在未来');
+test('postponeCard: 顺延 N 天后 due 落在未来（严重逾期卡相对 now 计算，杜绝顺延后依然逾期）', () => {
+  // 1. 严重逾期卡（逾期 10 天）：相对 now 顺延 7 天，due 必须严格落在未来
+  const overdueCard = { due: T(-240) };
+  const p1 = sched.postponeCard(overdueCard, 7);
+  const p1Time = schema.parseTwDate(p1.due).getTime();
+  assert.ok(p1Time > Date.now(), '严重逾期卡顺延 7 天后应在未来');
+  assert.ok(p1Time >= Date.now() + 6 * 86400000, '相对 now 顺延至少 6 天以上');
+
+  // 2. 未来卡（3 天后到期）：相对卡片本身的 due 顺延 7 天（即 10 天后）
+  const futureCard = { due: T(72) };
+  const p2 = sched.postponeCard(futureCard, 7);
+  const p2Time = schema.parseTwDate(p2.due).getTime();
+  assert.ok(p2Time >= Date.now() + 9 * 86400000, '未来卡保持原有排期基准累加');
 });
 
 test('advanceCard: due 重置到≈现在（立即到期）', () => {
@@ -93,11 +103,18 @@ test('normalizeAFactor: 字段容错与越界回默认', () => {
   assert.equal(sched.normalizeAFactor('1.0'), 1.0, '下限 1.0 允许');
 });
 
-test('postponeTopicByAFactor: 读取卡片 tidme.afactor（字段优先 → 篇幅启发式 → 默认 1.5）', () => {
-  const f1 = { due: PAST(), 'tidme.afactor': '2', scheduled_days: '10' };
-  assert.equal(Number(sched.postponeTopicByAFactor(f1).scheduled_days), 20, '10 × 2 = 20');
+test('postponeTopicByAFactor: 读取卡片 tidme.afactor（字段优先 → 篇幅启发式 → 默认 1.5），且递增 reps', () => {
+  const f1 = { due: PAST(), 'tidme.afactor': '2', scheduled_days: '10', reps: '2' };
+  const r1 = sched.postponeTopicByAFactor(f1);
+  assert.equal(Number(r1.scheduled_days), 20, '10 × 2 = 20');
+  assert.equal(r1.reps, '3', 'reps 递增 1（2 -> 3）');
+  assert.ok(r1.last_review, '更新 last_review');
+
   const f2 = { due: PAST(), 'tidme.afactor': '3', scheduled_days: '10' };
-  assert.equal(Number(sched.postponeTopicByAFactor(f2).scheduled_days), 30, '10 × 3 = 30');
+  const r2 = sched.postponeTopicByAFactor(f2);
+  assert.equal(Number(r2.scheduled_days), 30, '10 × 3 = 30');
+  assert.equal(r2.reps, '1', '无 reps 缺省从 0 递增到 1');
+
   const f3 = { due: PAST(), 'tidme.chars': '100', scheduled_days: '10' };
   assert.equal(Number(sched.postponeTopicByAFactor(f3).scheduled_days), 20, '短文启发式 2.0');
   const f4 = { due: PAST(), scheduled_days: '10' };

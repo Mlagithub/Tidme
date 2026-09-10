@@ -172,6 +172,7 @@ test('card-factory: buildStandaloneCard 全局独立制卡构建（QA / Cloze / 
   assert.ok(qaCard.text.includes('Q: BST 中序遍历'));
   assert.ok(qaCard.text.includes('A: 单调非递减'));
   assert.equal(qaCard.state, '0');
+  assert.equal(qaCard['tidme.priority'], '50', '独立卡未指定 priority 时默认 50');
 
   // 2. 独立挖空卡 (Cloze)
   const clozeCard = cardFactory.buildStandaloneCard(wiki, {
@@ -184,6 +185,7 @@ test('card-factory: buildStandaloneCard 全局独立制卡构建（QA / Cloze / 
   assert.equal(clozeCard['tidme.subkind'], 'cloze');
   assert.ok(clozeCard['tidme.deck'] === '散卡' || clozeCard['tidme.deck'] === 'Inbox');
   assert.equal(clozeCard.state, '0');
+  assert.equal(clozeCard['tidme.priority'], '50');
 
   // 3. 独立概念/知识卡 (Concept -> Topic 材料流)
   const conceptCard = cardFactory.buildStandaloneCard(wiki, {
@@ -198,6 +200,17 @@ test('card-factory: buildStandaloneCard 全局独立制卡构建（QA / Cloze / 
   assert.equal(conceptCard['tidme.subkind'], 'concept');
   assert.equal(conceptCard.caption, '李代数基础');
   assert.ok(conceptCard.text.includes('李代数是一个在数域上的向量空间'));
+  assert.equal(conceptCard['tidme.priority'], '50');
+  assert.equal(conceptCard['tidme.afactor'], '1.5', '独立 Concept 卡带默认 A-Factor');
+
+  // 4. 自定义优先级
+  const customCard = cardFactory.buildStandaloneCard(wiki, {
+    type: 'qa',
+    question: 'Q',
+    answer: 'A',
+    priority: 25,
+  });
+  assert.equal(customCard['tidme.priority'], '25', '保留指定 priority');
 });
 
 test('omni-creator: 全局制卡模态弹窗与 Widget 结构导出', () => {
