@@ -13,3 +13,15 @@ code-body: yes
 <$action-deletetiddler
     $filter="[all[shadows+tiddlers]prefix[$:/temp/tidme/]]"
 />
+<!-- 子集牌组手动停止即焚：显式停止 = 临时脚手架使命结束（普通牌组不受影响） -->
+<$list
+    filter="[<deckTiddler>has[tidme.subset-doc]]"
+    variable="ignore"
+>
+    <$action-deletetiddler
+        $tiddler={{{ [<deckTiddler>addsuffix[/log]] }}}
+    />
+    <$action-deletetiddler
+        $tiddler=<<deckTiddler>>
+    />
+</$list>

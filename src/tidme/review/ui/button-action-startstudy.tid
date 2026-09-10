@@ -65,5 +65,25 @@ code-body: yes
             $message="tm-notify"
             $param="$:/plugins/keepone/tidme/review/notify/congratulation"
         />
+        <!-- 子集牌组用完即焚：队列为空 = 复习完成，临时脚手架（牌组 + 学习列表 + 日志）随庆祝蒸发。
+             关闭牌组页须在删除前，避免故事条目引用已删 tiddler。普通牌组不受影响。 -->
+        <$list
+            filter="[<deckTiddler>has[tidme.subset-doc]]"
+            variable="ignore"
+        >
+            <$action-sendmessage
+                $message="tm-close-tiddler"
+                $param=<<deckTiddler>>
+            />
+            <$action-deletetiddler
+                $tiddler={{{ [<deckTiddler>addsuffix[/study]] }}}
+            />
+            <$action-deletetiddler
+                $tiddler={{{ [<deckTiddler>addsuffix[/log]] }}}
+            />
+            <$action-deletetiddler
+                $tiddler=<<deckTiddler>>
+            />
+        </$list>
     </$reveal>
 </$let>

@@ -4,7 +4,7 @@ core/grade.ts — 复习评分写路径（唯一实现）
 此前评分写库被 wikitext repeat.tid 与 card-viewer.rateCard 各自编排且已漂移
 （专注时长只有后者记、PriorityDynamics 配置只有前者读）。本模块收口为唯一写路径：
 FSRS 计算 → 字段写回（含 annotate-colour）→ <deck>/log → 优先级动态 →
-会话推进（Again 挪队尾重学）→ 专注时长 → 折叠态/计时锚点清理 → 子集牌组清理。
+会话推进（Again 挪队尾重学）→ 专注时长 → 折叠态/计时锚点清理。
 
 留在调用方（tidme-grade 动作 widget + repeat.tid）的部分：
 - leech 的用户配置动作（deck.leech_action 是 wikitext 转译）；本模块只按
@@ -130,10 +130,9 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   if (sec > 0) stats.recordReadTime(wiki, String(f['tidme.doc'] || ''), sec);
   wiki.deleteTiddler(ns.FOLDED_STATE_PREFIX + opts.title);
 
-  // 7. 子集牌组随评分清理（fsrs4tw 契约：subset 是「复习本书」的临时复习脚手架）
-  for (const d of deckMod.listDecks(wiki)) {
-    if (deckMod.isSubset(deckMod.getDeck(wiki, d))) wiki.deleteTiddler(d);
-  }
+  // 子集牌组（tidme.subset-doc）不在此清理：它是「复习本书」的作用域容器，
+  // 评分会删掉它 = 第一张卡后书籍复习静默解体。焚烧点在使用流程边界：
+  // startstudy 空队（用完）/ stopstudy（手动停止）/ endSession（结束学习）。
 
   result.ok = true;
   result.due = target.card.due !== undefined ? String(target.card.due) : null;

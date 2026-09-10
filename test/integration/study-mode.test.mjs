@@ -20,9 +20,12 @@ test.before(() => {
 
 test.beforeEach(reset);
 
-/** 造一张牌组 + 全局会话 + 牌组会话 + 临时项的完整激活态 */
+/** 造一张牌组 + 子集牌组 + 全局会话 + 牌组会话 + 临时项的完整激活态 */
 function setupActive() {
+  const deckMod = mod('core/deck.js');
   wiki.addTiddler({ title: '$:/Deck/甲', tags: ['$:/tags/TidmeDeck'], caption: '甲', card: '[tidme.kind[item]]' });
+  deckMod.createDeck(wiki, { name: 'Tidme/Decks/书X/复习本书', kind: 'subset', sourceDoc: 'doc-x', card: '[tidme.kind[item]]' });
+  wiki.addTiddler({ title: 'Tidme/Decks/书X/复习本书/log', type: 'application/json', text: '{}' });
   wiki.addTiddler({ title: '$:/state/tidme/learning-session', list: ['卡甲', '卡乙', '卡丙'], mode: 'items-only' });
   wiki.addTiddler({ title: '$:/Deck/甲/study', list: ['卡丁'] });
   wiki.addTiddler({ title: '$:/temp/tidme/study/input/卡甲', text: 'x' });
@@ -43,13 +46,17 @@ test('session: isSessionActive / getActiveStudy——全局会话优先，回退
   assert.deepEqual([...b.list], ['卡丁']);
 });
 
-test('session: endSession 三清（全局会话 + 全部 <deck>/study + $:/temp/tidme/*）', () => {
+test('session: endSession 四清（全局会话 + 全部 <deck>/study + 子集牌组 + $:/temp/tidme/*）', () => {
+  const deckMod = mod('core/deck.js');
   setupActive();
   assert.equal(session.isSessionActive(wiki), true);
   const n = session.endSession(wiki);
-  assert.ok(n >= 4, `清理数应 ≥4（会话+study+2 临时项），实际 ${n}`);
+  assert.ok(n >= 6, `清理数应 ≥6（会话+study+子集牌组+2 临时项+子集 log 兜底），实际 ${n}`);
   assert.ok(!wiki.getTiddler('$:/state/tidme/learning-session'), '全局会话已删除');
   assert.ok(!wiki.getTiddler('$:/Deck/甲/study'), '牌组 study 列表一并清除');
+  assert.ok(deckMod.getDeck(wiki, '$:/Deck/甲'), '普通牌组定义保留（仅清 study）');
+  assert.equal(deckMod.getDeck(wiki, 'Tidme/Decks/书X/复习本书'), null, '子集牌组随结束学习焚烧');
+  assert.ok(!wiki.getTiddler('Tidme/Decks/书X/复习本书/log'), '子集牌组日志一并清除');
   assert.ok(!wiki.getTiddler('$:/temp/tidme/study/input/卡甲'), '临时项已删除');
   assert.ok(!wiki.getTiddler('$:/temp/tidme/autopostpone/last'), '临时项已删除');
   assert.equal(session.isSessionActive(wiki), false, '结束后再无激活会话');

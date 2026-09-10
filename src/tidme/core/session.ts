@@ -129,8 +129,10 @@ export function getActiveStudy(wiki: any): ActiveStudy | null {
 }
 
 /**
- * 统一结束学习（唯一写入口）：清全局会话 + 全部 <deck>/study + $:/temp/tidme/* 临时项。
- * 学习模式条「结束学习」与 stopstudy 的全局收场都走这里；禁止各处自行拼删除逻辑。
+ * 统一结束学习（唯一写入口）：清全局会话 + 全部 <deck>/study + 子集牌组（含 /log）
+ * + $:/temp/tidme/* 临时项。学习模式条「结束学习」与 stopstudy 的全局收场都走这里；
+ * 禁止各处自行拼删除逻辑。子集牌组（tidme.subset-doc）是「复习本书」的临时复习
+ * 脚手架，随学习结束一并焚烧（普通牌组仅清 study 列表，定义保留）。
  * @returns 清理的 tiddler 数
  */
 export function endSession(wiki: any): number {
@@ -144,6 +146,16 @@ export function endSession(wiki: any): number {
     const t = d + DECK_STUDY_SUFFIX;
     if (wiki.getTiddler(t)) {
       wiki.deleteTiddler(t);
+      n++;
+    }
+    const dd = deckMod.getDeck(wiki, d);
+    if (dd && deckMod.isSubset(dd)) {
+      const log = ns.deckLogTitle(d);
+      if (wiki.getTiddler(log)) {
+        wiki.deleteTiddler(log);
+        n++;
+      }
+      wiki.deleteTiddler(d);
       n++;
     }
   }
@@ -167,16 +179,16 @@ export function prepareCardFold(wiki: any, title: string): void {
   // 专注计时锚点：评分时（core/grade）按锚点差值记本卡专注时长；
   // $:/temp/tidme/ 前缀使 endSession/stopstudy 清场自动带走残留
   wiki.addTiddler({ title: ns.CARD_OPEN_AT_TITLE, text: schema.twDateString(new Date()) });
-  // 卡所属 deck（同复习帧 decktiddler 语义：card 收录它的第一个 deck）；取该 deck 的 card_unfold
-  const decks = deckMod.listDecks(wiki);
-  for (const d of decks) {
-    if (!deckMod.deckCards(wiki, d).includes(title)) continue;
-    const deckFields = deckMod.getDeck(wiki, d)?.fields || {};
-    const unfoldFilter = String(deckFields.card_unfold || '');
-    const unfold = unfoldFilter && wiki.filterTiddlers(`[subfilter{${d}!!card_unfold}]`).includes(title);
-    wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text: unfold ? 'show' : 'hide' });
-    return;
+  // 默认折叠（先看问题）；仅当存在配置了 card_unfold 的牌组且命中当前卡时展开
+  // （反转原先先算 O(全库) deckCards 的逻辑，无 unfold 字段直接短路跳过，耗时近 0）
+  let text = 'hide';
+  for (const d of deckMod.listDecks(wiki)) {
+    const unfoldFilter = String(wiki.getTiddler(d)?.fields?.card_unfold || '').trim();
+    if (!unfoldFilter) continue;
+    if (wiki.filterTiddlers(`[subfilter{${d}!!card_unfold}]`).includes(title)) {
+      text = 'show';
+      break;
+    }
   }
-  // 兜底：默认折叠
-  wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text: 'hide' });
+  wiki.addTiddler({ title: ns.FOLDED_STATE_PREFIX + title, text });
 }

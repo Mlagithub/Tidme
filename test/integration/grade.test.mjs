@@ -9,7 +9,7 @@ grade.test.mjs — 评分写路径 core/grade（唯一实现）
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fakeDocument } from '../helpers/fake-dom.mjs';
+import { fakeDocument, fakeElement } from '../helpers/fake-dom.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 import { twDate } from '../helpers/tw-date.mjs';
 
@@ -127,12 +127,14 @@ test('gradeCard leech：新 lapses ≥ leech_threshold 返回标记（配置动�
   assert.equal(r.leech, true, 'lapses 8 ≥ 阈值 8');
 });
 
-test('gradeCard：子集牌组随评分清理（fsrs4tw 契约）', () => {
+test('gradeCard：无关评分不删子集牌组（评分不是子集生命周期的合法事件）', () => {
   mkCard('卡甲');
   const deckTitle = deckMod.createDeck(wiki, { name: '本书', kind: 'subset', sourceDoc: 'doc-x', card: '[tidme.kind[item]]' });
   session.setSession(wiki, { list: ['卡甲'], mode: 'items-only' });
-  grade.gradeCard(wiki, { title: '卡甲', deckTitle: '$:/Deck/default', rating: 'Good' });
-  assert.equal(deckMod.getDeck(wiki, deckTitle), null, '子集牌组已清理');
+  const r = grade.gradeCard(wiki, { title: '卡甲', deckTitle: '$:/Deck/default', rating: 'Good' });
+  assert.equal(r.ok, true);
+  assert.ok(deckMod.getDeck(wiki, deckTitle), '无关评分不删子集牌组——「复习本书」作用域在评分后存活');
+  // 焚烧点在使用流程边界：startstudy 空队 / stopstudy / endSession（见 session/deck 测试）
 });
 
 test('gradeCard：缺卡/未知评分安全返回 ok=false', () => {
@@ -255,4 +257,45 @@ test('推进决策统一：study-mode 与 pdf-reader 均经 session.advanceSessi
   assert.match(pdfReader, /advanceSession\(/, 'PDF 阅读器「完成并继续」走统一决策');
   assert.ok(!/list\[0\]/.test(studyMode), '模式条不再取 list[0]（会话快照提前重放回归）');
   assert.ok(!/list\[0\]/.test(pdfReader), 'PDF 阅读器不再取 list[0]');
+});
+
+/** 渲染 wikitext 动作并触发执行（同 study-flow.test.mjs 的 runActions 模式） */
+function runActions(text, variables) {
+  const parser = wiki.parseText('text/vnd.tiddlywiki', text, {});
+  const widgetNode = wiki.makeWidget(parser, { variables, document: fakeDocument });
+  widgetNode.render(fakeElement(), null);
+  widgetNode.invokeActions();
+}
+
+test('startstudy 空队：子集牌组用完即焚（普通牌组不受影响）', () => {
+  // 子集牌组（复习本书作用域）+ 普通牌组，二者均无在队卡
+  const subsetTitle = deckMod.createDeck(wiki, { name: 'Tidme/Decks/书Y/复习本书', kind: 'subset', sourceDoc: 'doc-y', card: '[title[幽灵卡]]' });
+  wiki.addTiddler({ title: '$:/Deck/普通', tags: ['$:/tags/TidmeDeck'], caption: '普通', card: '[tidme.kind[item]]' });
+  wiki.addTiddler({ title: `${subsetTitle}/log`, type: 'application/json', text: '{}' });
+  const startstudyText = wiki.getTiddlerText('$:/plugins/keepone/tidme/review/buttons/action/startstudy');
+  for (const deck of [subsetTitle, '$:/Deck/普通']) {
+    runActions(startstudyText, {
+      deckTiddler: deck,
+      currentTiddler: deck,
+      filter_queue: '[tidme.kind[item]]',
+      filter_unfold: '',
+    });
+  }
+  assert.equal(deckMod.getDeck(wiki, subsetTitle), null, '空队庆祝时子集牌组已焚烧');
+  assert.ok(!wiki.getTiddler(`${subsetTitle}/log`), '子集日志随牌组清除');
+  assert.ok(deckMod.getDeck(wiki, '$:/Deck/普通'), '普通牌组不受影响');
+});
+
+test('stopstudy：子集牌组手动停止即焚（普通牌组仅清 study）', () => {
+  const subsetTitle = deckMod.createDeck(wiki, { name: 'Tidme/Decks/书Z/复习本书', kind: 'subset', sourceDoc: 'doc-z', card: '[tidme.kind[item]]' });
+  wiki.addTiddler({ title: '$:/Deck/普通', tags: ['$:/tags/TidmeDeck'], caption: '普通', card: '[tidme.kind[item]]' });
+  wiki.addTiddler({ title: `${subsetTitle}/study`, list: ['某卡'] });
+  wiki.addTiddler({ title: '$:/Deck/普通/study', list: ['某卡'] });
+  const stopText = wiki.getTiddlerText('$:/plugins/keepone/tidme/review/buttons/action/stopstudy');
+  for (const deck of [subsetTitle, '$:/Deck/普通']) {
+    runActions(stopText, { deckTiddler: deck, currentTiddler: deck });
+  }
+  assert.equal(deckMod.getDeck(wiki, subsetTitle), null, '子集牌组随手动停止焚烧');
+  assert.ok(deckMod.getDeck(wiki, '$:/Deck/普通'), '普通牌组定义保留');
+  assert.ok(!wiki.getTiddler('$:/Deck/普通/study'), '普通牌组 study 列表已清');
 });
