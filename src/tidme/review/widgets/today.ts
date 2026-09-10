@@ -118,7 +118,7 @@ function makeTodayHero(): WidgetCtor {
       // 今日反馈条
       const rt = stats.getReadTimeStats(wiki);
       const reviewed = todayReviewCount(wiki);
-      // 容错补偿：若今日已有复习记录但专注时间为 0（因历史版本卡片复习流未挂载计时器），
+      // 历史数据容错：旧版本复习记录可能未记录专注时长，若今日已有复习记录但专注时间为 0，
       // 按每卡至少 1 秒给予基础时间，杜绝"已复习45卡 专注0秒"的反常现象
       const effectiveSec = Math.max(rt.todaySeconds, reviewed > 0 && rt.todaySeconds === 0 ? reviewed : 0);
       const revTpl = lingo(wiki, 'today.reviewedsummary', '${count} cards reviewed today');

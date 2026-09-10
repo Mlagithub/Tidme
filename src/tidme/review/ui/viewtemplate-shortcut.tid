@@ -11,19 +11,26 @@ code-body: yes
 \end
 
 \define ratingaction(rating)
-<$let
-    cards_json={{{ [<studyTiddler>fsrs<p>] }}}
+<!-- 折叠态（hide）不评分，防盲评——与 repeat 按钮 condition-disabled 同一守卫口径；
+     折叠态标记缺失视为展开（与 ViewTemplate/front 的 default=show 一致） -->
+<$list
+    filter="[<studyTiddler>addprefix[$:/state/folded/]get[text]!match[hide]]"
+    variable="ignore"
 >
-    <$list
-        filter="$rating$"
-        variable="rating"
+    <$let
+        cards_json={{{ [<studyTiddler>fsrs<p>] }}}
     >
-        <$transclude
-        tiddler="$:/plugins/keepone/tidme/review/buttons/action/repeat"
-        mode="inline"
-        />
-    </$list>
-</$let>
+        <$list
+            filter="$rating$"
+            variable="rating"
+        >
+            <$transclude
+            tiddler="$:/plugins/keepone/tidme/review/buttons/action/repeat"
+            mode="inline"
+            />
+        </$list>
+    </$let>
+</$list>
 \end
 
 <$list

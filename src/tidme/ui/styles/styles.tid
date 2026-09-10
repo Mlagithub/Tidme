@@ -1965,11 +1965,19 @@ mark.tm-readpoint {
 	transition: var(--tm-transition) !important;
 	width: 100%;
 }
-.tmc-repeat-wrapper button:hover {
+.tmc-repeat-wrapper button:hover:not(:disabled):not(.is-disabled) {
 	transform: translateY(-2px);
 	box-shadow: var(--tm-shadow-md);
 	border-color: currentColor !important;
 	background: var(--tm-surface-2) !important;
+}
+.tmc-repeat-wrapper button:disabled,
+.tmc-repeat-wrapper button.is-disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	pointer-events: none;
+	transform: none !important;
+	box-shadow: none !important;
 }
 
 .tmc-repeat-wrapper-1 {
@@ -2635,128 +2643,6 @@ a.tm-today-read-name:hover { text-decoration: underline; color: var(--tm-primary
 }
 .tm-pdf-ocr-text:empty { display: none; }
 
-/* 统一卡片交互引擎（tm-card-viewer） */
-.tc-tiddler-frame:has(.tm-card-viewer) .tc-subtitle { display: none; }
-.tc-tiddler-frame:has(.tm-card-viewer) .tc-tags-wrapper { display: none; }
-
-.tm-card-viewer {
-	display: flex;
-	flex-direction: column;
-	gap: 16px;
-	margin: 8px 0 16px;
-	font-family: var(--tm-font);
-}
-.tm-card-viewer-header {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding-bottom: 8px;
-	border-bottom: 1px solid var(--tm-border);
-}
-.tm-card-viewer-deck {
-	font-size: 12px;
-	color: var(--tm-text-2);
-	font-weight: 500;
-}
-.tm-card-fold-banner {
-	margin-left: auto;
-	font-size: 12px;
-	padding: 4px 10px;
-	border-radius: var(--tm-radius-sm);
-	background: var(--tm-surface-2);
-	border: 1px solid var(--tm-border);
-	color: var(--tm-text-1);
-	cursor: pointer;
-	transition: var(--tm-transition);
-}
-.tm-card-fold-banner:hover {
-	background: var(--tm-surface-hover, var(--tm-surface-3));
-}
-.tm-card-viewer-body {
-	min-height: 80px;
-}
-.tm-card-viewer-question {
-	font-size: 1.1em;
-	font-weight: 500;
-	line-height: 1.6;
-	color: var(--tm-text-1);
-	padding: 12px 16px;
-	background: var(--tm-surface-2);
-	border-radius: var(--tm-radius-md);
-	border-left: 4px solid var(--tm-accent);
-}
-.tm-card-viewer-answer {
-	font-size: 1em;
-	line-height: 1.65;
-	color: var(--tm-text-1);
-	padding: 4px 0;
-}
-.tm-card-viewer-footer {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	margin-top: 12px;
-	padding-top: 12px;
-	border-top: 1px solid var(--tm-border);
-}
-.tm-card-viewer-ratings {
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 10px;
-	width: 100%;
-}
-.tm-card-viewer-ratings .tm-btn {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	padding: 10px 8px;
-	border-radius: var(--tm-radius-md);
-	border: 1px solid var(--tm-border);
-	background: var(--tm-surface);
-	cursor: pointer;
-	transition: var(--tm-transition);
-	box-shadow: var(--tm-shadow-sm);
-}
-.tm-card-viewer-ratings .tm-btn:hover:not(:disabled) {
-	transform: translateY(-2px);
-	box-shadow: var(--tm-shadow-md);
-}
-.tm-card-viewer-ratings .tm-btn:disabled,
-.tm-card-viewer-ratings .tm-btn.is-disabled {
-	opacity: 0.45;
-	cursor: not-allowed;
-	transform: none !important;
-	box-shadow: none !important;
-}
-.tm-card-viewer-ratings .tm-btn--again { border-color: rgba(239, 68, 68, 0.4); color: var(--tm-danger, #ef4444); }
-.tm-card-viewer-ratings .tm-btn--hard { border-color: rgba(245, 158, 11, 0.4); color: var(--tm-warning, #f59e0b); }
-.tm-card-viewer-ratings .tm-btn--good { border-color: rgba(16, 185, 129, 0.4); color: var(--tm-success, #10b981); }
-.tm-card-viewer-ratings .tm-btn--easy { border-color: rgba(59, 130, 246, 0.4); color: var(--tm-accent, #3b82f6); }
-
-.tm-rating-title { font-size: 13px; font-weight: 600; }
-.tm-rating-time { font-size: 11px; opacity: 0.8; margin-top: 2px; }
-
-.tm-card-stats {
-	font-size: 12px;
-	color: var(--tm-text-2);
-	margin-top: 4px;
-}
-.tm-card-stats summary {
-	cursor: pointer;
-	user-select: none;
-	padding: 4px 0;
-}
-.tm-card-stats-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-	gap: 6px 12px;
-	margin-top: 8px;
-	padding: 10px 14px;
-	background: var(--tm-surface-2);
-	border-radius: var(--tm-radius-sm);
-	border: 1px solid var(--tm-border);
-}
 .tm-stat-item {
 	display: flex;
 	gap: 4px;

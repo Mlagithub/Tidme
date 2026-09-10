@@ -13,6 +13,7 @@ core 与 widgets 各处曾按字面量手拼，改名/迁移时靠 grep 兜底�
 wikitext 侧仍是字面量；改名必须人工同步两侧（grep 全仓核对）：
 - $:/state/tidme/learning-session   session.ts SESSION_TIDDLER ↔ startstudy/stopstudy 等动作
 - <deck>/study                      session.DECK_STUDY_SUFFIX ↔ startstudy.tid
+- $:/temp/tidme/card-open-at        ns.CARD_OPEN_AT_TITLE ↔ startstudy.tid（评分专注计时锚点）
 - $:/Deck/<name>                    ns.DECK_PREFIX ↔ fsrs4tw 学习循环 + 各管理 .tid
 - $:/state/folded/<title>           ns.FOLDED_STATE_PREFIX ↔ fsrs4tw reveal/折叠语义
 - $:/config/Tidme/AutoPostpone      scheduler.AUTOPOSTPONE_CONFIG_TITLE ↔ queue-ops 配置面板
@@ -55,6 +56,11 @@ export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[to
 
 /** 卡折叠态 tiddler 前缀（<prefix><title> = "show"/"hide"，fsrs4tw reveal 语义） */
 export const FOLDED_STATE_PREFIX = '$:/state/folded/';
+
+/** 卡片专注计时锚点（UTC 17 位时刻）：导航到学习卡时写入（session.prepareCardFold /
+ *  startstudy.tid），评分写路径（core/grade）读取差值记专注时长后删除。
+ *  落在 $:/temp/tidme/ 前缀下，endSession/stopstudy 清场自动带走。 */
+export const CARD_OPEN_AT_TITLE = '$:/temp/tidme/card-open-at';
 
 /** PDF 临时跳转页码 state tiddler 前缀（<prefix><docId>，跨 widget 一次性交接，消费即清理） */
 export const PDF_PAGE_STATE_PREFIX = '$:/state/tidme-pdf/page/';

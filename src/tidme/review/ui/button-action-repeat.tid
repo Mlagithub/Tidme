@@ -1,9 +1,15 @@
 title: $:/plugins/keepone/tidme/review/buttons/action/repeat
 condition: [<studyTiddler>!is[blank]]
+condition-disabled: [<studyTiddler>addprefix[$:/state/folded/]get[text]match[hide]]
 button-classes: tc-tiddlylink
 code-body: yes
 
 \define tv-action-refresh-policy() always
+
+<!-- 评分写路径（FSRS 字段/日志/优先级/会话/专注时长/清理）唯一实现在 core/grade，
+     经 <$tidme-grade/> 执行；本模板只保留 leech 分支（deck 配置的 leech_action 是
+     wikitext 转译）、结果展示与关卡。折叠态（hide）下按钮禁用防盲评；
+     键盘评分由 ViewTemplate/shortcut 的同名折叠守卫兜底。 -->
 
 <$let
     rating_origin=<<rating>>
@@ -13,13 +19,6 @@ code-body: yes
     <$let
         currentTiddler=<<studyTiddler>>
         card={{{ [<cards_json>jsonget[Rating],<rating>] :map[<cards_json>jsonextract[Cards],<currentTiddler>,[card]] }}}
-        review_log={{{ [<cards_json>jsonget[Rating],<rating>] :map[<cards_json>jsonextract[Cards],<currentTiddler>,[review_log]] }}}
-        priority_again={{{ [{$:/config/Tidme/PriorityDynamics!!again}else[0]] }}}
-        priority_hard={{{ [{$:/config/Tidme/PriorityDynamics!!hard}else[0]] }}}
-        priority_good={{{ [{$:/config/Tidme/PriorityDynamics!!good}else[5]] }}}
-        priority_easy={{{ [{$:/config/Tidme/PriorityDynamics!!easy}else[10]] }}}
-        priority_mult={{{ [{$:/config/Tidme/PriorityDynamics!!enable}match[false]then[0]else[1]] }}}
-        priority_delta={{{ [<rating>match[Again]then<priority_again>] ~[<rating>match[Hard]then<priority_hard>] ~[<rating>match[Good]then<priority_good>] ~[<priority_easy>] +[multiply<priority_mult>] }}}
     >
         <$list
             filter="[<card>jsonget[lapses]compare:number:gteq<leech_threshold>]"
@@ -31,42 +30,9 @@ code-body: yes
                 $param="$:/plugins/keepone/tidme/review/notify/leech"
             />
         </$list>
-        <$action-setmultiplefields
-            $fields="[<card>jsonindexes[]] =annotate-colour"
-            $values="[<card>jsonindexes[]] :map[<card>jsonget<currentTiddler>] =[<color>]"
-            $timestamp={{$:/config/TimestampDisable}}
-        />
-        <$action-setfield
-            $tiddler={{{ [<deckTiddler>addsuffix[/log]] }}}
-            $index={{{ [<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>] }}}
-            $value={{{ [<review_log>] }}}
-            $timestamp={{$:/config/TimestampDisable}}
-        />
-        <$action-setfield
-            $tiddler=<<studyTiddler>>
-            $field="tidme.priority"
-            $value={{{ [<studyTiddler>get[tidme.priority]else[50]add<priority_delta>] +[min[100]] +[max[0]] }}}
-            $timestamp={{$:/config/TimestampDisable}}
-        />
-        <$let
-            rem_list={{{ [[$:/state/tidme/learning-session]get[list]enlist-input[]!match<studyTiddler>format:titlelist[]join[ ]] }}}
-            again_list={{{ [[$:/state/tidme/learning-session]get[list]enlist-input[]!match<studyTiddler>] [<studyTiddler>] +[format:titlelist[]join[ ]] }}}
-            new_session_list={{{ [<rating>match[Again]then<again_list>else<rem_list>] }}}
-        >
-            <$action-setfield
-                $tiddler="$:/state/tidme/learning-session"
-                list=<<new_session_list>>
-                $timestamp={{$:/config/TimestampDisable}}
-            />
-        </$let>
+        <$tidme-grade tiddler=<<studyTiddler>> deck=<<deckTiddler>> rating=<<rating>>/>
         <$action-sendmessage
             $message="tm-close-tiddler"
-        />
-        <$action-sendmessage
-            $param=<<deckTiddler>>
-        />
-        <$action-deletetiddler
-            $filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]tidme.subset-doc[+]]"
         />
         <div>
             <div class=`tmc-btn-${ [<rating>lowercase[]] }$` style=`color:$(color)$;`>

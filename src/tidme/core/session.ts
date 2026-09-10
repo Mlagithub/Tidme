@@ -164,6 +164,9 @@ export function prepareCardFold(wiki: any, title: string): void {
   if (!wiki || typeof wiki.filterTiddlers !== 'function' || !title) return;
   const f = wiki.getTiddler(title)?.fields;
   if (!f || f['tidme.kind'] !== 'item') return;
+  // 专注计时锚点：评分时（core/grade）按锚点差值记本卡专注时长；
+  // $:/temp/tidme/ 前缀使 endSession/stopstudy 清场自动带走残留
+  wiki.addTiddler({ title: ns.CARD_OPEN_AT_TITLE, text: schema.twDateString(new Date()) });
   // 卡所属 deck（同复习帧 decktiddler 语义：card 收录它的第一个 deck）；取该 deck 的 card_unfold
   const decks = deckMod.listDecks(wiki);
   for (const d of decks) {

@@ -115,6 +115,26 @@ export function writeQueueOptions(
   }
 }
 
+// ---------- 复习优先级动态（评分 → tidme.priority 增量；core/grade 消费） ----------
+
+const PRIORITY_DYNAMICS_TITLE = '$:/config/Tidme/PriorityDynamics';
+
+/**
+ * 读取优先级动态配置：四档增量缺省 0/0/+5/+10（及格降优先、遗忘不动——优先级是
+ * 重要性，间隔是记忆状态）；enable=false 关闭。字段值原样透传，数值 coercion 与
+ * 缺档回退由 scheduler.priorityDeltaForRating 统一处理（本模块不做二次默认）。
+ */
+export function readPriorityDynamics(wiki: any): Record<string, any> {
+  const f = wiki?.getTiddler?.(PRIORITY_DYNAMICS_TITLE)?.fields || {};
+  return {
+    enable: String(f.enable ?? '') !== 'false',
+    again: f.again,
+    hard: f.hard,
+    good: f.good,
+    easy: f.easy,
+  };
+}
+
 // ---------- 复习日志保留 ----------
 
 /** 复习日志保留天数默认值（启动调度器按此修剪旧条目；0 = 永久保留） */
