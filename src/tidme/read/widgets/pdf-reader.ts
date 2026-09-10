@@ -233,12 +233,12 @@ function makeReader(): any {
             docOps.saveReadPoint(wiki, this._docId, { t, s: `p${this._page}` });
             wiki.addTiddler({ title: ns.pdfPageStateTitle(this._docId), text: String(this._page) });
           }
-          let list = Array.isArray(activeStudy.list) ? [...activeStudy.list] : [];
-          list = list.filter((x: string) => x !== t);
+          // 推进决策统一走 session.advanceSession（nextSchedulable + isDueNow）：
+          // 先在当前卡之后找下一张可学卡（会话快照中被顺延的卡不提前重放），再移出当前卡
+          const nextCard = sessionMod.advanceSession(wiki, t);
           sessionMod.removeFromSession(wiki, t); // 会话唯一读写口，勿手写 SESSION_TIDDLER
           dom.closeTiddler(this, t);
-          if (list.length > 0) {
-            const nextCard = list[0];
+          if (nextCard) {
             sessionMod.prepareCardFold(wiki, nextCard);
             dom.navigateTo(this, nextCard);
           } else {

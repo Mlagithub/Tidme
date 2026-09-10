@@ -44,9 +44,9 @@ export interface GradeResult {
   ok: boolean;
   /** 新 lapses ≥ leech_threshold（蠕虫卡判定；配置动作由 wikitext 执行） */
   leech: boolean;
-  /** 评分后会话队列是否已空（调用方可据此收尾庆祝） */
+  /** 评分后是否无下一张可学卡（调用方可据此收尾庆祝；剩余卡可能仍在未来排期） */
   finished: boolean;
-  /** 下一张卡（会话队头；Again 时当前卡挪队尾，next = 原队头） */
+  /** 下一张当前可学卡（isDueNow 口径，与推进入口统一）；无 → null */
   next: string | null;
   /** 本档评分后的下次到期（TW 17 位串，展示用） */
   due: string | null;
@@ -108,14 +108,21 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   wiki.setText(ns.deckLogTitle(deck.title), null, schema.twDateString(now), JSON.stringify(target.review_log));
 
   // 5. 会话推进（Again 挪队尾重学，其余移出；<deck>/study 不在此维护——
-  //  那是 fsrs4tw 起学路径的契约，队头推进由 startstudy.tid 决策）
+  //  那是 fsrs4tw 起学路径的契约，队头推进由 startstudy.tid 决策）。
+  //  next 口径与推进入口统一（nextSchedulable + isDueNow）：被顺延的卡不作为 next。
   const s = session.getSession(wiki);
   if (s) {
     const list = s.list.filter((t) => t !== opts.title);
     if (rating === 'Again') list.push(opts.title);
     session.setSession(wiki, { list, mode: s.mode, currentIndex: s.currentIndex });
     result.finished = list.length === 0;
-    result.next = list.length ? list[0] : null;
+    const learn = (t: string) => {
+      const tf = wiki.getTiddler(t)?.fields;
+      return !!tf && sched.isDueNow(tf);
+    };
+    const nextT = sched.nextSchedulable(list, null, learn);
+    result.next = nextT;
+    result.finished = nextT === null;
   }
 
   // 6. 专注时长 + 清理（计时锚点、折叠态标记）

@@ -174,6 +174,9 @@ test('模式条: 结束学习 → endSession 清场 + 派发导航/通知', () =
 });
 
 test('模式条: 阅读材料显示「读完，继续复习 ›」，点击推进到后续 item 卡片', () => {
+  // 推进统一走 advanceSession（isDueNow）：后续卡须为实体且当前可学，幽灵标题会被跳过
+  wiki.addTiddler({ title: '卡甲', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });
+  wiki.addTiddler({ title: '卡乙', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });
   setupActive();
   wiki.addTiddler({
     title: '阅读卡丙',
@@ -304,6 +307,62 @@ test('模式条: 节卡顺延后到期回归学习队列（topic 重现语义闭
   wiki.addTiddler({ ...wiki.getTiddler('节卡二').fields, due: twDate(new Date(Date.now() - 86400000)) });
   const queueLater = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
   assert.ok(queueLater.includes('节卡二'), '到期后 topic 回归学习队列（可第二次出现）');
+});
+
+test('模式条: 推进跳过会话内未来排期卡（isDueNow 口径，list[0] 提前重放回归）', () => {
+  const schema = mod('core/schema.js');
+  // 当前节卡（到期可读，显示推进按钮）；推进后 A-Factor 顺延
+  wiki.addTiddler({
+    title: '当前节卡',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'doc-x',
+  });
+  // 下一张「未来排期」卡：已被中途顺延（如阅读条栏稍后），不得被提前重放
+  wiki.addTiddler({
+    title: '已顺延节卡',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'doc-x',
+    due: schema.twDateString(new Date(Date.now() + 7 * 86400000)),
+    last_review: schema.twDateString(new Date()),
+    scheduled_days: '1',
+  });
+  wiki.addTiddler({ title: '卡丙', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });
+  wiki.addTiddler({ title: session.SESSION_TIDDLER, list: ['当前节卡', '已顺延节卡', '卡丙'] });
+  const { w, holder } = renderBar('当前节卡');
+  w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
+  holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›')._listeners.click();
+
+  const sess = wiki.getTiddler(session.SESSION_TIDDLER);
+  assert.deepEqual([...sess.fields.list], ['已顺延节卡', '卡丙'], '仅当前卡移出，未来排期卡保留在会话');
+  assert.notEqual(wiki.getTiddler('已顺延节卡')?.fields['tidme.done'], 'yes', '跳过 ≠ 标记完成');
+  assert.equal(String(wiki.getTiddler('已顺延节卡')?.fields.state ?? ''), '', '跳过不改写被顺延卡的调度字段');
+});
+
+test('模式条: 剩余卡全部未来排期 → 会话收尾（advanceSession null 语义）', () => {
+  const schema = mod('core/schema.js');
+  wiki.addTiddler({
+    title: '当前节卡',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'doc-far',
+  });
+  wiki.addTiddler({
+    title: '远期节卡',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'doc-far',
+    due: schema.twDateString(new Date(Date.now() + 30 * 86400000)),
+    last_review: schema.twDateString(new Date()),
+    scheduled_days: '30',
+  });
+  wiki.addTiddler({ title: session.SESSION_TIDDLER, list: ['当前节卡', '远期节卡'] });
+  const { w, holder } = renderBar('当前节卡');
+  w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
+  holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›')._listeners.click();
+
+  assert.equal(session.isSessionActive(wiki), false, '无当前可学卡 → 统一清场结束学习');
 });
 
 test('模式条: 当前卡跟随故事顶层（修复列表序嗅探滞留在旧词卡）', () => {

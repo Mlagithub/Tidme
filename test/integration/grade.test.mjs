@@ -206,6 +206,33 @@ test('防盲评守卫求值验证：折叠态禁用按钮且拦截快捷键', ()
   assert.deepEqual([...wiki.filterTiddlers(shortcutFilter, w)], ['show'], '展开态放行快捷键');
 });
 
+test('gradeCard next 口径：未来排期卡不作 next（与推进入口 isDueNow 统一）', () => {
+  const schema = mod('core/schema.js');
+  mkCard('当前卡');
+  // 剩余两张：未来排期卡在前、可学卡在后
+  wiki.addTiddler({
+    title: '远期卡',
+    'tidme.kind': 'item',
+    caption: '远期？',
+    text: '答',
+    state: '2',
+    due: schema.twDateString(new Date(Date.now() + 30 * 86400000)),
+    reps: '5',
+    lapses: '0',
+    stability: '2',
+    difficulty: '5',
+    elapsed_days: '1',
+    scheduled_days: '30',
+    last_review: schema.twDateString(new Date()),
+  });
+  mkCard('可学卡');
+  session.setSession(wiki, { list: ['当前卡', '远期卡', '可学卡'], mode: 'items-only' });
+  const r = grade.gradeCard(wiki, { title: '当前卡', deckTitle: '$:/Deck/default', rating: 'Good' });
+  assert.equal(r.next, '可学卡', 'next 跳过未来排期卡（list[0] 旧口径回归）');
+  assert.equal(r.finished, false);
+  assert.equal(r.ok, true);
+});
+
 test('跨端契约：repeat.tid 经 $tidme-grade 写库且折叠态禁用；startstudy 写同一计时锚点', () => {
   const repeat = wiki.getTiddlerText('$:/plugins/keepone/tidme/review/buttons/action/repeat');
   assert.match(repeat, /<\$tidme-grade\b/, '评分动作已收敛到 core/grade 入口 widget');
@@ -219,4 +246,13 @@ test('跨端契约：repeat.tid 经 $tidme-grade 写库且折叠态禁用；star
   assert.ok(startstudy.includes(ns.CARD_OPEN_AT_TITLE), 'startstudy 写同一计时锚点标题');
   const shortcut = wiki.getTiddlerText('$:/plugins/keepone/tidme/review/ui/ViewTemplate/shortcut');
   assert.match(shortcut, /get\[text\]!match\[hide\]/, '键盘评分有折叠守卫（防盲评）');
+});
+
+test('推进决策统一：study-mode 与 pdf-reader 均经 session.advanceSession（不再取 list[0]）', () => {
+  const studyMode = wiki.getTiddlerText('$:/plugins/keepone/tidme/review/widgets/study-mode.js');
+  const pdfReader = wiki.getTiddlerText('$:/plugins/keepone/tidme/read/widgets/pdf-reader.js');
+  assert.match(studyMode, /advanceSession\(/, '模式条推进走统一决策');
+  assert.match(pdfReader, /advanceSession\(/, 'PDF 阅读器「完成并继续」走统一决策');
+  assert.ok(!/list\[0\]/.test(studyMode), '模式条不再取 list[0]（会话快照提前重放回归）');
+  assert.ok(!/list\[0\]/.test(pdfReader), 'PDF 阅读器不再取 list[0]');
 });

@@ -72,6 +72,11 @@ function advanceStudy(widget: any) {
   const study = session.getActiveStudy(wiki);
   if (!study) return;
   const cur = getCurrentStudyCard(wiki, widget, study.list);
+  // 推进决策（统一走 session.advanceSession = nextSchedulable + isDueNow）：
+  // 先在 cur 之后找下一张当前可学卡，再移出当前卡。会话快照里被中途顺延的卡
+  // （阅读条栏「稍后」/管理器操作/auto-postpone）不再被 list[0] 提前重放——
+  // 未来排期卡到期后由阅读队列/牌组队列回收；剩余卡全部未来排期时收尾结束。
+  const next = session.advanceSession(wiki, cur);
   if (cur) {
     const f = wiki.getTiddler(cur)?.fields || {};
     if (pdfOps.isWholePdfCard(f)) {
@@ -84,14 +89,9 @@ function advanceStudy(widget: any) {
       wiki.addTiddler({ ...f, ...sched.postponeTopicByAFactor(f) });
     }
     dom.closeTiddler(widget, cur);
-  }
-  let list: string[] = Array.isArray(study.list) ? [...study.list] : [];
-  if (cur) {
     session.removeFromSession(wiki, cur);
-    list = list.filter((t: string) => t !== cur);
   }
-  if (list.length > 0) {
-    const next = list[0];
+  if (next) {
     // 续读点指向下一张卡并携带其页码（PDF 节卡 p<start>）：既不再指向已读完的卡，
     // 也不用 s:'' 抹掉页码——否则下次继续阅读回落首页（阅读记录丢失）
     const nf = wiki.getTiddler(next)?.fields || {};
