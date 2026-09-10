@@ -193,6 +193,59 @@ test('section-bar: 忽略按钮', () => {
   assert.ok(text.includes('忽略'), '未读节显示忽略按钮');
 });
 
+test('reading-list: 文档名点击导航到真实文档页 title（执行真实 handler，不是重算路径的算术）', () => {
+  const rl = mod('import/widgets/reading-list.js');
+  const { root, w } = renderWidgetEx(wiki, rl, 'reading-list');
+  const nav = [];
+  w.dispatchEvent = (e) => {
+    if (e.type === 'tm-navigate') nav.push(e.navigateTo);
+    return true;
+  };
+  function findByClass(node, cls) {
+    if (!node) return null;
+    if (typeof node.className === 'string' && node.className.split(/\s+/).includes(cls)) return node;
+    for (const c of node.childNodes || []) {
+      const res = findByClass(c, cls);
+      if (res) return res;
+    }
+    return null;
+  }
+  const link = findByClass(root, 'tm-rl-doc-name');
+  assert.ok(link, '渲染出文档名链接');
+  link.dispatchEvent({ type: 'click', preventDefault() {}, stopPropagation() {} });
+  assert.equal(nav.length, 1, '点击派发了一次导航');
+  const docOps = mod('core/doc-ops.js');
+  const docId = wiki.getTiddler(F.sectionTitle).fields['tidme.doc'];
+  assert.equal(nav[0], docOps.docPageOfDoc(wiki, docId), '导航目标 = 按 docId 查到的真实文档页');
+  assert.ok(wiki.getTiddler(nav[0]), '目标文档页真实存在');
+  assert.ok(nav[0].startsWith('Tidme/Docs/'), '目标是命名空间路径而非书名');
+});
+
+test('section-bar: 面包屑点击导航到真实文档页 title（执行真实 handler）', () => {
+  const title = wiki.filterTiddlers('[has[tidme.kind]tidme.kind[topic]tidme.subkind[section]!has[tidme.done]]')[0];
+  const { root, w } = renderWidgetEx(wiki, sectionBar, 'section-bar', { variables: { currentTiddler: title } });
+  const nav = [];
+  w.dispatchEvent = (e) => {
+    if (e.type === 'tm-navigate') nav.push(e.navigateTo);
+    return true;
+  };
+  function findByClass(node, cls) {
+    if (!node) return null;
+    if (typeof node.className === 'string' && node.className.split(/\s+/).includes(cls)) return node;
+    for (const c of node.childNodes || []) {
+      const res = findByClass(c, cls);
+      if (res) return res;
+    }
+    return null;
+  }
+  const crumb = findByClass(root, 'tm-section-crumb');
+  assert.ok(crumb, '信息行渲染出面包屑');
+  crumb.dispatchEvent({ type: 'click' });
+  assert.equal(nav.length, 1, '点击派发了一次导航');
+  assert.equal(nav[0], wiki.getTiddler(title).fields['tidme.docpage'], '导航目标 = 卡上已落的真实文档页 title');
+  assert.ok(wiki.getTiddler(nav[0]), '目标文档页真实存在');
+});
+
 test('reading-list: 渲染 topic 队列（按文档分组 + 进度 + 继续阅读）', () => {
   const rl = mod('import/widgets/reading-list.js');
   // 纯函数：收集 + 分组

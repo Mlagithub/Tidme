@@ -42,14 +42,14 @@ test('paths: slugify 处理各种书名', () => {
   assert.equal(paths.slugify(''), '');
 });
 
-test('paths: docRoot + sectionPath 产出符合命名空间（可读叶段 + 稳定 id）', () => {
+test('paths: docRoot + sectionLeaf 产出符合命名空间（可读叶段 + 稳定 id）', () => {
   const root = paths.docRoot('批评性思维');
   assert.equal(root, 'Tidme/Docs/批评性思维');
   // sectionLeaf（A2）：可读 caption slug + "-" + id；唯一性由 id 保证
   assert.equal(paths.sectionLeaf('第一章', 's1234567890ab'), '第一章-s1234567890ab');
   assert.equal(paths.sectionLeaf('', 's1234567890ab'), 's1234567890ab', 'caption 空退化为纯 id');
-  // sectionPath 拍平到书目录
-  const sec = paths.sectionPath('批评性思维', '第一章 1.1 思维', 's1234567890ab');
+  // 节卡路径 = joinPath(docRoot, sectionLeaf)（无独立 sectionPath 包装）
+  const sec = paths.joinPath(paths.docRoot('批评性思维'), paths.sectionLeaf('第一章 1.1 思维', 's1234567890ab'));
   assert.equal(sec, 'Tidme/Docs/批评性思维/第一章-1-1-思维-s1234567890ab');
   // 摘录/挖空/问答的真实命名在 card-factory.derivedCardBase（从父卡实际位置派生），
   // 纯形式路径助手（extractPath/cardPath/deckSubsetPath）已随死代码清理删除
@@ -58,6 +58,22 @@ test('paths: docRoot + sectionPath 产出符合命名空间（可读叶段 + 稳
 test('paths: 拒绝保留字书名', () => {
   assert.throws(() => paths.docRoot('index'), /reserved/);
   assert.throws(() => paths.docRoot('default'), /reserved/);
+});
+
+test('title 净化：危险字符集合同源（slugify 删除 / titleOf 换 -），产物都过滤器安全', () => {
+  const deck = mod('core/deck.js');
+  const nsMod2 = mod('core/ns.js');
+  const hostile = '书]名}甲{乙[丙$/\\:*?"<>|丁';
+  const slug = paths.slugify(hostile);
+  assert.equal(/[\\/:*?"<>|$[\]{}]/.test(slug), false, `slug 不含危险字符（实际 ${slug}）`);
+  assert.equal(nsMod2.isFilterSafeTitle(slug), true, 'slug 可安全插入过滤器');
+  const deckTitle = deck.titleOf('牌组]名}甲');
+  assert.equal(nsMod2.isFilterSafeTitle(deckTitle), true, `牌组 title 过滤器安全（实际 ${deckTitle}）`);
+  assert.ok(deckTitle.includes('-'), '危险字符换成 -（保留可读轮廓）');
+  assert.ok(!slug.includes('《'), '营销括号仍被剔除（风格差异保留）');
+  // 合法完整 title 原样通过（内部调用方传的是已构造好的 title）
+  assert.equal(deck.titleOf('$:/Deck/默认'), '$:/Deck/默认');
+  assert.equal(deck.titleOf('Tidme/Decks/散卡'), 'Tidme/Decks/散卡');
 });
 
 // === 集成：runSplit 产物 ===
@@ -237,6 +253,87 @@ test('section widget: 同位置多张摘录/挖空/问答自动加序号（拍�
   assert.equal(d.title, extractBase + '-4');
 });
 
+test('title: freeTitle = 库内占用 + 待落库草稿（pending）两条判据，唯一实现', () => {
+  const titleMod = mod('core/title.js');
+  const base = 'Tidme/Docs/唯一书/manual-引言';
+  assert.equal(titleMod.freeTitle(wiki, base), base, '库内无冲突 → 原样');
+  wiki.addTiddler({ title: base, text: 'x' });
+  assert.equal(titleMod.freeTitle(wiki, base), base + '-2', '库内已有 → -2');
+  // 草稿窗口：title 还没落库，靠 pending 显式告知（不是模块级全局表 → 结果只取决于库与该批次草稿）
+  const pending = new Set([base, base + '-2']);
+  assert.equal(titleMod.freeTitle(wiki, base, pending), base + '-3', '库 + pending 都算占用');
+  assert.equal(titleMod.freeTitle(wiki, 'Tidme/Docs/唯一书/manual-别段', pending), 'Tidme/Docs/唯一书/manual-别段', 'pending 不影响别的 base');
+  assert.equal(titleMod.freeTitle(wiki, '', pending), '', '空 base 原样返回');
+});
+
+test('buildCloze: 待落库草稿计入唯一化（弹窗未确认期间再制卡不撞名）', () => {
+  const parentTitle = 'Tidme/Docs/弹窗书/s1234567890ab';
+  wiki.addTiddler({
+    title: parentTitle,
+    caption: '节',
+    text: '首都是北京。',
+    state: '0',
+    due: twDate(),
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': 'dpopup',
+    'tidme.breadcrumb': '弹窗书 › 节',
+  });
+  const pending = new Set();
+  const first = factoryMod.buildCloze(wiki, parentTitle, '首都是北京。', '北京', pending);
+  assert.ok(first, '第一张草稿');
+  pending.add(String(first.title));
+  const second = factoryMod.buildCloze(wiki, parentTitle, '首都是北京。', '北京', pending);
+  assert.equal(second.title, first.title + '-2', '第一张还没落库（弹窗未确认）→ 第二张让号，不撞名');
+  // 不传 pending（调用方不持有草稿窗口）时只查库：这是既有口径，草稿窗口须由调用方显式给出
+  const third = factoryMod.buildCloze(wiki, parentTitle, '首都是北京。', '北京');
+  assert.equal(third.title, first.title, '只查库时看不见草稿 → 与第一张同名（故调用方必须传 pending）');
+});
+
+test('字段基座唯一产地：文档页与节卡的不变式字段在三条构建路径上一致', async () => {
+  const pdfOps = mod('core/pdf-ops.js');
+  // 1. 切分文档页（parse 产物）
+  const parsed = await parseMod.runSplit({ text: '# 章\n\n内容。', title: '基座书', type: 'text/markdown' });
+  const splitDoc = parsed.tiddlers.find(isDocPageTiddler);
+  assert.ok(splitDoc, '切分产出文档页');
+  // 2. 整本 PDF 文档页（core/pdf-ops）
+  const pdf = await pdfOps.createPdfDoc(wiki, { docTitle: '基座PDF', dataB64: 'JVBERi0xLjQK' });
+  const pdfDoc = wiki.getTiddler(pdf.docTitle).fields;
+  // 文档页不变式：tags / kind / doc / docpage / structure / type / caption
+  for (const key of ['tags', 'tidme.kind', 'tidme.doc', 'tidme.docpage', 'tidme.structure', 'type', 'caption']) {
+    assert.ok(splitDoc[key] !== undefined, `切分文档页含 ${key}`);
+    assert.ok(pdfDoc[key] !== undefined, `PDF 文档页含 ${key}`);
+  }
+  assert.deepEqual([...splitDoc.tags], ['tidme-doc']);
+  assert.deepEqual([...pdfDoc.tags], ['tidme-doc']);
+  assert.equal(splitDoc['tidme.structure'], 'sectioned');
+  assert.equal(pdfDoc['tidme.structure'], 'continuous');
+
+  // 3. 节卡：切分产物 vs 手动插入（buildSectionCardFields）不变式一致
+  const splitSec = parsed.tiddlers.find((t) => t['tidme.subkind'] === 'section');
+  const manualSec = factoryMod.buildSectionCardFields({
+    title: 'Tidme/Docs/基座书/manual-手记',
+    caption: '手记',
+    text: '手写内容。',
+    docId: parsed.docId,
+    priority: sched.PRIORITY_DEFAULT,
+    breadcrumb: '基座书 › 手记',
+  });
+  for (const key of ['type', 'tidme.kind', 'tidme.subkind', 'tidme.doc']) {
+    assert.equal(String(manualSec[key]), String(splitSec[key]), `${key} 两条路径同值`);
+  }
+  for (const key of ['tidme.chars', 'tidme.priority', 'tidme.afactor']) {
+    assert.ok(/^\d+(\.\d+)?$/.test(String(manualSec[key])), `手动节卡 ${key} 为数值串（实际 ${manualSec[key]}）`);
+    assert.ok(/^\d+(\.\d+)?$/.test(String(splitSec[key])), `切分节卡 ${key} 为数值串（实际 ${splitSec[key]}）`);
+  }
+  assert.equal(String(manualSec['tidme.chars']), String('手写内容。'.length), 'chars 按正文字数');
+  // FSRS 初值两条路径都有（写库前必须齐）
+  for (const key of ['due', 'state', 'reps', 'lapses', 'stability', 'difficulty', 'elapsed_days', 'scheduled_days', 'last_review']) {
+    assert.ok(manualSec[key] !== undefined, `手动节卡含 FSRS 字段 ${key}`);
+    assert.ok(splitSec[key] !== undefined, `切分节卡含 FSRS 字段 ${key}`);
+  }
+});
+
 // === 集成：子集牌组 ===
 
 test('deck: 子集牌组（复习本书）走 Tidme/Decks/<书>/复习本书', async () => {
@@ -363,7 +460,7 @@ test('FSP: 注入普通 tiddler 后保留 Tidme 目录结构（filesystem 适配
   // 调 filesystem 文件信息生成器
   const bookTitle = '导航测试书';
   const docId = 'dnav1234';
-  const sectionTitle = paths.sectionPath(bookTitle, '第一章', 's1234567890ab');
+  const sectionTitle = paths.joinPath(paths.docRoot(bookTitle), paths.sectionLeaf('第一章', 's1234567890ab'));
   wiki.addTiddler({
     title: sectionTitle,
     type: 'text/vnd.tiddlywiki',
@@ -381,49 +478,38 @@ test('FSP: 注入普通 tiddler 后保留 Tidme 目录结构（filesystem 适配
   assert.match(fi.filepath, /Tidme[\\\/]Docs[\\\/]导航测试书[\\\/]第一章-s1234567890ab\.tid$/, `filepath 拍平到书目录（可读叶段）: ${fi.filepath}`);
 });
 
-// === 集成：reading-list 导航修复（用真实 doc title）===
+// === 集成：reading-list / section-bar 导航（真实 widget 点击在 widget-reading.test.mjs）===
 
-test('nav: reading-list 跳转到 doc 页用真实命名空间路径（不是 breadcrumb 首段）', async () => {
+test('nav: 卡片自带 tidme.docpage，且 docPageOfDoc 按 docId 能查到同一页（导航不再重算路径）', async () => {
   const bookTitle = '跳转测试书';
-  // 注入 FSP（reading-list 测试也需要）
-  wiki.addTiddler({
-    title: '$:/config/FileSystemPaths',
-    type: 'text/vnd.tiddlywiki',
-    text: '[is[tiddler]prefix[Tidme/Docs/]]',
-  });
   const res = await parseMod.runSplit({ text: '# 第一章\n\n内容。', title: bookTitle, type: 'text/markdown', minChars: 0 });
   for (const t of res.tiddlers) wiki.addTiddler(t);
-
-  // 模拟 reading-list 内部：从 breadcrumb 拼出 docTiddlerTitle
-  const rl = tw.modules.execute('$:/plugins/keepone/tidme/import/widgets/reading-list.js');
-  const cards = rl.collectTopicCards(wiki).filter((c) => c.doc === res.docId);
-  const groups = rl.groupByDoc(cards);
-  assert.equal(groups.length, 1, '该书有一组 topic 卡');
-  const g = groups[0];
-  // reading-list 现在的实现：bookTitle 从 breadcrumb 拼，docTiddlerTitle 用 paths.docRoot
-  const breadcrumb = g.cards[0].breadcrumb;
-  const bookTitleFromCrumb = breadcrumb.split(' › ')[0] || '';
-  const expectedDocTiddler = paths.docRoot(bookTitleFromCrumb);
-  assert.equal(expectedDocTiddler, `Tidme/Docs/${bookTitle}`, 'reading-list 应该用 paths.docRoot 重建 doc tiddler title（命名空间路径），不是 breadcrumb 首段');
-  // 验证：docTiddlerTitle 真的能在 wiki 里查到 doc 页
-  const docTiddler = wiki.getTiddler(expectedDocTiddler);
-  assert.ok(docTiddler, `doc tiddler 存在: ${expectedDocTiddler}`);
-  assert.equal(docTiddler.fields.tags[0], 'tidme-doc');
+  const docPage = res.tiddlers.find(isDocPageTiddler);
+  const sec = res.tiddlers.find(isSectionTiddler);
+  // 生产事实：节卡落 tidme.docpage；UI 只需读它或按 docId 查库，不必重算 slug
+  assert.equal(sec['tidme.docpage'], docPage.title, '节卡 docpage 指向真实文档页');
+  assert.equal(docOps.docPageOfDoc(wiki, res.docId), docPage.title, '按 docId 查到的就是同一页');
+  assert.ok(wiki.getTiddler(docOps.docPageOfDoc(wiki, res.docId)), '查到的页真实存在');
 });
 
-test('nav: section.ts 面包屑点击也用真实 doc title（修复同上）', async () => {
+test('nav: section.ts 面包屑与 reading-list 文档名都把真实文档页 title 作为跳转目标', () => {
+  // 真实 widget 点击（渲染 + 触发 click + 断言 tm-navigate 目标）在 widget-reading.test.mjs
+  // 这里只锁数据前提：面包屑首段**不是**文档页 title，故"用 breadcrumb 首段重算"必然失配
   const bookTitle = '面包屑测试书';
-  const r = await parseMod.runSplit({ text: '# 第一章\n\n内容。', title: bookTitle, type: 'text/markdown', minChars: 0 });
-  for (const t of r.tiddlers) wiki.addTiddler(t);
-  const sec = r.tiddlers.find(isSectionTiddler);
-  const secTiddler = wiki.getTiddler(sec.title);
-  // 模拟 section.ts 内部 crumb click handler：
-  const crumbBook = secTiddler.fields['tidme.breadcrumb'].split(' › ')[0];
-  const crumbDoc = secTiddler.fields['tidme.doc'];
-  const crumbDocTitle = paths.docRoot(crumbBook);
-  const expectedDocTiddler = `Tidme/Docs/${bookTitle}`;
-  assert.equal(crumbDocTitle, expectedDocTiddler);
-  assert.ok(wiki.getTiddler(crumbDocTitle), `doc tiddler 存在: ${crumbDocTitle}`);
+  const docRoot = paths.docRoot(bookTitle);
+  wiki.addTiddler({
+    title: `${docRoot}/章-sabc`,
+    'tidme.doc': 'dnav-breadcrumb',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.docpage': docRoot,
+    'tidme.breadcrumb': `${bookTitle} › 章`,
+    type: 'text/vnd.tiddlywiki',
+    text: 'x',
+  });
+  const f = wiki.getTiddler(`${docRoot}/章-sabc`).fields;
+  assert.notEqual(f['tidme.breadcrumb'].split(' › ')[0], f['tidme.docpage'], '面包屑首段 ≠ 文档页 title（前缀不同）');
+  assert.ok(f['tidme.docpage'].startsWith('Tidme/Docs/'), 'docpage 是命名空间路径');
 });
 
 test('A1: 同名书不同 docId folder 冲突 → ~docId 后缀；同 docId 重导入幂等复用；卡带 tidme.docpage', async () => {

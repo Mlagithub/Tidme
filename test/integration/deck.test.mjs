@@ -46,8 +46,9 @@ test('deck: 成员求值（strict 排除 card_exclude；loose 含）', () => {
   assert.ok(!strict.includes('deckItemOut'), 'strict 排除（card_exclude=ignored）');
   const loose = deckMod.deckCards(wiki, t, { strict: false });
   assert.ok(loose.includes('deckItemOut'), 'loose 含全部 card 命中');
-  assert.ok(deckMod.deckHasCard(wiki, t, 'deckItemIn'));
-  assert.ok(!deckMod.deckHasCard(wiki, t, 'deckItemOut'));
+  // 成员判定即 deckCards 的结果（不另设 deckHasCard 包装）
+  assert.ok(deckMod.deckCards(wiki, t).includes('deckItemIn'));
+  assert.ok(!deckMod.deckCards(wiki, t).includes('deckItemOut'));
 });
 
 test('deck: 更新字段（含 configToFields 重生成）', () => {
@@ -85,4 +86,19 @@ test('deck: 删除语义 —— 默认仅删容器（卡保留）；alsoCards �
   assert.equal(wiki.getTiddler('doomCard'), undefined, '卡已删');
   // default 保护
   assert.throws(() => deckMod.deleteDeck(wiki, '$:/Deck/default'), 'default 不可删');
+});
+
+test('deck: 手写 deck title 含过滤器不安全字符时不产出假卡（回归：Filter error 冒充卡标题）', () => {
+  const deckEngine = mod('core/deck-engine.js');
+  // TW 过滤器不支持 `]`/`}` 转义（实测 `\]`、双括号写法也报错），含这些字符的 deck title 无法插值
+  wiki.addTiddler({ title: '$:/Deck/坏}牌组', tags: ['$:/tags/TidmeDeck'], card: '[tidme.kind[item]]' });
+  mkItem('不安全测试卡');
+
+  const cards = [...deckMod.deckCards(wiki, '$:/Deck/坏}牌组')];
+  assert.ok(!cards.some((t) => String(t).includes('Filter error')), `不得把过滤器错误文本当卡，实际 ${JSON.stringify(cards)}`);
+
+  const f = deckEngine.composeDeckFilters('$:/Deck/坏}牌组', {});
+  assert.equal(f.queue, '', '不安全 title → 队列过滤器置空（调用方按无成员处理）');
+  const out = [...wiki.filterTiddlers(f.queue || '[!is[missing]]')];
+  assert.ok(!out.some((t) => String(t).includes('Filter error')), '空过滤器不产生假结果');
 });

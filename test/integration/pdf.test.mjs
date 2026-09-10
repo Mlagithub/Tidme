@@ -5,15 +5,17 @@ pdf.test.mjs — PDF 导入/阅读/制卡 测试（node:test）
 - core/pdf-ops：整本落库（二进制 + 文档页阅读卡，不切分）、空数据守卫、
   二进制原位恢复、清理级联（二进制+OCR 页）
 - config：OCR 配置（Key 回退语义切分）
-- reader smoke：无 pdf.js 环境渲染加载提示（不挂）、工具栏结构、续读点绝对页恢复、
-  框选图片制卡
+- reader smoke：无 pdf.js 时优雅降级、工具栏结构、续读点绝对页恢复、框选图片制卡；
+  注入真实 pdf.js（pdfjs-dist legacy）后断言页数/翻页副作用/OCR 按钮开关
 - 存量分节书籍（legacy）：文档页不入队、sectionsOfDoc 排除文档页、推进流携带页码
 */
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { collectButtons, collectText, fakeDocument, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
+const nodeRequire = createRequire(import.meta.url);
 const { wiki, mod } = bootPlugin({ prefix: 'tidme-pdf-' });
 const parsePdf = mod('import/parse/pdf.js');
 const pdfOps = mod('core/pdf-ops.js');
@@ -27,6 +29,46 @@ const sessionMod = mod('core/session.js');
 const sched = mod('core/scheduler.js');
 const schema = mod('core/schema.js');
 const deckEngine = mod('core/deck-engine.js');
+const parseMod = mod('import/parse.js');
+
+/** 注入 Node 版 pdf.js 引擎（pdfjs.ts 的 ensurePdfJs 优先读 globalThis.pdfjsLib，与 pdf-import 同手法） */
+async function injectPdfJs() {
+  mod('import/widgets/pdfjs.js').setPdfJsLib(nodeRequire('pdfjs-dist/legacy/build/pdf.js'));
+}
+
+/** 最小合法 PDF（1.4）：两页，用于阅读器主路径 */
+function buildMinimalPdfBytes() {
+  const objs = [];
+  objs[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objs[2] = '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>';
+  objs[3] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>';
+  objs[4] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>';
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+  for (let i = 1; i < objs.length; i++) {
+    offsets[i] = body.length;
+    body += `${i} 0 obj\n${objs[i]}\nendobj\n`;
+  }
+  const xrefPos = body.length;
+  let xref = 'xref\n0 5\n0000000000 65535 f \n';
+  for (let i = 1; i < 5; i++) xref += String(offsets[i] ?? 0).padStart(10, '0') + ' 00000 n \n';
+  const trailer = `trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+  return new TextEncoder().encode(body + xref + trailer);
+}
+
+/** 字节 → base64（Node Buffer；等价于二进制的生产编码） */
+function btoaBytes(bytes) {
+  return Buffer.from(bytes).toString('base64');
+}
+
+async function waitFor(pred, timeoutMs = 3000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    if (pred()) return true;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return false;
+}
 
 test('parse/pdf: 扫描页判定与 pages 字段解析（存量分节书籍兼容）', () => {
   assert.equal(parsePdf.isScannedPageText(''), true);
@@ -118,7 +160,7 @@ test('config: OCR 配置（Key 回退语义切分；一致不落盘）', () => {
   assert.equal(saved.apiKey, 'own-key');
 });
 
-test('pdf-reader: 无 pdf.js 环境渲染加载提示（不挂）', () => {
+test('pdf-reader: 无 pdf.js 引擎时优雅降级（显示加载提示，不抛错）', () => {
   wiki.addTiddler({
     title: 'Tidme/Docs/PDF书',
     tags: ['tidme-doc'],
@@ -130,9 +172,43 @@ test('pdf-reader: 无 pdf.js 环境渲染加载提示（不挂）', () => {
     text: '<$tidme-pdf-reader/>',
   });
   wiki.addTiddler({ title: 'Tidme/Assets/PDF书', type: 'application/pdf', text: 'JVBERi0xLjK=' });
-  const { root, w } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: 'Tidme/Docs/PDF书' } });
+  const { root } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: 'Tidme/Docs/PDF书' } });
   assert.ok(collectText(root).includes('正在加载 pdf.js'), '渲染加载提示（异步加载在无头环境挂起，不阻塞）');
-  assert.equal(typeof w._ocrPage, 'function', 'OCR 按钮绑定的处理方法必须存在（曾缺失导致点击即崩）');
+  assert.ok(!collectText(root).includes('缺少 PDF 数据'), '二进制存在时不进 missing 分支');
+});
+
+test('pdf-reader: 注入 pdf.js 后真实渲染 —— 页数/翻页副作用/OCR 按钮开关（不靠私有字段）', async () => {
+  await injectPdfJs();
+  config.writeOcrConfig(wiki, { enable: false }); // 显式关闭，用例不依赖文件内执行顺序
+  const bytes = buildMinimalPdfBytes();
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '真实渲染书', dataB64: btoaBytes(bytes) });
+  const { root } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: r.docTitle },
+  });
+  // 真实主路径：pdf.js 解析出页数 → 工具栏页数不再是占位
+  await waitFor(() => collectText(root).includes('/ 2'));
+  const text = collectText(root);
+  assert.ok(text.includes('/ 2'), `页数来自 pdf.js 解析（实际 ${text.slice(0, 120)}）`);
+  assert.ok(!text.includes('正在加载 pdf.js'), '加载完成后不再显示加载提示');
+  assert.equal(wiki.getTiddler(r.docTitle).fields['tidme.pages-total'], '2', '文档页写入 pages-total');
+
+  // 翻页 → 页码 state（可观察副作用）+ 防抖后续读点
+  const next = collectButtons(root).find((b) => b.title === '下一页');
+  assert.ok(next, '工具栏有下一页按钮');
+  next.dispatchEvent({ type: 'click' });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '2', '翻页写入页码 state');
+  await waitFor(() => String(docOps.parseReadPoint(wiki, r.docId)?.s || '') === 'p2', 2000);
+  assert.equal(docOps.parseReadPoint(wiki, r.docId).s, 'p2', '防抖后续读点携带绝对页码');
+
+  // OCR 按钮开关是行为（配置驱动），不是私有方法是否存在
+  assert.ok(!collectButtons(root).some((b) => b.title.startsWith('扫描页识别')), 'OCR 未启用 → 无 OCR 按钮');
+  config.writeOcrConfig(wiki, { enable: true, apiKey: 'k' });
+  const withOcr = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: r.docTitle },
+  });
+  assert.ok(collectButtons(withOcr.root).some((b) => b.title.startsWith('扫描页识别')), 'OCR 启用 → 渲染 OCR 按钮');
+  withOcr.w.destroy?.();
+  config.writeOcrConfig(wiki, { enable: false });
 });
 
 test('pdf-reader: 二进制缺失或为空时状态条提供重新绑定入口', async () => {
@@ -178,7 +254,7 @@ test('pdf-reader: 工具栏结构 —— 缩放/翻页/全屏齐备（无目录�
 });
 
 test('pdf-reader: 节卡缺少 tidme.asset 时通过 docId 回退解析，且学习会话中显示推进按钮', async () => {
-  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '回退测试书', dataB64: 'JVBERi0xLjQK' });
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '回退测试书', dataB64: btoaBytes(buildMinimalPdfBytes()) });
   const secTitle = `${r.docTitle}/01 存量节`;
   wiki.addTiddler({
     title: secTitle,
@@ -196,7 +272,12 @@ test('pdf-reader: 节卡缺少 tidme.asset 时通过 docId 回退解析，且学
     variables: { currentTiddler: secTitle },
   });
 
-  assert.equal(w._pdfTitle, r.pdfTitle, '自动通过 docId 回退找到文档页的 tidme.asset');
+  // 可观察结果：能真的加载出页数 → 说明经 docId 回退找到了资产（不再断言私有字段 _pdfTitle）
+  await injectPdfJs();
+  await waitFor(() => collectText(root).includes('/ 2'));
+  const text = collectText(root);
+  assert.ok(text.includes('/ 2'), `经 docId 回退找到二进制并解析出页数（实际 ${text.slice(0, 120)}）`);
+  assert.ok(!text.includes('缺少 PDF 数据'), '不落入 missing 分支');
   const buttons = collectButtons(root);
   const nextBtn = buttons.find((b) => b.textContent?.includes('读完继续'));
   assert.ok(nextBtn, '学习会话中工具栏展示「读完继续」按钮');
@@ -441,10 +522,10 @@ test('pdf: 续读点持久化 & 回原文锚点（整本文档页）', async () 
   assert.equal(docOps.sectionOfDocByPage(wiki, b.docId, 18), null, '整本无节卡 → 页码反查回退 null');
 });
 
-test('pdf: 存量分节书 —— 文档页不入队（入口而非可学习卡），节卡在队', async () => {
-  // 存量分节书籍：手工构造文档页 + 节卡（新导入已不产生节卡）
-  const docTitle = 'Tidme/Docs/存量分节书';
-  const pdfTitle = 'Tidme/Assets/存量分节书';
+test('pdf: 分节文档页不入队（入口而非可学习卡），节卡在队；整本连续 PDF 文档页在队', async () => {
+  // 分节文档页：文档页只是入口（structure=sectioned，构建处必写——判据单一来源）
+  const docTitle = 'Tidme/Docs/分节书';
+  const pdfTitle = 'Tidme/Assets/分节书';
   const docId = 'dsplit1';
   wiki.addTiddler({
     title: docTitle,
@@ -452,6 +533,7 @@ test('pdf: 存量分节书 —— 文档页不入队（入口而非可学习卡�
     'tidme.kind': 'topic',
     'tidme.doc': docId,
     'tidme.format': 'pdf',
+    'tidme.structure': 'sectioned',
     'tidme.asset': pdfTitle,
     text: '<$tidme-pdf-reader/>',
     due: '20260101000000000',
@@ -475,25 +557,33 @@ test('pdf: 存量分节书 —— 文档页不入队（入口而非可学习卡�
   }
 
   const titles = docOps.collectTopicQueue(wiki).map((c) => c.title);
-  assert.ok(!titles.includes(docTitle), '存量分节书文档页不入队（入口而非可学习卡）');
+  assert.ok(!titles.includes(docTitle), '分节文档页不入队（入口而非可学习卡）');
   assert.ok(titles.includes(sec1) && titles.includes(sec2), '节卡在队');
+  // 分节文档页进度按节数（structure=sectioned 优先于 format=pdf —— 曾按页码显示）
+  const prog = docOps.docReadingProgress(wiki, docId);
+  assert.equal(prog.type, 'sections', '分节 PDF 文档页按节进度，不按页码');
+  assert.equal(prog.total, 2, '总节数 = 2');
+  // 两处"待读"口径一致：today 用的过滤器计数 vs 阅读列表用的队列快照
+  const todayCount = wiki.filterTiddlers(ns.TOPIC_QUEUE_FILTER).length;
+  assert.equal(todayCount, titles.length, '过滤器计数 = 阅读队列快照长度（同屏两个数字一致）');
 
   const queue = deckEngine.composeGlobalLearningQueue(
     (filter) => wiki.filterTiddlers(filter),
-    { topics: true, itemRatio: 1, topicRatio: 1, excludeTitles: Array.from(docOps.splitDocPageSet(wiki)) },
+    { topics: true, itemRatio: 1, topicRatio: 1 },
   );
-  assert.ok(!queue.includes(docTitle), '学习会话不含存量分节书文档页');
+  assert.ok(!queue.includes(docTitle), '学习会话不含分节文档页');
   assert.ok(queue.includes(sec1), '学习会话含节卡');
 
-  // 整本不切分的 PDF 文档页（无节卡）必须入队：不受存量排除逻辑误伤
+  // 整本不切分的 PDF 文档页（structure=continuous，无节卡）必须入队
   const r2 = await pdfOps.createPdfDoc(wiki, { docTitle: '队列排除测试书', dataB64: 'JVBERi0xLjQK' });
   const titles2 = docOps.collectTopicQueue(wiki).map((c) => c.title);
   assert.ok(titles2.includes(r2.docTitle), '整本不切分的 PDF 文档页入队');
   const queue2 = deckEngine.composeGlobalLearningQueue(
     (filter) => wiki.filterTiddlers(filter),
-    { topics: true, itemRatio: 1, topicRatio: 1, excludeTitles: Array.from(docOps.splitDocPageSet(wiki)) },
+    { topics: true, itemRatio: 1, topicRatio: 1 },
   );
   assert.ok(queue2.includes(r2.docTitle), '学习会话含整本文档页');
+  assert.equal(docOps.docReadingProgress(wiki, r2.docId).type, 'continuous', '整本连续文档页按页码进度');
 });
 
 test('pdf: 阅读条栏推进（▶ 下一节）续读点携带目标节起始页（存量分节书兼容，不再丢失阅读位置）', async () => {
@@ -581,15 +671,43 @@ test('pdf: 连续文档在学习模式推进时不仅保存续读点，还顺延
   assert.ok(!q.includes(r.docTitle), '排期推迟到未来后不再立即重现于新队列');
 });
 
-test('core/doc-ops: isContinuousCard 连续型阅读卡判定（PDF 与未切分长文）', () => {
-  // 1. PDF 文档页
-  assert.equal(docOps.isContinuousCard({ tags: ['tidme-doc'], 'tidme.kind': 'topic', 'tidme.format': 'pdf' }), true);
-  // 2. 连续型结构文档
+test('core/doc-ops: isContinuousCard 只认 tidme.structure=continuous（单一判据）', () => {
+  // 1. 连续型结构文档（整本 PDF / 未切分长文，构建处必写 structure）
   assert.equal(docOps.isContinuousCard({ tags: ['tidme-doc'], 'tidme.kind': 'topic', 'tidme.structure': 'continuous' }), true);
-  // 3. 分节节卡：subkind=section，不是整篇连续卡
+  // 2. 分节文档页（structure=sectioned）不是连续卡——曾因 format=pdf 兜底把分节 PDF 判成连续卡（进度显示页码）
+  assert.equal(
+    docOps.isContinuousCard({ tags: ['tidme-doc'], 'tidme.kind': 'topic', 'tidme.format': 'pdf', 'tidme.structure': 'sectioned' }),
+    false,
+    '分节 PDF 文档页按节进度，不进连续卡分支',
+  );
+  // 3. 缺 structure 的 PDF 文档页：判定为"非连续"（构建处必写 structure，缺字段即数据异常）
+  assert.equal(docOps.isContinuousCard({ tags: ['tidme-doc'], 'tidme.kind': 'topic', 'tidme.format': 'pdf' }), false);
+  // 4. 分节节卡：subkind=section，不是整篇连续卡
   assert.equal(docOps.isContinuousCard({ 'tidme.kind': 'topic', 'tidme.subkind': 'section' }), false);
-  // 4. 普通无 kind 文档目录页
+  // 5. 普通无 kind 文档目录页
   assert.equal(docOps.isContinuousCard({ tags: ['tidme-doc'], caption: '目录页' }), false);
+});
+
+test('core/doc-ops: 文档页构建处必写 tidme.structure（宿主页判据的数据前提）', async () => {
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '判据前提书', dataB64: 'JVBERi0xLjQK' });
+  assert.equal(wiki.getTiddler(r.docTitle).fields['tidme.structure'], 'continuous', '整本 PDF 文档页 structure=continuous');
+  const parsed = await parseMod.runSplit({ text: '# 章\n\n内容。', title: '判据前提切分书', type: 'text/markdown' });
+  const doc = parsed.tiddlers.find((t) => Array.isArray(t.tags) && t.tags.includes('tidme-doc'));
+  assert.equal(doc['tidme.structure'], 'sectioned', '切分文档页 structure=sectioned');
+});
+
+test('core/doc-ops: 续读点位置串编解码唯一实现（format/parse 互逆，非法输入回空/null）', () => {
+  assert.equal(docOps.formatPagePosition(7), 'p7');
+  assert.equal(docOps.formatPagePosition('12'), 'p12');
+  assert.equal(docOps.formatPagePosition(0), '', '非正页码 → 空串');
+  assert.equal(docOps.formatPagePosition(NaN), '');
+  assert.equal(docOps.formatPagePosition(undefined), '');
+  assert.equal(docOps.parsePagePosition('p7'), 7);
+  assert.equal(docOps.parsePagePosition(' p12 '), 12);
+  assert.equal(docOps.parsePagePosition(''), null);
+  assert.equal(docOps.parsePagePosition('7'), null, '裸数字不是位置串');
+  assert.equal(docOps.parsePagePosition('p.7'), null);
+  for (const p of [1, 2, 99, 12345]) assert.equal(docOps.parsePagePosition(docOps.formatPagePosition(p)), p, '互逆');
 });
 
 test('core/doc-ops: docReadingProgress 真实阅读进度计算（解决 PDF 进度永久 0/1）', async () => {
@@ -615,7 +733,6 @@ test('core/ns + paths: 统一 Doc 命名空间与 Decks 镜像推导', () => {
   const paths = mod('core/paths.js');
   assert.equal(ns.NS_DOCS, 'Tidme/Docs/');
   assert.equal(paths.docRoot('通用架构'), 'Tidme/Docs/通用架构');
-  assert.equal(paths.docCardsRoot('通用架构'), 'Tidme/Decks/通用架构');
   assert.equal(ns.docsToDecksRoot('Tidme/Docs/我的文档'), 'Tidme/Decks/我的文档');
 });
 

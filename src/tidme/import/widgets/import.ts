@@ -17,11 +17,16 @@ const commitMod = require('$:/plugins/keepone/tidme/core/import-commit.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
-const schema = require('$:/plugins/keepone/tidme/core/schema.js');
-const semMod = require('$:/plugins/keepone/tidme/core/server/semantic-split');
+const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
+const titleMod = require('$:/plugins/keepone/tidme/core/title.js');
+const semMod = require('$:/plugins/keepone/tidme/core/semantic-split.js');
+// LLM 网络层（唯一实现，浏览器走 fetch 分支）；语义切分纯逻辑不自己发请求
+const llm = require('$:/plugins/keepone/tidme/core/server/llm-client');
 const pdfImport = require('$:/plugins/keepone/tidme/import/widgets/pdf-import.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
+// 仅类型（import type 不产生运行时内联；core 跨模块引用规则只约束值导入）
+import type { CommitImportResult } from '../../core/import-commit.ts';
 
 interface ImportResult {
   bookTitle: string;
@@ -47,8 +52,8 @@ function getOptions(wiki: any): { maxChars?: number; minChars?: number; bag: str
     return Number.isFinite(v) && v > 0 ? v : undefined;
   };
   const bag = (wiki.getTiddlerText(parse.IMPORT_BAG_TITLE, '') || '').trim();
-  // 语义切分配置唯一读取口 = getSemanticSplitConfig（text JSON + apiKey/baseUrl/model 字段覆盖）
-  const hasCfg = wiki.getTiddler(semMod.SEMANTIC_SPLIT_CONFIG_TITLE);
+  // 语义切分配置唯一读取口 = config.readSemanticSplit（text JSON + 强类型化 enable/数值）
+  const hasCfg = wiki.getTiddler(ns.SEMANTIC_SPLIT_TITLE);
   return {
     maxChars: num(TEMP_IMPORT + 'max'),
     minChars: num(TEMP_IMPORT + 'min'),
@@ -77,7 +82,7 @@ async function subSplitTiddlerWithLLM(tiddler: any, r: ImportResult, wiki: any):
   }
 
   const origText = String(tiddler.text || '').trim();
-  const subChunks: Array<{ title: string; text: string; chars: number }> = await semMod.splitSectionText(origText, aiCfg);
+  const subChunks: Array<{ title: string; text: string; chars: number }> = await semMod.splitSectionText(origText, aiCfg, llm.callLLM);
   if (!subChunks || subChunks.length <= 1) return false;
 
   // 100% 字数与原文完整性校验
@@ -165,13 +170,6 @@ function buildRow(
   let activeEditTitleIndex: number | null = null;
   let activeAddIndex: number | null = null;
 
-  // 手动插卡 title 去重（同 caption 多次插入 → -N 后缀），会话内累积
-  const manualUsed = new Set<string>(
-    r.tiddlers
-      .filter((t: any) => t['tidme.kind'] === 'topic' && String(t.title || '').includes('/manual-'))
-      .map((t: any) => String(t.title)),
-  );
-
   const makeAddForm = (insertAfterIdx: number) => {
     const form = el(doc, 'div', 'tm-split-add-form');
     const titleIn = doc.createElement('input');
@@ -186,27 +184,19 @@ function buildRow(
       const tVal = titleIn.value.trim();
       const cVal = textIn.value.trim();
       if (tVal && cVal) {
-        // 手动插卡 title 走同一套命名空间/slug（paths.insertedSectionTitle），避免第三套转义；
-        // 同 caption 冲突时追加 -N（manualUsed 会话内累积）
-        const mBase = parse.insertedSectionTitle(r.bookTitle, tVal);
-        let mTitle = mBase;
-        let n = 2;
-        while (manualUsed.has(mTitle)) mTitle = `${mBase}-${n++}`;
-        manualUsed.add(mTitle);
-        const nowFields = schema.initialFsrsFields(new Date());
-        const newTiddler = {
+        // 手动插卡 title 走同一套命名空间/slug（paths.insertedSectionTitle）+ core/title 唯一化：
+        // pending = 本批预览里还没落库的产物 title（同一次预览连插同名节要靠它，库检查看不见草稿）
+        const pending = r.tiddlers.map((t: any) => String(t.title || ''));
+        const mTitle = titleMod.freeTitle(this.wiki, parse.insertedSectionTitle(r.bookTitle, tVal), pending);
+        // 节卡字段基座唯一产地 = core/card-factory（与切分产物同契约：kind/subkind/FSRS/chars/afactor）
+        const newTiddler = cardFactory.buildSectionCardFields({
           title: mTitle,
           caption: tVal,
           text: cVal,
-          ...nowFields,
-          'tidme.doc': r.docId,
-          'tidme.kind': 'topic',
-          'tidme.subkind': 'section',
-          'tidme.chars': String(cVal.length),
-          'tidme.priority': String(sched.PRIORITY_DEFAULT),
-          'tidme.afactor': String(sched.afactorForText(cVal.length)),
-          'tidme.breadcrumb': `${r.bookTitle}${ns.CRUMB_SEP}${tVal}`,
-        };
+          docId: r.docId,
+          priority: sched.PRIORITY_DEFAULT,
+          breadcrumb: `${r.bookTitle}${ns.CRUMB_SEP}${tVal}`,
+        });
         if (insertAfterIdx === -1) {
           r.tiddlers.splice(1, 0, newTiddler);
         } else {
@@ -511,24 +501,23 @@ function makeFileWidget(): WidgetCtor {
 
       // A：落库单个解析结果。写库统一走 core/import-commit：同 docId 已有旧卡 →
       // alignCards 增量（未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档），否则全量写。
-      // 返回 { created, updated, archived, aligned }。
-      const commitResult = async (result: ImportResult): Promise<{ created: number; updated: number; archived: number }> => {
+      // 返回值含异常计数（dropped/ambiguous/skippedExisting/collisionSuspect），由汇总行展示。
+      const commitResult = async (result: ImportResult): Promise<CommitImportResult> => {
         const validTiddlers = result.tiddlers.filter((x: any) => !x._deleted);
         const [doc, ...cards] = validTiddlers;
-        // 文档页复用旧标题（引用稳定）：已存在 docPage 时以其为最终 title
-        const docPage = this.wiki.filterTiddlers(`[tag[tidme-doc]tidme.doc[${result.docId}]]`)[0] || '';
-        const r = await commitMod.commitImportToWiki(this.wiki, {
+        // 文档页 title 由 core/import-commit 统一裁决（同 docId 已有文档页 → 复用它的引用）
+        return await commitMod.commitImportToWiki(this.wiki, {
           docId: result.docId,
           docTiddler: { ...doc, 'tidme.doc': result.docId },
-          docTitle: docPage || doc.title,
+          docTitle: doc.title,
           cards,
           rewriteDocPage: false,
         });
-        return { created: r.created, updated: r.updated, archived: r.archived };
       };
 
       btnImport.addEventListener('click', async () => {
-        let created = 0, updated = 0, archived = 0;
+        let created = 0, updated = 0, archived = 0, dropped = 0, skipped = 0;
+        let collision = false;
         let firstDocTitle = '';
         for (const [token, item] of pending) {
           if (!item.result) continue;
@@ -536,10 +525,10 @@ function makeFileWidget(): WidgetCtor {
           created += r.created;
           updated += r.updated;
           archived += r.archived;
-          if (!firstDocTitle) {
-            firstDocTitle = this.wiki.filterTiddlers(`[tag[tidme-doc]tidme.doc[${item.result.docId}]]`)[0] ||
-              item.result.tiddlers[0]?.title || '';
-          }
+          dropped += r.dropped;
+          skipped += r.skippedExisting;
+          collision = collision || r.collisionSuspect;
+          if (!firstDocTitle) firstDocTitle = r.docTitle || item.result.tiddlers[0]?.title || '';
           pending.delete(token);
         }
         // 重绘预览区
@@ -559,6 +548,14 @@ function makeFileWidget(): WidgetCtor {
               } ${archived} (${lingo(this.wiki, 'import.srspreserved', 'SRS preserved')})`,
             ),
           );
+        }
+        // 异常上报：同名节被丢弃 / 同名 tiddler 跳过 / 疑似同名书碰撞——旧实现算完就丢，用户看不到
+        if (dropped || skipped || collision) {
+          const parts: string[] = [];
+          if (dropped) parts.push(`${lingo(this.wiki, 'import.dropped', 'Duplicate sections discarded')} ${dropped}`);
+          if (skipped) parts.push(`${lingo(this.wiki, 'import.skippedexisting', 'Skipped (title exists)')} ${skipped}`);
+          if (collision) parts.push(lingo(this.wiki, 'import.collision', 'Possible book title collision - rename and re-import'));
+          rowsBox.appendChild(el(doc, 'div', 'tm-import-summary tm-import-warn', `⚠ ${parts.join(' · ')}`));
         }
         // 落点：导入完成跳到本书文档汇总页（从那里决定读哪张/继续提炼），而非停在空白队列
         if (created > 0 && firstDocTitle) {

@@ -3,6 +3,18 @@ ui/base/dom.ts — DOM 操作工具（createElement / 轻量 Toast / TW 事件�
 HTML 转义正身在 core/schema.escapeHtml。
 */
 
+// ---------- 划词气泡类名（唯一产地） ----------
+// 阅读条栏气泡与全局制卡气泡**必须**用各自的类名查询：曾共用 tm-selection-bubble 查询，
+// 于是任意阅读条栏实例在 mouseup 时会把全局制卡气泡一起删掉（"制卡气泡消失"的根因）。
+// 两个模块都从这里取常量，跨模块契约不再靠注释同步。
+
+/** 两者共用的样式类（视觉一致，styles.tid 里的 .tm-selection-bubble 规则） */
+export const BUBBLE_STYLE_CLASS = 'tm-selection-bubble';
+/** 阅读条栏自己的气泡（section-bar 只查/只删这个） */
+export const SECTION_BUBBLE_CLASS = 'tm-section-bubble';
+/** 全局制卡气泡（pick-bubble 只查/只删这个） */
+export const PICK_BUBBLE_CLASS = 'tm-pick-bubble';
+
 export function el(doc: Document, tag: string, cls?: string, text?: string): HTMLElement {
   const e = doc.createElement(tag);
   if (cls) e.className = cls;

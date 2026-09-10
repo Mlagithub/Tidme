@@ -25,6 +25,8 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
   exports.after = ['load-modules'];
 
   var CONCURRENCY = 2;
+  /** 正在处理的 pending title（scan 每 15s 重扫，见 startup 里的在飞保护） */
+  var inflight = Object.create(null);
 
   function ensureDom() {
     if (globalThis.DOMParser && globalThis.XMLSerializer) return true;
@@ -51,10 +53,8 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
           var raw = String(t.fields.text || '');
           var bytes;
           try {
-            var bin = $tw.utils.base64DecodeToUint8Array
-              ? $tw.utils.base64DecodeToUint8Array(raw)
-              : new Uint8Array(Buffer.from(raw, 'base64'));
-            bytes = bin;
+            // 解码唯一入口在 core/binary（支持 URL-safe 字母表与 dataURL 前缀，非法字符抛错）
+            bytes = require('$:/plugins/keepone/tidme/core/binary.js').base64ToBytes(raw);
           } catch (e) {
             $tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
               'tidme.pending': undefined,
@@ -65,6 +65,13 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
 
           var parse = require('$:/plugins/keepone/tidme/import/parse.js');
           var ns = require('$:/plugins/keepone/tidme/core/ns.js');
+          // 语义切分：纯逻辑在 core/semantic-split（模块名带 .js，是 TS 产物），
+          // 网络层在 core/server/llm-client（server/*.js 无 .meta，模块名不带 .js）。
+          // 两者都必须在使用前 require（var 提升会把「先引用后赋值」变成 undefined 而不报错，
+          // 曾因此静默关闭整条语义切分路径）。
+          var semantic = require('$:/plugins/keepone/tidme/core/semantic-split.js');
+          var llm = require('$:/plugins/keepone/tidme/core/server/llm-client');
+          var config = require('$:/plugins/keepone/tidme/core/config.js');
           var lower = fileName.toLowerCase();
           var needsDom = lower.endsWith('.epub') || /\.html?$/.test(lower);
           // 仅 epub/html 需要 DOMParser（TW 沙箱默认无；可经 __tidmeDomShim 预置）
@@ -77,22 +84,43 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
           }
           var result;
           if (lower.endsWith('.epub') || /\.(md|markdown|txt|html?)$/.test(lower)) {
-            // 落库执行器（runImport → 写库 → 标记 done/error）
+            // 落库执行器（runImport → core/import-commit 写库 → 标记 done/error）。
+            // 写库必须走唯一门面：直接 addTiddler(r.tiddlers) 会绕开对齐/归档/文档页复用，
+            // 服务端重导入与浏览器导入结果不一致（旧卡残留、SRS 进度丢、没有 archives）。
             var doImport = function(importBytes) {
               var opts = { bag: $tw.wiki.getTiddlerText(ns.IMPORT_BAG_TITLE, '') || 'default' };
               var pri = t.fields['tidme.priority'];
               if (pri !== undefined && pri !== '') opts.priority = Number(pri);
               parse.runImport(importBytes, fileName, opts)
                 .then(function(r) {
-                  for (var i = 0; i < r.tiddlers.length; i++) $tw.wiki.addTiddler(r.tiddlers[i]);
-                  $tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
-                    'tidme.pending': undefined,
-                    'tidme.import-done': new Date().toISOString(),
-                    'tidme.import-docId': r.docId,
-                    text: String(t.fields.text || ''),
-                  }));
-                  console.log('[tidme] import done:', fileName, r.sectionCount, 'sections');
-                  resolve();
+                  var valid = r.tiddlers.filter(function(x) {
+                    return !x._deleted;
+                  });
+                  var doc = valid[0] || {};
+                  var cards = valid.slice(1);
+                  var commit = require('$:/plugins/keepone/tidme/core/import-commit.js');
+                  return commit.commitImportToWiki($tw.wiki, {
+                    docId: r.docId,
+                    docTiddler: $tw.utils.extend({}, doc, { 'tidme.doc': r.docId }),
+                    docTitle: doc.title,
+                    cards: cards,
+                    rewriteDocPage: false,
+                  }).then(function(res) {
+                    $tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
+                      'tidme.pending': undefined,
+                      'tidme.import-done': new Date().toISOString(),
+                      'tidme.import-docId': r.docId,
+                      text: String(t.fields.text || ''),
+                    }));
+                    console.log(
+                      '[tidme] import done:',
+                      fileName,
+                      r.sectionCount,
+                      'sections',
+                      '(' + res.created + ' new / ' + res.updated + ' updated / ' + res.archived + ' archived)',
+                    );
+                    resolve();
+                  });
                 })
                 .catch(function(err) {
                   $tw.wiki.addTiddler($tw.utils.extend({}, t.fields, {
@@ -103,16 +131,13 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
                   resolve();
                 });
             };
-            // 语义切分：仅 md/txt 无结构散文，LLM 断点插虚拟标题；失败静默回退
+            // 语义切分：仅 md/txt 无结构散文，LLM 断点插虚拟标题；失败静默回退。
+            // 配置走 core/config.readSemanticSplit（强类型化 enable/数值，勿在此手写 JSON.parse）
             if (/\.(md|markdown|txt)$/.test(lower)) {
-              var semCfg = {};
-              try {
-                semCfg = JSON.parse($tw.wiki.getTiddlerText(semantic.SEMANTIC_SPLIT_CONFIG_TITLE, '{}') || '{}');
-              } catch (e) { /* 忽略非法配置 */ }
+              var semCfg = config.readSemanticSplit($tw.wiki);
               if (semCfg && semCfg.enable === true) {
-                var semantic = require('$:/plugins/keepone/tidme/core/server/semantic-split.js');
                 var decoded = Buffer.from(bytes).toString('utf8');
-                semantic.prepareText(decoded, semCfg)
+                semantic.prepareText(decoded, semCfg, llm.callLLM)
                   .then(function(r) {
                     if (r.usedBreaks > 0) {
                       console.log('[tidme] semantic split:', r.virtual, 'virtual headings');
@@ -150,7 +175,17 @@ globalThis.__tidmeDomShim（{DOMParser, XMLSerializer}）；都没有则报错�
       try {
         var pending = $tw.wiki.filterTiddlers('[tag[tidme-pending-import]tidme.pending[yes]]');
         var batch = pending.slice(0, CONCURRENCY);
-        batch.forEach(processOne);
+        batch.forEach(function(title) {
+          // 在飞保护：处理大文件可能超过 15s，下次扫描会再次捞到同一个 pending tiddler
+          // → 同一任务并发跑两遍（重复切分/重复落库）。进程内 Set 即够：单进程持有 wiki，
+          // 而 tiddler 标记会在进程崩溃后留下"处理中"残骸，反而永久堵住任务。
+          if (inflight[title]) return;
+          inflight[title] = true;
+          var done = function() {
+            delete inflight[title];
+          };
+          processOne(title).then(done, done);
+        });
       } catch (e) {
         console.error('[tidme] importer scan error:', e);
       }

@@ -4,7 +4,8 @@ core.test.mjs — tidme/core 单元测试（node:test）
 直接 import src/tidme/core/*.ts（Node 24 类型剥离）。覆盖：
 - ids：docId/sectionId 确定性、指纹
 - schema：FSRS 初始字段、缺失检测、严格校验
-- deck-engine：过滤器组合与队列顺序
+deck-engine 的过滤器组合经真实 TW 加载（该模块 require 同包 core/ns，ESM 直引会缺 require）
+→ 见 integration/queue.test.mjs 与 integration/bin-core.test.mjs。
 fsrs 四档评分语义见 integration/fsrs.test.mjs；学习流回归见 e2e/study-flow.test.mjs。
 */
 import assert from 'node:assert/strict';
@@ -12,7 +13,6 @@ import { test } from 'node:test';
 
 const ids = await import('../../src/tidme/core/ids.ts');
 const schema = await import('../../src/tidme/core/schema.ts');
-const deckEngine = await import('../../src/tidme/core/deck-engine.ts');
 
 test('ids: docId 只由元数据派生且确定', async () => {
   const meta = { title: '书A', creator: '作者', language: 'zh' };
@@ -61,42 +61,10 @@ test('schema: missingFsrsFields 检出缺失', () => {
   assert.ok(missing.includes('stability'));
 });
 
-test('schema: assertKind 严格校验', () => {
-  const good = {
-    'tidme.doc': 'd12345678',
-    'tidme.id': 's123456789012',
-    'tidme.parent': '书',
-    'tidme.path': '书 › 章',
-    'tidme.order': '000001',
-    'tidme.kind': 'topic',
-    'tidme.subkind': 'section',
-    'tidme.hash': 'h1234567890123456',
-    'tidme.format': 'epub',
-    caption: '章',
-    text: '<p>x</p>',
-    ...schema.initialFsrsFields(new Date()),
-  };
-  assert.doesNotThrow(() => schema.assertKind(good, 'topic'));
-  assert.throws(() => schema.assertKind({ ...good, caption: undefined }, 'topic'), /caption/);
-  assert.throws(() => schema.assertKind({ ...good, state: undefined }, 'topic'), /FSRS/);
-});
-
-test('deck-engine: 组合过滤器与队列顺序（due-new）', () => {
-  const fields = {
-    card: '[tidme.kind[item]]',
-    card_exclude: '[field:tidme.done[yes]]',
-    state_learn: '[state[1]]',
-    state_due: '[state[2]]',
-    state_new: '[state[0]]',
-    order: 'due-new',
-  };
-  const f = deckEngine.composeDeckFilters('$:/Deck/default', fields);
-  assert.ok(f.learn.includes('!!card'), 'learn 应引用 card 字段');
-  assert.ok(f.learn.includes('state_learn'), 'learn 应含 state_learn');
-  assert.ok(f.queue.startsWith(f.learn), 'due-new: learn 在前');
-  assert.ok(f.queue.includes(f.due) && f.queue.includes(f.newly), 'queue 含 due+new');
-  assert.ok(f.unfold.length > 0);
-  // new-due 顺序
-  const f2 = deckEngine.composeDeckFilters('$:/Deck/default', { ...fields, order: 'new-due' });
-  assert.ok(f2.queue.startsWith(f2.learn + ' ' + f2.newly), 'new-due: learn+new 在前');
+test('schema: assertCardFields 校验 kind 与 FSRS 九件套', () => {
+  const good = { 'tidme.kind': 'item', 'tidme.subkind': 'qa', ...schema.initialFsrsFields(new Date()) };
+  assert.doesNotThrow(() => schema.assertCardFields(good));
+  assert.throws(() => schema.assertCardFields({ ...good, 'tidme.kind': undefined }), /tidme\.kind/);
+  assert.throws(() => schema.assertCardFields({ ...good, 'tidme.kind': 'extract' }), /tidme\.kind/);
+  assert.throws(() => schema.assertCardFields({ ...good, state: undefined }), /FSRS/);
 });

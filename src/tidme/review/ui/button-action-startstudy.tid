@@ -26,10 +26,12 @@ code-body: yes
             $tiddler={{{ [<nextTiddler>addprefix[$:/state/folded/]] }}}
             text={{{ [subfilter<filter_unfold>match<nextTiddler>then[show]else[hide]] }}}
         />
-        <!-- 专注计时锚点（ns.CARD_OPEN_AT_TITLE 跨端契约）：评分时 core/grade 按差值记时长 -->
+        <!-- 专注计时锚点（ns.CARD_OPEN_AT_TITLE 跨端契约）：text = 起始时刻、card = 归属卡；
+             评分时 core/session.consumeFocusAnchor 按差值记时长并删除 -->
         <$action-setfield
             $tiddler="$:/temp/tidme/card-open-at"
             text={{{ [<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>] }}}
+            card={{{ [<nextTiddler>] }}}
         />
         <$action-navigate
             $to=<<nextTiddler>>

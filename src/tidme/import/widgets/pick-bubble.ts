@@ -46,7 +46,8 @@ let bubbleBound = false;
 let activeBubble: HTMLElement | null = null;
 
 function removeBubble(doc: Document) {
-  const bubble = doc.querySelector('.tm-pick-bubble');
+  // 只查自己的类（与 section-bar 的气泡类名互不相同，见 ui/base/dom 的类名唯一产地）
+  const bubble = doc.querySelector('.' + dom.PICK_BUBBLE_CLASS);
   if (bubble && bubble.parentNode) bubble.parentNode.removeChild(bubble);
   activeBubble = null;
 }
@@ -113,7 +114,7 @@ function bindGlobal(widget: any) {
     let bubble = activeBubble;
     if (!bubble || !bubble.parentNode) {
       bubble = doc.createElement('div');
-      bubble.className = 'tm-selection-bubble tm-pick-bubble';
+      bubble.className = `${dom.BUBBLE_STYLE_CLASS} ${dom.PICK_BUBBLE_CLASS}`;
       doc.body.appendChild(bubble);
       activeBubble = bubble;
     }

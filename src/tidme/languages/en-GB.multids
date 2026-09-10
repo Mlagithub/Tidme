@@ -65,6 +65,7 @@ badge.overdue: !
 badge.due: D
 badge.new: N
 kind.extract: E
+kind.concept: 💡
 kind.cloze: C
 kind.qa: Q
 kind.section: Section
@@ -416,6 +417,9 @@ import.alignsummary: Aligned: Added
 import.updated: Updated
 import.archived: Archived
 import.srspreserved: SRS preserved
+import.dropped: Duplicate sections discarded
+import.skippedexisting: Skipped (title exists)
+import.collision: Possible book title collision - rename and re-import
 import.pdfimported: imported
 import.sectionsadded: sections imported into default deck, ready to study.
 split.sourcemissing: Source tiddler does not exist
@@ -448,6 +452,7 @@ stats.funnel: Learning Funnel
 stats.funnel.import: Docs
 stats.funnel.sections: Sections
 stats.funnel.extracts: Extracts
+stats.funnel.concepts: Concepts
 stats.funnel.cards: Cards
 stats.reviewretention: Review & Retention
 stats.reviews: Reviews

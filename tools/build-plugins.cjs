@@ -80,11 +80,13 @@ function tiddlerFileName(title) {
 
   // 附带：导入管线 bundle（无头管线测试的输入）——用 esbuild JS API，避免 npx 子进程残留
   // $:/plugins/keepone/tidme/core/* 通过 onResolve 内联进 bundle（无头测试不依赖 TW 运行时）；import/* 保持外部（jszip）
+  // 说明：core 跨模块引用在源码里一律写 `.../core/<x>.js`（TW 运行时契约），此处需剥掉 .js 再补 .ts，
+  // 否则解析成 `<x>.js.ts` 直接构建失败。
   const coreResolvePlugin = {
     name: 'tidme-core-alias',
     setup(build) {
       build.onResolve({ filter: /^\$:\/plugins\/keepone\/tidme\/core\// }, (args) => {
-        const name = args.path.replace(/^\$:\/plugins\/keepone\/tidme\/core\//, '');
+        const name = args.path.replace(/^\$:\/plugins\/keepone\/tidme\/core\//, '').replace(/\.js$/, '');
         return { path: path.join(root, 'src/tidme/core', name + '.ts'), namespace: 'file' };
       });
     },

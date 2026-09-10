@@ -30,6 +30,7 @@ export function badgeOf(fields: Record<string, any>, wiki?: any): { text: string
 export function kindMark(fields: Record<string, any>, wiki?: any): string {
   const sub = String(fields['tidme.subkind'] || '');
   if (sub === 'extract') return wiki ? lingoMod.lingo(wiki, 'kind.extract', 'E') : 'E';
+  if (sub === 'concept') return wiki ? lingoMod.lingo(wiki, 'kind.concept', '💡') : '💡';
   if (sub === 'cloze') return wiki ? lingoMod.lingo(wiki, 'kind.cloze', 'C') : 'C';
   if (sub === 'qa') return wiki ? lingoMod.lingo(wiki, 'kind.qa', 'Q') : 'Q';
   return '';
@@ -51,10 +52,17 @@ export function stateLabel(fields: Record<string, any>, wiki?: any): string {
   return wiki ? lingoMod.lingo(wiki, 'state.new', 'New') : 'New';
 }
 
+/** 日期标签（17 位串/Date/数字 → yyyy-mm-dd；缺失/非法 → '—'）——日期展示唯一实现 */
+export function dateLabel(raw: any): string {
+  if (raw === undefined || raw === null || raw === '') return '—';
+  const d = schema.parseTwDate(raw);
+  return Number.isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
+}
+
+/** 到期日：只有 state=2（复习态）才有到期语义；其余显示 '—'（复用 dateLabel 格式化） */
 export function dueLabel(fields: Record<string, any>): string {
   if (String(fields.state || '0') !== '2') return '—';
-  const d = schema.parseTwDate(fields.due);
-  return Number.isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
+  return dateLabel(fields.due);
 }
 
 export function intervalLabel(fields: Record<string, any>, wiki?: any): string {
@@ -75,12 +83,6 @@ export function lapsesLabel(fields: Record<string, any>): string {
 export function diffLabel(fields: Record<string, any>): string {
   const d = Number(fields.difficulty);
   return Number.isFinite(d) && d > 0 ? `${Math.round(d * 100)}%` : '—';
-}
-
-export function dateLabel(raw: any): string {
-  if (raw === undefined || raw === null || raw === '') return '—';
-  const d = schema.parseTwDate(raw);
-  return Number.isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
 }
 
 /**

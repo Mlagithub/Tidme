@@ -93,7 +93,8 @@ function makeSettings(): any {
               desc: l('settings.reading.mix.desc', 'When topics are mixed in, insert 1 topic card per N item cards'),
               type: 'select',
               options: [
-                ['4:1', '4:1 (Default)'],
+                // 默认值来自单一产地（config.QUEUE_MIX_DEFAULT），改默认比例不必再来这里改
+                [config.QUEUE_MIX_DEFAULT, `${config.QUEUE_MIX_DEFAULT} (Default)`],
                 ['3:1', '3:1'],
                 ['2:1', '2:1'],
                 ['1:1', '1:1'],

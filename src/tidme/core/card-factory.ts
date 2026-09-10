@@ -3,7 +3,8 @@ core/card-factory.ts — 派生卡字段工厂（从 section.ts 迁入，行为�
 
 - buildExtract / buildCloze / buildQA / buildImageQA / buildStandaloneCard：制卡的
   字段构建唯一实现；锚点解析（parseAnchor）与 SM 'Delete processed text' 的加工
-  清理（processedSnippets / cleanProcessedText）在 core/doc-ops
+  清理（processedSnippets / cleanProcessedText）也在本模块——清理对象是"本卡衍生卡"，
+  与制卡同属加工闭环（它不查文档/阅读队列，放 doc-ops 属放错抽屉）
 - commitCard：制卡统一写库口（addTiddler + item 折叠预备）
 - 摘录只属于阅读材料——父卡无 tidme.doc 时 buildExtract 返回 null
   （普通笔记直接挖空/问答，item 卡由缺省牌组自动收录）
@@ -18,8 +19,89 @@ const paths = require('$:/plugins/keepone/tidme/core/paths.js');
 const session = require('$:/plugins/keepone/tidme/core/session.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const titleMod = require('$:/plugins/keepone/tidme/core/title.js');
 
 const escapeHtml = schema.escapeHtml;
+
+// ---------- 文档页 / 节卡字段基座（切分产物、整本 PDF、手动插节共用） ----------
+
+export interface DocPageFieldsOptions {
+  /** 文档页 title（Tidme/Docs/<slug> 路径） */
+  title: string;
+  /** 可读名（列表/模板显示用；title 是路径） */
+  caption?: string;
+  docId: string;
+  /** 阅读单元形态：sectioned = 有节卡（页只是入口）/ continuous = 页自身即阅读卡 */
+  structure: 'sectioned' | 'continuous';
+  format?: string;
+  text?: string;
+  /** 形态差异字段（FSRS 初值、asset、溯源 url/author/date、bag/revision 等） */
+  extra?: Record<string, any>;
+}
+
+/**
+ * 文档页字段基座（唯一产地）：不变式字段（tidme-doc 标签、kind=topic、doc/docpage、
+ * structure）都在这里，各构建处只提供差异（extra）。
+ * 曾由切分产物与整本 PDF 各拼一份，新增字段漏一处即静默失配（kind/structure 都漏过）。
+ */
+export function buildDocPageFields(opts: DocPageFieldsOptions): Record<string, any> {
+  const base: Record<string, any> = {
+    title: opts.title,
+    type: 'text/vnd.tiddlywiki',
+    tags: ['tidme-doc'],
+    'tidme.kind': 'topic',
+    'tidme.doc': opts.docId,
+    'tidme.docpage': opts.title,
+    'tidme.structure': opts.structure,
+  };
+  if (opts.caption !== undefined && opts.caption !== '') base.caption = opts.caption;
+  if (opts.text !== undefined) base.text = opts.text;
+  if (opts.format) base['tidme.format'] = opts.format;
+  return { ...base, ...(opts.extra || {}) };
+}
+
+export interface SectionCardFieldsOptions {
+  title: string;
+  caption?: string;
+  docId: string;
+  /** 文档页 title（含 ~docId 后缀时以此为准） */
+  docPage?: string;
+  text?: string;
+  /** 正文字数（默认按 text 长度） */
+  chars?: number;
+  priority?: string | number;
+  /** A-Factor；缺省按 chars 启发式（与切分产物同口径） */
+  afactor?: string | number;
+  breadcrumb?: string;
+  /** 切分产物的身份/顺序字段（tidme.id/hash/order/level/merged/file）等 */
+  extra?: Record<string, any>;
+}
+
+/**
+ * 节卡字段基座（唯一产地）：kind=topic/subkind=section/doc/chars/priority/afactor/breadcrumb
+ * 等不变式在这里；切分产物与「手动插入节」都走它，防止默认值在两处漂移
+ * （如 A-Factor 启发式、priority 归一化）。
+ */
+export function buildSectionCardFields(opts: SectionCardFieldsOptions): Record<string, any> {
+  const text = opts.text === undefined ? '' : String(opts.text);
+  const chars = opts.chars === undefined ? text.length : Number(opts.chars);
+  const base: Record<string, any> = {
+    title: opts.title,
+    type: 'text/vnd.tiddlywiki',
+    ...schema.initialFsrsFields(new Date()),
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.doc': opts.docId,
+    'tidme.chars': String(chars),
+    'tidme.priority': String(sched.normalizePriority(opts.priority)),
+    'tidme.afactor': String(opts.afactor === undefined ? sched.afactorForText(chars) : opts.afactor),
+  };
+  if (opts.caption !== undefined) base.caption = opts.caption;
+  if (opts.text !== undefined) base.text = text;
+  if (opts.docPage) base['tidme.docpage'] = opts.docPage;
+  if (opts.breadcrumb) base['tidme.breadcrumb'] = opts.breadcrumb;
+  return { ...base, ...(opts.extra || {}) };
+}
 
 /** 解析 tidme.anchor（{section, snippet, page}） */
 export function parseAnchor(raw: any): { section: string; snippet: string; page?: number } | null {
@@ -56,14 +138,6 @@ export function derivedCardBase(pf: Record<string, any>, parentTitle: string, ki
   return paths.joinPath(ns.NS_DECKS_SCATTER, parentSlug) + '--' + kind;
 }
 
-/** 拍平命名空间下同层冲突的序号后缀：base 已被占用则 base-N（N=2,3,…）。 */
-export function nextFreeTitle(wiki: any, base: string): string {
-  let title = base;
-  let i = 2;
-  while (wiki.getTiddler(title)) title = `${base}-${i++}`;
-  return title;
-}
-
 /** 规整片段（紧凑空白 + 截断），用于 anchor.snippet / caption 预览 */
 function compactSnippet(s: string, max: number): string {
   return String(s).replace(/\s+/g, ' ').trim().slice(0, max);
@@ -81,7 +155,7 @@ export function safeCaption(question: string, answer: string, prefix = ''): stri
 
 /** 派生图片问答卡标题基座：短化命名空间（<NS_DECKS>{书名}/P{页}-{label或QA}），避免深层目录全量冗长堆叠。
  *  与文本卡（derivedCardBase 的 Docs→Decks 目录镜像）刻意不同：图片卡只取书名段、
- *  不镜像深层目录（同书图片卡集中一目录，靠 nextFreeTitle 保证唯一）。 */
+ *  不镜像深层目录（同书图片卡集中一目录，靠 core/title.freeTitle 保证唯一）。 */
 export function derivedImageQABase(pf: Record<string, any>, parentTitle: string, page?: number, label?: string): string {
   let dir = '';
   if (parentTitle.startsWith(ns.NS_DOCS)) {
@@ -152,11 +226,12 @@ function derivedCardFields(opts: {
 /** 摘录卡字段（Alt+X）。tidme.anchor = 原文定位（跳回 Section 高亮用）。
  * 分类对齐 SuperMemo：摘录 = Topic（阅读材料），kind=topic/subkind=extract，
  * 进阅读列表（阅读流）。要成为测试卡：在摘录上挖空 → item（cloze）。
- * 父卡无 tidme.doc（普通笔记）→ 返回 null（摘录不属于笔记；改用挖空/问答）。 */
-export function buildExtract(wiki: any, parentTitle: string, selection: string): Record<string, any> | null {
+ * 父卡无 tidme.doc（普通笔记）→ 返回 null（摘录不属于笔记；改用挖空/问答）。
+ * @param pending 本批次已 build 但尚未落库的 title（弹窗确认等窗口用，见 core/title） */
+export function buildExtract(wiki: any, parentTitle: string, selection: string, pending?: Iterable<string>): Record<string, any> | null {
   const pf = wiki.getTiddler(parentTitle)?.fields || {};
   if (!pf['tidme.doc']) return null;
-  const title = nextFreeTitle(wiki, derivedCardBase(pf, parentTitle, 'extract'));
+  const title = titleMod.freeTitle(wiki, derivedCardBase(pf, parentTitle, 'extract'), pending);
   const preview = compactSnippet(selection, 30);
   return derivedCardFields({
     parentTitle,
@@ -171,14 +246,15 @@ export function buildExtract(wiki: any, parentTitle: string, selection: string):
   });
 }
 
-/** 挖空卡字段（Alt+Z）。分类对齐 SuperMemo：挖空 = Item（测试卡），kind=item/subkind=cloze */
-export function buildCloze(wiki: any, parentTitle: string, block: string, selected: string): Record<string, any> | null {
+/** 挖空卡字段（Alt+Z）。分类对齐 SuperMemo：挖空 = Item（测试卡），kind=item/subkind=cloze
+ * @param pending 本批次已 build 但尚未落库的 title（本卡要等弹窗确认才落库，见 core/title） */
+export function buildCloze(wiki: any, parentTitle: string, block: string, selected: string, pending?: Iterable<string>): Record<string, any> | null {
   const at = block.indexOf(selected);
   if (at === -1) return null;
   const safeSel = selected.replace(/"/g, '”');
   const clozeLine = `${block.slice(0, at)}<<C "${safeSel}" "c1" "">>${block.slice(at + selected.length)}`;
   const pf = wiki.getTiddler(parentTitle)?.fields || {};
-  const title = nextFreeTitle(wiki, derivedCardBase(pf, parentTitle, 'cloze'));
+  const title = titleMod.freeTitle(wiki, derivedCardBase(pf, parentTitle, 'cloze'), pending);
   return derivedCardFields({
     parentTitle,
     pf,
@@ -192,10 +268,11 @@ export function buildCloze(wiki: any, parentTitle: string, block: string, select
   });
 }
 
-/** 问答卡字段（QA Card）。kind=item/subkind=qa */
-export function buildQA(wiki: any, parentTitle: string, question: string, answer: string): Record<string, any> {
+/** 问答卡字段（QA Card）。kind=item/subkind=qa
+ * @param pending 本批次已 build 但尚未落库的 title（见 core/title） */
+export function buildQA(wiki: any, parentTitle: string, question: string, answer: string, pending?: Iterable<string>): Record<string, any> {
   const pf = wiki.getTiddler(parentTitle)?.fields || {};
-  const title = nextFreeTitle(wiki, derivedCardBase(pf, parentTitle, 'qa'));
+  const title = titleMod.freeTitle(wiki, derivedCardBase(pf, parentTitle, 'qa'), pending);
   return derivedCardFields({
     parentTitle,
     pf,
@@ -216,11 +293,12 @@ export interface ImageQAOptions {
   page?: number;
 }
 
-/** 图片问答卡字段（PDF 框选或截图制卡）。kind=item/subkind=qa */
-export function buildImageQA(wiki: any, parentTitle: string, opts: ImageQAOptions): Record<string, any> {
+/** 图片问答卡字段（PDF 框选或截图制卡）。kind=item/subkind=qa
+ * @param pending 本批次已 build 但尚未落库的 title（见 core/title） */
+export function buildImageQA(wiki: any, parentTitle: string, opts: ImageQAOptions, pending?: Iterable<string>): Record<string, any> {
   const pf = wiki.getTiddler(parentTitle)?.fields || {};
   const base = derivedImageQABase(pf, parentTitle, opts.page, opts.label);
-  const title = nextFreeTitle(wiki, base);
+  const title = titleMod.freeTitle(wiki, base, pending);
   const labelText = (opts.label || '').trim();
   const answerText = (opts.answer || '').trim();
   const qBody = labelText
@@ -261,6 +339,8 @@ export interface StandaloneCardOptions {
   conceptContent?: string;
   tags?: string[];
   priority?: string | number;
+  /** 本批次已 build 但尚未落库的 title（连建制卡等窗口用，见 core/title） */
+  pending?: Iterable<string>;
 }
 
 /** 独立制卡「散卡桶」的内部标识（omni-creator 下拉 value 与此共用同一来源） */
@@ -294,7 +374,7 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
   }
 
   const baseTitle = paths.joinPath(deckDir, slug || 'Card');
-  const title = nextFreeTitle(wiki, baseTitle);
+  const title = titleMod.freeTitle(wiki, baseTitle, opts.pending);
 
   let kind: 'topic' | 'item' = 'item';
   let subkind = 'qa';
@@ -345,13 +425,77 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
 }
 
 /**
- * 制卡统一写库口：addTiddler + item 折叠态预备。
+ * 制卡统一写库口：契约校验 + addTiddler + item 折叠态预备。
  * 阅读划词与全局制卡入口共用，禁止各自拼写库与折叠顺序。
+ * 校验先于写库：缺 kind/FSRS 的产物直接抛错（以前会静默写库，随后被队列与视图忽略）。
  * @returns 是否已写库（draft 为空/缺 title 时 false）
  */
 export function commitCard(wiki: any, draft: Record<string, any> | null): boolean {
   if (!draft || !draft.title) return false;
+  schema.assertCardFields(draft);
   wiki.addTiddler(draft);
   session.prepareCardFold(wiki, draft.title);
   return true;
+}
+
+// ---------- SM 'Delete processed text'：加工清理（制卡闭环的另一半） ----------
+
+/** 解析 tidme.anchor 提取 snippet（内部纯函数） */
+function parseAnchorSnippet(raw: any): string {
+  if (!raw) return '';
+  try {
+    const o = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return String(o?.snippet || '');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 收集本卡全部衍生卡（摘录/挖空/问答）的 anchor 片段（SM 'Delete processed text' 的清理对象）。
+ * 对应官方帮助：Delete processed text - delete all texts that have already been extracted or ignored。
+ */
+export function processedSnippets(wiki: any, title: string): string[] {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
+  const childTitles = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, '')}]]`);
+  const out: string[] = [];
+  for (const c of childTitles) {
+    const f = wiki.getTiddler(c)?.fields;
+    if (!f) continue;
+    const snippet = parseAnchorSnippet(f['tidme.anchor']);
+    if (snippet) out.push(snippet);
+  }
+  return out;
+}
+
+/**
+ * SM 对齐 'Delete processed text'：从本卡原文中删除已被摘录/挖空/问答的文本片段。
+ * 衍生卡不受影响（SM：Done! 删正文但保留 extracted material）；snippet 不在原文中时跳过，幂等。
+ * @returns 实际删除的片段数
+ */
+export function cleanProcessedText(wiki: any, title: string): number {
+  if (!wiki || typeof wiki.getTiddler !== 'function') return 0;
+  const t = wiki.getTiddler(title);
+  if (!t) return 0;
+  let out = String(t.fields.text || '');
+  const snippets = processedSnippets(wiki, title);
+  let removed = 0;
+  for (const s of snippets) {
+    let at = out.indexOf(s);
+    if (at === -1) continue;
+    let end = at + s.length;
+    // 顺带吸收邻接的单个空白，避免删除后两段文字粘连
+    if (at > 0 && /\s/.test(out[at - 1])) at--;
+    if (end < out.length && /\s/.test(out[end])) end++;
+    out = out.slice(0, at) + out.slice(end);
+    removed++;
+  }
+  if (removed) {
+    out = out
+      .replace(/<p>\s*<\/p>/g, '') // 清理整段被删后遗留的空 <p>
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    wiki.addTiddler({ ...t.fields, text: out });
+  }
+  return removed;
 }

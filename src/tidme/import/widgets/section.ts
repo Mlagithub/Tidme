@@ -46,13 +46,23 @@ import { cleanContaminatedHtmlToWikiText } from '../../editor/wikitext-parser';
  * - body：section-body 实例（唯一写入方）——编辑器视图、防抖保存 flush、_isSelfSaving 守卫。
  * - sectionBar：section-bar 实例（唯一写入方）——划词 frameTitle 回退 _title、保存指示器。
  * - docId：最近打开的阅读文档（section-bar / doc-resume 写）——currentDocId 的最后回退。
+ * - pendingCards：已 build 但还在等用户确认落库的卡 title（弹窗窗口的 title 唯一化依据，
+ *   见 core/title；落库或放弃时移除）
  */
-const active: { dispatch: any; body: any; sectionBar: any; docId: string; navActions: { prev: (() => void) | null; next: (() => void) | null; title: string } | null } = {
+const active: {
+  dispatch: any;
+  body: any;
+  sectionBar: any;
+  docId: string;
+  navActions: { prev: (() => void) | null; next: (() => void) | null; title: string } | null;
+  pendingCards: Set<string>;
+} = {
   dispatch: null,
   body: null,
   sectionBar: null,
   docId: '',
   navActions: null,
+  pendingCards: new Set<string>(),
 };
 
 /** 当前可用 wiki：派发源 widget 优先，回退全局 $tw.wiki（浏览器热键路径） */
@@ -65,8 +75,9 @@ const el = dom.el;
 /** 某文档的全部正文章节（排除摘录等衍生卡） */
 const sectionsOfDoc = docOps.sectionsOfDoc;
 const parseAnchor = factory.parseAnchor;
-const processedSnippets = docOps.processedSnippets;
-const cleanProcessedText = docOps.cleanProcessedText;
+// SM 'Delete processed text' 清理与制卡同属一个闭环 → 唯一实现也在 core/card-factory
+const processedSnippets = factory.processedSnippets;
+const cleanProcessedText = factory.cleanProcessedText;
 const buildExtract = factory.buildExtract;
 const buildCloze = factory.buildCloze;
 const buildQA = factory.buildQA;
@@ -276,6 +287,7 @@ function refreshAnchorsAfterCard(): void {
 function commitCardAndReadPoint(win: any, tt: string, draft: Record<string, any> | null, selected: string, kind: 'extract' | 'cloze'): boolean {
   if (!draft) return false;
   commitCard(activeWiki(), draft);
+  active.pendingCards.delete(String(draft.title || ''));
   const docId = currentDocId(win);
   if (docId) saveReadPoint(activeWiki(), docId, { t: tt, s: selected.replace(/\s+/g, ' ').trim().slice(0, 200) });
   try {
@@ -315,11 +327,13 @@ function actionCloze(win: any) {
     return;
   }
 
-  const fields = buildCloze(activeWiki(), tt, block || selected, selected);
+  // 本卡要等弹窗确认才落库：登记为待落库 title，弹窗开着时再次制卡不会拿到同一个 title
+  const fields = buildCloze(activeWiki(), tt, block || selected, selected, active.pendingCards);
   if (!fields) {
     notify('select-first');
     return;
   }
+  active.pendingCards.add(String(fields.title));
 
   openCardModal(win.document || document, 'cloze', String(fields.caption || ''), (res) => {
     fields.caption = res.answerOrCloze;
@@ -529,9 +543,10 @@ function makeSectionBar(): WidgetCtor {
       const win = (this.document as any).defaultView || globalThis;
       const doc = this.document;
       if (!doc || !doc.body) return;
-      // 只管理自己的气泡（tm-section-bubble）；全局制卡气泡（tm-pick-bubble）不归它管，
-      // 否则任意阅读条栏实例会在每次 mouseup 时按共享类名删掉全局气泡（制卡气泡消失的根因）
-      let bubble = doc.querySelector('.tm-section-bubble') as HTMLElement;
+      // 只管理自己的气泡（SECTION_BUBBLE_CLASS）；全局制卡气泡（PICK_BUBBLE_CLASS）不归它管，
+      // 否则任意阅读条栏实例会在每次 mouseup 时按共享类名删掉全局气泡（制卡气泡消失的根因）。
+      // 两个类名唯一产地 = ui/base/dom，跨模块契约不再靠注释同步。
+      let bubble = doc.querySelector('.' + dom.SECTION_BUBBLE_CLASS) as HTMLElement;
 
       const sel = win?.getSelection?.();
       let selectedText = '';
@@ -556,7 +571,7 @@ function makeSectionBar(): WidgetCtor {
       }
 
       if (!bubble) {
-        bubble = el(doc, 'div', 'tm-selection-bubble tm-section-bubble') as HTMLElement;
+        bubble = el(doc, 'div', `${dom.BUBBLE_STYLE_CLASS} ${dom.SECTION_BUBBLE_CLASS}`) as HTMLElement;
         doc.body.appendChild(bubble);
       }
       bubble.textContent = '';
@@ -648,7 +663,7 @@ function makeSectionBar(): WidgetCtor {
         removeTitleFromSession(title);
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
         if (nxt) {
-          sessionMod.prepareCardFold(wiki, nxt);
+          sessionMod.enterCard(wiki, nxt);
           saveReadPoint(wiki, docId, { t: nxt, s: docOps.readPointPositionOf(wiki, nxt) });
           this.dispatchEvent({ type: 'tm-navigate', navigateTo: nxt });
         }
@@ -662,7 +677,7 @@ function makeSectionBar(): WidgetCtor {
         // ▶ 会话中 = 明确"跳过本卡"：移出会话，避免滞留卡被复习流"下一张"
         // （从会话头找）反复拉回 → 摘录↔词卡 1:1 死循环。
         removeTitleFromSession(title);
-        sessionMod.prepareCardFold(wiki, nxt);
+        sessionMod.enterCard(wiki, nxt);
         saveReadPoint(wiki, docId, { t: nxt, s: docOps.readPointPositionOf(wiki, nxt) });
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
         this.dispatchEvent({ type: 'tm-navigate', navigateTo: nxt });
@@ -714,7 +729,7 @@ function makeSectionBar(): WidgetCtor {
 
         btnRow.appendChild(mkBtn(lingo(wiki, 'read/done', 'Done'), 'done', lingo(wiki, 'read/done.tip', 'Finish card: remove from queue and close'), false, () => {
           this._flushReadTime?.();
-          wiki.addTiddler(sched.doneCard(fields));
+          wiki.addTiddler({ ...fields, ...sched.doneCard() });
           const backTo = fields['tidme.parent'] || '';
           this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
           if (backTo) this.dispatchEvent({ type: 'tm-navigate', navigateTo: backTo });
@@ -866,14 +881,14 @@ function makeSectionBar(): WidgetCtor {
       if (sched.isCardOutOfQueue(fields)) {
         btnRow.appendChild(mkBtn(lingo(wiki, 'read/readd', 'Re-add'), 'undo', lingo(wiki, 'read/readd.tip', 'Restore to study queue'), false, () => {
           this._flushSave();
-          wiki.addTiddler(sched.restoreCard(fields));
+          wiki.addTiddler({ ...fields, ...sched.restoreCard() });
         }));
       } else {
         btnRow.appendChild(
           mkBtn(lingo(wiki, 'read.done', 'Read'), 'done', lingo(wiki, 'read/done.section.tip', 'Done! Mark section as read and remove from study queue'), false, () => {
             this._flushSave();
             this._flushReadTime?.();
-            wiki.addTiddler(sched.doneCard(fields));
+            wiki.addTiddler({ ...fields, ...sched.doneCard() });
             leaveTo(getScheduledNext());
             notify('done');
           }),
@@ -1029,9 +1044,11 @@ function makeSectionBar(): WidgetCtor {
         '3': lingo(wiki, 'state.relearning', 'Relearning'),
       };
       const stateText = stateMap[String(fields.state || '0')] || lingo(wiki, 'state.new', 'New');
-      const priLevel = priVal <= 33
+      // 优先级三档唯一产地 = scheduler.priorityBucket（曾在此手写 33/66 与 core/stats 各一份）
+      const priBucket = sched.priorityBucket(priVal);
+      const priLevel = priBucket === 'high'
         ? lingo(wiki, 'priority.high', 'High')
-        : priVal <= 66
+        : priBucket === 'medium'
         ? lingo(wiki, 'priority.med', 'Med')
         : lingo(wiki, 'priority.low', 'Low');
       const rtStats = stats.getReadTimeStats(wiki);
@@ -1117,9 +1134,9 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
     // 优先跳到续读点（只要该卡在队且未完成，或指向文档页本身），其次第一张当前可读卡；无节卡则退回文档页本身
     const target = (rp && (list.includes(rp.t) || rp.t === title) ? rp.t : null) || readable[0] || list[0] || title;
     if (target) {
-      const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
-      if (pageMatch) {
-        wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: pageMatch[1] });
+      const page = rp ? docOps.parsePagePosition(rp.s) : null;
+      if (page) {
+        wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: String(page) });
       }
       if (target !== title) {
         widget.dispatchEvent({ type: 'tm-close-tiddler' }); // 关闭文档页，进入节卡
@@ -1210,7 +1227,7 @@ function appendDocDoneSection(doc: Document, wiki: any, wrap: HTMLElement, all: 
     back.title = lingo(wiki, 'read/readd.tip', 'Restore to study queue');
     back.addEventListener('click', () => {
       const f = wiki.getTiddler(dt)?.fields;
-      if (f) wiki.addTiddler(sched.restoreCard(f));
+      if (f) wiki.addTiddler({ ...f, ...sched.restoreCard() });
     });
     actTd.appendChild(back);
     tr.appendChild(actTd);
@@ -1254,8 +1271,8 @@ function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLEle
   for (const c of sorted) {
     const tr = el(doc, 'tr', 'tm-doc-done-row');
     const kindTd = el(doc, 'td', '', '');
-    const kindMark = c.fields['tidme.subkind'] === 'cloze' ? 'C' : c.fields['tidme.subkind'] === 'qa' ? 'Q' : 'E';
-    kindTd.appendChild(el(doc, 'span', 'tm-cb-kind', kindMark));
+    // 徽章字形唯一产地（core/display.kindMark），勿在此再写一份 kind 字母表
+    kindTd.appendChild(el(doc, 'span', 'tm-cb-kind', display.kindMark(c.fields, wiki)));
     tr.appendChild(kindTd);
     tr.appendChild(el(doc, 'td', 'tm-cb-name', display.displayTitle(c.fields, c.title)));
     // 摘录加工状态（可挖空/已挖空）

@@ -1,24 +1,16 @@
 /*
 schema.ts — 实体字段规范与校验
 
-- 常量：实体 kind、来源格式、FSRS 字段族、缺省值
-- 校验：missingRequired / assertKind
-- 校验策略：对旧数据（缺字段）宽容（返回缺失清单由调用方补默认），对新数据严格（assertKind 抛错）
+- 常量：实体 kind / subkind、FSRS 字段族
+- 日期：twDateString / parseTwDate（17 位 TW UTC 串唯一实现）
+- 校验：missingFsrsFields / assertCardFields（写库前调用，缺失即抛错）
+- 宽松读取：解析期容忍缺字段；写入期由 assertCardFields 兜住契约
 
-本规范只覆盖**导入 parse 产物**（Section 族：tidme.id/order/level/hash 齐全、身份=稳定 id）。
-阅读划词/全局手动制卡的派生卡走 core/card-factory.derivedCardFields（身份=title，
-无 tidme.id/order/hash，FSRS 初值由 initialFsrsFields 提供）——两套规范服务不同实体族，
-assertKind 不得用于工厂产物（必因缺 tidme.id 抛错）；工厂卡的字段契约在 card-factory 声明。
+本规范只覆盖**卡片实体**（阅读材料 topic / 测试卡 item：kind + subkind + FSRS 九件套）。
+导入 parse 产物另有 Section 族字段（tidme.id/order/level/hash），由 import/parse 自身保证，
+不在此模块校验。
 */
 
-export const FORMATS = ['epub', 'markdown', 'html', 'txt', 'clip', 'paste'] as const;
-export type Format = (typeof FORMATS)[number];
-
-/**
- * 大类（对齐 SuperMemo 元素分类）：决定视图与队列归属。
- * - topic：阅读材料（阅读视图，阅读列表/文档页管理，不进牌组）
- * - item：测试卡（复习视图，进默认牌组）
- */
 export const KINDS = ['topic', 'item'] as const;
 export type Kind = (typeof KINDS)[number];
 
@@ -28,8 +20,12 @@ export interface CardLike {
   fields: Record<string, any>;
 }
 
-/** 子类型：驱动展示差异（徽章/加工路径/具体按钮），不决定学习模式 */
-export const SUBKINDS = ['section', 'extract', 'cloze', 'qa'] as const;
+/** 子类型：驱动展示差异（徽章/加工路径/具体按钮），不决定学习模式。
+ *  - section  = 导入切分出的阅读节
+ *  - extract  = 划词摘录（待加工成卡）
+ *  - concept  = 概念/笔记卡（topic 轨道，走 A-Factor 展期，不走 FSRS 评分）
+ *  - cloze / qa = 测试卡（item 轨道） */
+export const SUBKINDS = ['section', 'extract', 'concept', 'cloze', 'qa'] as const;
 export type SubKind = (typeof SUBKINDS)[number];
 
 /** FSRS 字段族（卡实体必填，见 data-model §3） */
@@ -45,25 +41,6 @@ export const FSRS_FIELDS = [
   'last_review',
 ] as const;
 
-export interface SectionRequired {
-  'tidme.doc': string;
-  'tidme.id': string;
-  'tidme.parent': string;
-  'tidme.order': string;
-  'tidme.level': string;
-  'tidme.kind': 'topic';
-  'tidme.subkind': 'section';
-  'tidme.hash': string;
-  'tidme.format': string;
-  caption: string;
-  text: string;
-}
-
-export interface CardRequired extends SectionRequired {
-  'tidme.kind': 'item';
-  'tidme.subkind': 'cloze' | 'qa';
-}
-
 /** TW 日期字符串（UTC 语义，YYYY0MM0DD0hh0mm0ss0XXX，与 $tw.utils.stringifyDate 一致） */
 export function twDateString(d: Date): string {
   const p = (n: number, l: number) => String(n).padStart(l, '0');
@@ -72,10 +49,42 @@ export function twDateString(d: Date): string {
   }`;
 }
 
+/** 日期键（UTC，YYYYMMDD）：统计口径与日志 tiddler 命名共用（日期归本模块唯一产地）。
+ *  @param now 默认当前时刻；传偏移时刻可算"保留截止日"（见 server/scheduler 日志修剪） */
+export function todayKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+/**
+ * 严格解析：非法/缺失返回 null（不静默回退到「现在」）。
+ * 调度类判定（isDueNow / 计时锚点 / 排期比较）用它：脏数据必须表现为「不可判定」，
+ * 而不是伪装成"立即到期"或"刚刚操作过"。
+ */
+export function tryParseTwDate(v: unknown): Date | null {
+  const s = String(v || '');
+  if (/^\d{17}$/.test(s)) {
+    const d = new Date(Date.UTC(
+      Number(s.slice(0, 4)),
+      Number(s.slice(4, 6)) - 1,
+      Number(s.slice(6, 8)),
+      Number(s.slice(8, 10)),
+      Number(s.slice(10, 12)),
+      Number(s.slice(12, 14)),
+      Number(s.slice(14, 17)),
+    ));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (!s) return null;
+  const p = Date.parse(s);
+  return Number.isNaN(p) ? null : new Date(p);
+}
+
 /**
  * TW 日期串（YYYY0MM0DD0hh0mm0ss0XXX，UTC 语义，与 $tw.utils.parseDate 一致）→ Date。
  * 注意：TW 的日期字符串是 UTC 编码（stringifyDate 用 getUTC*），按本地时区解析
  * 会造成系统性的时区偏差（如评分间隔显示"8 hours from now"）。
+ * 宽容版：非法值回 fallback（默认「现在」）——仅用于展示/排序等不敏感场景；
+ * 需要区分「非法」的场景请用 tryParseTwDate。
  */
 export function parseTwDate(v: unknown, fallback = new Date()): Date {
   const s = String(v || '');
@@ -120,24 +129,17 @@ export function missingFsrsFields(fields: Record<string, unknown>): string[] {
   return FSRS_FIELDS.filter((f) => fields[f] === undefined || fields[f] === null || fields[f] === '');
 }
 
-/** 返回必填字段缺失清单（宽容模式：不抛错，由调用方补默认）
- * 注：tidme.path 已废止（与 tidme.breadcrumb 全程同值、无任何读取方）；路径显示一律走 tidme.breadcrumb */
-export function missingRequired(fields: Record<string, unknown>, kind: Kind): string[] {
-  const base = ['tidme.doc', 'tidme.id', 'tidme.parent', 'caption'];
-  // topic 需正文；item（挖空/问答）正面在 caption，text 允许为空
-  const extra = kind === 'topic' ? ['tidme.kind', 'text'] : ['tidme.kind'];
-  return [...base, ...extra].filter((f) => fields[f] === undefined || fields[f] === null || fields[f] === '');
-}
-
-/** 严格校验（写入前调用）：缺失即抛错 */
-export function assertKind(fields: Record<string, unknown>, kind: Kind): void {
-  const missing = missingRequired(fields, kind);
-  if (missing.length) {
-    throw new Error(`[tidme/core] ${kind} 实体缺字段: ${missing.join(', ')}`);
+/** 卡片字段契约校验（写库前调用，缺失即抛错）：kind ∈ KINDS 且 FSRS 九件套齐全。
+ *  唯一调用方是 core/card-factory.commitCard——制卡入口是契约保障点（缺 kind/FSRS 的
+ *  产物以前会静默写库，随后被队列与视图静默忽略）。 */
+export function assertCardFields(fields: Record<string, unknown>): void {
+  const kind = fields['tidme.kind'];
+  if (typeof kind !== 'string' || !(KINDS as readonly string[]).includes(kind)) {
+    throw new Error(`[tidme/core] 卡片缺/非法 tidme.kind: ${JSON.stringify(kind)}`);
   }
-  const fsrsMissing = missingFsrsFields(fields);
-  if (fsrsMissing.length) {
-    throw new Error(`[tidme/core] ${kind} 实体缺 FSRS 字段: ${fsrsMissing.join(', ')}`);
+  const missing = missingFsrsFields(fields);
+  if (missing.length) {
+    throw new Error(`[tidme/core] ${kind} 卡缺 FSRS 字段: ${missing.join(', ')}`);
   }
 }
 

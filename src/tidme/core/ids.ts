@@ -49,7 +49,8 @@ function getSubtle(): SubtleCrypto {
   throw new Error('crypto.subtle 不可用（需要浏览器或 Node >= 19）');
 }
 
-export async function hashHex(str: string): Promise<string> {
+/** SHA-256 十六进制（内部实现：对外只经 shortHash——全库没有需要完整摘要的调用方） */
+async function hashHex(str: string): Promise<string> {
   const digest = await getSubtle().digest('SHA-256', getEncoder().encode(str));
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }

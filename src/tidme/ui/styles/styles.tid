@@ -828,6 +828,10 @@ mark.tm-card-highlight--qa {
 	padding-top: 4px;
 	border-top: 1px dotted var(--tm-text-2);
 }
+.tm-import-warn {
+	color: var(--tm-danger);
+	font-size: 0.9em;
+}
 mark.tm-readpoint {
 	background: #fff3a0;
 	box-shadow: 0 0 0 2px #fff3a0;

@@ -62,6 +62,23 @@ test('queue-ops: 每牌组渲染批量操作按钮（只剩默认牌组）', () 
   assert.ok(text.includes('立即顺延'), '应有手动 auto-postpone 按钮');
 });
 
+test('queue-ops: 上次自动顺延记录被展示（写/读两侧闭环，不再是只写标记）', () => {
+  const nsMod = mod('core/ns.js');
+  reset();
+  // 无记录 → 不渲染该行
+  let root = renderWidget(wiki, queueOps, 'queue-ops');
+  assert.ok(!collectText(root).includes('上次运行'), '无记录时不渲染');
+  // 任务写入记录 → 展示时间与顺延张数
+  wiki.addTiddler({
+    title: nsMod.AUTOPOSTPONE_LAST_TITLE,
+    text: JSON.stringify({ at: '2026-09-10T01:02:03.456Z', overdue: 9, postponed: 5, kept: 4 }),
+  });
+  root = renderWidget(wiki, queueOps, 'queue-ops');
+  const text = collectText(root);
+  assert.ok(text.includes('2026-09-10 01:02:03'), `展示上次运行时刻（实际：${text}）`);
+  assert.ok(text.includes('5'), '展示顺延张数');
+});
+
 test('stats-panel: 渲染负载/文档进度/漏斗', () => {
   const root = renderWidget(wiki, statsPanel, 'stats-panel');
   const text = collectText(root);
@@ -114,27 +131,24 @@ test('card-manager: 批量选择交互与全选', () => {
   assert.ok(text.includes('已选'), '已选信息应在工具条展示');
 });
 
-test('card-manager: doneFields 置 tidme.done，restoreCard 可逆恢复（kind 决定归属）', () => {
-  const done = cardManager.doneFields({ title: '节', 'tidme.kind': 'topic', state: '0' });
+test('card-manager: doneFields/resumePatch 都是补丁，合并写库可逆恢复', () => {
+  const fields = { title: '节', 'tidme.kind': 'topic', state: '0' };
+  const done = cardManager.doneFields();
   assert.equal(done['tidme.done'], 'yes');
-  assert.equal(done['tidme.kind'], 'topic', 'kind 保留');
-  // 恢复（「回」按钮路径 = restoreCard 整体替换）：清除 done/ignored/suspended，kind 决定归属
-  const resumed = sched.restoreCard({ ...done });
+  assert.ok(!('title' in done), '只返回补丁');
+  // 恢复（「回」按钮路径）：core/resumePatch 同源，三键显式 undefined 经合并清除标记
+  const resumed = { ...fields, ...done, ...cardManager.resumePatch() };
   assert.equal(resumed['tidme.done'], undefined, '恢复删除 tidme.done');
   assert.equal(resumed['tidme.kind'], 'topic', 'topic 保留（阅读流）');
   assert.ok(!sched.isCardOutOfQueue(resumed), '恢复后不在完成态');
 });
 
-test('card-manager: resumePatch 是合并式补丁（三键显式 undefined）', () => {
-  // 批量恢复是合并式补丁：三键显式 undefined（TW addTiddler = 删除字段），
-  // 回归防护——曾因返回"删除键后的完整字段集"导致 {...fields, ...patch} 合并下恢复静默失效
-  const done = cardManager.doneFields({ title: '节', 'tidme.kind': 'topic', state: '0' });
-  const resumePatch = cardManager.resumePatch();
-  assert.equal(resumePatch['tidme.done'], undefined);
-  assert.equal(resumePatch['tidme.ignored'], undefined);
-  assert.equal(resumePatch['tidme.suspended'], undefined);
-  assert.ok(!sched.isCardOutOfQueue({ ...done, ...resumePatch, 'tidme.kind': 'item' }), '合并写回后应脱离完成态');
-  assert.ok(!sched.isCardOutOfQueue({ ...done, ...resumePatch, 'tidme.kind': 'item', 'tidme.suspended': 'yes' }), '合并可覆盖旧搁置值');
+test('card-manager: resumePatch 与 core/scheduler.restoreCard 同源（不再各写一份）', () => {
+  const patch = cardManager.resumePatch();
+  assert.deepEqual({ ...patch }, { ...sched.restoreCard() }, '三键补丁与 core 完全一致');
+  const done = cardManager.doneFields();
+  assert.ok(!sched.isCardOutOfQueue({ 'tidme.kind': 'item', ...done, ...patch }), '合并写回后应脱离完成态');
+  assert.ok(!sched.isCardOutOfQueue({ ...done, ...patch, 'tidme.kind': 'item', 'tidme.suspended': 'yes' }), '合并可覆盖旧搁置值');
 });
 
 test('card-manager: 全部卡片可见（含已读卡与手动散卡）', () => {

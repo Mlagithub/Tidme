@@ -11,6 +11,7 @@ import { bootPlugin } from '../helpers/tw-boot.mjs';
 
 const { wiki, mod } = bootPlugin({ prefix: 'tidme-logs-' });
 const ns = mod('core/ns.js');
+const schemaMod = mod('core/schema.js');
 const config = mod('core/config.js');
 const deckMod = mod('core/deck.js');
 const schedMod = mod('core/server/scheduler');
@@ -63,7 +64,7 @@ test('deck: 删除牌组时复习日志随之清理', () => {
 test('today: 今日复习计数 —— 单文件按日期前缀统计', () => {
   const deck = '$:/Deck/计数书';
   wiki.addTiddler({ title: deck, tags: ['$:/tags/TidmeDeck'] });
-  const key = ns.todayKey();
+  const key = schemaMod.todayKey();
   wiki.addTiddler({
     title: ns.deckLogTitle(deck),
     type: 'application/json',

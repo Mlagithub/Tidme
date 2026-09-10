@@ -2,12 +2,13 @@
 study-mode.test.mjs — 学习模式条与统一结束学习
 
 - core/session：endSession 三清（全局会话 + 全部 <deck>/study + $:/temp/tidme/*）、
-  isSessionActive / getActiveStudy（global 与 deck 两个来源）、openItemCards（遗留复习卡）
+  getActiveStudy（global 与 deck 两个来源）、遗留复习卡判定（ui/base/view-state）
 - 学习模式条 widget：未激活隐藏 / 激活显示进度 / 结束点击清场（走唯一刷新机制嗅探）/
   会话由激活转结束（结束按钮、队列耗尽、牌组停止）时关闭故事河遗留的 item 卡
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { collectButtons, collectText, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-mode-' });
@@ -21,6 +22,9 @@ test.before(() => {
 
 test.beforeEach(reset);
 
+/** 会话是否激活（= getActiveStudy 有结果；不另设 isSessionActive 包装 API） */
+const isActive = () => session.getActiveStudy(wiki) !== null;
+
 /** 造一张牌组 + 子集牌组 + 全局会话 + 牌组会话 + 临时项的完整激活态 */
 function setupActive() {
   const deckMod = mod('core/deck.js');
@@ -33,10 +37,10 @@ function setupActive() {
   wiki.addTiddler({ title: '$:/temp/tidme/autopostpone/last', text: '{}' });
 }
 
-test('session: isSessionActive / getActiveStudy——全局会话优先，回退牌组会话', () => {
-  assert.equal(session.isSessionActive(wiki), false, '初始未激活');
+test('session: getActiveStudy——全局会话优先，回退牌组会话', () => {
+  assert.equal(isActive(), false, '初始未激活');
   setupActive();
-  assert.equal(session.isSessionActive(wiki), true);
+  assert.equal(isActive(), true);
   const a = session.getActiveStudy(wiki);
   assert.equal(a.source, 'global', '全局会话优先');
   assert.deepEqual([...a.list], ['卡甲', '卡乙', '卡丙']);
@@ -50,7 +54,7 @@ test('session: isSessionActive / getActiveStudy——全局会话优先，回退
 test('session: endSession 四清（全局会话 + 全部 <deck>/study + 子集牌组 + $:/temp/tidme/*）', () => {
   const deckMod = mod('core/deck.js');
   setupActive();
-  assert.equal(session.isSessionActive(wiki), true);
+  assert.equal(isActive(), true);
   const n = session.endSession(wiki);
   assert.ok(n >= 6, `清理数应 ≥6（会话+study+子集牌组+2 临时项+子集 log 兜底），实际 ${n}`);
   assert.ok(!wiki.getTiddler('$:/state/tidme/learning-session'), '全局会话已删除');
@@ -60,7 +64,7 @@ test('session: endSession 四清（全局会话 + 全部 <deck>/study + 子集�
   assert.ok(!wiki.getTiddler('Tidme/Decks/书X/复习本书/log'), '子集牌组日志一并清除');
   assert.ok(!wiki.getTiddler('$:/temp/tidme/study/input/卡甲'), '临时项已删除');
   assert.ok(!wiki.getTiddler('$:/temp/tidme/autopostpone/last'), '临时项已删除');
-  assert.equal(session.isSessionActive(wiki), false, '结束后再无激活会话');
+  assert.equal(isActive(), false, '结束后再无激活会话');
   // 幂等：再清一次安全
   assert.equal(session.endSession(wiki), 0);
 });
@@ -72,113 +76,70 @@ test('reactive: 会话变化谓词覆盖全局会话与 <deck>/study', () => {
   assert.equal(reactive.isSessionChange('普通笔记'), false);
 });
 
-// ---- 学习模式条 widget（假 DOM 渲染） ----
+// ---- 学习模式条 widget（共享假 DOM：fake-dom.mjs 全库唯一一份） ----
 
-function fakeNode(tag = 'div') {
-  const node = {
-    nodeType: 1,
-    tagName: String(tag).toUpperCase(),
-    childNodes: [],
-    children: [],
-    style: {},
-    attributes: {},
-    parentNode: null,
-    classList: {
-      add() {},
-      remove() {},
-      contains() {
-        return false;
-      },
-    },
-    setAttribute(k, v) {
-      this.attributes[k] = v;
-    },
-    addEventListener(type, fn) {
-      (this._listeners ||= {})[type] = fn;
-    },
-    dispatchEvent() {
-      return true;
-    },
-    removeEventListener() {},
-    appendChild(c) {
-      this.childNodes.push(c);
-      this.children.push(c);
-      c.parentNode = this;
-      return c;
-    },
-    insertBefore(c) {
-      this.childNodes.push(c);
-      this.children.push(c);
-      c.parentNode = this;
-      return c;
-    },
-    removeChild(c) {
-      this.childNodes = this.childNodes.filter((x) => x !== c);
-      return c;
-    },
-    innerHTML: '',
-  };
-  // 对齐真实 DOM 语义：赋值 textContent 清空全部子节点
-  Object.defineProperty(node, 'textContent', {
-    get() {
-      if (node._text !== undefined) return node._text;
-      return (node.childNodes || []).map((c) => c.textContent).join('');
-    },
-    set(v) {
-      if (!v) {
-        node.childNodes = [];
-        node.children = [];
-      }
-      node._text = v;
-    },
-  });
-  return node;
-}
-
+/** 渲染学习模式条，并捕获事件流（导航/通知断言用） */
 function renderBar(currentTiddler) {
-  const holder = fakeNode('div');
-  const w = new modeBar['tidme-study-mode-bar']({ attributes: {} }, {
-    wiki,
-    document: { createElement: (t) => fakeNode(t), body: fakeNode('body') },
-    parentWidget: {
-      variables: { currentTiddler: { value: currentTiddler, params: [], isMacroDefinition: false } },
-      getVariable: (n) => (n === 'currentTiddler' ? currentTiddler : ''),
-      getAncestorCount: () => 0,
-      dispatchEvent: () => false,
-    },
-    variables: {},
-  });
-  w.render(holder, null);
-  return { w, holder };
+  const { root, w } = renderWidgetBase(wiki, modeBar, 'tidme-study-mode-bar', { variables: { currentTiddler } });
+  w.events = [];
+  const orig = w.dispatchEvent;
+  w.dispatchEvent = (e) => {
+    w.events.push(e);
+    return typeof orig === 'function' ? orig.call(w, e) : true;
+  };
+  return { w, holder: root };
 }
 
+function barEl(holder) {
+  return holder.children[0];
+}
+
+/** 条内文案（共享 collectText 递归收集） */
 function barText(holder) {
-  return (holder.children[0]?.childNodes || []).map((c) => c.textContent).join('|');
+  return collectText(barEl(holder));
+}
+
+/** 按文案找条内按钮 */
+function barButton(holder, label) {
+  return collectButtons(barEl(holder)).find((b) => collectText(b) === label);
+}
+
+/** 点条内按钮（共享 fakeElement.dispatchEvent 真派发给监听器，不再手工 ._listeners.click()） */
+function clickBarButton(holder, label) {
+  const b = barButton(holder, label);
+  assert.ok(b, `条内缺少按钮：${label}（实际 ${collectText(barEl(holder))}）`);
+  b.dispatchEvent({ type: 'click' });
+  return b;
 }
 
 test('模式条: 未激活隐藏，激活显示进度，refresh 嗅探会话变化', () => {
   const { w, holder } = renderBar('卡甲');
-  assert.equal(holder.children[0].style.display, 'none', '未激活隐藏');
+  assert.equal(barEl(holder).style.display, 'none', '未激活隐藏');
   setupActive();
   // 唯一刷新机制：learning-session 变化 → refresh 嗅探重建
   assert.equal(w.refresh({ '$:/state/tidme/learning-session': { modified: true } }), true, '会话变化触发重建');
-  assert.equal(holder.children[0].style.display, '', '激活可见');
-  assert.equal(barText(holder), '学习中|1/3|结束学习', '进度为当前卡在会话中的位置');
+  assert.equal(barEl(holder).style.display, '', '激活可见');
+  const text = barText(holder);
+  assert.ok(text.includes('学习中') && text.includes('1/3') && text.includes('结束学习'), `进度为当前卡在会话中的位置（实际 ${text}）`);
   // 队列外的 tiddler 不显示进度
   const { w: w2, holder: h2 } = renderBar('无关笔记');
   w2.refresh({ '$:/state/tidme/learning-session': { modified: true } });
-  assert.equal(barText(h2), '学习中|结束学习');
+  const text2 = barText(h2);
+  assert.ok(text2.includes('学习中') && text2.includes('结束学习') && !text2.includes('/'), `队列外不显示 x/y 进度（实际 ${text2}）`);
 });
 
-test('模式条: 结束学习 → endSession 清场 + 派发导航/通知', () => {
+test('模式条: 结束学习 → endSession 清场 + 派发导航/通知（事件流断言）', () => {
   setupActive();
   const { w, holder } = renderBar('卡乙');
   w.refresh({ '$:/state/tidme/learning-session': { modified: true } });
-  // 点击结束按钮
-  const btn = holder.children[0].childNodes.find((c) => c.textContent === '结束学习');
-  btn._listeners.click();
-  assert.equal(session.isSessionActive(wiki), false, '点击后全部清场');
-  assert.equal(holder.children[0].style.display, 'none', '结束后隐藏');
+  clickBarButton(holder, '结束学习');
+  assert.equal(isActive(), false, '点击后全部清场');
+  assert.equal(barEl(holder).style.display, 'none', '结束后隐藏');
+  // 事件流：必须真的派发导航（回今天页）与结束通知——此前用例名写了"派发导航/通知"却零断言
+  const types = w.events.map((e) => e.type);
+  assert.ok(types.includes('tm-navigate'), `派发导航（实际 ${types}）`);
+  assert.equal(w.events.find((e) => e.type === 'tm-navigate').navigateTo, ns.PAGE_TODAY, '导航目标是今天页');
+  assert.ok(types.includes('tm-notify'), '派发结束通知');
 });
 
 test('模式条: 阅读材料显示「读完，继续复习 ›」，点击推进到后续 item 卡片', () => {
@@ -199,10 +160,8 @@ test('模式条: 阅读材料显示「读完，继续复习 ›」，点击推�
   const { w, holder } = renderBar('阅读卡丙');
   w.refresh({ '$:/state/tidme/learning-session': { modified: true } });
 
-  assert.ok(barText(holder).includes('读完，继续复习 ›'), '阅读卡显示推进复习按钮');
-  const advBtn = holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›');
-  assert.ok(advBtn, '存在推进按钮');
-  advBtn._listeners.click();
+  assert.ok(barButton(holder, '读完，继续复习 ›'), '阅读卡显示推进复习按钮');
+  clickBarButton(holder, '读完，继续复习 ›');
 
   const sess = wiki.getTiddler(session.SESSION_TIDDLER);
   assert.equal(sess.fields.list[0], '卡甲', '推进后队列首位切换到 item 卡片');
@@ -228,9 +187,9 @@ test('模式条: 整本 PDF 文档页推进 —— 不标 done，留在阅读队
   const { w, holder } = renderBar('Tidme/Docs/长书');
   w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
 
-  const advBtn = holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›');
+  const advBtn = barButton(holder, '读完，继续复习 ›');
   assert.ok(advBtn, '整本 PDF 文档页显示推进按钮');
-  advBtn._listeners.click();
+  clickBarButton(holder, '读完，继续复习 ›');
 
   const f = wiki.getTiddler('Tidme/Docs/长书')?.fields || {};
   assert.notEqual(f['tidme.done'], 'yes', '只读了几页 ≠ 读完整个文件：不得标记 done');
@@ -256,9 +215,9 @@ test('模式条: 牌组页（词书 legacy kind=topic）推进 —— 永不标 
   const { w, holder } = renderBar('$:/Deck/IELTS_M');
   w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
 
-  const advBtn = holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›');
+  const advBtn = barButton(holder, '读完，继续复习 ›');
   assert.ok(advBtn, '牌组页（legacy kind=topic）仍显示推进按钮');
-  advBtn._listeners.click();
+  clickBarButton(holder, '读完，继续复习 ›');
 
   assert.notEqual(wiki.getTiddler('$:/Deck/IELTS_M')?.fields['tidme.done'], 'yes', '牌组页不是阅读卡，不得标记 done');
   const sess = wiki.getTiddler(session.SESSION_TIDDLER);
@@ -279,8 +238,9 @@ test('模式条: 节卡推进 —— A-Factor 顺延出队，到期自动回归�
   const { w, holder } = renderBar('节卡一');
   w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
 
-  const advBtn = holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›');
-  advBtn._listeners.click();
+  const advBtn = barButton(holder, '读完，继续复习 ›');
+  assert.ok(advBtn, '节卡显示推进按钮');
+  clickBarButton(holder, '读完，继续复习 ›');
 
   const f = wiki.getTiddler('节卡一')?.fields || {};
   assert.notEqual(f['tidme.done'], 'yes', '阅读材料不标 done（永久出队违背 SM 重现语义）');
@@ -307,7 +267,7 @@ test('模式条: 节卡顺延后到期回归学习队列（topic 重现语义闭
   wiki.addTiddler({ title: session.SESSION_TIDDLER, list: ['节卡二', '卡甲'] });
   const { w, holder } = renderBar('节卡二');
   w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
-  holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›')._listeners.click();
+  clickBarButton(holder, '读完，继续复习 ›');
 
   const queueNow = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
   assert.ok(!queueNow.includes('节卡二'), '顺延后立刻不再出现');
@@ -341,7 +301,7 @@ test('模式条: 推进跳过会话内未来排期卡（isDueNow 口径，list[0
   wiki.addTiddler({ title: session.SESSION_TIDDLER, list: ['当前节卡', '已顺延节卡', '卡丙'] });
   const { w, holder } = renderBar('当前节卡');
   w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
-  holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›')._listeners.click();
+  clickBarButton(holder, '读完，继续复习 ›');
 
   const sess = wiki.getTiddler(session.SESSION_TIDDLER);
   assert.deepEqual([...sess.fields.list], ['已顺延节卡', '卡丙'], '仅当前卡移出，未来排期卡保留在会话');
@@ -369,9 +329,9 @@ test('模式条: 剩余卡全部未来排期 → 会话收尾（advanceSession n
   wiki.addTiddler({ title: session.SESSION_TIDDLER, list: ['当前节卡', '远期节卡'] });
   const { w, holder } = renderBar('当前节卡');
   w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
-  holder.children[0].childNodes.find((c) => c.textContent === '读完，继续复习 ›')._listeners.click();
+  clickBarButton(holder, '读完，继续复习 ›');
 
-  assert.equal(session.isSessionActive(wiki), false, '无当前可学卡 → 统一清场结束学习');
+  assert.equal(isActive(), false, '无当前可学卡 → 统一清场结束学习');
 });
 
 test('模式条: 当前卡跟随故事顶层（修复列表序嗅探滞留在旧词卡）', () => {
@@ -391,7 +351,7 @@ test('模式条: 当前卡跟随故事顶层（修复列表序嗅探滞留在旧
   const { w, holder } = renderBar('');
   w.refresh({ [session.SESSION_TIDDLER]: { modified: true } });
 
-  assert.equal(barText(holder), '学习中|2/2|读完，继续复习 ›|结束学习', '进度与推进按钮跟随故事顶层的会话阅读卡');
+  assert.equal(barText(holder), '学习中2/2读完，继续复习 ›结束学习', '进度与推进按钮跟随故事顶层的会话阅读卡');
 });
 
 // ---- 结束学习后关闭故事河遗留的复习卡（item） ----
@@ -412,15 +372,17 @@ function closedTitles(events) {
   return events.filter((e) => e.type === 'tm-close-tiddler' && e.param).map((e) => e.param);
 }
 
-test('session.openItemCards: 只挑故事河里真实存在的 item 卡（topic 与幽灵标题排除）', () => {
+test('view-state.storyItemCards: 只挑故事河里真实存在的 item 卡（topic 与幽灵标题排除）', () => {
+  const viewState = mod('ui/base/view-state.js');
   wiki.addTiddler({ title: '卡甲', 'tidme.kind': 'item' });
   wiki.addTiddler({ title: 'Tidme/Docs/书', 'tidme.kind': 'topic' });
   wiki.addTiddler({ title: '$:/StoryList', list: ['卡甲', 'Tidme/Docs/书', '幽灵卡'] });
 
-  assert.deepEqual([...session.openItemCards(wiki)], ['卡甲'], 'story 里的幽灵标题与阅读材料都不算遗留复习卡');
+  assert.deepEqual([...viewState.storyItemCards(wiki)], ['卡甲'], 'story 里的幽灵标题与阅读材料都不算遗留复习卡');
+  assert.deepEqual([...viewState.storyTitles(wiki)], ['卡甲', 'Tidme/Docs/书', '幽灵卡'], 'storyTitles 原样给出故事河顺序');
 
   wiki.deleteTiddler('$:/StoryList');
-  assert.deepEqual([...session.openItemCards(wiki)], [], '无故事河返回空（幂等安全）');
+  assert.deepEqual([...viewState.storyItemCards(wiki)], [], '无故事河返回空（幂等安全）');
 });
 
 test('模式条: 结束学习关闭故事河里遗留的 item 卡（阅读材料保留）', () => {
@@ -433,9 +395,9 @@ test('模式条: 结束学习关闭故事河里遗留的 item 卡（阅读材料
 
   const { w, holder } = renderBar('卡乙'); // render 时已激活 → _wasActive = true
   const events = spyEvents(w);
-  holder.children[0].childNodes.find((c) => c.textContent === '结束学习')._listeners.click();
+  clickBarButton(holder, '结束学习');
 
-  assert.equal(session.isSessionActive(wiki), false, '会话已结束');
+  assert.equal(isActive(), false, '会话已结束');
   const closed = closedTitles(events);
   assert.deepEqual([...closed], ['遗留卡', '卡甲'], '故事河里的遗留 item 卡按序全部关闭');
   assert.ok(!closed.includes('Tidme/Docs/在读文档'), '阅读材料（topic）保留——用户可能正在读');

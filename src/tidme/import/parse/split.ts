@@ -13,8 +13,10 @@ import { contentFingerprint, makeDocId, makeSectionId, normalizeText } from '$:/
 import type { DocMeta } from '$:/plugins/keepone/tidme/core/ids';
 import { CRUMB_SEP } from '$:/plugins/keepone/tidme/core/ns';
 import { docRoot, joinPath, sectionLeaf } from '$:/plugins/keepone/tidme/core/paths';
-import { afactorForText, normalizePriority, PRIORITY_DEFAULT } from '$:/plugins/keepone/tidme/core/scheduler';
+import { PRIORITY_DEFAULT } from '$:/plugins/keepone/tidme/core/scheduler';
 import { initialFsrsFields, twDateString } from '$:/plugins/keepone/tidme/core/schema';
+// 文档页/节卡字段基座唯一产地（不变式字段不在此重拼）
+import { buildDocPageFields, buildSectionCardFields } from '$:/plugins/keepone/tidme/core/card-factory';
 import { applyOverrides, chunkBook } from './chunker';
 import type { ChunkOptions, RawSection } from './chunker';
 import { blocksFromHtml, blocksFromMarkdown, blocksFromPlainText, blocksFromWikitext, formatLabel, guessTitle, sniffFormat } from './ingest-text';
@@ -142,32 +144,31 @@ export async function emitTiddlers(
     // 叶段 = 可读 caption slug + "-" + 稳定 id（A2：搜索/最近/反向链接可读；唯一性由 id 保证）
     const capText = s.title || trail[trail.length - 1] || '';
     const title = joinPath(docRoot, sectionLeaf(capText, id));
-    cards.push({
+    // 节卡字段基座唯一产地 = core/card-factory（kind/subkind/doc/chars/priority/afactor/breadcrumb
+    // 等不变式不在此重拼）；切分身份字段（id/hash/order/level/merged/file）走 extra
+    cards.push(buildSectionCardFields({
       title,
-      type: 'text/vnd.tiddlywiki',
       caption: capText, // 卡片正面：学习模式折叠态只渲染 caption
       text: s.html,
-      ...nowFields,
-      ...syncFields,
-      'tidme.doc': docId,
-      'tidme.docpage': docRoot, // 文档页真实 title（含 ~docId 后缀时亦准确）
-      'tidme.id': id,
-      'tidme.hash': hash,
-      'tidme.order': String(s.ordinal).padStart(6, '0'), // 零填充：字符串排序=阅读顺序
-      'tidme.level': String(s.level),
-      'tidme.kind': 'topic', // 阅读材料（阅读视图，阅读列表管理）
-      'tidme.subkind': 'section', // 子类型：正文节
-      'tidme.chars': String(s.chars),
-      'tidme.priority': String(normalizePriority(priority)),
-      // SM 对齐：A-Factor 按文本长度启发式设定（短材料快速展期、长材料平缓长尾）
-      'tidme.afactor': String(afactorForText(s.chars)),
-      'tidme.breadcrumb': joined, // 路径显示唯一字段（tidme.path 已废止：同值冗余、无读取方）
-      'tidme.source': meta.title || '',
-      'tidme.author': meta.creator || '',
-      'tidme.format': format,
-      ...(s.merged ? { 'tidme.merged': 'yes' } : {}),
-      ...(s.file ? { 'tidme.file': s.file } : {}),
-    });
+      docId,
+      docPage: docRoot, // 文档页真实 title（含 ~docId 后缀时亦准确）
+      chars: s.chars,
+      priority,
+      breadcrumb: joined, // 路径显示唯一字段（tidme.path 已废止：同值冗余、无读取方）
+      extra: {
+        ...nowFields,
+        ...syncFields,
+        'tidme.id': id,
+        'tidme.hash': hash,
+        'tidme.order': String(s.ordinal).padStart(6, '0'), // 零填充：字符串排序=阅读顺序
+        'tidme.level': String(s.level),
+        'tidme.source': meta.title || '',
+        'tidme.author': meta.creator || '',
+        'tidme.format': format,
+        ...(s.merged ? { 'tidme.merged': 'yes' } : {}),
+        ...(s.file ? { 'tidme.file': s.file } : {}),
+      },
+    }));
   }
 
   const links = cards.map((t) => `* [[${t.caption || t.title}|${t.title}]]`).join('\n');
@@ -178,26 +179,24 @@ export async function emitTiddlers(
   docLines.push('Document ID: ' + docId);
   docLines.push(`Total ${cards.length} sections:`, '', links);
 
-  const docTiddler: Record<string, any> = {
+  const docTiddler: Record<string, any> = buildDocPageFields({
     title: docRoot, // 文档页落 Tidme/Docs/<书名>[/~docId] 命名空间
     caption: docTitle, // 可读名：标题模板/列表显示用（title 是路径）
-    type: 'text/vnd.tiddlywiki',
-    tags: ['tidme-doc'], // 文档页标记（与 kind=topic 并存：kind 定大类，tag 定"文档宿主页"）
-    'tidme.kind': 'topic', // 阅读材料大类（与 pdf-ops.createPdfDoc 的文档页一致）
+    docId,
+    structure: 'sectioned',
+    format,
     text: docLines.join('\n'),
-    bag,
-    revision: '0',
-    'tidme.doc': docId,
-    'tidme.docpage': docRoot,
-    'tidme.format': format,
-    'tidme.structure': 'sectioned',
-    ...(meta.title ? { 'tidme.source': meta.title } : {}),
-    ...(meta.author || meta.creator ? { 'tidme.author': meta.author || meta.creator } : {}),
-    ...(meta.language ? { 'tidme.language': meta.language } : {}),
-    ...(meta.url ? { 'tidme.url': meta.url } : {}),
-    ...(meta.date ? { 'tidme.date': meta.date } : {}),
-    ...(meta.license ? { 'tidme.license': meta.license } : {}),
-  };
+    extra: {
+      bag,
+      revision: '0',
+      ...(meta.title ? { 'tidme.source': meta.title } : {}),
+      ...(meta.author || meta.creator ? { 'tidme.author': meta.author || meta.creator } : {}),
+      ...(meta.language ? { 'tidme.language': meta.language } : {}),
+      ...(meta.url ? { 'tidme.url': meta.url } : {}),
+      ...(meta.date ? { 'tidme.date': meta.date } : {}),
+      ...(meta.license ? { 'tidme.license': meta.license } : {}),
+    },
+  });
 
   // 无自动牌组：topic（阅读材料）由阅读列表/文档页管理，不走 deck/牌组体系
   const tiddlers = [docTiddler, ...cards];

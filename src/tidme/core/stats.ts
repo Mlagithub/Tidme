@@ -2,9 +2,9 @@
 stats.ts — 统计聚合（纯函数）
 
 - deckLoad：牌组负载（total / new / learn / due / overdue）
-- docProgress：文档进度（已读 / 剩余）
 - retentionFromLogs：从复习日志估算保留率（1 - Again 占比）
-- funnelCounts：漏斗（导入文档 / Section / 摘录 / 卡）
+- funnelCounts：漏斗（文档页 / Section / 摘录 / 卡）
+- 文档阅读进度不在此模块：唯一实现在 core/doc-ops.docReadingProgress（区分连续型/分节型）
 
 review log 行格式（repeat 写入 $:/Deck/<deck>/log 单文件，键 = 17 位复习时刻）：
   { rating: 1-4, elapsed_days, scheduled_days, review, state }
@@ -16,8 +16,8 @@ const parseTwDate = schema.parseTwDate;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const nsMod = require('$:/plugins/keepone/tidme/core/ns.js');
 const isCardOutOfQueue = sched.isCardOutOfQueue;
-const normalizePriority = sched.normalizePriority;
-const todayKey = nsMod.todayKey;
+const isInQueue = sched.isInQueue;
+const todayKey = schema.todayKey;
 
 import type { CardLike } from './schema.ts';
 export type { CardLike };
@@ -35,8 +35,7 @@ export function deckLoad(cards: CardLike[], now = new Date()): DeckLoad {
   const nowMs = now.getTime();
   for (const c of cards) {
     const f = c.fields;
-    if (isCardOutOfQueue(f)) continue; // 已出队（done/ignored）
-    if (f['tidme.suspended'] === 'yes') continue;
+    if (!isInQueue(f)) continue; // 出队三态统一判定（done/ignored/suspended）
     const state = String(f.state || '0');
     if (state === '1' || state === '3') load.learn++;
     else if (state === '2') {
@@ -49,19 +48,6 @@ export function deckLoad(cards: CardLike[], now = new Date()): DeckLoad {
     } else load.newCount++;
   }
   return load;
-}
-
-export interface DocProgress {
-  total: number;
-  done: number;
-  left: number;
-}
-
-/** 文档进度：done = 已移出队列（done/ignored） */
-export function docProgress(sections: CardLike[]): DocProgress {
-  const total = sections.length;
-  const done = sections.filter((c) => isCardOutOfQueue(c.fields)).length;
-  return { total, done, left: total - done };
 }
 
 export interface Retention {
@@ -86,19 +72,23 @@ export interface Funnel {
   docs: number;
   sections: number;
   extracts: number;
+  concepts: number;
   cards: number;
 }
 
-/** 漏斗：文档页（tidme-doc 标签，宿主/阅读单元）/ Topic 节 / 摘录 / 测试卡。
- *  文档页优先于 kind 判定——文档页是 kind=topic 的宿主页，按 kind 会误记成"节"。 */
+/** 漏斗：文档页（tidme-doc 标签，宿主/阅读单元）/ Topic 节 / 摘录 / 概念卡 / 测试卡。
+ *  文档页优先于 kind 判定——文档页是 kind=topic 的宿主页，按 kind 会误记成"节"。
+ *  概念卡（subkind=concept）单独成桶：它同属 topic 轨道但不是切分出的节，
+ *  混进"节"会让漏斗数字虚高（曾如此）。 */
 export function funnelCounts(items: CardLike[]): Funnel {
-  const f: Funnel = { docs: 0, sections: 0, extracts: 0, cards: 0 };
+  const f: Funnel = { docs: 0, sections: 0, extracts: 0, concepts: 0, cards: 0 };
   for (const c of items) {
     const kind = String(c.fields['tidme.kind'] || '');
     const sub = String(c.fields['tidme.subkind'] || '');
     if (Array.isArray(c.fields.tags) && c.fields.tags.includes('tidme-doc')) f.docs++;
     else if (kind === 'topic') {
       if (sub === 'extract') f.extracts++;
+      else if (sub === 'concept') f.concepts++;
       else f.sections++;
     } else if (kind === 'item') f.cards++;
   }
@@ -106,6 +96,11 @@ export function funnelCounts(items: CardLike[]): Funnel {
 }
 
 export const READTIME_TIDDLER = '$:/plugins/keepone/tidme/stats/readtime';
+
+/** 单段专注时长上限（秒）：超过视为挂机/休眠/机器时间跳变，整段丢弃并告警。
+ *  不 clamp——clamp 会把 3 小时挂机伪装成 1 小时，比丢弃更失真。
+ *  （「快刷保底 1 秒」在 session.recordFocus，属另一侧口径：短段补足，长段丢弃。） */
+export const FOCUS_SEGMENT_MAX_SECONDS = 3600;
 
 export interface ReadTimeStats {
   totalSeconds: number;
@@ -170,17 +165,18 @@ export function recordReadTime(wiki: any, docId: string, seconds: number) {
   });
 }
 
-/** 按优先级分桶（供排序展示）；priority 缺失或空串 = 未设 */
+/** 按优先级分桶（供排序展示）；priority 缺失或空串 = 未设。
+ *  三档分界引 scheduler.priorityBucket（唯一产地），未设单独成桶不再靠默认值混入"中" */
 export function priorityBuckets(cards: CardLike[]): { high: number; medium: number; low: number; none: number } {
   const b = { high: 0, medium: 0, low: 0, none: 0 };
   for (const c of cards) {
     const raw = c.fields['tidme.priority'];
     const unset = raw === undefined || raw === null || String(raw).trim() === '';
-    const p = normalizePriority(raw);
-    if (unset) b.none++;
-    else if (p <= 33) b.high++;
-    else if (p <= 66) b.medium++;
-    else b.low++;
+    if (unset) {
+      b.none++;
+      continue;
+    }
+    b[sched.priorityBucket(raw)]++;
   }
   return b;
 }

@@ -14,6 +14,7 @@ import { FUTURE, PAST, twDate } from '../helpers/tw-date.mjs';
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-wgt-rev-' });
 const parseMod = mod('import/parse.js');
 const nsMod = mod('core/ns.js');
+const schemaMod = mod('core/schema.js');
 
 /** 渲染并返回根节点（冒烟断言用） */
 function renderWidget(wiki, mod_, name, opts = {}) {
@@ -119,21 +120,53 @@ test('视图互斥: 会话进行中 topic 卡也不得落入复习帧（修复 s
   assert.deepStrictEqual([...res2], ['$:/plugins/keepone/tidme/review/ui/ViewTemplate/tiddler'], 'item 卡仍走复习帧');
 });
 
-test('study 视图: 评分条/快捷键/卡片正面均对 topic 卡禁显（!tidme.kind[topic]）', () => {
-  for (const t of ['study', 'shortcut', 'front']) {
-    const text = wiki.getTiddler('$:/plugins/keepone/tidme/review/ui/ViewTemplate/' + t).fields.text;
-    assert.ok(text.includes('!is[blank]!tidme.kind[topic]'), t + ' 模板必须排除 topic 卡（阅读卡不显示评分/复习界面）');
-  }
+test('study 视图: topic 阅读卡不渲染评分界面，item 卡渲染（渲染断言，不看模板源码）', () => {
+  const schemaMod = mod('core/schema.js');
+  const mk = (title, kind) =>
+    wiki.addTiddler({
+      title,
+      'tidme.kind': kind,
+      'tidme.subkind': kind === 'item' ? 'qa' : 'section',
+      caption: title,
+      text: kind === 'item' ? '答' : '正文',
+      ...schemaMod.initialFsrsFields(new Date()),
+    });
+  mk('评分子卡', 'item');
+  mk('阅读节卡', 'topic');
+  const filterQueue = '[subfilter{$:/Deck/default!!card}]';
+  const renderStudy = (card) => {
+    const sim =
+      `<$let deckTiddler="$:/Deck/default" studyTiddler="${card}" filter_learn="${filterQueue}" filter_due="${filterQueue}" filter_new="${filterQueue}" filter_unfold="[]" filter_queue="${filterQueue}" currentTiddler="${card}"><$transclude tiddler="$:/plugins/keepone/tidme/review/ui/ViewTemplate/study"/></$let>`;
+    wiki.addTiddler({ title: `SimStudy_${card}`, text: sim });
+    return wiki.renderTiddler('text/html', `SimStudy_${card}`);
+  };
+  const itemOut = renderStudy('评分子卡');
+  assert.ok(itemOut.includes('tmc-study-bar'), `item 卡渲染评分条（实际 ${itemOut.slice(0, 120)}）`);
+  // 注：四档按钮本身由全局 `\widget $fsrs4tw.repeat` 提供，该宏在无 PageTemplate 的
+  // renderTiddler 环境里不注册（"Undefined widget"），故这里只断言评分条的渲染门控——
+  // 门控正是本用例的回归对象（topic 阅读卡不得出现复习界面）。
+  const topicOut = renderStudy('阅读节卡');
+  assert.ok(!topicOut.includes('tmc-study-bar'), 'topic 阅读卡不渲染评分条（阅读卡不显示复习界面）');
+  assert.ok(!topicOut.includes('tmc-repeat-wrapper'), 'topic 阅读卡不渲染评分按钮容器');
 });
 
-test('study 视图: 评分条始终可见（不随 folded 隐藏）', () => {
-  // 回归：startstudy/开始复习对 cloze/qa 卡设 folded=hide（非 unfold），
-  // 若评分条被 text="hide" 的 reveal 包裹则评分条消失 → 复习无法评分。
-  const study = wiki.getTiddler('$:/plugins/keepone/tidme/review/ui/ViewTemplate/study').fields.text;
-  const barIdx = study.indexOf('tmc-study-bar');
-  const repeatIdx = study.indexOf('fsrs4tw.repeat');
-  assert.ok(barIdx !== -1 && repeatIdx > barIdx, '评分条在 sticky 条栏内');
-  assert.ok(!study.includes('text="hide"'), '评分条不再被 hide reveal 包裹（folded=hide 时也可见）');
+test('study 视图: folded=hide 时评分条仍可见（regression：被 hide reveal 包裹则无法评分）', () => {
+  const schemaMod = mod('core/schema.js');
+  wiki.addTiddler({
+    title: '折叠评分卡',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'cloze',
+    caption: '卡',
+    text: '',
+    ...schemaMod.initialFsrsFields(new Date()),
+  });
+  wiki.addTiddler({ title: '$:/state/folded/折叠评分卡', text: 'hide' }); // startstudy 设的折叠态
+  const filterQueue = '[subfilter{$:/Deck/default!!card}]';
+  const sim =
+    `<$let deckTiddler="$:/Deck/default" studyTiddler="折叠评分卡" filter_learn="${filterQueue}" filter_due="${filterQueue}" filter_new="${filterQueue}" filter_unfold="[]" filter_queue="${filterQueue}" currentTiddler="折叠评分卡"><$transclude tiddler="$:/plugins/keepone/tidme/review/ui/ViewTemplate/study"/></$let>`;
+  wiki.addTiddler({ title: 'SimStudyFolded', text: sim });
+  const out = wiki.renderTiddler('text/html', 'SimStudyFolded');
+  assert.ok(out.includes('tmc-study-bar'), `折叠态下评分条仍渲染（实际 ${out.slice(0, 120)}）`);
 });
 
 test('调度: 默认牌组 state_learn 使用正确的 UTC 日期格式（修复 <now> 损坏格式）', () => {
@@ -143,17 +176,16 @@ test('调度: 默认牌组 state_learn 使用正确的 UTC 日期格式（修复
   assert.ok(stateLearn.includes('compare:date:lt<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>'), 'state_learn 使用 TW 核心 UTC 格式');
 });
 
-test('startstudy: 队列过滤器在按钮 transclude 上下文显式解析（$(deckTiddler)$）', () => {
-  // 回归：2658977 曾把视图模板的队列过滤器从显式 {$(deckTiddler)$!!card} 改成隐式 {!!card}，
-  // 导致「开始学习」按钮经 <$transclude> 渲染时 currentTiddler=按钮自身，{!!card} 取空 → 永远"无新卡"。
-  // 1) 视图模板必须使用显式 $(deckTiddler)$ 引用（不依赖 currentTiddler）
-  // （tr.tid 已随 $:/Decks 页退役——今天页的 today-deck-row 接替其行渲染职责）
+test('deckfilter: 队列过滤器组合只有一个真源（模板不再手抄组合，按钮上下文能解析出卡）', () => {
+  // 回归：过滤器组合曾同时存在于两处 ViewTemplate 的 $let 与 core/deck-engine，
+  // 谁改了另一侧就静默漂移（队列错一半看不出来）。现在模板只经 deckfilter 取字符串。
   for (const t of ['deck', 'tiddler']) {
     const text = wiki.getTiddler(`$:/plugins/keepone/tidme/review/ui/ViewTemplate/${t}`).fields.text;
-    assert.ok(text.includes('$(deckTiddler)$!!card'), `${t} 模板用显式 $(deckTiddler)$ 引用`);
-    assert.ok(!text.includes('[subfilter{!!card}]'), `${t} 模板不得用隐式 {!!card}`);
+    assert.ok(text.includes('deckfilter['), `${t} 模板经 deckfilter 取过滤器字符串`);
+    // 队列分段字段（state_*/order_*）不得出现在模板里——那是组合逻辑，只能来自 deck-engine
+    assert.ok(!/(state_learn|state_due|state_new|order_due|order_new|sortrandom)/.test(text), `${t} 模板不得手抄队列组合`);
+    assert.ok(!text.includes('[subfilter{!!card}]'), `${t} 模板不得用隐式 {!!card}（transclude 上下文会取空）`);
   }
-  // 2) 模拟 tr 行 let + 按钮上下文：filter_queue 应解析出在队卡（而非空）
   wiki.addTiddler({
     title: '按钮队列测试卡',
     'tidme.kind': 'item',
@@ -169,16 +201,15 @@ test('startstudy: 队列过滤器在按钮 transclude 上下文显式解析（$(
     scheduled_days: '0',
     last_review: '20261231000000000',
   });
+  const deckEngine = mod('core/deck-engine.js');
+  // 1) 操作符输出 = composeDeckFilters 的输出（模板与 JS 同一真源的机器证明）
+  const fromOp = wiki.filterTiddlers('[[$:/Deck/default]deckfilter[queue]]');
+  assert.equal(fromOp.length, 1, 'deckfilter 产出单段过滤器字符串');
+  assert.equal(fromOp[0], deckEngine.composeDeckFilters('$:/Deck/default', wiki.getTiddler('$:/Deck/default').fields).queue);
+  // 2) 在真实渲染里按模板写法取用 → 能解析出在队卡（按钮 transclude 上下文同构）
   const sim = `<$let
     deckTiddler="$:/Deck/default"
-    filter_learn=\`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]\`
-    filter_due=\`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_due}] +[subfilter{$(deckTiddler)$!!order_due}]\`
-    filter_new=\`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_new}] +[subfilter{$(deckTiddler)$!!order_new}]\`
-    filter_unfold=\`[subfilter{$(deckTiddler)$!!card_unfold}]\`
-    due-new=\`$(filter_learn)$ $(filter_due)$ $(filter_new)$\`
-    new-due=\`$(filter_learn)$ $(filter_new)$ $(filter_due)$\`
-    random=\`$(filter_learn)$ [subfilter<filter_random>]\`
-    filter_queue=\`\${ [<deckTiddler>get[order]match[new-due]then<new-due>] [<deckTiddler>get[order]match[random]then<random>] ~[<due-new>] }\$\`
+    filter_queue=\`\${ [<deckTiddler>deckfilter[queue]] }\$\`
 >
 NEXT: {{{ [subfilter<filter_queue>first[]] }}}
 </$let>`;
@@ -207,12 +238,14 @@ test('workflow: 开始学习 startGlobalLearning 直达默认牌组第一张在�
   const folded = wiki.getTiddler('$:/state/folded/' + expected);
   assert.ok(folded && ['show', 'hide'].includes(folded.fields.text), '折叠态已设置（show/hide）');
 
-  // 无在队卡 → 恭喜分支（不导航、不写 study list）
-  const empty = { filterTiddlers: () => [], getTiddler: () => null };
+  // 无在队卡 → 恭喜分支（不导航、不写 study list）。用**真实** wiki 清空到空状态，
+  // 不写退化桩——桩只对"仓库为空"这一种调用序列成立，掩盖真实过滤链的行为
+  reset({ alsoSystem: ['$:/Deck/'] });
   const ev2 = [];
-  wf.startGlobalLearning(empty, { dispatchEvent: (e) => ev2.push(e) });
+  wf.startGlobalLearning(wiki, { dispatchEvent: (e) => ev2.push(e) });
   assert.ok(!ev2.some((e) => e.type === 'tm-navigate'), '空队列不导航');
   assert.ok(ev2.some((e) => e.type === 'tm-notify'), '空队列弹恭喜');
+  assert.equal(wiki.getTiddler('$:/Deck/default/study'), undefined, '空队列不写 study list');
 });
 
 test('workflow: $:/Decks 工作流中心（全局交错学习流 + 阅读目标）', () => {
@@ -235,9 +268,9 @@ test('workflow: $:/Decks 工作流中心（全局交错学习流 + 阅读目标�
   wiki.addTiddler({ title: '$:/config/tidme/readpoint/global', text: F.extractTitle });
   const target2 = wf.globalReadingTarget(wiki);
   assert.equal(target2, F.extractTitle, '有续读点则跳续读点卡');
-  // 全无 → 阅读列表页
-  const emptyWiki = { filterTiddlers: () => [], getTiddler: () => null };
-  assert.equal(wf.globalReadingTarget(emptyWiki), '$:/plugins/keepone/tidme/import/ui/reading-list', '全无跳阅读列表');
+  // 全无 → 阅读列表页（真实空 wiki：清空后再问，断言的是真过滤链的兜底分支）
+  reset({ alsoSystem: ['$:/Deck/', '$:/config/tidme/readpoint/'] });
+  assert.equal(wf.globalReadingTarget(wiki), '$:/plugins/keepone/tidme/import/ui/reading-list', '全无跳阅读列表');
 });
 
 // ---------- 继续阅读目标（globalReadingTarget：续读点出队顺延 + 真实队列口径） ----------
@@ -362,13 +395,23 @@ test('doc-ops: docReadingTarget —— 续读点被忽略/搁置视为出队；�
   mk('忽略S1', '000001', { 'tidme.ignored': 'yes' });
   mk('搁置S2', '000002', { 'tidme.suspended': 'yes' });
   mk('可读S3', '000003');
+  // 文档页（宿主页）必须存在：否则「全书读完返回空串」的断言会被 docPageOfDoc 回退掩盖
+  wiki.addTiddler({
+    title: 'Tidme/Docs/定位书2',
+    tags: ['tidme-doc'],
+    'tidme.kind': 'topic',
+    'tidme.doc': 'dtgt2',
+    'tidme.structure': 'sectioned',
+    caption: '定位书2',
+    text: '',
+  });
   docOps.saveReadPoint(wiki, 'dtgt2', { t: '忽略S1', s: '' });
   assert.equal(docOps.docReadingTarget(wiki, 'dtgt2'), '可读S3', '被忽略的续读点出队，顺延到第一张在队卡');
-  // 全部出队 → 空串（调用方回退文档页）
+  // 全部出队 → 空串（即使存在文档页也不回退到宿主页；由调用方自行回退）
   docOps.saveReadPoint(wiki, 'dtgt2', { t: '可读S3', s: '' });
   const f = wiki.getTiddler('可读S3').fields;
   wiki.addTiddler({ ...f, title: '可读S3', 'tidme.done': 'yes' });
-  assert.equal(docOps.docReadingTarget(wiki, 'dtgt2'), '');
+  assert.equal(docOps.docReadingTarget(wiki, 'dtgt2'), '', '全书读完返回空串（不回退文档页）');
 });
 
 test('doc-ops: 续读点写入携带 modified（最近阅读排序的时间源）', () => {
@@ -482,11 +525,12 @@ test('today-recent: 项目书名渲染为超链接并支持点击导航到文档
   }
 });
 
-test('today-hero: 已复习卡片时专注时间保底不为 0 秒', () => {
+test('today-hero: 今日专注时长如实回显统计值（不再为 0 秒补假时间）', () => {
   const todayMod = mod('review/widgets/today.js');
+  const statsMod = mod('core/stats.js');
   reset();
   const logData = {};
-  const todayK = nsMod.todayKey();
+  const todayK = schemaMod.todayKey();
   for (let i = 0; i < 45; i++) {
     logData[`${todayK}00000${String(i).padStart(4, '0')}`] = { rating: 1 };
   }
@@ -495,12 +539,14 @@ test('today-hero: 已复习卡片时专注时间保底不为 0 秒', () => {
     type: 'application/json',
     text: JSON.stringify(logData),
   });
+  // 专注时长来自记录侧（core/session 的锚点结算：快刷保底 1 秒 / 超上限整段丢弃），
+  // 展示侧只回显；45 卡但确实没有时长记录时显示 0（曾按卡数补假时间，掩盖了记录侧为 0 的根因）
+  statsMod.recordReadTime(wiki, 'docY', 270);
 
   const { root } = renderWidgetBase(wiki, todayMod, 'tidme-today-hero');
   const text = collectText(root);
   assert.ok(text.includes('今日已复习 45 卡'), '正确统计今日复习卡数');
-  assert.ok(!text.includes('专注 0 秒') && !text.includes('0 s'), '已复习 45 卡时绝不显示专注 0');
-  assert.ok(text.includes('45 s') || text.includes('45 秒'), '获得 45 秒基础保底时长');
+  assert.ok(text.includes('4 m 30 s'), `如实显示已记录的 270 秒（实际：${text}）`);
 });
 
 test('today-recent: 支持连续型文档（PDF 等）展示页码进度与跳转', () => {

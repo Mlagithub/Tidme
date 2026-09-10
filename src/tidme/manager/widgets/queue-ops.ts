@@ -17,6 +17,7 @@ const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 // 共享 DOM/显示/组件工具（实现收敛于 ui/base/dom、ui/components/ui-primitives、core/display）
@@ -51,6 +52,7 @@ function makeQueueOps(): WidgetCtor {
       // 手动触发 auto-postpone（启动与每小时自动执行；开关与参数在「设置」页集中配置）
       const autoRow = el(doc, 'div', 'tm-import-actions', '');
       const autoStatus = el(doc, 'span', 'tm-import-muted', '');
+      const lastRun = el(doc, 'div', 'tm-import-muted', '');
       const runAuto = icons.iconButton(doc, 'tm-btn tm-btn--primary', 'zap', lingoMod.lingo(wiki, 'queueops.autopostpone', 'Auto-Postpone Now'));
       runAuto.title = lingoMod.lingo(
         wiki,
@@ -72,6 +74,22 @@ function makeQueueOps(): WidgetCtor {
       autoRow.appendChild(runAuto);
       autoRow.appendChild(autoStatus);
       wrap.appendChild(autoRow);
+
+      // 上次自动顺延记录（启动/每小时任务写入 $:/temp/tidme/autopostpone/last）：
+      // 顺延会悄悄改到期日，用户需要能看到"什么时候被顺延过、顺延了多少张"
+      const lastRaw = wiki.getTiddlerText?.(ns.AUTOPOSTPONE_LAST_TITLE, '') || '';
+      if (lastRaw) {
+        try {
+          const last = JSON.parse(lastRaw);
+          const when = last && last.at ? String(last.at).replace('T', ' ').replace(/\..*$/, '') : '';
+          lastRun.textContent = `${lingoMod.lingo(wiki, 'queueops.lastrun', 'Last run:')} ${when} · ${lingoMod.lingo(wiki, 'queueops.postponed', 'Postponed')} ${
+            Number(last && last.postponed) || 0
+          }`;
+        } catch {
+          lastRun.textContent = '';
+        }
+      }
+      wrap.appendChild(lastRun);
 
       const list = el(doc, 'div', 'tm-queue-ops-list');
       wrap.appendChild(list);
@@ -111,7 +129,7 @@ function makeQueueOps(): WidgetCtor {
           };
           btns.appendChild(apply((f) => sched.postponeCard(f, 7), lingoMod.lingo(wiki, 'manager.postpone7d', 'Postpone 7d')));
           btns.appendChild(apply(() => sched.advanceCard(), lingoMod.lingo(wiki, 'manager.advance', 'Advance')));
-          btns.appendChild(apply((f) => sched.ignoreCard(f), lingoMod.lingo(wiki, 'read.ignore', 'Ignore')));
+          btns.appendChild(apply(() => sched.ignoreCard(), lingoMod.lingo(wiki, 'read.ignore', 'Ignore')));
           btns.appendChild(apply(() => sched.suspendCard(), lingoMod.lingo(wiki, 'manager.suspend', 'Suspend')));
           btns.appendChild(apply(() => sched.resumeCard(), lingoMod.lingo(wiki, 'manager.restore', 'Restore')));
           btns.appendChild(apply(() => sched.forgetCard(), lingoMod.lingo(wiki, 'manager.forget', 'Forget')));

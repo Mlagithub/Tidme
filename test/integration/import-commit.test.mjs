@@ -3,6 +3,7 @@ import-commit.test.mjs — core/import-commit（对齐落库唯一实现）+ doc
 
 背景：split.ts / import.ts 曾各自实现"alignCards 三路写库 + 文档页落位"，细节漂移；
 docItemFilter 曾把 ITEM_FILTER 拼出第二个 run（并集），把全库 item 混进"复习本书"。
+同名节丢弃 / 同名 tiddler 跳过 / 同名书碰撞三类异常都必须计数上报（旧实现静默丢弃）。
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -68,8 +69,9 @@ test('import-commit: 重导入对齐——未变节保 SRS 进度、内容变重
   assert.ok(String(wiki.getTiddler(sec1[0]).fields.text).includes('修订'), '甲内容已更新');
 
   const nowTitles = sectionTitles(r2.docId);
-  assert.ok(nowTitles.includes(sec1[1]) === false || wiki.getTiddler(sec1[1]).fields['tidme.done'] === 'yes');
-  assert.equal(res.created >= 1, true, '丙为新增节');
+  // 乙已被归档 → 它不再出现在"可读节"集合里（sectionTitles 不排除归档卡，故按 done 判定）
+  assert.ok(!nowTitles.includes(sec1[1]) || wiki.getTiddler(sec1[1]).fields['tidme.done'] === 'yes', '归档节不回队列');
+  assert.equal(res.created, 1, '只有丙是新增节（甲重挂接、乙归档）');
   assert.ok(nowTitles.some((t) => wiki.getTiddler(t).fields.caption === '丙'));
 });
 
@@ -119,6 +121,93 @@ test('import-commit: 对齐模式下同 key 换 ID 的新卡不重复写（ordin
   assert.ok(!wiki.getTiddler(newSameKey.title), '同 key 换 ID 的新卡不得写出（防重复节）');
   assert.ok(wiki.getTiddler(keyless.title), 'keyless 漏网新卡防御性补写');
   assert.equal(wiki.getTiddler(oldTitle).fields.text, '新内容', '同 key 旧卡内容重挂接为新内容');
+});
+
+test('import-commit: 同名节多张新卡 → 保留一张并上报 dropped/ambiguous（不再静默丢内容）', async () => {
+  // 旧卡：key = "重名书 › 章"
+  const oldTitle = 'Tidme/Docs/重名书/旧s000';
+  wiki.addTiddler({
+    title: oldTitle,
+    caption: '章',
+    text: '旧内容',
+    'tidme.doc': 'ddup',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.breadcrumb': '重名书 › 章',
+    'tidme.order': '000000',
+  });
+  const mk = (id, text) => ({
+    title: `Tidme/Docs/重名书/${id}`,
+    caption: '章',
+    text,
+    'tidme.doc': 'ddup',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.breadcrumb': '重名书 › 章',
+    'tidme.order': '000001',
+  });
+  const doc = { title: 'Tidme/Docs/重名书', tags: ['tidme-doc'], 'tidme.doc': 'ddup', text: '' };
+  const res = await commitMod.commitImportToWiki(wiki, {
+    docId: 'ddup',
+    docTiddler: doc,
+    docTitle: doc.title,
+    cards: [mk('新a111', '新内容甲'), mk('新b222', '新内容乙')],
+  });
+  assert.equal(res.aligned, true);
+  assert.equal(res.dropped, 1, '同 key 两张新卡只能采用一张，另一张计入 dropped');
+  assert.equal(res.ambiguous, 1, '该 key 被标记为歧义');
+  assert.equal(res.created, 0, '被采用的走旧卡重挂接，不新建');
+  assert.ok(!wiki.getTiddler('Tidme/Docs/重名书/新b222'), '未被采用的新卡不写库');
+});
+
+test('import-commit: 未变节与重挂接节都记为"已消费"（不再走防御性写，不会重复建卡）', async () => {
+  const r = await parseMod.runSplit({ text: '# 甲\n\n甲。\n\n# 乙\n\n乙。', title: '无歧义书', type: 'text/markdown', minChars: 0 });
+  const [doc, ...cards] = r.tiddlers;
+  await commitMod.commitImportToWiki(wiki, { docId: r.docId, docTiddler: doc, docTitle: doc.title, cards });
+  const secs = sectionTitles(r.docId);
+  assert.equal(secs.length, 2, '首导两张节卡');
+
+  // 甲内容变（重挂接）、乙未变（unchanged）
+  const r2 = await parseMod.runSplit({ text: '# 甲\n\n甲改。\n\n# 乙\n\n乙。', title: '无歧义书', type: 'text/markdown', minChars: 0 });
+  const [doc2, ...cards2] = r2.tiddlers;
+  const res = await commitMod.commitImportToWiki(wiki, { docId: r2.docId, docTiddler: doc2, docTitle: doc2.title, cards: cards2 });
+  assert.equal(res.created, 0, '没有新节 → 不新建');
+  assert.equal(res.dropped, 0);
+  assert.equal(res.ambiguous, 0);
+  assert.equal(res.skippedExisting, 0, '未变/重挂接的节被对齐消费，不计为"同名跳过"');
+  assert.equal(sectionTitles(r2.docId).length, 2, '节数不变（未重复建卡）');
+});
+
+test('import-commit: 对齐未消费的新卡若标题已存在 → 跳过并计入 skippedExisting（不覆盖别人的内容）', async () => {
+  // 旧卡：breadcrumb 等于文档标题 → trail key 为空，对齐只归档不配对
+  const docTitle = 'Tidme/Docs/撞名书';
+  const collide = 'Tidme/Docs/撞名书/manual-手记';
+  wiki.addTiddler({
+    title: collide,
+    caption: '手记',
+    text: '既有内容',
+    'tidme.doc': 'dclash',
+    'tidme.kind': 'topic',
+    'tidme.subkind': 'section',
+    'tidme.breadcrumb': docTitle,
+  });
+  const doc = { title: docTitle, tags: ['tidme-doc'], 'tidme.doc': 'dclash', text: '' };
+  const res = await commitMod.commitImportToWiki(wiki, {
+    docId: 'dclash',
+    docTiddler: doc,
+    docTitle,
+    cards: [{
+      title: collide,
+      caption: '手记',
+      text: '新内容',
+      'tidme.doc': 'dclash',
+      'tidme.kind': 'topic',
+      'tidme.subkind': 'section',
+      'tidme.breadcrumb': docTitle,
+    }],
+  });
+  assert.equal(res.skippedExisting, 1, '同名 tiddler 存在 → 跳过并计数');
+  assert.equal(wiki.getTiddler(collide).fields.text, '既有内容', '既有内容未被覆盖');
 });
 
 test('doc-ops.docItemsFilter: 只匹配本书在队 item（回归：拼接并集曾把全库 item 混入复习本书）', () => {
@@ -175,4 +264,33 @@ test('import-commit: 同名书碰撞检测——旧节无一保留且批量消�
   const resB = await commitMod.commitImportToWiki(wiki, { docId: r3.docId, docTiddler: doc3, docTitle: doc3.title, cards: cards3 });
   assert.equal(resB.aligned, true);
   assert.equal(resB.collisionSuspect, false, '存在未变节 → 视为修订版，不误报');
+});
+
+test('import-commit: 消失的节归档后再次出现 → 复活回队（不永久 done+obsolete）', async () => {
+  const md = '# 复活书\n\n甲内容。\n\n# 乙章\n\n乙内容。';
+  const r1 = await parseMod.runSplit({ text: md, title: '复活书', type: 'text/markdown', minChars: 0 });
+  const [doc1, ...cards1] = r1.tiddlers;
+  await commitMod.commitImportToWiki(wiki, { docId: r1.docId, docTiddler: doc1, docTitle: doc1.title, cards: cards1 });
+  const yi = cards1.find((c) => String(c.caption || '').includes('乙'));
+  assert.ok(yi, '找到乙章');
+
+  // 只导入甲 → 乙被归档（obsolete + done）
+  const r2 = await parseMod.runSplit({ text: '# 复活书\n\n甲内容。', title: '复活书', type: 'text/markdown', minChars: 0 });
+  const [doc2, ...cards2] = r2.tiddlers;
+  await commitMod.commitImportToWiki(wiki, { docId: r2.docId, docTiddler: doc2, docTitle: doc2.title, cards: cards2 });
+  const archived = wiki.getTiddler(yi.title).fields;
+  assert.equal(archived['tidme.obsolete'], 'yes', '乙被归档');
+  assert.equal(archived['tidme.done'], 'yes', '归档即出队');
+
+  // 乙再次出现 → 必须复活（旧实现：归档卡仍参与对齐 → 新卡被跳过，永久不回队）
+  const r3 = await parseMod.runSplit({ text: md, title: '复活书', type: 'text/markdown', minChars: 0 });
+  const [doc3, ...cards3] = r3.tiddlers;
+  await commitMod.commitImportToWiki(wiki, { docId: r3.docId, docTiddler: doc3, docTitle: doc3.title, cards: cards3 });
+  const revived = wiki.getTiddler(yi.title).fields;
+  assert.equal(revived['tidme.obsolete'], undefined, '复活后不再归档');
+  assert.equal(revived['tidme.done'], undefined, '复活后回到队列');
+  assert.ok(
+    wiki.filterTiddlers(`[tidme.doc[${r3.docId}]tidme.kind[topic]!tag[tidme-doc]]`).includes(yi.title),
+    '乙重新出现在阅读单元集合中',
+  );
 });

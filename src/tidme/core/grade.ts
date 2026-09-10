@@ -20,7 +20,6 @@ const fsrs = require('$:/plugins/keepone/tidme/core/fsrs.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const session = require('$:/plugins/keepone/tidme/core/session.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
-const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
@@ -28,10 +27,6 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 /** 评分四档 → annotate-colour 注释色（fsrs4tw 遗产字段，保留写库契约；
  *  repeat.tid 展示层的同名映射无法与 JS 共享，改动须人工同步） */
 const RATING_COLOURS: Record<string, string> = { Again: 'red', Hard: 'orange', Good: 'green', Easy: 'dodgerblue' };
-
-/** 单卡专注时长 clamp（秒）：下限防零记录，上限防挂机/异常计时 */
-const FOCUS_SEC_MIN = 1;
-const FOCUS_SEC_MAX = 3600;
 
 export interface GradeOptions {
   title: string;
@@ -52,20 +47,11 @@ export interface GradeResult {
   due: string | null;
 }
 
-/** 消费专注计时锚点（导航时由 session.prepareCardFold / startstudy.tid 写入）：
- *  返回本卡专注秒数（clamp），锚点读取后即删除。无锚点/不可解析返回 0。 */
-function consumeFocusSeconds(wiki: any, now: Date): number {
-  const raw = String(wiki.getTiddlerText(ns.CARD_OPEN_AT_TITLE, '') || '');
-  wiki.deleteTiddler(ns.CARD_OPEN_AT_TITLE);
-  const start = raw ? schema.parseTwDate(raw, null as any) : null;
-  if (!start) return 0;
-  const sec = Math.round((now.getTime() - start.getTime()) / 1000);
-  return Math.max(FOCUS_SEC_MIN, Math.min(FOCUS_SEC_MAX, sec));
-}
-
 /**
  * 评分写路径：对单卡执行 FSRS 计算与全部落库，返回判定结果。
  * 会话缺位（单牌组 fsrs4tw 路径无全局会话）时照常写卡与日志，只跳过会话推进。
+ * 守卫（不信任调用方）：非 item 卡拒绝；显式传入但**不存在**的牌组拒绝——
+ * 否则日志/优先级/leech 阈值会静默写到 default 牌组（曾如此）。
  */
 export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   const result: GradeResult = { ok: false, finished: false, next: null, due: null };
@@ -73,8 +59,10 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   const now = opts.now || new Date();
   const f = wiki.getTiddler(opts.title)?.fields;
   if (!f) return result;
+  if (f['tidme.kind'] !== 'item') return result; // 只有测试卡可评分（阅读材料/文档页/非卡不入评分路径）
 
-  const deck = deckMod.getDeck(wiki, opts.deckTitle || '') || deckMod.getDeck(wiki, deckMod.DEFAULT_DECK);
+  const deckName = String(opts.deckTitle || '');
+  const deck = deckName ? deckMod.getDeck(wiki, deckName) : deckMod.getDeck(wiki, deckMod.DEFAULT_DECK);
   if (!deck) return result;
   const rating = String(opts.rating || '');
 
@@ -116,9 +104,9 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
     result.finished = nextT === null;
   }
 
-  // 5. 专注时长 + 清理（计时锚点、折叠态标记）
-  const sec = consumeFocusSeconds(wiki, now);
-  if (sec > 0) stats.recordReadTime(wiki, String(f['tidme.doc'] || ''), sec);
+  // 5. 专注时长（锚点结算 → 记入阅读时长统计）+ 折叠态清理。
+  //  锚点归 core/session（touch/consume 成对），本模块不再自读自删 tiddler。
+  session.consumeFocusAnchor(wiki, opts.title, now);
   wiki.deleteTiddler(ns.FOLDED_STATE_PREFIX + opts.title);
 
   // 子集牌组（tidme.subset-doc）不在此清理：它是「复习本书」的作用域容器，

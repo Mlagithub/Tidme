@@ -15,7 +15,7 @@ core/deck.ts — 牌组实体（唯一读写入口）
 declare function require(module: string): any;
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
-export const DECK_TAG = '$:/tags/TidmeDeck';
+export const DECK_TAG = ns.DECK_TAG;
 export const DEFAULT_DECK = ns.DECK_PREFIX + 'default';
 
 /**
@@ -53,12 +53,14 @@ export interface Deck {
   fields: Record<string, any>;
 }
 
-/** 名称 → 标题（sanitize：防路径/系统段注入）。合法完整标题（$:/Deck/…、Tidme/Decks/…）原样通过。 */
+/** 名称 → 标题（sanitize：防路径/系统段注入）。合法完整标题（$:/Deck/…、Tidme/Decks/…）原样通过。
+ *  危险字符集合来自 ns.TITLE_UNSAFE_CHARS（与 paths.slugify 同源，含过滤器无法转义的 `[]{}`）；
+ *  本函数选择"换成 -"而非删除（牌组名要保留可读轮廓）。 */
 export function titleOf(name: string): string {
   const raw = String(name || '').trim();
   if (raw.startsWith(ns.DECK_PREFIX) || raw.startsWith(ns.NS_DECKS)) return raw;
   const clean = raw
-    .replace(/[\\/:*?"<>|$\[\]]/g, '-')
+    .replace(ns.TITLE_UNSAFE_CHARS, '-')
     .replace(/[\s]+/g, '-');
   if (!clean || clean === '-') throw new Error('deck: invalid deck name: ' + name);
   return ns.DECK_PREFIX + clean;
@@ -203,12 +205,41 @@ export function deleteDeck(wiki: any, nameOrTitle: string, opts: { alsoCards?: b
 }
 
 /**
+ * 焚烧子集牌组（含 /log）：`tidme.subset-doc` 牌组是「复习本书」的临时复习脚手架，
+ * 用完（startstudy 空队）/ 停止（stopstudy）/ 结束学习（endSession）三个流程边界都要烧掉，
+ * 否则它会作为幽灵牌组留在牌组库里。普通牌组不受影响（生命周期函数只认子集）。
+ * @returns 删除的 tiddler 数
+ */
+export function burnSubsetDeck(wiki: any, nameOrTitle: string): number {
+  if (!wiki || typeof wiki.deleteTiddler !== 'function') return 0;
+  const deck = getDeck(wiki, nameOrTitle);
+  if (!deck || !isSubset(deck)) return 0;
+  let n = 0;
+  const log = ns.deckLogTitle(deck.title);
+  if (wiki.getTiddler(log)) {
+    wiki.deleteTiddler(log);
+    n++;
+  }
+  if (wiki.getTiddler(deck.title)) {
+    wiki.deleteTiddler(deck.title);
+    n++;
+  }
+  return n;
+}
+
+/**
  * 成员求值：card 过滤器（strict=true 时再排除 card_exclude）。
  * 成员唯一来源 = 过滤器（与 fsrs4tw 学习循环一致）。
  */
 export function deckCards(wiki: any, nameOrTitle: string, opts: { strict?: boolean } = {}): string[] {
   const deck = getDeck(wiki, nameOrTitle);
   if (!deck) return [];
+  // 手写 deck title 含 `]`/`}` 时无法安全插值进过滤器（TW 不支持转义）→ 返回空并告警，
+  // 而不是让 "Filter error" 文本冒充卡标题流向下游
+  if (!ns.isFilterSafeTitle(deck.title)) {
+    console.warn('[tidme] deck title 含过滤器不安全字符，已跳过成员求值:', deck.title);
+    return [];
+  }
   const strict = opts.strict !== false;
   const card = String(deck.fields.card || '');
   if (!card) return [];
@@ -218,9 +249,4 @@ export function deckCards(wiki: any, nameOrTitle: string, opts: { strict?: boole
   return exclude
     ? wiki.filterTiddlers(`[subfilter{${deck.title}!!card}!subfilter{${deck.title}!!card_exclude}]`)
     : wiki.filterTiddlers(`[subfilter{${deck.title}!!card}]`);
-}
-
-/** 牌组是否收录该卡（strict 成员判定） */
-export function deckHasCard(wiki: any, nameOrTitle: string, title: string): boolean {
-  return deckCards(wiki, nameOrTitle).includes(title);
 }

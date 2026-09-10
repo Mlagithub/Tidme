@@ -6,8 +6,12 @@ align.test.mjs — 重切分对齐单元测试（node:test）
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { bootPlugin } from '../helpers/tw-boot.mjs';
 
-const align = await import('../../src/tidme/core/align.ts');
+// core/align 运行时 require 其它 core 模块（铁律：core 跨模块引用禁 ES import——会被 esbuild
+// 内联成第二份实现），故与 test/integration 同源：走 bin 产物 + 真实 TW boot。
+const { mod } = bootPlugin({ prefix: 'tidme-align-' });
+const align = mod('core/align.js');
 
 const DOC = '对齐书';
 
@@ -67,7 +71,7 @@ test('alignCards: 未变保 ID / 修改重挂接 / 新增保留 / 消失归档',
   ];
   const r = await align.alignCards(oldCards, DOC, newCards);
   assert.equal(r.unchanged, 1, '甲未变');
-  assert.deepEqual(r.archives, ['丙'], '丙消失归档');
+  assert.deepEqual([...r.archives], ['丙'], '丙消失归档');
   assert.equal(r.keep.length, 1, '丁新增保留');
   assert.equal(r.keep[0].title, '对齐书 › 丁');
   // 乙：内容变 → patch 更新内容字段，但补丁里不含 SRS 字段（保留进度）
@@ -86,7 +90,7 @@ test('alignCards: 内容未变但顺序变化 → 仅同步 order', async () => 
   const r = await align.alignCards(oldCards, DOC, newCards);
   assert.equal(r.unchanged, 1);
   assert.equal(r.patches.length, 1);
-  assert.deepEqual(r.patches[0].fields, { 'tidme.order': '000003' }, '只同步 order');
+  assert.deepEqual({ ...r.patches[0].fields }, { 'tidme.order': '000003' }, '只同步 order');
   assert.equal(r.archives.length, 0);
   assert.equal(r.keep.length, 0);
 });
@@ -96,5 +100,5 @@ test('alignCards: 空新结果 / 空旧卡', async () => {
   assert.equal(empty.keep.length, 1, '无旧卡全新建');
   const none = await align.alignCards([oldCard('甲', '内容甲')], DOC, []);
   assert.equal(none.keep.length, 0);
-  assert.deepEqual(none.archives, [], '新结果为空不归档（防御）');
+  assert.deepEqual([...none.archives], [], '新结果为空不归档（防御）');
 });

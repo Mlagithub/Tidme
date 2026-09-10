@@ -1,7 +1,7 @@
 /*
 stats.test.mjs — core 统计聚合测试（node:test + 真实 TW boot）
 
-- deckLoad / docProgress / retentionFromLogs / funnelCounts / priorityBuckets / formatDuration
+- deckLoad / retentionFromLogs / funnelCounts / priorityBuckets / formatDuration
 - recordReadTime 写真实 wiki（$:/plugins/tidme/stats/readtime.json），不再 mock wiki
 - 调度语义（isCardOutOfQueue/parseTwDate/normalizePriority）引用 core/scheduler 正身，
   测试跑在真实模块装配上而非本地副本
@@ -32,20 +32,6 @@ test('deckLoad: new/learn/due/overdue 分类（未来排期的 state2 不计 due
   assert.equal(load.overdue, 1);
 });
 
-test('docProgress: 已读/剩余', () => {
-  const sections = [
-    { title: 'A', fields: { 'tidme.kind': 'topic' } },
-    { title: 'B', fields: { 'tidme.kind': 'topic' } },
-    { title: 'C', fields: { 'tidme.kind': 'topic', 'tidme.done': 'yes' } }, // 已读
-    { title: 'D', fields: { 'tidme.kind': 'topic', 'tidme.ignored': 'yes' } }, // 忽略
-  ];
-  // 跨 realm 对象逐字段比（AGENTS.md 已知陷阱：deepEqual 原型不等）
-  const p = stats.docProgress(sections);
-  assert.equal(p.total, 4);
-  assert.equal(p.done, 2);
-  assert.equal(p.left, 2);
-});
-
 test('retentionFromLogs: 保留率 ≈ 1 - Again 占比', () => {
   const r = stats.retentionFromLogs([{ rating: 1 }, { rating: 3 }, { rating: 4 }, { rating: 3 }]);
   assert.equal(r.reviews, 4);
@@ -59,6 +45,8 @@ test('funnelCounts: 漏斗分层（topic/item 大类 + subkind）', () => {
     { title: '节', fields: { 'tidme.kind': 'topic', 'tidme.subkind': 'section' } },
     { title: '节2', fields: { 'tidme.kind': 'topic', 'tidme.subkind': 'section' } },
     { title: '摘录', fields: { 'tidme.kind': 'topic', 'tidme.subkind': 'extract' } },
+    // 概念卡同属 topic 轨道但不是切分出的节 → 单独成桶（曾计入 sections 使漏斗虚高）
+    { title: '概念', fields: { 'tidme.kind': 'topic', 'tidme.subkind': 'concept' } },
     { title: '挖空', fields: { 'tidme.kind': 'item', 'tidme.subkind': 'cloze' } },
   ];
   // 跨 realm 对象逐字段比（AGENTS.md 已知陷阱：deepEqual 原型不等）
@@ -66,7 +54,23 @@ test('funnelCounts: 漏斗分层（topic/item 大类 + subkind）', () => {
   assert.equal(f.docs, 1);
   assert.equal(f.sections, 2);
   assert.equal(f.extracts, 1);
+  assert.equal(f.concepts, 1, 'concept 不计入 sections');
   assert.equal(f.cards, 1);
+});
+
+test('display.kindMark: subkind 徽章字形唯一产地（含 concept）', () => {
+  const display = mod('core/display.js');
+  const schema = mod('core/schema.js');
+  // 契约内的每个 subkind 都有明确归属（plan 的 section 无徽章属刻意留白）
+  assert.equal(display.kindMark({ 'tidme.subkind': 'extract' }), 'E');
+  assert.equal(display.kindMark({ 'tidme.subkind': 'cloze' }), 'C');
+  assert.equal(display.kindMark({ 'tidme.subkind': 'qa' }), 'Q');
+  assert.equal(display.kindMark({ 'tidme.subkind': 'section' }), '');
+  assert.notEqual(display.kindMark({ 'tidme.subkind': 'concept' }), '', '概念卡不再是"无徽章的隐形卡"');
+  // 工厂产出的 subkind 必须全部落在契约内（P1-15 的根因就是 concept 越出 SUBKINDS）
+  for (const sk of ['section', 'extract', 'concept', 'cloze', 'qa']) {
+    assert.ok(schema.SUBKINDS.includes(sk), `${sk} 应在 schema.SUBKINDS 内`);
+  }
 });
 
 test('priorityBuckets: 分桶（缺失/空串 = 未设）', () => {
@@ -82,6 +86,32 @@ test('priorityBuckets: 分桶（缺失/空串 = 未设）', () => {
   assert.equal(b.medium, 1);
   assert.equal(b.low, 1);
   assert.equal(b.none, 2, '缺失与空串都算未设');
+});
+
+test('priorityBucket: 三档分界唯一产地（边界值与 priorityBuckets 一致）', () => {
+  const sched = mod('core/scheduler.js');
+  // 边界：33 属高、34 属中、66 属中、67 属低（曾经 stats 与 section 各写一份 33/66）
+  assert.equal(sched.priorityBucket(0), 'high');
+  assert.equal(sched.priorityBucket(33), 'high');
+  assert.equal(sched.priorityBucket(34), 'medium');
+  assert.equal(sched.priorityBucket(66), 'medium');
+  assert.equal(sched.priorityBucket(67), 'low');
+  assert.equal(sched.priorityBucket(100), 'low');
+  assert.equal(sched.priorityBucket('abc'), 'medium', '非法值经 normalizePriority → 默认 50（中）');
+  // 与分桶统计同解：三档计数 = 逐卡 priorityBucket 计数
+  const cards = [
+    { title: 'A', fields: { 'tidme.priority': '33' } },
+    { title: 'B', fields: { 'tidme.priority': '34' } },
+    { title: 'C', fields: { 'tidme.priority': '67' } },
+    { title: 'D', fields: {} },
+  ];
+  const b = stats.priorityBuckets(cards);
+  const counts = { high: 0, medium: 0, low: 0 };
+  for (const c of cards) {
+    if (c.fields['tidme.priority'] === undefined) continue;
+    counts[sched.priorityBucket(c.fields['tidme.priority'])]++;
+  }
+  assert.deepEqual({ high: b.high, medium: b.medium, low: b.low }, counts);
 });
 
 test('formatDuration: 格式化时间', () => {

@@ -66,8 +66,6 @@ function startGlobalLearning(wiki: any, widget: any): void {
     topics: opts.topics,
     itemRatio: opts.itemRatio,
     topicRatio: opts.topicRatio,
-    // 存量分节书籍的文档页是书籍入口而非可学习卡（整本不切分的 PDF 文档页不在其列）
-    excludeTitles: Array.from(docOps.splitDocPageSet(wiki)),
   });
 
   if (!queue || queue.length === 0) {
@@ -87,8 +85,8 @@ function startGlobalLearning(wiki: any, widget: any): void {
 
   // <deck>/study 会话列表（fsrs4tw 契约后缀见 core/session）
   wiki.addTiddler({ title: DEFAULT_DECK + sessionMod.DECK_STUDY_SUFFIX, list: queue });
-  // 首卡折叠态统一走 core/session.prepareCardFold（item → hide/show，按所属 deck card_unfold）
-  sessionMod.prepareCardFold(wiki, first);
+  // 首卡：折叠态 + 专注计时锚点统一走 core/session.enterCard（item → hide/show，按所属 deck card_unfold）
+  sessionMod.enterCard(wiki, first);
 
   widget.dispatchEvent({ type: 'tm-navigate', navigateTo: first });
 }

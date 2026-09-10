@@ -18,17 +18,14 @@ title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/tiddler
     unfold_action={{{ [<deckTiddler>get[unfold_action]else{$:/Deck/default!!unfold_action}] }}}
     leech_threshold={{{ [<deckTiddler>get[leech_threshold]else{$:/Deck/default!!leech_threshold}] }}}
     leech_action={{{ [<deckTiddler>get[leech_action]else{$:/Deck/default!!leech_action}] }}}
-    filter_learn_due=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sort[due]]`
-    filter_learn_random=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] +[sortrandom[]]`
-    filter_learn=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_learn}] ${ [<deckTiddler>get[random_learn]match[yes]then<filter_learn_random>else<filter_learn_due>] }$`
-    filter_due=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_due}] +[subfilter{$(deckTiddler)$!!order_due}]`
-    filter_new=`[subfilter{$(deckTiddler)$!!card}] -[subfilter{$(deckTiddler)$!!card_exclude}] +[subfilter{$(deckTiddler)$!!state_new}] +[subfilter{$(deckTiddler)$!!order_new}]`
-    filter_unfold=`[subfilter{$(deckTiddler)$!!card_unfold}]`
-    filter_random=`[subfilter<filter_due>] [subfilter<filter_new>] +[sortrandom[]]`
-    due-new=`[subfilter<filter_learn>] [subfilter<filter_due>] [subfilter<filter_new>]`
-    new-due=`[subfilter<filter_learn>] [subfilter<filter_new>] [subfilter<filter_due>]`
-    random=`[subfilter<filter_learn>] [subfilter<filter_random>]`
-    filter_queue=`${ [<deckTiddler>get[order]match[new-due]then<new-due>] [<deckTiddler>get[order]match[random]then<random>] ~[<due-new>] }$`
+    filter_learn=`${ [<deckTiddler>deckfilter[learn]] }$`
+    filter_due=`${ [<deckTiddler>deckfilter[due]] }$`
+    filter_new=`${ [<deckTiddler>deckfilter[newly]] }$`
+    filter_unfold=`${ [<deckTiddler>deckfilter[unfold]] }$`
+    due-new=`${ [<deckTiddler>deckfilter[duenew]] }$`
+    new-due=`${ [<deckTiddler>deckfilter[newdue]] }$`
+    random=`${ [<deckTiddler>deckfilter[randomcombo]] }$`
+    filter_queue=`${ [<deckTiddler>deckfilter[queue]] }$`
 >
     <$transclude
         tiddler={{{ [<currentTiddler>] :cascade[all[shadows+tiddlers]tag[$:/tags/StoryTiddlerTemplateFilter]![$:/config/Tidme/StoryTiddlerTemplateFilters/card]!is[draft]get[text]] :and[has[title]else[$:/core/ui/ViewTemplate]] }}}

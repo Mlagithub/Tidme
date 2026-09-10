@@ -53,7 +53,7 @@ test('en-smoke: 英文环境下制卡使用 Standalone/Inbox 稳定归属于散�
   assert.ok(card2.title.startsWith(ns.NS_DECKS_SCATTER), 'inbox 同样落入散卡桶');
 });
 
-test('en-smoke: 英文环境下 omni-creator listAvailableDecks 与模态弹窗挂载', () => {
+test('en-smoke: 英文环境下 omni-creator listAvailableDecks 与模态弹窗真制卡（onSuccess 契约）', () => {
   const omni = mod('ui/components/omni-creator.js');
   const decks = omni.listAvailableDecks(wiki);
   assert.ok(decks.includes('Standalone'), '英文环境牌组首项为 Standalone');
@@ -64,16 +64,35 @@ test('en-smoke: 英文环境下 omni-creator listAvailableDecks 与模态弹窗�
     querySelector: () => null,
   };
 
-  let saved = null;
+  const saved = [];
   omni.openOmniCardModal(doc, wiki, {
     defaultType: 'qa',
     defaultTitle: 'English Card',
     defaultQuestion: 'Is this pure English?',
     defaultAnswer: 'Yes.',
-    onSave: (c) => {
-      saved = c;
-    },
+    // 回调名是 onSuccess（曾经测试传 onSave → 死参数，回调契约从未被验证）
+    onSuccess: (c) => saved.push(c),
   });
 
   assert.ok(doc.body.childNodes.length > 0, '成功在英文环境下挂载 modal');
+
+  // 真制卡：填 question/answer → 点「Create Card」→ 断言回调被调 + 卡落库
+  const byTag = (node, tag, out = []) => {
+    if (!node) return out;
+    if (String(node.tagName) === tag) out.push(node);
+    for (const c of node.childNodes || []) byTag(c, tag, out);
+    return out;
+  };
+  const overlay = doc.body.childNodes.find((n) => String(n.className).includes('tm-omni-creator-overlay'));
+  const textareas = byTag(overlay, 'TEXTAREA');
+  assert.ok(textareas.length >= 2, 'QA 模板渲染出问题/答案两个输入框');
+  textareas[0].value = 'Is this pure English?';
+  textareas[1].value = 'Yes.';
+  const submit = byTag(overlay, 'BUTTON').find((b) => String(b.textContent).includes('Create Card'));
+  assert.ok(submit, '找到「Create Card」提交按钮');
+  submit.dispatchEvent({ type: 'click' });
+
+  assert.equal(saved.length, 1, 'onSuccess 被调用一次（回调契约成立）');
+  assert.ok(wiki.getTiddler(saved[0].title), '卡片真的落库');
+  assert.equal(saved[0]['tidme.kind'], 'item', 'QA 卡 kind=item');
 });

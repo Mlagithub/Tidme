@@ -19,7 +19,7 @@ import { emitTiddlers, runSplit } from './split';
 export { IMPORT_BAG_TITLE } from '$:/plugins/keepone/tidme/core/ns';
 
 export { contentFingerprint, makeDocId, makeSectionId } from '$:/plugins/keepone/tidme/core/ids';
-export { docCardsRoot, docRoot, insertedSectionTitle, joinPath, leafIdOf, sectionLeaf, sectionPath, slugify } from '$:/plugins/keepone/tidme/core/paths';
+export { docRoot, insertedSectionTitle, joinPath, leafIdOf, sectionLeaf, slugify } from '$:/plugins/keepone/tidme/core/paths';
 export { cleanTitle, runSplit } from './split';
 
 export interface ImportResult {

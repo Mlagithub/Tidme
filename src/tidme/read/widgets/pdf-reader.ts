@@ -84,13 +84,8 @@ async function loadPdfBytesWithWait(
   }
 
   if (!b64) return null;
-
-  let cleanB64 = b64;
-  const commaIdx = b64.indexOf(',');
-  if (b64.startsWith('data:') && commaIdx !== -1) {
-    cleanB64 = b64.slice(commaIdx + 1);
-  }
-  return binaryMod.base64ToBytes(cleanB64);
+  // dataURL 前缀 / 折行 / URL-safe 字母表 / 非法字符拒绝统一在 core/binary（唯一解码入口）
+  return binaryMod.base64ToBytes(b64);
 }
 
 function makeReader(): any {
@@ -231,7 +226,7 @@ function makeReader(): any {
         studyNextBtn.title = lingoMod.lingo(wiki, 'pdf.study.next.tip', 'Save reading progress and continue study flow');
         studyNextBtn.addEventListener('click', () => {
           if (this._docId && this._page) {
-            docOps.saveReadPoint(wiki, this._docId, { t, s: `p${this._page}` });
+            docOps.saveReadPoint(wiki, this._docId, { t, s: docOps.formatPagePosition(this._page) });
             wiki.addTiddler({ title: ns.pdfPageStateTitle(this._docId), text: String(this._page) });
           }
           const f = wiki.getTiddler(t)?.fields;
@@ -244,7 +239,7 @@ function makeReader(): any {
           sessionMod.removeFromSession(wiki, t); // 会话唯一读写口，勿手写 SESSION_TIDDLER
           dom.closeTiddler(this, t);
           if (nextCard) {
-            sessionMod.prepareCardFold(wiki, nextCard);
+            sessionMod.enterCard(wiki, nextCard);
             dom.navigateTo(this, nextCard);
           } else {
             this.dispatchEvent({ type: 'tm-confetti-launch' });
@@ -323,7 +318,7 @@ function makeReader(): any {
       let target = range.start;
       if (this._docId) {
         const rp = docOps.parseReadPoint(wiki, this._docId);
-        const rpPage = rp?.s && /^p\d+$/.test(rp.s) ? Number(rp.s.slice(1)) : NaN;
+        const rpPage = rp ? docOps.parsePagePosition(rp.s) : null;
         const statePage = Number(wiki.getTiddlerText(ns.pdfPageStateTitle(this._docId), ''));
 
         // 1. 当前卡 = 续读点卡 → 恢复其记录的绝对页码。阅读本就连续跨节（页间防抖
@@ -507,7 +502,7 @@ function makeReader(): any {
           const matchedSection = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(this.wiki, this._docId, this._page) : null;
           const targetCard = matchedSection || curT || this._docPageTitle;
           if (targetCard) {
-            docOps.saveReadPoint(this.wiki, this._docId, { t: targetCard, s: `p${this._page}` });
+            docOps.saveReadPoint(this.wiki, this._docId, { t: targetCard, s: docOps.formatPagePosition(this._page) });
             docOps.saveGlobalReadPoint(this.wiki, targetCard);
           }
         }, 300);

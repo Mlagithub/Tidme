@@ -139,6 +139,81 @@ test('server E2E: 后台导入任务（pending → importer → 文档/卡）', 
   assert.equal(tw.wiki.tiddlerExists('$:/Deck/read/E2E书'), false, '不生成自动阅读牌组（topic 走阅读列表）');
 });
 
+test('server E2E: 服务端重导入走对齐——SRS 进度保留且不产生重复卡（回归：曾直接 addTiddler）', async () => {
+  const { tw } = bootWiki();
+  tw.boot.startup();
+  const importer = tw.modules.execute('$:/plugins/keepone/tidme/core/server/importer');
+
+  const pad = '重导入内容段落。'.repeat(120); // 超过默认 minChars=600，避免被短节合并成一张容器卡
+  const md = `# 重导书\n\n第一节${pad}\n\n# 第二节\n\n第二节${pad}`;
+  const enqueue = (title, text) => {
+    tw.wiki.addTiddler({
+      title,
+      tags: ['tidme-pending-import'],
+      'tidme.file-name': 'reimport.md',
+      'tidme.pending': 'yes',
+      text: Buffer.from(text, 'utf8').toString('base64'),
+      bag: 'default',
+    });
+    importer.scan();
+  };
+
+  enqueue('$:/temp/e2e/reimport1', md);
+  await waitFor(() => tw.wiki.getTiddler('$:/temp/e2e/reimport1')?.fields['tidme.import-done'], 10000);
+  const docId = tw.wiki.getTiddler('$:/temp/e2e/reimport1').fields['tidme.import-docId'];
+  const secs = () => tw.wiki.filterTiddlers(`[tidme.doc[${docId}]tidme.kind[topic]!tag[tidme-doc]]`);
+  const before = secs();
+  assert.ok(before.length >= 2, `首导至少切出 2 节: ${before.length}`);
+
+  // 模拟复习进度：给第一张节卡写 SRS 字段
+  const first = before[0];
+  tw.wiki.addTiddler({ ...tw.wiki.getTiddler(first).fields, state: '2', reps: '1', 'tidme.afactor': '1.8' });
+
+  // 重导入同一份内容（服务端第二次导入）
+  enqueue('$:/temp/e2e/reimport2', md);
+  await waitFor(() => tw.wiki.getTiddler('$:/temp/e2e/reimport2')?.fields['tidme.import-done'], 10000);
+
+  const after = secs();
+  assert.equal(after.length, before.length, `重导入不产生重复节卡（旧实现直接写库会多出/覆盖）: ${after.length} vs ${before.length}`);
+  assert.ok(after.includes(first), '同一张节卡 title 稳定（对齐重挂接而非重建）');
+  const fields = tw.wiki.getTiddler(first).fields;
+  assert.equal(String(fields.state), '2', 'SRS state 保留');
+  assert.equal(String(fields.reps), '1', 'SRS reps 保留');
+  assert.equal(String(fields['tidme.afactor']), '1.8', 'A-Factor 保留');
+});
+
+test('server E2E: 扫描在飞保护——同一 pending 不会被两次 scan 重复处理', async () => {
+  const { tw } = bootWiki();
+  tw.boot.startup();
+  const importer = tw.modules.execute('$:/plugins/keepone/tidme/core/server/importer');
+
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.map((a) => String(a)).join(' '));
+  try {
+    const md = `# 在飞书\n\n${'内容段落。'.repeat(200)}`;
+    tw.wiki.addTiddler({
+      title: '$:/temp/e2e/inflight',
+      tags: ['tidme-pending-import'],
+      'tidme.file-name': 'inflight.md',
+      'tidme.pending': 'yes',
+      text: Buffer.from(md, 'utf8').toString('base64'),
+      bag: 'default',
+    });
+    // 连续两次扫描（等价于 15s 定时器在处理未完成时又跑了一轮）
+    importer.scan();
+    importer.scan();
+    await waitFor(() => tw.wiki.getTiddler('$:/temp/e2e/inflight')?.fields['tidme.import-done'], 10000);
+    // 等一拍，确保第二次扫描确实没有另起一份处理
+    await new Promise((r) => setTimeout(r, 200));
+    const doneLogs = logs.filter((l) => l.includes('import done:') && l.includes('inflight.md'));
+    assert.equal(doneLogs.length, 1, `同一 pending 只处理一次（实际 ${doneLogs.length} 次）`);
+    assert.equal(tw.wiki.getTiddler('$:/temp/e2e/inflight').fields['tidme.pending'], undefined, '完成后去掉 pending');
+  } finally {
+    console.log = origLog;
+  }
+});
+
 test('server E2E: 导入失败标记 error（不挂起）', async () => {
   const { tw } = bootWiki();
   tw.boot.startup();
@@ -157,4 +232,59 @@ test('server E2E: 导入失败标记 error（不挂起）', async () => {
   const t = tw.wiki.getTiddler('$:/temp/e2e/bad');
   assert.ok(String(t.fields['tidme.import-error']).includes('不支持'), '错误信息明确');
   assert.equal(t.fields['tidme.pending'], undefined, '失败后不再 pending');
+});
+
+test('server E2E: 语义切分开启时 LLM 路径真正可达（回归：var 提升曾静默关闭整条路径）', async () => {
+  const http = await import('node:http');
+  let llmHits = 0;
+  const llm = http.createServer((_req, res) => {
+    llmHits++;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    // OpenAI 兼容响应；content 为断点段落索引数组（parseBreaksResponse 契约）
+    res.end(JSON.stringify({ choices: [{ message: { content: '[1,2]' } }] }));
+  });
+  await new Promise((r) => llm.listen(0, '127.0.0.1', r));
+  const baseUrl = `http://127.0.0.1:${llm.address().port}/v1`;
+
+  // 沙箱内无 fetch 时模块回退 node:https，对 http 端点必然失败并打日志。
+  // 断言语义：「分支被执行」——LLM 命中 或 出现语义切分失败日志，二者必有其一；
+  // 旧实现（var 提升吞异常）两者都不会发生，故这条能真正锁住回归。
+  const logged = [];
+  const origError = console.error;
+  console.error = (...args) => {
+    logged.push(args.map((a) => String(a)).join(' '));
+  };
+
+  try {
+    const { tw } = bootWiki();
+    tw.boot.startup();
+    tw.wiki.addTiddler({
+      title: '$:/config/Tidme/SemanticSplit',
+      type: 'application/json',
+      text: JSON.stringify({ enable: true, apiKey: 'e2e-key', baseUrl, model: 'e2e-model', maxParas: 50 }),
+    });
+    // 无标题结构的散文（≥3 段、无 # / ! / <h / setext），段足够长以避免被短内容合并
+    const para = (lead) => `${lead}${'这是用于验证语义切分链路的连续散文句子，不含任何标题标记，长度足以避免被短内容合并规则吞掉。'.repeat(2)}`;
+    const prose = [para('第一段说明问题的来历与研究背景。'), para('第二段展开内部机制与推导过程。'), para('第三段给出例子与结论。'), para('第四段补充边界条件。')].join('\n\n');
+    tw.wiki.addTiddler({
+      title: '$:/temp/e2e/semantic',
+      tags: ['tidme-pending-import'],
+      'tidme.file-name': 'semantic.md',
+      'tidme.pending': 'yes',
+      text: Buffer.from(prose, 'utf8').toString('base64'),
+      bag: 'default',
+    });
+    const importer = tw.modules.execute('$:/plugins/keepone/tidme/core/server/importer');
+    importer.scan();
+    await waitFor(() => tw.wiki.getTiddler('$:/temp/e2e/semantic')?.fields['tidme.import-done'], 10000);
+
+    const attempted = llmHits > 0 || logged.some((l) => l.includes('semantic split'));
+    assert.ok(attempted, `语义切分分支被执行（LLM 命中 ${llmHits} 次；日志 ${JSON.stringify(logged)}）`);
+    const done = tw.wiki.getTiddler('$:/temp/e2e/semantic').fields;
+    const cards = tw.wiki.filterTiddlers(`[tidme.doc[${done['tidme.import-docId']}]tidme.kind[topic]!tag[tidme-doc]]`);
+    assert.ok(cards.length >= 1, `语义切分失败时静默回退机械切分 → 仍应产出节卡，实际 ${cards.length}`);
+  } finally {
+    console.error = origError;
+    llm.close();
+  }
 });

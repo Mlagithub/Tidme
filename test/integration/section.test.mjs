@@ -1,17 +1,17 @@
 /*
 section.test.mjs — 阅读闭环字段构建器单元测试（node:test）
 
-在临时 TW 环境加载 core/card-factory.js（制卡唯一实现），验证：
+在临时 TW 环境加载 core/card-factory.js（制卡唯一实现 + SM 'Delete processed text' 清理），验证：
 - buildExtract/buildCloze：parent 链、anchor 记录、嵌套摘录（parent = 摘录卡）
-- parseAnchor：round-trip
+- parseAnchor：round-trip；processedSnippets/cleanProcessedText：加工清理
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-section-' });
-let sectionMod; // = core/card-factory（制卡唯一实现）
-let docOps; // = core/doc-ops（正文清洗唯一实现）
+let sectionMod; // = core/card-factory（制卡唯一实现 + 加工清理）
+let docOps; // = core/doc-ops（阅读队列 / 续读点 / 进度 / 删除级联）
 let deckMod;
 test.before(() => {
   sectionMod = mod('core/card-factory.js');
@@ -108,7 +108,7 @@ test('processedSnippets: 收集本卡全部衍生卡 anchor 片段', () => {
     'tidme.anchor': JSON.stringify({ section: '书 › 第二章', snippet: '14 摄氏度' }),
   });
   wiki.addTiddler({ title: '无关卡', 'tidme.kind': 'topic' });
-  const snips = docOps.processedSnippets(wiki, '书 › 第二章');
+  const snips = sectionMod.processedSnippets(wiki, '书 › 第二章');
   assert.deepEqual([...snips].sort(), ['14 摄氏度', '地球平均表面温度']);
 });
 
@@ -128,13 +128,13 @@ test('cleanProcessedText: 删除已提取片段、保留其余、幂等', () => 
     'tidme.subkind': 'extract',
     'tidme.anchor': JSON.stringify({ section: '书 › 第三章', snippet: '一个被摘录' }),
   });
-  const n = docOps.cleanProcessedText(wiki, '书 › 第三章');
+  const n = sectionMod.cleanProcessedText(wiki, '书 › 第三章');
   assert.equal(n, 1);
   const text = wiki.getTiddler('书 › 第三章').fields.text;
   assert.ok(!text.includes('一个被摘录'), '片段已从原文删除');
   assert.ok(text.includes('这句话包含') && text.includes('后面还有内容'), '其余内容保留');
   // 幂等：片段已不在原文，再次执行不再删除
-  assert.equal(docOps.cleanProcessedText(wiki, '书 › 第三章'), 0);
+  assert.equal(sectionMod.cleanProcessedText(wiki, '书 › 第三章'), 0);
 });
 
 test('cleanProcessedText: 整段被摘录后清理遗留空 <p>', () => {
@@ -146,7 +146,7 @@ test('cleanProcessedText: 整段被摘录后清理遗留空 <p>', () => {
     'tidme.subkind': 'extract',
     'tidme.anchor': JSON.stringify({ section: '书 › 第四章', snippet: '整段被摘录的内容。' }),
   });
-  docOps.cleanProcessedText(wiki, '书 › 第四章');
+  sectionMod.cleanProcessedText(wiki, '书 › 第四章');
   const text = wiki.getTiddler('书 › 第四章').fields.text;
   assert.ok(!text.includes('<p></p>') && !text.includes('整段被摘录'), '空 <p> 与片段均已清理');
   assert.ok(text.includes('保留段'), '保留段不受影响');
@@ -176,4 +176,14 @@ test('commitCard——无 doc 笔记挖空/问答 → item 卡入缺省牌组 + 
   assert.equal(wiki.getTiddler('$:/state/folded/' + cloze.title).fields.text, 'hide');
   // 空安全
   assert.equal(sectionMod.commitCard(wiki, null), false);
+});
+
+test('commitCard: 缺 kind 或 FSRS 字段的草稿拒绝写库（契约前置校验，不再静默写库）', () => {
+  // 缺 kind（历史上这类草稿会被写库、随后被队列与视图静默忽略）
+  assert.throws(() => sectionMod.commitCard(wiki, { title: '坏卡甲', caption: 'Q', text: 'A' }), /tidme\.kind/);
+  assert.equal(wiki.getTiddler('坏卡甲'), undefined, '未写库');
+  // kind 合法但 FSRS 不全
+  const partial = { title: '坏卡乙', 'tidme.kind': 'item', 'tidme.subkind': 'qa', caption: 'Q', text: 'A' };
+  assert.throws(() => sectionMod.commitCard(wiki, partial), /FSRS/);
+  assert.equal(wiki.getTiddler('坏卡乙'), undefined, '未写库');
 });

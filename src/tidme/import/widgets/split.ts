@@ -32,17 +32,30 @@ function provenanceOf(wiki: any, title: string): Record<string, string> {
   return out;
 }
 
-/** 执行切分并写库：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签）。
- * 对齐写库统一走 core/import-commit（未变保 SRS 进度 / 修改重挂接 / 新增建卡 / 删除归档）。 */
-async function commitSplit(wiki: any, widget: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number) {
-  const t = wiki.getTiddler(title);
-  if (!t) throw new Error(lingo(wiki, 'split.sourcemissing', 'Source tiddler does not exist'));
+/** 切分并落库的唯一出口：runSplit → 合并来源字段 → core/import-commit（对齐/全量写）。
+ *  粘贴入口（无源 tiddler）与剪藏入口（源 tiddler 覆盖为文档页）共用，避免两条落库决策。
+ *  @param srcFields 源 tiddler 字段（粘贴场景传空对象：无溯源可合并）
+ *  @returns 管线结果 + 落库统计（异常计数由调用方展示） */
+async function splitAndCommit(
+  wiki: any,
+  opts: {
+    text: string;
+    title: string;
+    type?: string;
+    bag?: string;
+    srcFields?: Record<string, any>;
+    extraSourceFields?: Record<string, string>;
+    priority?: number;
+  },
+) {
+  const srcFields = opts.srcFields || {};
   const r = await parse.runSplit({
-    text: String(t.fields.text || ''),
-    title,
-    type: t.fields.type,
-    sourceFields: { ...provenanceOf(wiki, title), ...extraSourceFields },
-    priority,
+    text: opts.text,
+    title: opts.title,
+    type: opts.type,
+    bag: opts.bag,
+    sourceFields: { ...provenanceOf(wiki, opts.title), ...(opts.extraSourceFields || {}) },
+    priority: opts.priority,
     folderOccupied: (base: string) => docOps.docFolderOwner(wiki, base),
   });
   const [doc, ...cards] = r.tiddlers;
@@ -50,27 +63,54 @@ async function commitSplit(wiki: any, widget: any, title: string, extraSourceFie
 
   // 源 tiddler → 文档页：合并溯源字段、标签合并（去 tidme-inbox）；
   // 卡片 tidme.docpage 须指向合并后真实存在的文档页 title（源 tiddler title 优先于管线 docRoot）
-  const srcFields = t.fields;
   const srcTags = Array.isArray(srcFields.tags) ? srcFields.tags.filter((x: string) => x !== 'tidme-inbox') : [];
   const mergedDoc: Record<string, any> = {
     ...doc,
-    title,
+    title: opts.title,
     tags: [...new Set([...(Array.isArray(doc.tags) ? doc.tags : []), ...srcTags])],
     ...(srcFields.bag ? { bag: srcFields.bag } : {}),
     ...(srcFields['tidme.url'] ? { 'tidme.url': srcFields['tidme.url'] } : {}),
     ...(srcFields['tidme.author'] ? { 'tidme.author': srcFields['tidme.author'] } : {}),
     ...(srcFields['tidme.date'] ? { 'tidme.date': srcFields['tidme.date'] } : {}),
   };
-  await commitMod.commitImportToWiki(wiki, {
+  const commit = await commitMod.commitImportToWiki(wiki, {
     docId: r.docId,
     docTiddler: mergedDoc,
-    docTitle: title,
+    docTitle: opts.title,
     cards,
     rewriteDocPage: true,
   });
   // 无自动阅读牌组：topic 由阅读列表管理，item 进默认牌组
-  // 事件总线：切分完成（paste-split / inbox-split 共用此出口）
-  return r;
+  return { split: r, commit };
+}
+
+/** 剪藏入口：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签） */
+async function commitSplit(wiki: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number) {
+  const t = wiki.getTiddler(title);
+  if (!t) throw new Error(lingo(wiki, 'split.sourcemissing', 'Source tiddler does not exist'));
+  return await splitAndCommit(wiki, {
+    text: String(t.fields.text || ''),
+    title,
+    type: t.fields.type,
+    srcFields: t.fields,
+    extraSourceFields,
+    priority,
+  });
+}
+
+/** 落库异常提示文案（同名节丢弃 / 同名 tiddler 跳过 / 疑似同名书）；无异常返回空串 */
+function commitWarning(wiki: any, commit: any): string {
+  const parts: string[] = [];
+  if (commit?.dropped > 0) {
+    parts.push(`${lingo(wiki, 'import.dropped', 'Duplicate sections discarded')} ${commit.dropped}`);
+  }
+  if (commit?.skippedExisting > 0) {
+    parts.push(`${lingo(wiki, 'import.skippedexisting', 'Skipped (title exists)')} ${commit.skippedExisting}`);
+  }
+  if (commit?.collisionSuspect) {
+    parts.push(lingo(wiki, 'import.collision', 'Possible book title collision - rename and re-import'));
+  }
+  return parts.join(' · ');
 }
 
 function makePasteSplit(): WidgetCtor {
@@ -101,16 +141,17 @@ function makePasteSplit(): WidgetCtor {
         btn.setAttribute('disabled', 'true');
         status.textContent = lingo(wiki, 'split.parsing', 'Parsing...');
         try {
-          const r = await parse.runSplit({
+          // 落库走与剪藏同一出口（core/import-commit）：同名文档再粘贴时按对齐处理，
+          // 不再绕开唯一写库门面直接 addTiddler（曾无对齐、无归档、丢 SRS 进度）
+          const { split: r, commit } = await splitAndCommit(this.wiki, {
             text,
             title: firstLine,
             bag: this.wiki.getTiddlerText(parse.IMPORT_BAG_TITLE, '') || 'default',
-            folderOccupied: (base: string) => docOps.docFolderOwner(this.wiki, base),
           });
-          if (!r.tiddlers.some((x: any) => x['tidme.kind'] === 'topic')) throw new Error('未切分出任何节');
-          for (const tdl of r.tiddlers) this.wiki.addTiddler(tdl);
           notify(this, ns.NOTIFY_DONE);
           navigateTo(this, r.tiddlers[0].title);
+          const warn = commitWarning(this.wiki, commit);
+          if (warn) status.textContent = `⚠ ${warn}`;
         } catch (e: any) {
           status.textContent = lingo(wiki, 'split.failed', 'Split failed:') + ' ' + String(e.message || e);
           btn.removeAttribute('disabled');
@@ -156,8 +197,14 @@ function makeInboxSplit(): WidgetCtor {
             btn.setAttribute('disabled', 'true');
             btn.textContent = '…';
             try {
-              await commitSplit(this.wiki, this, item);
+              const { commit } = await commitSplit(this.wiki, item);
               notify(this, ns.NOTIFY_DONE);
+              const warn = commitWarning(this.wiki, commit);
+              if (warn) {
+                btn.removeAttribute('disabled');
+                btn.textContent = `⚠ ${warn}`;
+                return;
+              }
               refresh();
             } catch (e: any) {
               btn.textContent = lingo(wiki, 'split.failed', 'Failed:') + ' ' + String((e as any).message || e);

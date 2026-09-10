@@ -47,20 +47,27 @@ function mkCard(title) {
   });
 }
 
-/** 建立全局学习会话 + 首卡折叠态/计时锚点（对齐 startGlobalLearning 的导航前置） */
-function startSession(list) {
+/** 建立全局学习会话 + 首卡折叠态/计时锚点（对齐导航前置：core/session.enterCard）。
+ *  默认锚点为真实当前时刻（其余用例不关心时长）；要精确断言时长时显式传时钟。 */
+const T0 = new Date('2026-09-10T01:00:00Z');
+function startSession(list, at = new Date()) {
   session.setSession(wiki, { list, mode: 'items-only' });
-  session.prepareCardFold(wiki, list[0]);
+  session.enterCard(wiki, list[0], at);
 }
 
 test('gradeCard Good：FSRS 写回 + 日志 + 优先级 +5 + 会话推进 + 锚点消费 + 专注时长', () => {
   mkCard('卡甲');
   mkCard('卡乙');
-  startSession(['卡甲', '卡乙']);
-  assert.ok(wiki.getTiddler(ns.CARD_OPEN_AT_TITLE), 'prepareCardFold 已写专注计时锚点');
+  startSession(['卡甲', '卡乙'], T0);
+  assert.equal(wiki.getTiddler(ns.CARD_OPEN_AT_TITLE).fields.card, '卡甲', 'enterCard 已写计时锚点（含归属卡）');
   assert.equal(wiki.getTiddler('$:/state/folded/卡甲').fields.text, 'hide', '首卡默认折叠');
 
-  const r = grade.gradeCard(wiki, { title: '卡甲', deckTitle: '$:/Deck/default', rating: 'Good' });
+  const r = grade.gradeCard(wiki, {
+    title: '卡甲',
+    deckTitle: '$:/Deck/default',
+    rating: 'Good',
+    now: new Date('2026-09-10T01:00:07Z'),
+  });
   assert.equal(r.ok, true);
   const f = wiki.getTiddler('卡甲').fields;
   assert.equal(String(f.state), '1', '新卡 Good 进入学习态（State=1）');
@@ -82,7 +89,7 @@ test('gradeCard Good：FSRS 写回 + 日志 + 优先级 +5 + 会话推进 + 锚�
 
   assert.ok(!wiki.getTiddler(ns.CARD_OPEN_AT_TITLE), '计时锚点读取后删除');
   assert.ok(!wiki.getTiddler('$:/state/folded/卡甲'), '折叠态标记已清理');
-  assert.ok(stats.getReadTimeStats(wiki).totalSeconds >= 1, '专注时长已记录（锚点差值 clamp 下限 1s）');
+  assert.equal(stats.getReadTimeStats(wiki).totalSeconds, 7, '专注时长 = 锚点时刻到评分时刻的 7 秒（注入时钟精确断言）');
 });
 
 test('gradeCard Again：当前卡挪队尾重学，优先级不动', () => {
@@ -98,7 +105,7 @@ test('gradeCard Again：当前卡挪队尾重学，优先级不动', () => {
 
 test('gradeCard：会话最后一张 → finished；缺锚点不记专注时长', () => {
   mkCard('卡甲');
-  session.setSession(wiki, { list: ['卡甲'], mode: 'items-only' }); // 不经 prepareCardFold：无锚点
+  session.setSession(wiki, { list: ['卡甲'], mode: 'items-only' }); // 不经 enterCard：无锚点
   const r = grade.gradeCard(wiki, { title: '卡甲', deckTitle: '$:/Deck/default', rating: 'Good' });
   assert.equal(r.finished, true);
   assert.equal(r.next, null);
@@ -146,6 +153,25 @@ test('gradeCard：缺卡/未知评分安全返回 ok=false', () => {
   assert.equal(grade.gradeCard(wiki, { title: '不存在', rating: 'Good' }).ok, false);
   mkCard('卡甲');
   assert.equal(grade.gradeCard(wiki, { title: '卡甲', rating: 'Bogus' }).ok, false);
+});
+
+test('gradeCard 守卫：非 item 卡与不存在的牌组都拒绝（不再静默写进 default）', () => {
+  // 1. 阅读材料（topic）不得进入评分写路径
+  wiki.addTiddler({ title: '阅读节卡', 'tidme.kind': 'topic', 'tidme.subkind': 'section', state: '0', due: twDate() });
+  const rTopic = grade.gradeCard(wiki, { title: '阅读节卡', deckTitle: '$:/Deck/default', rating: 'Good' });
+  assert.equal(rTopic.ok, false, 'topic 卡拒绝评分');
+  assert.equal(wiki.getTiddler('阅读节卡').fields.reps, undefined, '未写入 FSRS 字段');
+
+  // 2. 显式指定但不存在/非法牌组 → 拒绝（否则日志与优先级会写到 default 牌组）
+  mkCard('卡乙');
+  const rDeck = grade.gradeCard(wiki, { title: '卡乙', deckTitle: '$:/Deck/并不存在', rating: 'Good' });
+  assert.equal(rDeck.ok, false, '未知牌组拒绝评分');
+  assert.equal(wiki.getTiddler(ns.deckLogTitle('$:/Deck/default')), undefined, '未往 default 牌组写日志');
+  assert.equal(wiki.getTiddler(ns.deckLogTitle('$:/Deck/并不存在')), undefined, '也未往未知牌组写日志');
+
+  // 3. 未指定牌组 → 回落 default（正常路径仍可用）
+  const rDefault = grade.gradeCard(wiki, { title: '卡乙', rating: 'Good' });
+  assert.equal(rDefault.ok, true, '未指定牌组时回落 default 牌组');
 });
 
 test('widgets/grade: <$tidme-grade> invokeAction 驱动 core/grade 写库与变量兜底', () => {
@@ -240,19 +266,37 @@ test('gradeCard next 口径：未来排期卡不作 next（与推进入口 isDue
   assert.equal(r.ok, true);
 });
 
-test('跨端契约：repeat.tid 经 $tidme-grade 写库且折叠态禁用；startstudy 写同一计时锚点', () => {
-  const repeat = wiki.getTiddlerText('$:/plugins/keepone/tidme/review/buttons/action/repeat');
-  assert.match(repeat, /<\$tidme-grade\b/, '评分动作已收敛到 core/grade 入口 widget');
-  assert.doesNotMatch(repeat, /action-setmultiplefields/, '旧内联写库编排已移除');
-  assert.match(
-    String(wiki.getTiddler('$:/plugins/keepone/tidme/review/buttons/action/repeat').fields['condition-disabled']),
-    /match\[hide\]/,
-    '折叠态禁用评分按钮（防盲评，字段经 button 模板生效）',
-  );
-  const startstudy = wiki.getTiddlerText('$:/plugins/keepone/tidme/review/buttons/action/startstudy');
-  assert.ok(startstudy.includes(ns.CARD_OPEN_AT_TITLE), 'startstudy 写同一计时锚点标题');
-  const shortcut = wiki.getTiddlerText('$:/plugins/keepone/tidme/review/ui/ViewTemplate/shortcut');
-  assert.match(shortcut, /get\[text\]!match\[hide\]/, '键盘评分有折叠守卫（防盲评）');
+test('跨端契约：评分按钮渲染 + 折叠态真的禁用（防盲评，行为断言）', () => {
+  const btnTpl = '$:/plugins/keepone/tidme/review/ui/ViewTemplate/button';
+  const repeatTitle = '$:/plugins/keepone/tidme/review/buttons/action/repeat';
+  mkCard('折叠卡');
+  const render = (folded) => {
+    if (folded === null) wiki.deleteTiddler('$:/state/folded/折叠卡');
+    else wiki.addTiddler({ title: `$:/state/folded/折叠卡`, text: folded });
+    const sim = `<$let studyTiddler="折叠卡" currentTiddler="${repeatTitle}"><$transclude tiddler="${btnTpl}"/></$let>`;
+    wiki.addTiddler({ title: `SimRepeat_${folded}`, text: sim });
+    return wiki.renderTiddler('text/html', `SimRepeat_${folded}`);
+  };
+  // 折叠（hide = 答案还没翻）→ 按钮必须带 disabled（否则可盲评）
+  // 回归：condition-disabled 返回的是 match 命中的文本（"hide"），而 TW 的 $button 只认 disabled="yes"，
+  // 直接把 "hide" 传给 disabled 会被忽略 → 守卫失效（P0-9）
+  const hidden = render('hide');
+  assert.ok(/<button[^>]*\bdisabled\b/.test(hidden), `折叠态按钮被禁用（实际 ${hidden.slice(0, 160)}）`);
+  // 展开（show）→ 可点击
+  const shown = render('show');
+  assert.ok(/<button/.test(shown), '展开态渲染出按钮');
+  assert.ok(!/<button[^>]*\bdisabled\b/.test(shown), '展开态按钮可用（未误禁）');
+  // 折叠态标记缺失 → 视为展开（与键盘守卫"missing → 可评分"同口径）
+  const noState = render(null);
+  assert.ok(/<button/.test(noState) && !/<button[^>]*\bdisabled\b/.test(noState), '无折叠标记时按钮可用');
+  // 反向边界：没有 condition-disabled 字段的按钮绝不能被误禁
+  // （守卫修法是把"非空结果"统一映射成 yes，映射写错会让全站按钮变灰）
+  const unfoldTitle = '$:/plugins/keepone/tidme/review/buttons/action/unfold';
+  const unfoldSim = `<$let studyTiddler="折叠卡" deckTiddler="$:/Deck/default" currentTiddler="${unfoldTitle}"><$transclude tiddler="${btnTpl}"/></$let>`;
+  wiki.addTiddler({ title: 'SimUnfold', text: unfoldSim });
+  const unfoldOut = wiki.renderTiddler('text/html', 'SimUnfold');
+  assert.ok(/<button/.test(unfoldOut), '无 condition-disabled 的按钮仍渲染');
+  assert.ok(!/<button[^>]*\bdisabled\b/.test(unfoldOut), '无 condition-disabled 的按钮不被误禁');
 });
 
 test('推进决策统一：study-mode 与 pdf-reader 均经 session.advanceSession（不再取 list[0]）', () => {

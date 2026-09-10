@@ -13,12 +13,13 @@ core 与 widgets 各处曾按字面量手拼，改名/迁移时靠 grep 兜底�
 wikitext 侧仍是字面量；改名必须人工同步两侧（grep 全仓核对）：
 - $:/state/tidme/learning-session   session.ts SESSION_TIDDLER ↔ startstudy/stopstudy 等动作
 - <deck>/study                      session.DECK_STUDY_SUFFIX ↔ startstudy.tid
-- $:/temp/tidme/card-open-at        ns.CARD_OPEN_AT_TITLE ↔ startstudy.tid（评分专注计时锚点）
+- $:/temp/tidme/card-open-at        ns.CARD_OPEN_AT_TITLE ↔ startstudy.tid（评分专注计时锚点；字段 text=起始时刻、card=归属卡）
 - $:/Deck/<name>                    ns.DECK_PREFIX ↔ fsrs4tw 学习循环 + 各管理 .tid
 - $:/state/folded/<title>           ns.FOLDED_STATE_PREFIX ↔ fsrs4tw reveal/折叠语义
 - $:/config/Tidme/AutoPostpone      scheduler.AUTOPOSTPONE_CONFIG_TITLE ↔ queue-ops 配置面板
-- $:/config/Tidme/QueueMode         workflow.ts QUEUE_MODE_TIDDLER ↔ 工作流选项
-- $:/temp/tidme/*                   session.TEMP_PREFIX ↔ stopstudy 清场
+- $:/config/Tidme/*                 本模块 QUEUE_MODE_TITLE / QUEUE_MIX_TITLE / PRIORITY_DYNAMICS_TITLE /
+                                     LOG_RETENTION_TITLE / OCR_TITLE / SEMANTIC_SPLIT_TITLE ↔ 设置页与 .tid
+- $:/temp/tidme/*                   session.TEMP_PREFIX / ns.AUTOPOSTPONE_LAST_TITLE ↔ stopstudy 清场、queue-ops 展示
 - $:/temp/tidme-import/bag          ns.IMPORT_BAG_TITLE ↔ 服务端 importer（importer.js）
 - notify-* 通知面板 / help-shortcuts 本模块 NOTIFY_*、PAGE_* ↔ 按钮/按键 .tid 的 tm-notify
 */
@@ -48,33 +49,62 @@ export const DECK_PREFIX = '$:/Deck/';
  */
 export const QUEUE_EXCLUDE = '!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]';
 
+/** 牌组实体标签：带此标签的 tiddler 即牌组（`$:/Deck/<name>`）。
+ *  learning-package 词书页是"牌组 + legacy kind=topic"，故它是牌组而非阅读材料——
+ *  阅读/学习队列、导入对齐的旧卡查询一律按此标签排除（JS 侧用 deck.isDeckFields）。 */
+export const DECK_TAG = '$:/tags/TidmeDeck';
+
+/** 过滤器片段：排除牌组实体（TOPIC_QUEUE_FILTER 与导入对齐旧卡查询共用同一份字面量） */
+export const NOT_DECK_FILTER = `!tag[${DECK_TAG}]`;
+
 /**
  * 阅读列表（topic 队列）过滤器唯一契约：全库 kind=topic 在队卡（排除草稿、牌组页、搁置/完成/忽略）。
  * 单条 run 的闭合过滤器字符串；deck-engine / doc-ops 等处共用。
  *
  * 排除两类非阅读单元：
- *  - tag[$:/tags/TidmeDeck]：牌组实体（legacy 词书页 kind=topic）；
+ *  - 牌组实体（NOT_DECK_FILTER，legacy 词书页 kind=topic）；
  *  - structure=sectioned：分节型文档页——阅读材料的宿主/入口页（节卡才是阅读单元），
  *    连续型文档页（structure=continuous，如整本 PDF）自身即阅读卡，须留在队列。
  *  卡片一律带 tidme.kind（见 core/card-factory 与各文档页构建处），无需"无 kind 兜底"。
  */
-export const TOPIC_QUEUE_FILTER = '[all[shadows+tiddlers]!is[draft]tidme.kind[topic]!tag[$:/tags/TidmeDeck]!tidme.structure[sectioned]' +
+export const TOPIC_QUEUE_FILTER = `[all[shadows+tiddlers]!is[draft]tidme.kind[topic]${NOT_DECK_FILTER}!tidme.structure[sectioned]` +
   QUEUE_EXCLUDE + ']';
+
+/** 该 title 能否安全插入 TW 过滤器字面量（`[prefix[<title>]]`、`{<title>!!field}`）。
+ *  实测（TW 5.3）：`]` 与 `}` 在过滤器字面量内**无法转义**（`\]`、双括号写法均报
+ *  "Filter error"），且错误文本会被当作一个结果项返回 → 下游把假 title 当卡处理。
+ *  系统生成的 title 经 paths.slugify / deck.titleOf 过滤（两者共用 TITLE_UNSAFE_CHARS）；
+ *  本判别用于"手写 deck/页 title"这类外部输入的插值点做守卫。 */
+export function isFilterSafeTitle(s: unknown): boolean {
+  return !/[[\]{}]/.test(String(s ?? ''));
+}
+
+/** 生成 title 叶段时必须处理的字符（唯一产地，paths.slugify 与 deck.titleOf 共用）：
+ *  路径分隔符 `/`、文件系统保留字符、TW 系统前缀符 `$`，以及过滤器无法转义的 `[` `]` `{` `}`
+ *  （见 isFilterSafeTitle）。两处各自决定"删掉"还是"换成 -"（可读性风格不同），
+ *  但**危险字符集合必须同源**——曾经两份列表，`{}` 只在一处，另一处生成出过滤器不安全的 title。 */
+export const TITLE_UNSAFE_CHARS = /[\\/:*?"<>|$[\]{}]/g;
 
 /** 卡折叠态 tiddler 前缀（<prefix><title> = "show"/"hide"，fsrs4tw reveal 语义） */
 export const FOLDED_STATE_PREFIX = '$:/state/folded/';
 
-/** TW 故事河列表（Story river）：当前打开的 tiddler 顺序。tm-navigate 只追加不替换，
- *  故「结束学习后还剩哪些卡开着」只能从这里读（session.openItemCards）。 */
-export const STORY_LIST_TITLE = '$:/StoryList';
+// 故事河（$:/StoryList）是界面状态，不是领域数据：读它的实现与常量在 ui/base/view-state。
 
-/** 卡片专注计时锚点（UTC 17 位时刻）：导航到学习卡时写入（session.prepareCardFold /
- *  startstudy.tid），评分写路径（core/grade）读取差值记专注时长后删除。
- *  落在 $:/temp/tidme/ 前缀下，endSession/stopstudy 清场自动带走。 */
+/** 卡片专注计时锚点：`text` = 起始时刻（UTC 17 位串），`card` = 归属卡 title。
+ *  导航进入学习卡时由 core/session.touchFocusAnchor 写入，换卡/评分/结束学习时结算
+ *  （session.settleFocusAnchor / consumeFocusAnchor）——锚点只有一个槽位，换卡必须先
+ *  结算上一张，否则那段时长被覆盖丢失。startstudy.tid 是 fsrs4tw 单牌组起学路径的
+ *  写入方，须同时写 text 与 card 两个字段。落在 $:/temp/tidme/ 前缀下，
+ *  endSession/stopstudy 清场自动带走。 */
 export const CARD_OPEN_AT_TITLE = '$:/temp/tidme/card-open-at';
 
 /** PDF 临时跳转页码 state tiddler 前缀（<prefix><docId>，跨 widget 一次性交接，消费即清理） */
 export const PDF_PAGE_STATE_PREFIX = '$:/state/tidme-pdf/page/';
+
+/** 自动顺延任务的上次运行记录：server/scheduler.js 写（{at, overdue, postponed, kept}），
+ *  queue-ops 读给用户看——顺延会悄悄改到期日，用户需要知道"什么时候被顺延过、顺延了多少张"。
+ *  $:/temp 前缀使其随会话清场带走（只是运行记录，不是持久统计）。 */
+export const AUTOPOSTPONE_LAST_TITLE = '$:/temp/tidme/autopostpone/last';
 
 export function pdfPageStateTitle(docId: string): string {
   return PDF_PAGE_STATE_PREFIX + docId;
@@ -103,10 +133,26 @@ export function isDeckLogTitle(title: string): boolean {
   return title.startsWith(DECK_PREFIX) && title.endsWith(DECK_LOG_SUFFIX);
 }
 
-/** 今日日期键（UTC，YYYYMMDD）——日志 tiddler 命名与统计口径共用 */
-export function todayKey(now = new Date()): string {
-  return now.toISOString().slice(0, 10).replace(/-/g, '');
-}
+// 日期键（todayKey）不在此模块：ns 是零依赖常量模块，日期归 core/schema 唯一产地
+
+// ---------- 配置 tiddler 地址（$:/config/Tidme/*，唯一产地） ----------
+// 自动顺延配置的常量例外地放在 core/scheduler（它是该配置的最低层消费者），config.ts 复用 sched.AUTOPOSTPONE_CONFIG_TITLE。
+
+/** 本插件配置命名空间前缀（reactivity 谓词按前缀嗅探「任一 Tidme 配置变化」也用这个常量） */
+export const CONFIG_TITLE_PREFIX = '$:/config/Tidme/';
+
+/** 学习流构成（''=纯测试卡 / interleaved / strict） */
+export const QUEUE_MODE_TITLE = CONFIG_TITLE_PREFIX + 'QueueMode';
+/** 交错比（item:topic，如 '4:1'） */
+export const QUEUE_MIX_TITLE = CONFIG_TITLE_PREFIX + 'QueueMix';
+/** 评分 → 优先级动态（again/hard/good/easy + enable） */
+export const PRIORITY_DYNAMICS_TITLE = CONFIG_TITLE_PREFIX + 'PriorityDynamics';
+/** 复习日志保留天数（空=默认 90；0=永久保留） */
+export const LOG_RETENTION_TITLE = CONFIG_TITLE_PREFIX + 'LogRetention';
+/** PDF 与 OCR 配置（JSON） */
+export const OCR_TITLE = CONFIG_TITLE_PREFIX + 'Ocr';
+/** 语义切分配置（JSON；服务端 importer 与导入预览共用） */
+export const SEMANTIC_SPLIT_TITLE = CONFIG_TITLE_PREFIX + 'SemanticSplit';
 
 // ---------- 本插件 UI 页面地址（tm-navigate 目标；.tid 引用见头部跨端契约清单） ----------
 

@@ -1,6 +1,11 @@
 title: $:/plugins/keepone/tidme/review/ui/ViewTemplate/button
 code-body: yes
 
+<!-- condition-disabled 契约：一个过滤器，**只要有结果就禁用按钮**。
+     TW 的 <$button> 只认 disabled="yes"（其余值忽略），故此处统一把非空结果映射成 yes；
+     各按钮的 condition-disabled 写 `match[hide]`（返回被匹配的文本，如 "hide"）即可，
+     不必各自再 then[yes]——曾因把 "hide" 直接传给 disabled 而**守卫失效**（折叠态仍可点击 → 盲评）。 -->
+
 \define tidme-button-icon()
 <$list
     filter="[<custom-icon>!match[yes]]"
@@ -63,7 +68,7 @@ code-body: yes
                     tooltip=<<tooltip-text>>
                     aria-label=<<tooltip-text>>
                     actions={{!!actions}}
-                    disabled=<<disabled>>
+                    disabled={{{ [<disabled>!is[blank]then[yes]] }}}
                 >
                     <<tidme-button-icon>>
                     <<tidme-button-caption>>
@@ -92,7 +97,7 @@ code-body: yes
                         selectedClass="tc-selected"
                         tooltip=<<tooltip-text>>
                         actions={{!!actions}}
-                        disabled=<<disabled>>
+                        disabled={{{ [<disabled>!is[blank]then[yes]] }}}
                     >
                         <<tidme-button-icon>>
                         <<tidme-button-caption>>
@@ -134,7 +139,7 @@ code-body: yes
                     tooltip=<<tooltip-text>>
                     aria-label=<<tooltip-text>>
                     actions={{!!actions}}
-                    disabled=<<disabled>>
+                    disabled={{{ [<disabled>!is[blank]then[yes]] }}}
                 >
                     <<tidme-button-icon>>
                     <<tidme-button-caption>>

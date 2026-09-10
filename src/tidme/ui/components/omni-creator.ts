@@ -15,6 +15,7 @@ const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+const nsMod = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
@@ -389,7 +390,7 @@ function makeOmniCreatorWidget(): any {
       const needRefresh = changed.some((t) =>
         t.startsWith('$:/language/') ||
         t.startsWith('$:/Deck/') ||
-        t.startsWith('$:/config/Tidme/')
+        t.startsWith(nsMod.CONFIG_TITLE_PREFIX)
       );
       if (needRefresh) {
         this.refreshSelf();

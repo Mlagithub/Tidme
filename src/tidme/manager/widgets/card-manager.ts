@@ -108,17 +108,13 @@ const dateLabel = display.dateLabel;
  *  （core/card-factory）与文档页构建处保证。排除文档汇总页（文档页宿主不是可管理卡片）。 */
 const CARD_FILTER = '[all[shadows+tiddlers]!is[draft]has[tidme.kind]!tag[tidme-doc]]';
 
-/** Done：字段补丁（core scheduler 实现） */
-function doneFields(fields: Record<string, any>): Record<string, any> {
-  return sched.doneCard(fields);
+/** Done：字段补丁（core scheduler 实现，与批量恢复同族——一律返回补丁，调用方展开写库） */
+function doneFields(): Record<string, any> {
+  return sched.doneCard();
 }
-/**
- * 恢复：**合并式补丁**——三键显式 undefined（TW addTiddler 语义 = 删除字段）。
- * 不能用 sched.restoreCard（它返回删除键后的完整字段集，供整体替换；
- * 一旦走 {...fields, ...patch} 合并，旧值不会被覆盖 → 恢复静默失效）。
- */
+/** 恢复：直接用 core 的补丁（三键显式 undefined = TW addTiddler 删除字段语义） */
 function resumePatch(): Record<string, any> {
-  return { 'tidme.done': undefined, 'tidme.ignored': undefined, 'tidme.suspended': undefined };
+  return sched.restoreCard();
 }
 
 // ---------- 纯查询 ----------
@@ -298,7 +294,7 @@ function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
     const readBtn = el(doc, 'button', 'tm-cm-op', lingoMod.lingo(wiki, 'manager.action.read', 'Read'));
     readBtn.title = lingoMod.lingo(wiki, 'manager.action.read.tip', 'Remove from queue (Mark as read)');
     readBtn.addEventListener('click', () => {
-      wiki.addTiddler(doneFields(c.fields));
+      wiki.addTiddler({ ...c.fields, ...doneFields() });
       render(ctx);
     });
     row.appendChild(readBtn);
@@ -306,7 +302,7 @@ function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
     const resumeBtn = el(doc, 'button', 'tm-cm-op', lingoMod.lingo(wiki, 'manager.action.back', 'Back'));
     resumeBtn.title = lingoMod.lingo(wiki, 'manager.action.back.tip', 'Restore to learning queue');
     resumeBtn.addEventListener('click', () => {
-      wiki.addTiddler(sched.restoreCard(c.fields));
+      wiki.addTiddler({ ...c.fields, ...resumePatch() });
       render(ctx);
     });
     row.appendChild(resumeBtn);
@@ -876,7 +872,7 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   row.appendChild(schedGroup);
 
   const stateGroup = el(doc, 'span', 'tm-cm-bar-group', '');
-  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.done', 'Done'), (f) => doneFields(f)));
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.done', 'Done'), () => doneFields()));
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.suspend', 'Suspend'), () => sched.suspendCard()));
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.restore', 'Restore'), () => resumePatch()));
   row.appendChild(stateGroup);

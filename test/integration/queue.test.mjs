@@ -9,14 +9,10 @@ queue.test.mjs — 全局学习队列（deck-engine composeGlobalLearningQueue�
 - 逾期 topic 不再被漏掉（修复：旧过滤仅 days:due[0] 匹配当天，逾期积压不入队）
 */
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 import { twDate } from '../helpers/tw-date.mjs';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
 const { tw, wiki, mod, reset } = bootPlugin({ prefix: 'tidme-queue-' });
 let deckEngine;
 let sched;
@@ -52,6 +48,28 @@ function mkCard(title, opts = {}) {
 }
 
 test.beforeEach(reset);
+
+test('deck-engine: 组合过滤器与队列顺序（due-new / new-due）', () => {
+  const fields = {
+    card: '[tidme.kind[item]]',
+    card_exclude: '[field:tidme.done[yes]]',
+    state_learn: '[state[1]]',
+    state_due: '[state[2]]',
+    state_new: '[state[0]]',
+    order: 'due-new',
+  };
+  const f = deckEngine.composeDeckFilters('$:/Deck/default', fields);
+  assert.ok(f.learn.includes('!!card'), 'learn 应引用 card 字段');
+  assert.ok(f.learn.includes('state_learn'), 'learn 应含 state_learn');
+  assert.ok(f.queue.startsWith(f.learn), 'due-new: learn 在前');
+  assert.ok(f.queue.includes(f.due) && f.queue.includes(f.newly), 'queue 含 due+new');
+  assert.ok(f.unfold.length > 0);
+  const f2 = deckEngine.composeDeckFilters('$:/Deck/default', { ...fields, order: 'new-due' });
+  assert.ok(f2.queue.startsWith(f2.learn + ' ' + f2.newly), 'new-due: learn+new 在前');
+  // 过滤器不安全 title → 全空（不产出 "Filter error" 假卡）
+  const bad = deckEngine.composeDeckFilters('$:/Deck/坏}牌组', fields);
+  assert.equal(bad.queue, '', '不安全 title 的组合过滤器置空');
+});
 
 test('默认（无 opts）：纯知识卡队列 —— topic 阅读材料不入队', () => {
   mkCard('item到期', { kind: 'item', state: '2', due: new Date(Date.now() - 3600000) });
@@ -128,10 +146,16 @@ test('调度: 学习步（state 1/3）due 未到不入 learn 队列', () => {
   assert.ok(q.includes('学习已到期'), '学习步已到期入队');
 });
 
-test('调度: deck-engine 过滤器不包含损坏的 <now> 格式（回归防护）', () => {
-  const src = fs.readFileSync(path.resolve(here, '../../src/tidme/core/deck-engine.ts'), 'utf8');
-  assert.ok(!src.includes('[UTC]YYYY0MMDD0hh0mm0ss0XXX'), '不得使用损坏的日期格式（被 parse 为未来日期）');
-  assert.ok(src.includes('[UTC]YYYY0MM0DD0hh0mm0ssXXX'), '使用 TW 核心 UTC 格式');
+test('调度: 到期判定真的按时间比较（回归：<now> 格式错误曾让 due<now 恒真）', () => {
+  // 用行为而非源码文本锁这条：同一张卡，due 在过去 → 入队；改到未来 → 不入队。
+  // 格式错误（被 parse 成未来/恒真）会让两种情形给出同一结果，这里必然失败。
+  mkCard('到期边界卡', { kind: 'topic', due: new Date(Date.now() - 60000) });
+  const withPast = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
+  assert.ok(withPast.includes('到期边界卡'), 'due 在过去 → 进到期段');
+
+  wiki.addTiddler({ ...wiki.getTiddler('到期边界卡').fields, due: twDate(new Date(Date.now() + 3600000)) });
+  const withFuture = deckEngine.composeGlobalLearningQueue((f) => wiki.filterTiddlers(f), { topics: true });
+  assert.ok(!withFuture.includes('到期边界卡'), 'due 在未来 → 不入队（同一张卡，只有时间变了）');
 });
 
 test('调度: nextSchedulable — 序列推进统一算法（section-bar/阅读列表/文档页共用）', () => {

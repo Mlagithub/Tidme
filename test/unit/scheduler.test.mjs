@@ -6,10 +6,15 @@ scheduler.test.mjs — core 调度体系单元测试（node:test）
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { bootPlugin } from '../helpers/tw-boot.mjs';
 import { FUTURE, PAST, T } from '../helpers/tw-date.mjs';
 
-const sched = await import('../../src/tidme/core/scheduler.ts');
-const schema = await import('../../src/tidme/core/schema.ts');
+// core/scheduler 运行时 require core/schema（铁律：core 跨模块引用禁 ES import，会被 esbuild
+// 内联成第二份实现），故与 test/integration 同源：走 bin 产物 + 真实 TW boot。
+// 注意：产物来自 vm 沙箱，返回的数组/对象是跨 realm 值——断言前先展开（AGENTS 已知陷阱）。
+const { mod } = bootPlugin({ prefix: 'tidme-sched-' });
+const sched = mod('core/scheduler.js');
+const schema = mod('core/schema.js');
 
 test('normalizePriority: 边界与非法值', () => {
   assert.equal(sched.normalizePriority(0), 0);
@@ -41,15 +46,12 @@ test('priorityDeltaForRating: 评分 → 优先级调整量（SM: pass grades �
   assert.equal(sched.priorityDeltaForRating('Again', { again: -20 }), -20, '配置可覆盖（自定义升优先）');
 });
 
-test('adjustPriority: 缺省 50 起步并 clamp 到 0-100', () => {
-  assert.equal(sched.adjustPriority(50, -10), '40', '升优先');
-  assert.equal(sched.adjustPriority(5, -10), '0', '下限 clamp');
-  assert.equal(sched.adjustPriority(95, 10), '100', '上限 clamp');
-  assert.equal(sched.adjustPriority(undefined, 5), '55', '缺省按 50');
-});
-
-test('shiftPriority: 字符串优先级位移', () => {
-  assert.equal(sched.shiftPriority('50', -5), '45');
+test('shiftPriority: 缺省 50 起步并 clamp 到 0-100（字符串字段值与位移）', () => {
+  assert.equal(sched.shiftPriority(50, -10), '40', '升优先');
+  assert.equal(sched.shiftPriority(5, -10), '0', '下限 clamp');
+  assert.equal(sched.shiftPriority(95, 10), '100', '上限 clamp');
+  assert.equal(sched.shiftPriority(undefined, 5), '55', '缺省按 50');
+  assert.equal(sched.shiftPriority('50', -5), '45', '字符串优先级位移');
   assert.equal(sched.shiftPriority('50', 5), '55');
 });
 
@@ -73,11 +75,35 @@ test('advanceCard: due 重置到≈现在（立即到期）', () => {
   assert.ok(schema.parseTwDate(advanced.due).getTime() <= Date.now() + 60000, 'advance 到期时间≈现在');
 });
 
-test('ignoreCard: 置 tidme.ignored 出队，kind 保留（分类重构后无标签）', () => {
-  const ignored = sched.ignoreCard({ title: '卡', 'tidme.kind': 'item', state: '0' });
+test('ignoreCard: 返回补丁（不含原字段），合并后出队', () => {
+  const fields = { title: '卡', 'tidme.kind': 'item', state: '0' };
+  const ignored = sched.ignoreCard();
   assert.equal(ignored['tidme.ignored'], 'yes', '忽略置 tidme.ignored');
-  assert.ok(sched.isCardOutOfQueue(ignored), '忽略后 isCardOutOfQueue 返回 true（出队）');
-  assert.equal(ignored['tidme.kind'], 'item', '保留 kind');
+  assert.ok(!('title' in ignored) && !('tidme.kind' in ignored), '只返回补丁，不含原字段');
+  assert.ok(sched.isCardOutOfQueue({ ...fields, ...ignored }), '合并后 isCardOutOfQueue 为真（出队）');
+});
+
+test('doneCard: 返回补丁，合并后出队且 kind 保留', () => {
+  const done = sched.doneCard();
+  assert.deepEqual({ ...done }, { 'tidme.done': 'yes' }, 'done 补丁只有一键');
+  const merged = { ...{ title: '节', 'tidme.kind': 'topic', state: '0' }, ...done };
+  assert.equal(merged['tidme.kind'], 'topic', 'kind 经合并保留');
+  assert.ok(sched.isCardOutOfQueue(merged), 'doneCard 后 isCardOutOfQueue 应返回 true');
+});
+
+test('restoreCard: 返回删除补丁，合并后可逆恢复（topic/item 同）', () => {
+  const restored = sched.restoreCard();
+  const base = { title: '节', 'tidme.kind': 'topic', state: '0', 'tidme.done': 'yes', 'tidme.ignored': 'yes', 'tidme.suspended': 'yes' };
+  const merged = { ...base, ...restored };
+  assert.equal(merged['tidme.done'], undefined, '恢复删除 done');
+  assert.equal(merged['tidme.ignored'], undefined, '恢复删除 ignored');
+  assert.equal(merged['tidme.suspended'], undefined, '恢复删除 suspended');
+  assert.equal(merged['tidme.kind'], 'topic', 'kind 保留（topic 回阅读流）');
+  assert.ok(!sched.isCardOutOfQueue(merged), 'restoreCard 后 isCardOutOfQueue 应返回 false');
+
+  const item = { title: '卡', 'tidme.kind': 'item', state: '0', ...sched.doneCard(), ...sched.restoreCard() };
+  assert.equal(item['tidme.kind'], 'item', 'item 保留（回复习流）');
+  assert.ok(!sched.isCardOutOfQueue(item));
 });
 
 test('forgetCard: 重置为新卡（state=0、reps=0）', () => {
@@ -165,7 +191,7 @@ test('autoPostpone: 保留 top N 高优先级，顺延其余低优先级逾期�
   const r = sched.autoPostpone(cards, { maxPriority: 60, postponeDays: 7, keepTop: 2 });
   assert.equal(r.stats.overdue, 4, '4 张逾期（E 未到期排除）');
   assert.equal(r.stats.postponed, 2, '保留 top2（A/B），顺延 C/D');
-  assert.deepEqual(r.patches.map((p) => p.title).sort(), ['低优C', '低优D']);
+  assert.deepEqual([...r.patches].map((p) => p.title).sort(), ['低优C', '低优D']);
   for (const p of r.patches) {
     assert.ok(schema.parseTwDate(p.fields.due).getTime() > Date.now(), `${p.title} 被顺延到未来`);
   }
@@ -178,7 +204,7 @@ test('autoPostpone: 搁置/完成/忽略卡不处理', () => {
     { title: '已忽略', fields: { 'tidme.priority': '90', due: PAST(), 'tidme.kind': 'item', 'tidme.ignored': 'yes' } },
   ];
   const r = sched.autoPostpone(cards, { maxPriority: 60, keepTop: 0 });
-  assert.deepEqual(r.patches.map((p) => p.title), [], '已出队状态不顺延');
+  assert.deepEqual([...r.patches].map((p) => p.title), [], '已出队状态不顺延');
 });
 
 test('autoPostpone: topic 阅读卡按 A-Factor 顺延（SM: auto-postpone 主要作用于 Topics）', () => {
@@ -187,7 +213,7 @@ test('autoPostpone: topic 阅读卡按 A-Factor 顺延（SM: auto-postpone 主�
     { title: '可顺延', fields: { 'tidme.priority': '90', due: PAST(), 'tidme.kind': 'item' } },
   ];
   const r = sched.autoPostpone(cards, { maxPriority: 60, keepTop: 0 });
-  assert.deepEqual(r.patches.map((p) => p.title), ['可顺延', '阅读卡'], 'item 加权 -15 排前，topic 阅读卡同样顺延');
+  assert.deepEqual([...r.patches].map((p) => p.title), ['可顺延', '阅读卡'], 'item 加权 -15 排前，topic 阅读卡同样顺延');
   for (const p of r.patches) {
     assert.ok(schema.parseTwDate(p.fields.due).getTime() > Date.now(), `${p.title} 被顺延到未来`);
   }
@@ -209,28 +235,60 @@ test('isDueNow: 出队状态（搁置/完成/忽略）不可调度', () => {
   assert.ok(!sched.isDueNow({ due: PAST(), 'tidme.ignored': 'yes' }), '忽略不可');
 });
 
-test('doneCard: 置 tidme.done 出队，kind 保留（无标签）', () => {
-  const done = sched.doneCard({ title: '节', 'tidme.kind': 'topic', state: '0', 'tidme.suspended': 'yes' });
+test('doneCard/restoreCard 补丁合并：topic 出队后可逆恢复', () => {
+  const topic = { title: '节', 'tidme.kind': 'topic', state: '0', 'tidme.suspended': 'yes' };
+  const done = { ...topic, ...sched.doneCard() };
   assert.equal(done['tidme.done'], 'yes', 'Done 置 tidme.done');
-  assert.equal(done['tidme.kind'], 'topic', '保留 kind');
-  assert.ok(sched.isCardOutOfQueue(done), 'doneCard 后 isCardOutOfQueue 应返回 true');
+  assert.ok(sched.isCardOutOfQueue(done), 'doneCard 后出队');
+  const resumed = { ...done, ...sched.restoreCard() };
+  assert.equal(resumed['tidme.suspended'], undefined, '恢复清搁置标记');
+  assert.ok(!sched.isCardOutOfQueue(resumed), '恢复后回队');
 });
 
-test('restoreCard: 清 done/ignored/suspended 可逆恢复，kind 决定归属', () => {
-  const done = sched.doneCard({ title: '节', 'tidme.kind': 'topic', state: '0' });
-  const resumed = sched.restoreCard({ ...done });
-  assert.equal(resumed['tidme.done'], undefined, '恢复删除 tidme.done');
-  assert.equal(resumed['tidme.ignored'], undefined, '恢复删除 tidme.ignored');
-  assert.equal(resumed['tidme.suspended'], undefined, '恢复删除 tidme.suspended');
-  assert.equal(resumed['tidme.kind'], 'topic', 'kind 保留（topic 回阅读流）');
-  assert.ok(!sched.isCardOutOfQueue(resumed), 'restoreCard 后 isCardOutOfQueue 应返回 false');
+test('isInQueue: 出队三态唯一定义（done/ignored/suspended）+ isCardOutOfQueue 只管已处理', () => {
+  const base = { 'tidme.kind': 'item' };
+  assert.ok(sched.isInQueue(base), '无标记 → 在队');
+  assert.ok(!sched.isInQueue({ ...base, 'tidme.done': 'yes' }), 'done → 不在队');
+  assert.ok(!sched.isInQueue({ ...base, 'tidme.ignored': 'yes' }), 'ignored → 不在队');
+  assert.ok(!sched.isInQueue({ ...base, 'tidme.suspended': 'yes' }), 'suspended → 不在队');
+  assert.ok(!sched.isInQueue(null), '空值 → 不在队');
+  // 两个谓词的分工：isCardOutOfQueue 只回答"是否已处理"（进度口径），不含 suspended
+  assert.ok(sched.isCardOutOfQueue({ ...base, 'tidme.done': 'yes' }), 'done 属于已处理');
+  assert.ok(!sched.isCardOutOfQueue({ ...base, 'tidme.suspended': 'yes' }), 'suspended 不算已处理（可恢复）');
 });
 
-test('restoreCard: item 恢复同样只清标记（回复习流）', () => {
-  const done = sched.doneCard({ title: '卡', 'tidme.kind': 'item', state: '0' });
-  const resumed = sched.restoreCard({ ...done, 'tidme.kind': 'item' });
-  assert.equal(resumed['tidme.kind'], 'item', 'item 保留（回复习流）');
-  assert.ok(!sched.isCardOutOfQueue(resumed));
+test('时钟可注入：comparePriorityMixed / autoPostpone 用传入 now（hybrid 逾期权重可复现）', () => {
+  const now = new Date('2026-06-01T00:00:00Z');
+  const overdue = { title: '逾期', fields: { 'tidme.priority': '80', due: schema.twDateString(new Date('2026-05-01T00:00:00Z')), 'tidme.kind': 'item' } };
+  const fresh = { title: '新卡', fields: { 'tidme.priority': '50', due: schema.twDateString(new Date('2026-06-05T00:00:00Z')), 'tidme.kind': 'item' } };
+  // 判序唯一实现 = comparePriorityMixed（排序即"两两比较"，不另设排序包装）
+  const sorted = [fresh, overdue].sort((a, b) => sched.comparePriorityMixed(a, b, 'hybrid', 0.5, now));
+  assert.equal(sorted[0].title, '逾期', '注入时钟下逾期卡因权重排前（且与真实时钟无关）');
+
+  const res = sched.autoPostpone([overdue], { keepTop: 0, maxPriority: 60, maxOverdueThreshold: 0 }, now);
+  assert.equal(res.patches.length, 1, '传入 now 时该卡被判定为逾期');
+  const dueOut = schema.parseTwDate(res.patches[0].fields.due).getTime();
+  assert.ok(dueOut > now.getTime(), '顺延基准 = 注入的 now（而非真实时钟）');
+});
+
+test('默认值单一产地：autoPostpone 代码默认 = config 默认；牌组参数默认 = shadow 牌组字段', () => {
+  assert.equal(sched.AUTOPOSTPONE_OPTS_DEFAULTS.maxPriority, 60);
+  assert.equal(sched.AUTOPOSTPONE_OPTS_DEFAULTS.keepTop, 10);
+  assert.equal(sched.POSTPONE_DEFAULT_DAYS, 7);
+  assert.equal(sched.TOPIC_MIN_INTERVAL_DAYS, 3);
+  assert.equal(sched.AFACTOR_DEFAULT, 1.5);
+  assert.equal(sched.DECK_PARAM_DEFAULTS.maximumInterval, 36500, '与 $:/Deck/default 的 p.maximum_interval 同值');
+  assert.equal(sched.DECK_PARAM_DEFAULTS.requestRetention, 0.9);
+  assert.equal(sched.DECK_PARAM_DEFAULTS.leechThreshold, 8);
+});
+
+test('isDueNow: 无法解析的 due 不再伪装成"立即到期"', () => {
+  const now = new Date('2026-06-01T00:00:00Z');
+  assert.equal(sched.isDueNow({ 'tidme.kind': 'item', due: 'garbage' }, now), false, '脏 due → 不可调度');
+  assert.equal(sched.isDueNow({ 'tidme.kind': 'item', due: schema.twDateString(new Date('2026-05-01T00:00:00Z')) }, now), true, '正常逾期 → 可调度');
+  assert.equal(sched.isDueNow({ 'tidme.kind': 'item' }, now), true, '无 due（Pending）→ 可读');
+  assert.equal(schema.tryParseTwDate('garbage'), null, 'tryParseTwDate 对非法值返回 null');
+  assert.equal(schema.tryParseTwDate(''), null);
 });
 
 test('ITEM_FILTER: 双轨分流（topic 出、item 进）', () => {
@@ -258,5 +316,5 @@ test('sortTopicQueue: 优先级（0 最高）→ due（早在前）→ 阅读顺
     mk('C', 50, '20270101000000000', '000001'),
     mk('D', 50, '20260101000000000', '000004'),
   ];
-  assert.deepEqual(sched.sortTopicQueue(cards).map((c) => c.title), ['A', 'D', 'C', 'B'], '优先级分组内按 due，再按阅读顺序');
+  assert.deepEqual([...sched.sortTopicQueue(cards)].map((c) => c.title), ['A', 'D', 'C', 'B'], '优先级分组内按 due，再按阅读顺序');
 });

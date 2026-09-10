@@ -10,6 +10,8 @@ ingest-text.ts — 文本摄取：Markdown / Wikitext / HTML / TXT → 统一 Bl
 
 import { normalizeText } from '$:/plugins/keepone/tidme/core/ids';
 import { escapeHtml } from '$:/plugins/keepone/tidme/core/schema';
+// 标题/结构判定的唯一实现（与语义切分共用，避免 `![图片](x)` 这类行的判定漂移）
+import { isHtmlHeading, isMarkdownAtxHeading, isWikitextHeading } from '$:/plugins/keepone/tidme/core/text-structure';
 import type { Block } from './epub';
 import { collectBlocks } from './epub';
 
@@ -230,13 +232,16 @@ export function blocksFromPlainText(text: string): Block[] {
   return paragraphsOf(text).map((p) => virtualBlock(p)).filter((b) => normalizeText(b.text));
 }
 
-/** 格式探测（无显式 type 时） */
+/** 格式探测（无显式 type 时）：标题判定复用 core/text-structure 的单一实现 */
 export function sniffFormat(text: string): TextFormat {
   const t = String(text || '').slice(0, 2000);
-  if (/^\s*<(?:!DOCTYPE\s+html|html|head|body|h[1-6]|div|p)\b/i.test(t)) return 'html';
-  const hasMdHeading = /^\s*#{1,6}\s+\S/m.test(t);
+  const lines = t.split('\n');
+  if (lines.some((l) => /^\s*<(?:!DOCTYPE\s+html|html|head|body|div|p|h[1-6])\b/i.test(l))) return 'html';
+  const hasMdHeading = lines.some((l) => isMarkdownAtxHeading(l));
   const hasMdFence = /^\s*(```|~~~)/m.test(t);
-  const hasBangHeading = /^\s*!{1,6}\s+\S/m.test(t);
+  const hasBangHeading = lines.some((l) => isWikitextHeading(l));
+  const hasHtmlHeading = lines.some((l) => isHtmlHeading(l));
+  if (hasHtmlHeading && !hasMdHeading) return 'html';
   if (hasBangHeading && !hasMdHeading && !hasMdFence) return 'wikitext';
   if (hasMdHeading || hasMdFence || /^\s*[-*+]\s+\S/m.test(t) || /^\s*\d+[.)]\s+\S/m.test(t)) return 'markdown';
   return 'txt';

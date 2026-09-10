@@ -16,6 +16,7 @@ const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const ids = require('$:/plugins/keepone/tidme/core/ids.js');
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
+const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
 
 export function pdfBinaryTitle(docTitle: string): string {
   return ns.NS_ASSETS + docTitle;
@@ -57,24 +58,23 @@ export async function createPdfDoc(
 
   wiki.addTiddler({ title: pdfTitle, type: 'application/pdf', text: dataB64 });
   const nowFields = schema.initialFsrsFields(new Date());
-  const docTiddler: Record<string, any> = {
+  // 文档页字段基座唯一产地 = core/card-factory（不变式字段不在此重拼）
+  const docTiddler = cardFactory.buildDocPageFields({
     title: docRootTitle,
-    tags: ['tidme-doc'],
-    ...nowFields,
-    'tidme.kind': 'topic',
-    'tidme.doc': docId,
-    'tidme.format': 'pdf',
-    'tidme.asset': pdfTitle,
-    'tidme.structure': 'continuous',
-    'tidme.priority': String(sched.PRIORITY_DEFAULT),
-    'tidme.afactor': String(sched.AFACTOR_CONTINUOUS),
     caption: docTitle,
-    'tidme.breadcrumb': docTitle,
+    docId,
+    structure: 'continuous',
+    format: 'pdf',
     text: '<$tidme-pdf-reader/>',
-  };
-  if (opts.pagesTotal && opts.pagesTotal > 0) {
-    docTiddler['tidme.pages-total'] = String(opts.pagesTotal);
-  }
+    extra: {
+      ...nowFields,
+      'tidme.asset': pdfTitle,
+      'tidme.priority': String(sched.PRIORITY_DEFAULT),
+      'tidme.afactor': String(sched.AFACTOR_CONTINUOUS),
+      'tidme.breadcrumb': docTitle,
+      ...(opts.pagesTotal && opts.pagesTotal > 0 ? { 'tidme.pages-total': String(opts.pagesTotal) } : {}),
+    },
+  });
   wiki.addTiddler(docTiddler);
   return { docId, docTitle: docRootTitle, pdfTitle };
 }

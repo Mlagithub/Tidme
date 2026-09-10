@@ -165,7 +165,7 @@ function makeStatsPanel(): WidgetCtor {
         const cardFunnel = el(doc, 'div', 'tm-dashboard-card');
         cardFunnel.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.funnel', 'Learning Funnel')));
         const funnelBox = el(doc, 'div', 'tm-stat-funnel');
-        const funnelMax = Math.max(1, funnel.docs, funnel.sections, funnel.extracts, funnel.cards);
+        const funnelMax = Math.max(1, funnel.docs, funnel.sections, funnel.extracts, funnel.concepts, funnel.cards);
         const funnelRow = (label: string, n: number) => {
           const row = el(doc, 'div', 'tm-stat-funnel-row');
           row.appendChild(el(doc, 'span', 'tm-stat-funnel-label', label));
@@ -180,6 +180,7 @@ function makeStatsPanel(): WidgetCtor {
         funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.import', 'Docs'), funnel.docs));
         funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.sections', 'Sections'), funnel.sections));
         funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.extracts', 'Extracts'), funnel.extracts));
+        funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.concepts', 'Concepts'), funnel.concepts));
         funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.cards', 'Cards'), funnel.cards));
         cardFunnel.appendChild(funnelBox);
         sideCol.appendChild(cardFunnel);

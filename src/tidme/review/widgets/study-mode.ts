@@ -24,6 +24,7 @@ const Widget = require('$:/core/modules/widgets/widget.js').widget;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
+const viewState = require('$:/plugins/keepone/tidme/ui/base/view-state.js');
 const el = dom.el;
 const navigateTo = dom.navigateTo;
 const notify = dom.notify;
@@ -50,7 +51,7 @@ function endStudy(widget: any) {
  */
 function closeLeftoverCards(widget: any, wasActive: boolean, active: boolean): void {
   if (!wasActive || active) return;
-  for (const t of session.openItemCards(widget.wiki)) dom.closeTiddler(widget, t);
+  for (const t of viewState.storyItemCards(widget.wiki)) dom.closeTiddler(widget, t);
 }
 
 /** 获取当前学习活动卡片（优先取 widget 变量，在全局 PageTemplate 时按故事栈顶层取会话卡） */
@@ -59,8 +60,8 @@ function getCurrentStudyCard(wiki: any, widget: any, studyList: string[]): strin
   if (varTitle && studyList.includes(varTitle)) {
     return varTitle;
   }
-  const story = wiki.getTiddler(ns.STORY_LIST_TITLE)?.fields?.list;
-  if (Array.isArray(story)) {
+  const story = viewState.storyTitles(wiki);
+  if (story.length) {
     // 用户正在看的卡 = 故事最顶层：从顶层向下找第一张会话卡。按列表序嗅探
     // （find 第一张在场的卡）会指向更早入栈的旧卡——打开 PDF 阅读时模式条
     // 仍停在词卡进度、不出现「读完，继续复习」，学习模式与所见卡脱节。
@@ -94,7 +95,7 @@ function advanceStudy(widget: any) {
       const docId = String(f['tidme.doc'] || '');
       const page = Number(wiki.getTiddlerText(ns.pdfPageStateTitle(docId), ''));
       if (docId && Number.isFinite(page) && page >= 1) {
-        docOps.saveReadPoint(wiki, docId, { t: cur, s: `p${page}` });
+        docOps.saveReadPoint(wiki, docId, { t: cur, s: docOps.formatPagePosition(page) });
       }
     }
     if (f['tidme.kind'] === 'topic' && !deckMod.isDeckFields(f)) {
@@ -113,11 +114,11 @@ function advanceStudy(widget: any) {
       let s = docOps.readPointPositionOf(wiki, next);
       if (!s && docOps.isContinuousCard(nf)) {
         const p = Number(wiki.getTiddlerText(ns.pdfPageStateTitle(nextDoc), ''));
-        if (Number.isFinite(p) && p >= 1) s = `p${p}`;
+        s = docOps.formatPagePosition(p);
       }
       docOps.saveReadPoint(wiki, nextDoc, { t: next, s });
     }
-    session.prepareCardFold(wiki, next);
+    session.enterCard(wiki, next);
     navigateTo(widget, next);
   } else {
     widget.dispatchEvent?.({ type: 'tm-confetti-launch' });

@@ -27,7 +27,7 @@ paths.ts — tiddler 命名空间路径生成（章节隔离）
 title 的真实位置派生（兼容带后缀 folder），不经本模块。
 */
 
-import { NS_DECKS, NS_DOCS } from './ns.ts';
+import { NS_DECKS, NS_DOCS, TITLE_UNSAFE_CHARS as NS_UNSAFE_CHARS } from './ns.ts';
 
 // 保留 TW 系统 tiddler 段
 const RESERVED = new Set([
@@ -40,14 +40,16 @@ const RESERVED = new Set([
   'state',
 ]);
 
-/** 去除路径不安全字符 + 折叠空白；保留中日韩文字与拉丁字母数字 */
+/** 去除路径不安全字符 + 折叠空白；保留中日韩文字与拉丁字母数字。
+ *  危险字符集合来自 ns.TITLE_UNSAFE_CHARS（与 deck.titleOf 同源）；本函数选择"删除"
+ *  而非"换成 -"，并叠加可读性风格（NFKC、去营销括号、折叠连字符、截断）。 */
 export function slugify(name: string): string {
   if (!name) return '';
   let s = String(name)
     .normalize('NFKC')
     .replace(/[《》「」『』「」]/g, '') // 中文角标引号（书名号等）
     .replace(/[（()()【\[\]】]/g, '') // 中英文括号（营销/说明）
-    .replace(/[/\\:*?"<>|]/g, '') // 文件系统/TW 保留字符
+    .replace(NS_UNSAFE_CHARS, '') // 路径/文件系统/过滤器危险字符
     .replace(/\s+/g, '-') // 空白 → 连字符
     .replace(/[\-_.]+/g, '-') // 合并连续连字符/点
     .replace(/^[\-\.]+|[\-\.]+$/g, '') // 去首尾连字符/点
@@ -77,21 +79,11 @@ export function docRoot(docTitle: string): string {
   return NS_DOCS + slug;
 }
 
-/** 知识型卡片根：Tidme/Decks/<docSlug>（挖空/问答统一进这里；与 docRoot 平行） */
-export function docCardsRoot(docTitle: string): string {
-  return NS_DECKS + (slugify(docTitle) || 'untitled');
-}
-
 /** 节卡叶段（A2：核心 UI 可读）：可读 caption slug + "-" + 稳定 id；caption 空时退化为纯 id。
  * 唯一性由 id 保证，可读性由 caption 提供；标题一经创建即稳定。 */
 export function sectionLeaf(caption: string, sectionId: string): string {
   const slug = slugify(caption);
   return (slug ? slug + '-' : '') + sectionId;
-}
-
-/** 节卡路径（纯形式）：Tidme/Docs/<docSlug>/<sectionLeaf(caption, sectionId)>。 */
-export function sectionPath(docTitle: string, caption: string, sectionId: string): string {
-  return joinPath(docRoot(docTitle), sectionLeaf(caption, sectionId));
 }
 
 /** 取命名空间 title 的叶段（末段）：Tidme/Docs/<slug>/s123… → s123…。

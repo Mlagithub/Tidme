@@ -37,8 +37,9 @@ Tidme 启动维护任务（浏览器 / Node / TiddlyWeb 通用）：
         }
       }
       if (result.stats.postponed > 0) {
+        var nsMod = require('$:/plugins/keepone/tidme/core/ns.js');
         $tw.wiki.addTiddler({
-          title: '$:/temp/tidme/autopostpone/last',
+          title: nsMod.AUTOPOSTPONE_LAST_TITLE,
           text: JSON.stringify({ at: new Date().toISOString(), overdue: result.stats.overdue, postponed: result.stats.postponed, kept: result.stats.kept }),
         });
       }
@@ -52,10 +53,10 @@ Tidme 启动维护任务（浏览器 / Node / TiddlyWeb 通用）：
   function pruneLogs() {
     try {
       var config = require('$:/plugins/keepone/tidme/core/config.js');
-      var nsMod = require('$:/plugins/keepone/tidme/core/ns.js');
+      var schema = require('$:/plugins/keepone/tidme/core/schema.js');
       var retentionDays = config.readLogRetentionDays($tw.wiki);
       if (!(retentionDays > 0)) return;
-      var cutoffDay = nsMod.todayKey(new Date(Date.now() - retentionDays * 86400000));
+      var cutoffDay = schema.todayKey(new Date(Date.now() - retentionDays * 86400000));
       var logs = $tw.wiki.filterTiddlers('[all[shadows+tiddlers]prefix[$:/Deck/]]').filter(function(t) {
         return /\/log$/.test(t);
       });

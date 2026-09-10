@@ -20,6 +20,7 @@ const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
 const workflow = require('$:/plugins/keepone/tidme/review/widgets/workflow.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 function lingo(wiki: any, key: string, fallback: string): string {
   return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
@@ -33,9 +34,9 @@ const bindWidgetRefresh = primitives.bindWidgetRefresh;
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
-/** 今日复习卡数：遍历全部牌组日志单文件，按今天的日期前缀计数（契约见 core/ns） */
+/** 今日复习卡数：遍历全部牌组日志单文件，按今天的日期前缀计数（日期键唯一产地 = core/schema） */
 function todayReviewCount(wiki: any): number {
-  const key = ns.todayKey();
+  const key = schema.todayKey();
   let n = 0;
   for (const lt of wiki.filterTiddlers(`[prefix[${ns.DECK_PREFIX}]]`)) {
     if (!ns.isDeckLogTitle(lt)) continue;
@@ -118,13 +119,12 @@ function makeTodayHero(): WidgetCtor {
       // 今日反馈条
       const rt = stats.getReadTimeStats(wiki);
       const reviewed = todayReviewCount(wiki);
-      // 历史数据容错：旧版本复习记录可能未记录专注时长，若今日已有复习记录但专注时间为 0，
-      // 按每卡至少 1 秒给予基础时间，杜绝"已复习45卡 专注0秒"的反常现象
-      const effectiveSec = Math.max(rt.todaySeconds, reviewed > 0 && rt.todaySeconds === 0 ? reviewed : 0);
+      // 专注时长如实回显记录值：记录侧已有「快刷保底 1 秒 / 超上限整段丢弃」口径
+      // （core/session 的锚点结算），此处不再为 0 秒补假时间
       const revTpl = lingo(wiki, 'today.reviewedsummary', '${count} cards reviewed today');
       const reviewedStr = revTpl.replace('${count}', String(reviewed)).replace('$(count)$', String(reviewed));
       const focTpl = lingo(wiki, 'today.focussummary', 'Focus ${duration}');
-      const focusStr = focTpl.replace('${duration}', stats.formatDuration(effectiveSec)).replace('$(duration)$', stats.formatDuration(effectiveSec));
+      const focusStr = focTpl.replace('${duration}', stats.formatDuration(rt.todaySeconds)).replace('$(duration)$', stats.formatDuration(rt.todaySeconds));
       const feed = el(doc, 'div', 'tm-today-feed', `${reviewedStr} · ${focusStr}`);
       container.appendChild(feed);
     }
@@ -201,9 +201,9 @@ function makeTodayRecent(): WidgetCtor {
         const target = docOps.docReadingTarget(wiki, docId) || r.title;
         const syncPdfPage = () => {
           const rp = docOps.parseReadPoint(wiki, docId);
-          const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
-          if (pageMatch && docId) {
-            wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: pageMatch[1] });
+          const page = rp ? docOps.parsePagePosition(rp.s) : null;
+          if (page && docId) {
+            wiki.addTiddler({ title: ns.pdfPageStateTitle(docId), text: String(page) });
           }
         };
         return {

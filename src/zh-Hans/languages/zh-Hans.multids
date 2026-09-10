@@ -65,6 +65,7 @@ badge.overdue: !
 badge.due: 期
 badge.new: 新
 kind.extract: 摘
+kind.concept: 概
 kind.cloze: 挖
 kind.qa: 问
 kind.section: 节
@@ -416,6 +417,9 @@ import.alignsummary: 对齐：新增
 import.updated: 更新
 import.archived: 归档
 import.srspreserved: SRS 进度保留
+import.dropped: 同名节已丢弃
+import.skippedexisting: 同名条目已跳过
+import.collision: 疑似同名书碰撞，请改标题后重新导入
 import.pdfimported: 已导入
 import.sectionsadded: 节已入库并进入默认牌堆，随时可学。
 split.sourcemissing: 源 tiddler 不存在
@@ -448,6 +452,7 @@ stats.funnel: 学习漏斗
 stats.funnel.import: 导入
 stats.funnel.sections: 切分
 stats.funnel.extracts: 摘录
+stats.funnel.concepts: 概念
 stats.funnel.cards: 卡片
 stats.reviewretention: 复习与保留率
 stats.reviews: 次复习

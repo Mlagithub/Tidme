@@ -176,9 +176,9 @@ function makeReadingList(): any {
           e.preventDefault();
           e.stopPropagation();
           const rp = docOps.parseReadPoint(wiki, g.doc);
-          const pageMatch = rp?.s && /^p(\d+)$/.exec(rp.s);
-          if (pageMatch && g.doc) {
-            wiki.addTiddler({ title: ns.pdfPageStateTitle(g.doc), text: pageMatch[1] });
+          const page = rp ? docOps.parsePagePosition(rp.s) : null;
+          if (page && g.doc) {
+            wiki.addTiddler({ title: ns.pdfPageStateTitle(g.doc), text: String(page) });
           }
           if (targetCard) navigateTo(this, targetCard);
         });
