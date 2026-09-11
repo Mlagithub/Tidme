@@ -3275,9 +3275,9 @@ function runImport(_0, _1) {
     const lower = fileName.toLowerCase();
     if (lower.endsWith(".epub"))
       return importEpubBytes(bytes, fileName, options);
-    if (/\.(md|markdown|txt|html?)$/.test(lower))
+    if (/\.(md|markdown|pdf|txt|html?)$/.test(lower))
       return importTextBytes(bytes, fileName, options);
-    throw new Error(`\u4E0D\u652F\u6301\u7684\u683C\u5F0F\uFF1A${fileName}\uFF08\u652F\u6301 .epub / .md / .txt / .html\uFF09`);
+    throw new Error(`\u4E0D\u652F\u6301\u7684\u683C\u5F0F\uFF1A${fileName}\uFF08\u652F\u6301 .epub / .md / .pdf / .txt / .html\uFF09`);
   });
 }
 function neighborsOf(orderedTitles, current) {

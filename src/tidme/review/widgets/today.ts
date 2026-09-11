@@ -22,6 +22,7 @@ const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 function lingo(wiki: any, key: string, fallback: string): string {
   return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
@@ -57,15 +58,48 @@ function todayReviewCount(wiki: any): number {
   return n;
 }
 
-/** 待学数（全局学习队列 = learn+due+new）与待读数（topic 在队） */
-function todayCounts(wiki: any): { learn: number; due: number; newly: number; toRead: number } {
+interface TodayWorkload {
+  learn: number;
+  due: number;
+  newly: number;
+  todayToStudy: number;
+  totalDue: number;
+  totalNew: number;
+  totalPool: number;
+  toRead: number;
+}
+
+/** 待学数（全局学习队列受今日配额截断后的实际待学量 + 卡库全量池）与待读数（topic 在队） */
+function todayCounts(wiki: any): TodayWorkload {
   const f = deckEngine.composeDeckFilters(deckMod.DEFAULT_DECK);
   const count = (filter: string) => wiki.filterTiddlers(filter).length;
+  const totalLearn = count(f.learn);
+  const totalDue = count(f.due);
+  const totalNew = count(f.newly);
+  const toRead = count(ns.TOPIC_QUEUE_FILTER);
+
+  const quota = sched && typeof sched.readDailyQuota === 'function' ? sched.readDailyQuota(wiki) : { newCount: 0, reviewCount: 0 };
+  const newCap = config && typeof config.readNewPerDay === 'function' ? config.readNewPerDay(wiki) : 20;
+  const reviewCap = config && typeof config.readReviewsPerDay === 'function' ? config.readReviewsPerDay(wiki) : 200;
+  const suppress = config && typeof config.readLimitsSuppressNew === 'function' ? config.readLimitsSuppressNew(wiki) : true;
+
+  const remainingNewQuota = newCap > 0 ? Math.max(0, newCap - quota.newCount) : totalNew;
+  const remainingReviewQuota = reviewCap > 0 ? Math.max(0, reviewCap - quota.reviewCount) : totalDue;
+
+  const actualDue = Math.min(totalDue, remainingReviewQuota);
+  const isOverdueSuppressed = suppress && (reviewCap > 0 && totalDue >= remainingReviewQuota);
+  const actualNew = isOverdueSuppressed ? 0 : Math.min(totalNew, remainingNewQuota);
+  const todayToStudy = totalLearn + actualDue + actualNew;
+
   return {
-    learn: count(f.learn),
-    due: count(f.due),
-    newly: count(f.newly),
-    toRead: count(ns.TOPIC_QUEUE_FILTER),
+    learn: totalLearn,
+    due: actualDue,
+    newly: actualNew,
+    todayToStudy,
+    totalDue,
+    totalNew,
+    totalPool: totalLearn + totalDue + totalNew,
+    toRead,
   };
 }
 
@@ -92,7 +126,7 @@ function makeTodayHero(): WidgetCtor {
       const wiki = this.wiki;
       container.textContent = '';
       const c = todayCounts(wiki);
-      const toStudy = c.learn + c.due + c.newly;
+      const toStudy = c.todayToStudy;
 
       // 双主 CTA
       const grid = el(doc, 'div', 'tm-today-ctas');
@@ -104,15 +138,26 @@ function makeTodayHero(): WidgetCtor {
         card.addEventListener('click', onClick);
         return card;
       };
-      grid.appendChild(
-        mkCta(
-          'tm-today-cta--study',
-          'study',
-          lingo(wiki, 'today.startstudy', 'Start Review'),
-          toStudy > 0 ? `${toStudy} ${lingo(wiki, 'today.cardsdue', 'cards due')}` : lingo(wiki, 'today.noduecards', 'No due cards, free to review'),
-          () => workflow.startGlobalLearning(wiki, this),
-        ),
+
+      const studySub = toStudy > 0
+        ? `${toStudy} ${lingo(wiki, 'today.cardstostudy', 'cards to study today')}`
+        : lingo(wiki, 'today.noduecards', 'No due cards, free to review');
+      const studyTip = `${lingo(wiki, 'today.startstudy', 'Start Review')} — ${lingo(wiki, 'today.cardstostudy', 'cards to study today')}: ${toStudy} (${
+        lingo(wiki, 'today.breakdown.review', 'Review')
+      }: ${c.due}/${c.totalDue}, ${lingo(wiki, 'today.breakdown.new', 'New')}: ${c.newly}/${c.totalNew}, ${lingo(wiki, 'today.breakdown.learn', 'Learning')}: ${c.learn}; ${
+        lingo(wiki, 'today.breakdown.total', 'Total Vault')
+      }: ${c.totalPool})`;
+
+      const studyBtn = mkCta(
+        'tm-today-cta--study',
+        'study',
+        lingo(wiki, 'today.startstudy', 'Start Review'),
+        studySub,
+        () => workflow.startGlobalLearning(wiki, this),
       );
+      studyBtn.title = studyTip;
+      grid.appendChild(studyBtn);
+
       const readTarget = workflow.globalReadingTarget(wiki);
       grid.appendChild(
         mkCta(
@@ -249,3 +294,4 @@ function makeTodayRecent(): WidgetCtor {
 exports['tidme-today-hero'] = makeTodayHero();
 exports['tidme-today-recent'] = makeTodayRecent();
 exports.todayReviewCount = todayReviewCount; // 供测试/复用
+exports.todayCounts = todayCounts;

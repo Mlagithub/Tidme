@@ -86,12 +86,17 @@ nav.stats: Stats
 nav.settings: Settings
 today.startstudy: Start Review
 today.cardsdue: cards due
-today.noduecards: No due cards, free to review
+today.cardstostudy: cards to study today
+today.noduecards: All done for today, free to review
 today.sectionsleft: sections left
 today.noreading: No reading materials
 today.reviewedprefix: Today Reviewed:
 today.focusprefix: Focus:
 today.norecentbooks: No reading in progress - Add materials from Import Center.
+today.breakdown.review: Review
+today.breakdown.new: New
+today.breakdown.learn: Learning
+today.breakdown.total: Total Vault
 studymode.learning: Learning
 studymode.finishandnext: Done, Next ›
 studymode.finishandnext.tip: Save reading progress and continue review

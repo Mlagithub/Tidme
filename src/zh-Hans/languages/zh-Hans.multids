@@ -86,12 +86,17 @@ nav.stats: 统计
 nav.settings: 设置
 today.startstudy: 开始学习
 today.cardsdue: 张卡待复习
-today.noduecards: 暂无到期卡片，可自由复习
+today.cardstostudy: 张卡今日待学
+today.noduecards: 今日任务已完成，可自由复习
 today.sectionsleft: 节待读
 today.noreading: 暂无待读材料
 today.reviewedprefix: 今日已复习：
 today.focusprefix: 专注：
 today.norecentbooks: 暂无在读书籍——去导入中心添加材料。
+today.breakdown.review: 复习
+today.breakdown.new: 新卡
+today.breakdown.learn: 学习中
+today.breakdown.total: 卡库总量
 studymode.learning: 学习中
 studymode.finishandnext: 读完，继续复习 ›
 studymode.finishandnext.tip: 保存阅读进度并继续复习后续卡片；读完的材料按 A-Factor 顺延，到期自动回归队列
