@@ -411,3 +411,15 @@ test('deck 过滤器组合: 队列各段 subfilter 包裹后并集齐全（回�
   const outOld = evalWithVars({ queue_old: rawJoin }, '[subfilter<queue_old>]');
   assert.deepEqual(outOld, ['T2-new'], '旧裸拼接形态只产出新卡段（缺陷对照）');
 });
+
+test('composeGlobalLearningQueue: 自动过滤包含过滤器元字符或系统条目的伪标题', () => {
+  const evaluate = (filter) => {
+    if (filter.includes('state_learn')) return ['[subfilter{$:/Deck/default!!card}] +[sort[due]]', '合法学习卡'];
+    if (filter.includes('state_due')) return ['$:/config/broken-card', '合法到期卡'];
+    return ['普通新卡'];
+  };
+  const q = deckEngine.composeGlobalLearningQueue(evaluate);
+  assert.ok(!q.includes('[subfilter{$:/Deck/default!!card}] +[sort[due]]'), '包含 []{} 的伪标题被拦截');
+  assert.ok(!q.includes('$:/config/broken-card'), '$:/ 开头的系统伪标题被拦截');
+  assert.deepEqual([...q], ['合法学习卡', '合法到期卡', '普通新卡']);
+});

@@ -131,9 +131,10 @@ export function composeGlobalLearningQueue(
   const mode = opts.mode || 'interleaved';
   const includeTopics = opts.topics === true;
 
-  const learnItems = evaluate(defaultDeckFilters.learn);
-  let dueItems = evaluate(defaultDeckFilters.due);
-  let newItems = evaluate(defaultDeckFilters.newly);
+  const isSafeCard = (t: string) => isFilterSafeTitle(t) && !t.startsWith('$:/');
+  const learnItems = evaluate(defaultDeckFilters.learn).filter(isSafeCard);
+  let dueItems = evaluate(defaultDeckFilters.due).filter(isSafeCard);
+  let newItems = evaluate(defaultDeckFilters.newly).filter(isSafeCard);
 
   const initialDueCount = dueItems.length;
   if (opts.reviewLimit !== undefined) {
