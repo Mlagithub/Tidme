@@ -14,13 +14,14 @@ import { bootPlugin } from '../helpers/tw-boot.mjs';
 import { twDate } from '../helpers/tw-date.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-grade-' });
-let grade, session, stats, deckMod, ns;
+let grade, session, stats, deckMod, ns, schema;
 test.before(() => {
   grade = mod('core/grade.js');
   session = mod('core/session.js');
   stats = mod('core/stats.js');
   deckMod = mod('core/deck.js');
   ns = mod('core/ns.js');
+  schema = mod('core/schema.js');
 });
 
 test.beforeEach(() => {
@@ -147,6 +148,42 @@ test('gradeCard：无关评分不删子集牌组（评分不是子集生命周�
   assert.equal(r.ok, true);
   assert.ok(deckMod.getDeck(wiki, deckTitle), '无关评分不删子集牌组——「复习本书」作用域在评分后存活');
   // 焚烧点在使用流程边界：startstudy 空队 / stopstudy / endSession（见 session/deck 测试）
+});
+
+test('gradeCard：成熟复习卡评分时施加 Fuzz 抖动并同步写入 due 与 review_log', () => {
+  wiki.addTiddler({
+    title: '成熟卡',
+    'tidme.kind': 'item',
+    caption: '成熟问？',
+    text: '答',
+    state: '2',
+    due: twDate(new Date('2026-09-10T00:00:00Z')),
+    reps: '5',
+    lapses: '0',
+    stability: '10',
+    difficulty: '5',
+    elapsed_days: '10',
+    scheduled_days: '10',
+    last_review: twDate(new Date('2026-08-31T00:00:00Z')),
+  });
+  const now = new Date('2026-09-10T00:00:00Z');
+  // 注入 randomFn = 0.999（最大正抖动）
+  const r = grade.gradeCard(wiki, {
+    title: '成熟卡',
+    deckTitle: '$:/Deck/default',
+    rating: 'Good',
+    now,
+    fuzzRandomFn: () => 0.999,
+  });
+  assert.equal(r.ok, true);
+  const f = wiki.getTiddler('成熟卡').fields;
+  assert.equal(String(f.state), '2');
+  assert.ok(Number(f.scheduled_days) > 10, 'scheduled_days 正常增长且含抖动');
+  assert.equal(r.due, String(f.due));
+
+  const log = wiki.getTiddlerData(ns.deckLogTitle('$:/Deck/default'));
+  const logEntry = JSON.parse(log[schema.twDateString(now)]);
+  assert.equal(logEntry.scheduled_days, Number(f.scheduled_days), '日志 scheduled_days 与卡片同步');
 });
 
 test('gradeCard：缺卡/未知评分安全返回 ok=false', () => {

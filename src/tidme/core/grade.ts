@@ -35,6 +35,8 @@ export interface GradeOptions {
   /** Again / Hard / Good / Easy（调用方已归一，此处只按键取值） */
   rating: string;
   now?: Date;
+  /** 间隔模糊随机数注入（默认 Math.random，便于测试确定性断言） */
+  fuzzRandomFn?: () => number;
 }
 
 export interface GradeResult {
@@ -68,14 +70,34 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
 
   // 1. FSRS 四档计算（缺字段按新卡，与 [fsrs[p]] 过滤器输出一致）
   let target: any = null;
+  let maxInterval = sched.DECK_PARAM_DEFAULTS.maximumInterval;
   try {
     const parsed = JSON.parse(fsrs.repeat(f, { p: String(deck.fields.p || ''), now }));
     const key = parsed.Rating?.[rating] ?? rating;
     target = parsed.Cards?.[key];
+    if (parsed.P?.maximum_interval) maxInterval = Number(parsed.P.maximum_interval);
   } catch {
     target = null;
   }
   if (!target || !target.card) return result;
+
+  // 1.5 间隔模糊（Fuzz）：对及格复习卡（state=2 且 scheduled_days >= 2.5）加对称抖动打散聚集
+  if (rating !== 'Again' && String(target.card.state) === '2') {
+    const rawDays = Number(target.card.scheduled_days);
+    if (Number.isFinite(rawDays) && rawDays >= 2.5) {
+      const prevInterval = Number(f.scheduled_days || 0);
+      const fuzzedDays = sched.applyFuzz(rawDays, {
+        prevInterval,
+        maxInterval,
+        randomFn: opts.fuzzRandomFn,
+      });
+      if (fuzzedDays !== rawDays) {
+        target.card.scheduled_days = String(fuzzedDays);
+        target.card.due = schema.twDateString(new Date(now.getTime() + fuzzedDays * 86400000));
+        if (target.review_log) target.review_log.scheduled_days = fuzzedDays;
+      }
+    }
+  }
 
   // 2. 字段写回：FSRS 补丁 + annotate-colour + 优先级动态（合并一次写，少一轮 refresh）
   const delta = sched.priorityDeltaForRating(rating, config.readPriorityDynamics(wiki));

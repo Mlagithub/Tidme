@@ -133,6 +133,58 @@ function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86400000);
 }
 
+export interface FuzzRange {
+  minDelta: number;
+  maxDelta: number;
+}
+
+/**
+ * 间隔模糊（Fuzz）区间计算：对标 Anki states/fuzz.rs 分段对称抖动规则。
+ * - interval < 2.5 天：不加抖动（避免破坏 1 天复习或短期学习步）；
+ * - 2.5 ~ 7 天：delta = 1 + 0.15 * (interval - 2.5)；
+ * - 7 ~ 20 天：累加 0.10 * (interval - 7)；
+ * - 20 天以上：累加 0.05 * (interval - 20)，上限 90 天。
+ */
+export function calculateFuzzRange(interval: number): FuzzRange {
+  if (interval < 2.5) return { minDelta: 0, maxDelta: 0 };
+  let delta = 1;
+  if (interval < 7) {
+    delta += 0.15 * (interval - 2.5);
+  } else if (interval < 20) {
+    delta += 0.15 * (7 - 2.5) + 0.10 * (interval - 7);
+  } else {
+    delta += 0.15 * (7 - 2.5) + 0.10 * (20 - 7) + 0.05 * (interval - 20);
+  }
+  const intDelta = Math.min(90, Math.max(1, Math.round(delta)));
+  return { minDelta: -intDelta, maxDelta: intDelta };
+}
+
+export interface FuzzOptions {
+  prevInterval?: number;
+  maxInterval?: number;
+  randomFn?: () => number;
+}
+
+/**
+ * 应用间隔模糊抖动：返回加入对称抖动后的整数天数。
+ * 约束：及格时不短于前次间隔（SM 准则）；不低于 1 天；不超过 maxInterval。
+ */
+export function applyFuzz(scheduledDays: number, opts: FuzzOptions = {}): number {
+  if (scheduledDays < 2.5) return Math.round(scheduledDays);
+  const { minDelta, maxDelta } = calculateFuzzRange(scheduledDays);
+  if (minDelta === 0 && maxDelta === 0) return Math.round(scheduledDays);
+  const rnd = typeof opts.randomFn === 'function' ? opts.randomFn() : Math.random();
+  const range = maxDelta - minDelta + 1;
+  const fuzz = minDelta + Math.floor(rnd * range);
+  let fuzzed = scheduledDays + fuzz;
+  const lowerBound = opts.prevInterval && opts.prevInterval > 0 ? Math.min(scheduledDays, opts.prevInterval) : 1;
+  fuzzed = Math.max(lowerBound, fuzzed);
+  if (opts.maxInterval && opts.maxInterval > 0) {
+    fuzzed = Math.min(opts.maxInterval, fuzzed);
+  }
+  return Math.round(fuzzed);
+}
+
 export interface CardLike extends CardLikeBase {}
 export interface Patch {
   title: string;

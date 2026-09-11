@@ -360,7 +360,9 @@ __export(scheduler_exports, {
   advanceCard: () => advanceCard,
   afactorForText: () => afactorForText,
   afactorOf: () => afactorOf,
+  applyFuzz: () => applyFuzz,
   autoPostpone: () => autoPostpone,
+  calculateFuzzRange: () => calculateFuzzRange,
   comparePriorityMixed: () => comparePriorityMixed,
   doneCard: () => doneCard,
   forgetCard: () => forgetCard,
@@ -435,6 +437,37 @@ function shiftPriority(priority, step = 5) {
 }
 function addDays(d, days) {
   return new Date(d.getTime() + days * 864e5);
+}
+function calculateFuzzRange(interval) {
+  if (interval < 2.5)
+    return { minDelta: 0, maxDelta: 0 };
+  let delta = 1;
+  if (interval < 7) {
+    delta += 0.15 * (interval - 2.5);
+  } else if (interval < 20) {
+    delta += 0.15 * (7 - 2.5) + 0.1 * (interval - 7);
+  } else {
+    delta += 0.15 * (7 - 2.5) + 0.1 * (20 - 7) + 0.05 * (interval - 20);
+  }
+  const intDelta = Math.min(90, Math.max(1, Math.round(delta)));
+  return { minDelta: -intDelta, maxDelta: intDelta };
+}
+function applyFuzz(scheduledDays, opts = {}) {
+  if (scheduledDays < 2.5)
+    return Math.round(scheduledDays);
+  const { minDelta, maxDelta } = calculateFuzzRange(scheduledDays);
+  if (minDelta === 0 && maxDelta === 0)
+    return Math.round(scheduledDays);
+  const rnd = typeof opts.randomFn === "function" ? opts.randomFn() : Math.random();
+  const range = maxDelta - minDelta + 1;
+  const fuzz = minDelta + Math.floor(rnd * range);
+  let fuzzed = scheduledDays + fuzz;
+  const lowerBound = opts.prevInterval && opts.prevInterval > 0 ? Math.min(scheduledDays, opts.prevInterval) : 1;
+  fuzzed = Math.max(lowerBound, fuzzed);
+  if (opts.maxInterval && opts.maxInterval > 0) {
+    fuzzed = Math.min(opts.maxInterval, fuzzed);
+  }
+  return Math.round(fuzzed);
 }
 function postponeCard(fields, byDays = POSTPONE_DEFAULT_DAYS, now = new Date()) {
   const d = parseTwDate2(fields.due);
