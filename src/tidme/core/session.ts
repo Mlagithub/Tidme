@@ -174,6 +174,40 @@ export function endSession(wiki: any): number {
 }
 
 /**
+ * 启动日末操练（Final Drill）：
+ * 读取当前操练队列，写入专属 final-drill 会话并进入首张卡。
+ */
+export function startFinalDrill(wiki: any, now = new Date()): { list: string[]; mode: string } | null {
+  if (!wiki) return null;
+  const queue = sched.getFinalDrillQueue(wiki, now);
+  if (!queue || !queue.length) return null;
+
+  setSession(wiki, { list: queue, mode: 'final-drill', currentIndex: '0' });
+  enterCard(wiki, queue[0], now);
+  return { list: queue, mode: 'final-drill' };
+}
+
+/**
+ * 启动自定义突击/搜索复习（Cram 模式）：
+ * 接受卡片标题列表或 TW 过滤器，创建 cram 会话并进入首张卡。
+ * cram 会话复习时不写 FSRS 字段、不写 review log，纯粹作为临时突击操练。
+ */
+export function startCramSession(wiki: any, filterOrList: string | string[], now = new Date()): { list: string[]; mode: string } | null {
+  if (!wiki) return null;
+  let list: string[] = [];
+  if (Array.isArray(filterOrList)) {
+    list = filterOrList.filter(Boolean);
+  } else if (typeof filterOrList === 'string' && typeof wiki.filterTiddlers === 'function') {
+    list = wiki.filterTiddlers(filterOrList);
+  }
+  if (!list.length) return null;
+
+  setSession(wiki, { list, mode: 'cram', currentIndex: '0' });
+  enterCard(wiki, list[0], now);
+  return { list, mode: 'cram' };
+}
+
+/**
  * 跳转复习卡（item）前设置折叠态：$:/state/folded/<title> = "hide"（折叠，先看问题）
  * 除非命中某张 deck 的 card_unfold（"show"）。与 startstudy.tid / fsrs4tw 折叠语义
  * 一致——否则 state 缺失时 reveal 默认展开（答案直接显示）。

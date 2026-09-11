@@ -163,6 +163,12 @@ export const LEARN_AHEAD_TITLE = CONFIG_TITLE_PREFIX + 'LearnAhead';
 export const DAILY_QUOTA_STATE_TITLE = '$:/state/tidme/daily-quota';
 /** 撤销状态 tiddler */
 export const UNDO_STATE_TITLE = '$:/state/tidme/undo-state';
+/** 兄弟卡自动分散搁置（默认 true，评分后同源兄弟卡搁置至次日） */
+export const BURY_SIBLINGS_TITLE = CONFIG_TITLE_PREFIX + 'BurySiblings';
+/** 兄弟卡搁置字段（值为 learningDay 串，等于当前学习日则不可调度，次日自动解埋） */
+export const BURIED_FIELD = 'tidme.buried';
+/** 日末操练（Final Drill）状态 tiddler */
+export const FINAL_DRILL_STATE_TITLE = '$:/state/tidme/final-drill';
 /** PDF 与 OCR 配置（JSON） */
 export const OCR_TITLE = CONFIG_TITLE_PREFIX + 'Ocr';
 /** 语义切分配置（JSON；服务端 importer 与导入预览共用） */

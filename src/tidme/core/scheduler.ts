@@ -287,8 +287,17 @@ export function isDueNow(
   fields: Record<string, any> | null | undefined,
   now = new Date(),
   learnAheadMinutes = 0,
+  rolloverHour = 4,
 ): boolean {
   if (!isInQueue(fields)) return false;
+
+  // 兄弟卡当日搁置判定（tidme.buried 等于当前学习日则不可调度，次日自动解埋）
+  const buriedDay = fields![ns.BURIED_FIELD];
+  if (buriedDay) {
+    const currentDay = schema.learningDayOf(now, rolloverHour);
+    if (buriedDay === currentDay) return false;
+  }
+
   const due = fields!.due;
   if (due === undefined || due === null || String(due) === '') return true;
   const parsed = tryParseTwDate(due);
@@ -368,6 +377,139 @@ export function rollbackDailyQuota(wiki: any, isNew: boolean, now = new Date(), 
     });
   }
   return updated;
+}
+
+// ---------- 同源卡分散与兄弟卡搁置（Bury Siblings） ----------
+
+/** 查找指定卡片的所有兄弟卡（同一 tidme.parent，且 title 不同的在队 item 卡） */
+export function findSiblings(wiki: any, cardTitle: string): string[] {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function' || !cardTitle) return [];
+  const f = wiki.getTiddler(cardTitle)?.fields;
+  const parent = f?.['tidme.parent'];
+  if (!parent) return [];
+  const raw = wiki.filterTiddlers(
+    `[all[shadows+tiddlers]tidme.parent[${parent.replace(/[\[\]]/g, '')}]!is[draft]tidme.kind[item]]`,
+  );
+  return raw.filter((t: string) => t !== cardTitle && isInQueue(wiki.getTiddler(t)?.fields));
+}
+
+/** 搁置兄弟卡（Bury siblings）：将传入卡列表打上 tidme.buried = <learningDay> */
+export function buryCards(wiki: any, titles: string[], learningDay: string): string[] {
+  if (!wiki || typeof wiki.addTiddler !== 'function' || !titles.length) return [];
+  const buried: string[] = [];
+  for (const t of titles) {
+    const f = wiki.getTiddler(t)?.fields;
+    if (f && f[ns.BURIED_FIELD] !== learningDay) {
+      wiki.addTiddler({ ...f, [ns.BURIED_FIELD]: learningDay });
+      buried.push(t);
+    }
+  }
+  return buried;
+}
+
+/** 解除搁置（Unbury）：清理指定卡片或全库的 tidme.buried 标记 */
+export function unburyCards(wiki: any, titles?: string[]): number {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return 0;
+  const targetTitles = titles || wiki.filterTiddlers(`[all[shadows+tiddlers]has[${ns.BURIED_FIELD}]]`);
+  let count = 0;
+  for (const t of targetTitles) {
+    const f = wiki.getTiddler(t)?.fields;
+    if (f && f[ns.BURIED_FIELD]) {
+      const copy = { ...f };
+      delete copy[ns.BURIED_FIELD];
+      wiki.addTiddler(copy);
+      count++;
+    }
+  }
+  return count;
+}
+
+// ---------- 日末操练队列（Final Drill） ----------
+
+export interface FinalDrillEntry {
+  title: string;
+  addedAt: string;
+  failCount: number;
+}
+
+export const FINAL_DRILL_MAX_AGE_DAYS = 3;
+
+/** 读取日末操练队列（自动清理 >3 天超期或已被删除的卡片） */
+export function getFinalDrillQueue(wiki: any, now = new Date(), maxAgeDays = FINAL_DRILL_MAX_AGE_DAYS): string[] {
+  if (!wiki || typeof wiki.getTiddlerData !== 'function') return [];
+  const data = wiki.getTiddlerData(ns.FINAL_DRILL_STATE_TITLE);
+  const list: FinalDrillEntry[] = Array.isArray(data?.entries) ? data.entries : [];
+  if (!list.length) return [];
+
+  const nowMs = now.getTime();
+  const maxAgeMs = maxAgeDays * 86400000;
+  const validEntries: FinalDrillEntry[] = [];
+  let changed = false;
+
+  for (const item of list) {
+    const t = item.title;
+    if (!t || !wiki.getTiddler(t)) {
+      changed = true;
+      continue;
+    }
+    const addedTime = schema.tryParseTwDate(item.addedAt)?.getTime() || 0;
+    if (nowMs - addedTime > maxAgeMs) {
+      changed = true;
+      continue;
+    }
+    validEntries.push(item);
+  }
+
+  if (changed || validEntries.length !== list.length) {
+    wiki.addTiddler({
+      title: ns.FINAL_DRILL_STATE_TITLE,
+      type: 'application/json',
+      text: JSON.stringify({ entries: validEntries }),
+    });
+  }
+
+  return validEntries.map((e) => e.title);
+}
+
+/** 记录一张卡到日末操练队列（评 Again 时触发） */
+export function recordFinalDrill(wiki: any, title: string, now = new Date()): void {
+  if (!wiki || typeof wiki.addTiddler !== 'function' || !title) return;
+  getFinalDrillQueue(wiki, now);
+  const data = wiki.getTiddlerData?.(ns.FINAL_DRILL_STATE_TITLE);
+  const entries: FinalDrillEntry[] = Array.isArray(data?.entries) ? [...data.entries] : [];
+
+  const existing = entries.find((e) => e.title === title);
+  if (existing) {
+    existing.failCount = (existing.failCount || 1) + 1;
+    existing.addedAt = schema.twDateString(now);
+  } else {
+    entries.push({
+      title,
+      addedAt: schema.twDateString(now),
+      failCount: 1,
+    });
+  }
+  wiki.addTiddler({
+    title: ns.FINAL_DRILL_STATE_TITLE,
+    type: 'application/json',
+    text: JSON.stringify({ entries }),
+  });
+}
+
+/** 从日末操练队列移除一张卡（评及格达标时触发） */
+export function removeFinalDrill(wiki: any, title: string): boolean {
+  if (!wiki || typeof wiki.getTiddlerData !== 'function' || !title) return false;
+  const data = wiki.getTiddlerData(ns.FINAL_DRILL_STATE_TITLE);
+  const entries: FinalDrillEntry[] = Array.isArray(data?.entries) ? data.entries : [];
+  const filtered = entries.filter((e) => e.title !== title);
+  if (filtered.length === entries.length) return false;
+
+  wiki.addTiddler({
+    title: ns.FINAL_DRILL_STATE_TITLE,
+    type: 'application/json',
+    text: JSON.stringify({ entries: filtered }),
+  });
+  return true;
 }
 
 /**

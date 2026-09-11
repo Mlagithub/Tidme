@@ -61,6 +61,8 @@ var __async = (__this, __arguments, generator) => {
 var ns_exports = {};
 __export(ns_exports, {
   AUTOPOSTPONE_LAST_TITLE: () => AUTOPOSTPONE_LAST_TITLE,
+  BURIED_FIELD: () => BURIED_FIELD,
+  BURY_SIBLINGS_TITLE: () => BURY_SIBLINGS_TITLE,
   CARD_OPEN_AT_TITLE: () => CARD_OPEN_AT_TITLE,
   CONFIG_TITLE_PREFIX: () => CONFIG_TITLE_PREFIX,
   CRUMB_SEP: () => CRUMB_SEP,
@@ -68,6 +70,7 @@ __export(ns_exports, {
   DECK_LOG_SUFFIX: () => DECK_LOG_SUFFIX,
   DECK_PREFIX: () => DECK_PREFIX,
   DECK_TAG: () => DECK_TAG,
+  FINAL_DRILL_STATE_TITLE: () => FINAL_DRILL_STATE_TITLE,
   FOLDED_STATE_PREFIX: () => FOLDED_STATE_PREFIX,
   IMPORT_BAG_TITLE: () => IMPORT_BAG_TITLE,
   LEARN_AHEAD_TITLE: () => LEARN_AHEAD_TITLE,
@@ -131,7 +134,7 @@ function deckLogTitle(deck) {
 function isDeckLogTitle(title) {
   return title.startsWith(DECK_PREFIX) && title.endsWith(DECK_LOG_SUFFIX);
 }
-var NS_DOCS, NS_ASSETS, NS_DECKS, NS_DECKS_SCATTER, CRUMB_SEP, DECK_PREFIX, QUEUE_EXCLUDE, DECK_TAG, NOT_DECK_FILTER, TOPIC_QUEUE_FILTER, TITLE_UNSAFE_CHARS, FOLDED_STATE_PREFIX, CARD_OPEN_AT_TITLE, PDF_PAGE_STATE_PREFIX, AUTOPOSTPONE_LAST_TITLE, DECK_LOG_SUFFIX, CONFIG_TITLE_PREFIX, QUEUE_MODE_TITLE, QUEUE_MIX_TITLE, PRIORITY_DYNAMICS_TITLE, LOG_RETENTION_TITLE, ROLLOVER_HOUR_TITLE, NEW_PER_DAY_TITLE, REVIEWS_PER_DAY_TITLE, LIMITS_SUPPRESS_NEW_TITLE, LEARN_AHEAD_TITLE, DAILY_QUOTA_STATE_TITLE, UNDO_STATE_TITLE, OCR_TITLE, SEMANTIC_SPLIT_TITLE, PAGE_INCREMENTAL_LEARNING, PAGE_TODAY, PAGE_READING_LIST, PAGE_IMPORT_CENTER, PAGE_CARD_MANAGER, PAGE_IMPORT_STATS, PAGE_HELP_SHORTCUTS, PAGE_SETTINGS, NOTIFY_EXTRACT, NOTIFY_CLOZE, NOTIFY_READPOINT, NOTIFY_SELECT_FIRST, NOTIFY_EXTRACT_NOTE, NOTIFY_SECTION_DONE, NOTIFY_LATER, NOTIFY_DONE, NOTIFY_UNSUPPORTED, NOTIFY_CONGRATULATION, NOTIFY_STUDY_ENDED, IMPORT_BAG_TITLE;
+var NS_DOCS, NS_ASSETS, NS_DECKS, NS_DECKS_SCATTER, CRUMB_SEP, DECK_PREFIX, QUEUE_EXCLUDE, DECK_TAG, NOT_DECK_FILTER, TOPIC_QUEUE_FILTER, TITLE_UNSAFE_CHARS, FOLDED_STATE_PREFIX, CARD_OPEN_AT_TITLE, PDF_PAGE_STATE_PREFIX, AUTOPOSTPONE_LAST_TITLE, DECK_LOG_SUFFIX, CONFIG_TITLE_PREFIX, QUEUE_MODE_TITLE, QUEUE_MIX_TITLE, PRIORITY_DYNAMICS_TITLE, LOG_RETENTION_TITLE, ROLLOVER_HOUR_TITLE, NEW_PER_DAY_TITLE, REVIEWS_PER_DAY_TITLE, LIMITS_SUPPRESS_NEW_TITLE, LEARN_AHEAD_TITLE, DAILY_QUOTA_STATE_TITLE, UNDO_STATE_TITLE, BURY_SIBLINGS_TITLE, BURIED_FIELD, FINAL_DRILL_STATE_TITLE, OCR_TITLE, SEMANTIC_SPLIT_TITLE, PAGE_INCREMENTAL_LEARNING, PAGE_TODAY, PAGE_READING_LIST, PAGE_IMPORT_CENTER, PAGE_CARD_MANAGER, PAGE_IMPORT_STATS, PAGE_HELP_SHORTCUTS, PAGE_SETTINGS, NOTIFY_EXTRACT, NOTIFY_CLOZE, NOTIFY_READPOINT, NOTIFY_SELECT_FIRST, NOTIFY_EXTRACT_NOTE, NOTIFY_SECTION_DONE, NOTIFY_LATER, NOTIFY_DONE, NOTIFY_UNSUPPORTED, NOTIFY_CONGRATULATION, NOTIFY_STUDY_ENDED, IMPORT_BAG_TITLE;
 var init_ns = __esm({
   "src/tidme/core/ns.ts"() {
     NS_DOCS = "Tidme/Docs/";
@@ -162,6 +165,9 @@ var init_ns = __esm({
     LEARN_AHEAD_TITLE = CONFIG_TITLE_PREFIX + "LearnAhead";
     DAILY_QUOTA_STATE_TITLE = "$:/state/tidme/daily-quota";
     UNDO_STATE_TITLE = "$:/state/tidme/undo-state";
+    BURY_SIBLINGS_TITLE = CONFIG_TITLE_PREFIX + "BurySiblings";
+    BURIED_FIELD = "tidme.buried";
+    FINAL_DRILL_STATE_TITLE = "$:/state/tidme/final-drill";
     OCR_TITLE = CONFIG_TITLE_PREFIX + "Ocr";
     SEMANTIC_SPLIT_TITLE = CONFIG_TITLE_PREFIX + "SemanticSplit";
     PAGE_INCREMENTAL_LEARNING = "$:/IncrementalLearning";
@@ -371,6 +377,7 @@ __export(scheduler_exports, {
   AUTOPOSTPONE_CONFIG_TITLE: () => AUTOPOSTPONE_CONFIG_TITLE,
   AUTOPOSTPONE_OPTS_DEFAULTS: () => AUTOPOSTPONE_OPTS_DEFAULTS,
   DECK_PARAM_DEFAULTS: () => DECK_PARAM_DEFAULTS,
+  FINAL_DRILL_MAX_AGE_DAYS: () => FINAL_DRILL_MAX_AGE_DAYS,
   ITEM_FILTER: () => ITEM_FILTER,
   ITEM_PROTECTION_WEIGHT: () => ITEM_PROTECTION_WEIGHT,
   POSTPONE_DEFAULT_DAYS: () => POSTPONE_DEFAULT_DAYS,
@@ -383,10 +390,13 @@ __export(scheduler_exports, {
   afactorOf: () => afactorOf,
   applyFuzz: () => applyFuzz,
   autoPostpone: () => autoPostpone,
+  buryCards: () => buryCards,
   calculateFuzzRange: () => calculateFuzzRange,
   comparePriorityMixed: () => comparePriorityMixed,
   doneCard: () => doneCard,
+  findSiblings: () => findSiblings,
   forgetCard: () => forgetCard,
+  getFinalDrillQueue: () => getFinalDrillQueue,
   ignoreCard: () => ignoreCard,
   isCardOutOfQueue: () => isCardOutOfQueue,
   isDueNow: () => isDueNow,
@@ -400,13 +410,16 @@ __export(scheduler_exports, {
   priorityDeltaForRating: () => priorityDeltaForRating,
   readDailyQuota: () => readDailyQuota,
   recordDailyQuota: () => recordDailyQuota,
+  recordFinalDrill: () => recordFinalDrill,
+  removeFinalDrill: () => removeFinalDrill,
   restoreCard: () => restoreCard,
   resumeCard: () => resumeCard,
   rollbackDailyQuota: () => rollbackDailyQuota,
   shiftPriority: () => shiftPriority,
   sortTopicQueue: () => sortTopicQueue,
   suspendCard: () => suspendCard,
-  tierRandom: () => tierRandom
+  tierRandom: () => tierRandom,
+  unburyCards: () => unburyCards
 });
 function protectionScore(fields) {
   return normalizePriority(fields["tidme.priority"]) + (fields["tidme.kind"] === "item" ? -ITEM_PROTECTION_WEIGHT : 0);
@@ -540,9 +553,15 @@ function doneCard() {
 function restoreCard() {
   return { "tidme.done": void 0, "tidme.ignored": void 0, "tidme.suspended": void 0 };
 }
-function isDueNow(fields, now = new Date(), learnAheadMinutes = 0) {
+function isDueNow(fields, now = new Date(), learnAheadMinutes = 0, rolloverHour = 4) {
   if (!isInQueue(fields))
     return false;
+  const buriedDay = fields[ns.BURIED_FIELD];
+  if (buriedDay) {
+    const currentDay = schema.learningDayOf(now, rolloverHour);
+    if (buriedDay === currentDay)
+      return false;
+  }
   const due = fields.due;
   if (due === void 0 || due === null || String(due) === "")
     return true;
@@ -611,6 +630,118 @@ function rollbackDailyQuota(wiki, isNew, now = new Date(), rolloverHour) {
     });
   }
   return updated;
+}
+function findSiblings(wiki, cardTitle) {
+  if (!wiki || typeof wiki.filterTiddlers !== "function" || !cardTitle)
+    return [];
+  const f = wiki.getTiddler(cardTitle)?.fields;
+  const parent = f?.["tidme.parent"];
+  if (!parent)
+    return [];
+  const raw = wiki.filterTiddlers(
+    `[all[shadows+tiddlers]tidme.parent[${parent.replace(/[\[\]]/g, "")}]!is[draft]tidme.kind[item]]`
+  );
+  return raw.filter((t) => t !== cardTitle && isInQueue(wiki.getTiddler(t)?.fields));
+}
+function buryCards(wiki, titles, learningDay) {
+  if (!wiki || typeof wiki.addTiddler !== "function" || !titles.length)
+    return [];
+  const buried = [];
+  for (const t of titles) {
+    const f = wiki.getTiddler(t)?.fields;
+    if (f && f[ns.BURIED_FIELD] !== learningDay) {
+      wiki.addTiddler({ ...f, [ns.BURIED_FIELD]: learningDay });
+      buried.push(t);
+    }
+  }
+  return buried;
+}
+function unburyCards(wiki, titles) {
+  if (!wiki || typeof wiki.filterTiddlers !== "function")
+    return 0;
+  const targetTitles = titles || wiki.filterTiddlers(`[all[shadows+tiddlers]has[${ns.BURIED_FIELD}]]`);
+  let count = 0;
+  for (const t of targetTitles) {
+    const f = wiki.getTiddler(t)?.fields;
+    if (f && f[ns.BURIED_FIELD]) {
+      const copy = { ...f };
+      delete copy[ns.BURIED_FIELD];
+      wiki.addTiddler(copy);
+      count++;
+    }
+  }
+  return count;
+}
+function getFinalDrillQueue(wiki, now = new Date(), maxAgeDays = FINAL_DRILL_MAX_AGE_DAYS) {
+  if (!wiki || typeof wiki.getTiddlerData !== "function")
+    return [];
+  const data = wiki.getTiddlerData(ns.FINAL_DRILL_STATE_TITLE);
+  const list = Array.isArray(data?.entries) ? data.entries : [];
+  if (!list.length)
+    return [];
+  const nowMs = now.getTime();
+  const maxAgeMs = maxAgeDays * 864e5;
+  const validEntries = [];
+  let changed = false;
+  for (const item of list) {
+    const t = item.title;
+    if (!t || !wiki.getTiddler(t)) {
+      changed = true;
+      continue;
+    }
+    const addedTime = schema.tryParseTwDate(item.addedAt)?.getTime() || 0;
+    if (nowMs - addedTime > maxAgeMs) {
+      changed = true;
+      continue;
+    }
+    validEntries.push(item);
+  }
+  if (changed || validEntries.length !== list.length) {
+    wiki.addTiddler({
+      title: ns.FINAL_DRILL_STATE_TITLE,
+      type: "application/json",
+      text: JSON.stringify({ entries: validEntries })
+    });
+  }
+  return validEntries.map((e) => e.title);
+}
+function recordFinalDrill(wiki, title, now = new Date()) {
+  if (!wiki || typeof wiki.addTiddler !== "function" || !title)
+    return;
+  getFinalDrillQueue(wiki, now);
+  const data = wiki.getTiddlerData?.(ns.FINAL_DRILL_STATE_TITLE);
+  const entries = Array.isArray(data?.entries) ? [...data.entries] : [];
+  const existing = entries.find((e) => e.title === title);
+  if (existing) {
+    existing.failCount = (existing.failCount || 1) + 1;
+    existing.addedAt = schema.twDateString(now);
+  } else {
+    entries.push({
+      title,
+      addedAt: schema.twDateString(now),
+      failCount: 1
+    });
+  }
+  wiki.addTiddler({
+    title: ns.FINAL_DRILL_STATE_TITLE,
+    type: "application/json",
+    text: JSON.stringify({ entries })
+  });
+}
+function removeFinalDrill(wiki, title) {
+  if (!wiki || typeof wiki.getTiddlerData !== "function" || !title)
+    return false;
+  const data = wiki.getTiddlerData(ns.FINAL_DRILL_STATE_TITLE);
+  const entries = Array.isArray(data?.entries) ? data.entries : [];
+  const filtered = entries.filter((e) => e.title !== title);
+  if (filtered.length === entries.length)
+    return false;
+  wiki.addTiddler({
+    title: ns.FINAL_DRILL_STATE_TITLE,
+    type: "application/json",
+    text: JSON.stringify({ entries: filtered })
+  });
+  return true;
 }
 function nextSchedulable(ordered, cur, canLearn) {
   const start = cur === null || cur === void 0 ? 0 : ordered.indexOf(cur) + 1;
@@ -721,7 +852,7 @@ function autoPostpone(cards, opts = {}, now = new Date()) {
     stats: { overdue: overdue.length, postponed: postponable.length, kept: kept.length }
   };
 }
-var ns, AUTOPOSTPONE_CONFIG_TITLE, PRIORITY_DEFAULT, AFACTOR_DEFAULT, AFACTOR_CONTINUOUS, TOPIC_MIN_INTERVAL_DAYS, ITEM_PROTECTION_WEIGHT, POSTPONE_DEFAULT_DAYS, AUTOPOSTPONE_OPTS_DEFAULTS, DECK_PARAM_DEFAULTS, PRIORITY_TIERS, ITEM_FILTER, schema, parseTwDate2, tryParseTwDate2, twDateString2, PRIORITY_BUCKET_BOUNDS;
+var ns, AUTOPOSTPONE_CONFIG_TITLE, PRIORITY_DEFAULT, AFACTOR_DEFAULT, AFACTOR_CONTINUOUS, TOPIC_MIN_INTERVAL_DAYS, ITEM_PROTECTION_WEIGHT, POSTPONE_DEFAULT_DAYS, AUTOPOSTPONE_OPTS_DEFAULTS, DECK_PARAM_DEFAULTS, PRIORITY_TIERS, ITEM_FILTER, schema, parseTwDate2, tryParseTwDate2, twDateString2, PRIORITY_BUCKET_BOUNDS, FINAL_DRILL_MAX_AGE_DAYS;
 var init_scheduler = __esm({
   "src/tidme/core/scheduler.ts"() {
     ns = (init_ns(), __toCommonJS(ns_exports));
@@ -750,6 +881,7 @@ var init_scheduler = __esm({
     tryParseTwDate2 = schema.tryParseTwDate;
     twDateString2 = schema.twDateString;
     PRIORITY_BUCKET_BOUNDS = { high: 33, medium: 66 };
+    FINAL_DRILL_MAX_AGE_DAYS = 3;
   }
 });
 
@@ -1113,6 +1245,7 @@ __export(config_exports, {
   SEMANTIC_SPLIT_DEFAULTS: () => SEMANTIC_SPLIT_DEFAULTS,
   SEMANTIC_SPLIT_TITLE: () => SEMANTIC_SPLIT_TITLE2,
   readAutoPostpone: () => readAutoPostpone,
+  readBurySiblings: () => readBurySiblings,
   readDefaultDeckParams: () => readDefaultDeckParams,
   readLearnAheadMinutes: () => readLearnAheadMinutes,
   readLimitsSuppressNew: () => readLimitsSuppressNew,
@@ -1125,6 +1258,7 @@ __export(config_exports, {
   readRolloverHour: () => readRolloverHour,
   readSemanticSplit: () => readSemanticSplit,
   writeAutoPostpone: () => writeAutoPostpone,
+  writeBurySiblings: () => writeBurySiblings,
   writeDefaultDeckParams: () => writeDefaultDeckParams,
   writeLearnAheadMinutes: () => writeLearnAheadMinutes,
   writeLimitsSuppressNew: () => writeLimitsSuppressNew,
@@ -1327,6 +1461,17 @@ function writeLearnAheadMinutes(wiki, minutes) {
   const n = Math.min(1440, Math.max(0, Math.floor(Number(minutes) || 0)));
   wiki.addTiddler({ title: ns3.LEARN_AHEAD_TITLE, text: String(n) });
 }
+function readBurySiblings(wiki) {
+  if (!wiki)
+    return true;
+  const raw = wiki.getTiddlerText?.(ns3.BURY_SIBLINGS_TITLE, "") || wiki.getTiddler?.(ns3.BURY_SIBLINGS_TITLE)?.fields?.text;
+  return boolish(raw, true);
+}
+function writeBurySiblings(wiki, enable) {
+  if (!wiki)
+    return;
+  wiki.addTiddler({ title: ns3.BURY_SIBLINGS_TITLE, text: enable ? "yes" : "no" });
+}
 function readOcrConfig(wiki) {
   const raw = { enable: false, model: "gpt-4o-mini", baseUrl: "", apiKey: "", ...readJson(wiki, OCR_TITLE2) };
   const cfg = {
@@ -1460,6 +1605,8 @@ __export(session_exports, {
   removeFromSessionMany: () => removeFromSessionMany,
   setSession: () => setSession,
   settleFocusAnchor: () => settleFocusAnchor,
+  startCramSession: () => startCramSession,
+  startFinalDrill: () => startFinalDrill,
   touchFocusAnchor: () => touchFocusAnchor
 });
 function getSession(wiki) {
@@ -1563,6 +1710,31 @@ function endSession(wiki) {
     n++;
   }
   return n;
+}
+function startFinalDrill(wiki, now = new Date()) {
+  if (!wiki)
+    return null;
+  const queue = sched3.getFinalDrillQueue(wiki, now);
+  if (!queue || !queue.length)
+    return null;
+  setSession(wiki, { list: queue, mode: "final-drill", currentIndex: "0" });
+  enterCard(wiki, queue[0], now);
+  return { list: queue, mode: "final-drill" };
+}
+function startCramSession(wiki, filterOrList, now = new Date()) {
+  if (!wiki)
+    return null;
+  let list = [];
+  if (Array.isArray(filterOrList)) {
+    list = filterOrList.filter(Boolean);
+  } else if (typeof filterOrList === "string" && typeof wiki.filterTiddlers === "function") {
+    list = wiki.filterTiddlers(filterOrList);
+  }
+  if (!list.length)
+    return null;
+  setSession(wiki, { list, mode: "cram", currentIndex: "0" });
+  enterCard(wiki, list[0], now);
+  return { list, mode: "cram" };
 }
 function prepareCardFold(wiki, title) {
   if (!wiki || typeof wiki.filterTiddlers !== "function" || !title)

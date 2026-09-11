@@ -270,6 +270,17 @@ export function writeLearnAheadMinutes(wiki: any, minutes: number): void {
   wiki.addTiddler({ title: ns.LEARN_AHEAD_TITLE, text: String(n) });
 }
 
+export function readBurySiblings(wiki: any): boolean {
+  if (!wiki) return true;
+  const raw = wiki.getTiddlerText?.(ns.BURY_SIBLINGS_TITLE, '') || wiki.getTiddler?.(ns.BURY_SIBLINGS_TITLE)?.fields?.text;
+  return boolish(raw, true);
+}
+
+export function writeBurySiblings(wiki: any, enable: boolean): void {
+  if (!wiki) return;
+  wiki.addTiddler({ title: ns.BURY_SIBLINGS_TITLE, text: enable ? 'yes' : 'no' });
+}
+
 // ---------- PDF 导入与 LLM-OCR ----------
 
 /** PDF/OCR 与语义切分配置地址（唯一产地在 core/ns；此处别名保留既有引用） */

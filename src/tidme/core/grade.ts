@@ -37,6 +37,8 @@ export interface GradeOptions {
   now?: Date;
   /** 间隔模糊随机数注入（默认 Math.random，便于测试确定性断言） */
   fuzzRandomFn?: () => number;
+  /** 突击 Cram 模式：不写 FSRS 状态与日志，仅操练 */
+  cram?: boolean;
 }
 
 export interface GradeResult {
@@ -67,6 +69,47 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   const deck = deckName ? deckMod.getDeck(wiki, deckName) : deckMod.getDeck(wiki, deckMod.DEFAULT_DECK);
   if (!deck) return result;
   const rating = String(opts.rating || '');
+
+  const currentSession = session.getSession(wiki);
+  const isCram = opts.cram !== undefined ? !!opts.cram : (currentSession?.mode === 'cram');
+  const logKey = schema.twDateString(now);
+  const rollover = config && typeof config.readRolloverHour === 'function' ? config.readRolloverHour(wiki) : 4;
+  const learningDay = schema.learningDayOf(now, rollover);
+
+  // 突击 Cram 模式分支：不改写 FSRS 字段、不写日志、不计配额，纯操练
+  if (isCram) {
+    undoStack.push({
+      title: opts.title,
+      deckTitle: deck.title,
+      logKey,
+      prevFields: { ...f },
+      prevSession: currentSession
+        ? { list: [...currentSession.list], mode: currentSession.mode, currentIndex: currentSession.currentIndex }
+        : null,
+      wasNew: false,
+      learningDay,
+      at: now,
+      isCram: true,
+    });
+    if (undoStack.length > MAX_UNDO_DEPTH) undoStack.shift();
+    wiki.addTiddler({ title: ns.UNDO_STATE_TITLE, depth: String(undoStack.length), can_undo: 'yes' });
+
+    if (currentSession) {
+      const list = currentSession.list.filter((t: string) => t !== opts.title);
+      if (rating === 'Again') list.push(opts.title);
+      session.setSession(wiki, { list, mode: currentSession.mode, currentIndex: currentSession.currentIndex });
+      const nextT = session.advanceSession(wiki, null);
+      result.next = nextT;
+      result.finished = nextT === null;
+    }
+
+    session.consumeFocusAnchor(wiki, opts.title, now);
+    wiki.deleteTiddler(ns.FOLDED_STATE_PREFIX + opts.title);
+
+    result.ok = true;
+    result.due = f.due !== undefined ? String(f.due) : null;
+    return result;
+  }
 
   // 1. FSRS 四档计算（缺字段按新卡，与 [fsrs[p]] 过滤器输出一致）
   let target: any = null;
@@ -102,14 +145,28 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   // 2. 字段写回：FSRS 补丁 + annotate-colour + 优先级动态（合并一次写，少一轮 refresh）
   const delta = sched.priorityDeltaForRating(rating, config.readPriorityDynamics(wiki));
   const priority = Math.max(0, Math.min(100, sched.normalizePriority(f['tidme.priority']) + delta));
+  const isNewCard = !f.state || f.state === '0';
+
+  // 兄弟卡搁置（Bury Siblings）
+  let newlyBuried: string[] = [];
+  if (config && typeof config.readBurySiblings === 'function' && config.readBurySiblings(wiki)) {
+    const siblings = sched.findSiblings(wiki, opts.title);
+    if (siblings.length) {
+      newlyBuried = sched.buryCards(wiki, siblings, learningDay);
+    }
+  }
+
+  // 日末操练（Final Drill）记录与达标移除
+  let finalDrillChange: 'added' | 'removed' | null = null;
+  if (rating === 'Again') {
+    sched.recordFinalDrill(wiki, opts.title, now);
+    finalDrillChange = 'added';
+  } else if (rating === 'Good' || rating === 'Easy') {
+    const removed = sched.removeFinalDrill(wiki, opts.title);
+    if (removed) finalDrillChange = 'removed';
+  }
 
   // 记录快照以支持 Undo 撤销（内存栈，深度 MAX_UNDO_DEPTH = 30）
-  const currentSession = session.getSession(wiki);
-  const logKey = schema.twDateString(now);
-  const isNewCard = !f.state || f.state === '0';
-  const rollover = config && typeof config.readRolloverHour === 'function' ? config.readRolloverHour(wiki) : 4;
-  const learningDay = schema.learningDayOf(now, rollover);
-
   undoStack.push({
     title: opts.title,
     deckTitle: deck.title,
@@ -121,6 +178,9 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
     wasNew: isNewCard,
     learningDay,
     at: now,
+    isCram: false,
+    newlyBuried,
+    finalDrillChange,
   });
   if (undoStack.length > MAX_UNDO_DEPTH) undoStack.shift();
   wiki.addTiddler({ title: ns.UNDO_STATE_TITLE, depth: String(undoStack.length), can_undo: 'yes' });
@@ -138,13 +198,14 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   // 3.5 每日配额记账
   sched.recordDailyQuota(wiki, isNewCard, now, rollover);
 
-  // 4. 会话推进（Again 挪队尾重学，其余移出；<deck>/study 不在此维护——
-  //  那是 fsrs4tw 起学路径的契约，队头推进由 startstudy.tid 决策）。
-  //  下一张的决策与两处推进入口共用 session.advanceSession 单点（nextSchedulable +
-  //  isDueNow）：被顺延的未来排期卡不作 next。先写会话再决策，故 cur 传 null。
+  // 4. 会话推进（Again 挪队尾重学，其余移出；且排除当日被搁置的兄弟卡）
   const s = session.getSession(wiki);
   if (s) {
-    const list = s.list.filter((t: string) => t !== opts.title);
+    let list = s.list.filter((t: string) => t !== opts.title);
+    if (newlyBuried.length) {
+      const buriedSet = new Set(newlyBuried);
+      list = list.filter((t: string) => !buriedSet.has(t));
+    }
     if (rating === 'Again') list.push(opts.title);
     session.setSession(wiki, { list, mode: s.mode, currentIndex: s.currentIndex });
     const nextT = session.advanceSession(wiki, null);
@@ -153,13 +214,8 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   }
 
   // 5. 专注时长（锚点结算 → 记入阅读时长统计）+ 折叠态清理。
-  //  锚点归 core/session（touch/consume 成对），本模块不再自读自删 tiddler。
   session.consumeFocusAnchor(wiki, opts.title, now);
   wiki.deleteTiddler(ns.FOLDED_STATE_PREFIX + opts.title);
-
-  // 子集牌组（tidme.subset-doc）不在此清理：它是「复习本书」的作用域容器，
-  // 评分会删掉它 = 第一张卡后书籍复习静默解体。焚烧点在使用流程边界：
-  // startstudy 空队（用完）/ stopstudy（手动停止）/ endSession（结束学习）。
 
   result.ok = true;
   result.due = target.card.due !== undefined ? String(target.card.due) : null;
@@ -175,6 +231,9 @@ export interface GradeSnapshot {
   wasNew: boolean;
   learningDay: string;
   at: Date;
+  isCram?: boolean;
+  newlyBuried?: string[];
+  finalDrillChange?: 'added' | 'removed' | null;
 }
 
 const undoStack: GradeSnapshot[] = [];
@@ -192,13 +251,28 @@ export function clearUndoStack(): void {
  * 撤销上一次评分（Undo）：
  * 1. 恢复卡片所有字段（FSRS 字段族 + annotate-colour + priority）
  * 2. 从 <deck>/log 中删除对应时间戳的单条复习日志
- * 3. 恢复评分前的会话列表与焦点
- * 4. 回滚当日新卡/复习卡配额计数
- * 5. 更新撤销状态 tiddler
+ * 3. 撤销兄弟卡搁置状态与日末操练变动
+ * 4. 恢复评分前的会话列表与焦点
+ * 5. 回滚当日新卡/复习卡配额计数
+ * 6. 更新撤销状态 tiddler
  */
 export function undoLastGrade(wiki: any): { ok: boolean; title?: string } {
   if (!wiki || !undoStack.length) return { ok: false };
   const snapshot = undoStack.pop()!;
+
+  // Cram 模式的撤销：仅恢复会话列表与焦点
+  if (snapshot.isCram) {
+    if (snapshot.prevSession) {
+      session.setSession(wiki, snapshot.prevSession);
+      session.enterCard(wiki, snapshot.title, snapshot.at);
+    }
+    wiki.addTiddler({
+      title: ns.UNDO_STATE_TITLE,
+      depth: String(undoStack.length),
+      can_undo: undoStack.length > 0 ? 'yes' : 'no',
+    });
+    return { ok: true, title: snapshot.title };
+  }
 
   // 1. 恢复卡片原始字段
   wiki.addTiddler(snapshot.prevFields);
@@ -209,6 +283,18 @@ export function undoLastGrade(wiki: any): { ok: boolean; title?: string } {
   if (logData && typeof logData === 'object' && logData[snapshot.logKey]) {
     delete logData[snapshot.logKey];
     wiki.addTiddler({ title: logTitle, type: 'application/json', text: JSON.stringify(logData) });
+  }
+
+  // 2.5 撤销兄弟卡搁置
+  if (snapshot.newlyBuried && snapshot.newlyBuried.length) {
+    sched.unburyCards(wiki, snapshot.newlyBuried);
+  }
+
+  // 2.6 撤销 Final Drill 变化
+  if (snapshot.finalDrillChange === 'added') {
+    sched.removeFinalDrill(wiki, snapshot.title);
+  } else if (snapshot.finalDrillChange === 'removed') {
+    sched.recordFinalDrill(wiki, snapshot.title, snapshot.at);
   }
 
   // 3. 恢复会话状态并重新进入该卡
