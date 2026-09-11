@@ -149,6 +149,8 @@ export const QUEUE_MIX_TITLE = CONFIG_TITLE_PREFIX + 'QueueMix';
 export const PRIORITY_DYNAMICS_TITLE = CONFIG_TITLE_PREFIX + 'PriorityDynamics';
 /** 复习日志保留天数（空=默认 90；0=永久保留） */
 export const LOG_RETENTION_TITLE = CONFIG_TITLE_PREFIX + 'LogRetention';
+/** 学习日换天时刻（小时 0–23，默认 4，对标 Anki 4:00 AM） */
+export const ROLLOVER_HOUR_TITLE = CONFIG_TITLE_PREFIX + 'RolloverHour';
 /** PDF 与 OCR 配置（JSON） */
 export const OCR_TITLE = CONFIG_TITLE_PREFIX + 'Ocr';
 /** 语义切分配置（JSON；服务端 importer 与导入预览共用） */

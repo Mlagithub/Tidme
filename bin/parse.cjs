@@ -100,6 +100,7 @@ __export(ns_exports, {
   QUEUE_EXCLUDE: () => QUEUE_EXCLUDE,
   QUEUE_MIX_TITLE: () => QUEUE_MIX_TITLE,
   QUEUE_MODE_TITLE: () => QUEUE_MODE_TITLE,
+  ROLLOVER_HOUR_TITLE: () => ROLLOVER_HOUR_TITLE,
   SEMANTIC_SPLIT_TITLE: () => SEMANTIC_SPLIT_TITLE,
   TITLE_UNSAFE_CHARS: () => TITLE_UNSAFE_CHARS,
   TOPIC_QUEUE_FILTER: () => TOPIC_QUEUE_FILTER,
@@ -124,7 +125,7 @@ function deckLogTitle(deck) {
 function isDeckLogTitle(title) {
   return title.startsWith(DECK_PREFIX) && title.endsWith(DECK_LOG_SUFFIX);
 }
-var NS_DOCS, NS_ASSETS, NS_DECKS, NS_DECKS_SCATTER, CRUMB_SEP, DECK_PREFIX, QUEUE_EXCLUDE, DECK_TAG, NOT_DECK_FILTER, TOPIC_QUEUE_FILTER, TITLE_UNSAFE_CHARS, FOLDED_STATE_PREFIX, CARD_OPEN_AT_TITLE, PDF_PAGE_STATE_PREFIX, AUTOPOSTPONE_LAST_TITLE, DECK_LOG_SUFFIX, CONFIG_TITLE_PREFIX, QUEUE_MODE_TITLE, QUEUE_MIX_TITLE, PRIORITY_DYNAMICS_TITLE, LOG_RETENTION_TITLE, OCR_TITLE, SEMANTIC_SPLIT_TITLE, PAGE_INCREMENTAL_LEARNING, PAGE_TODAY, PAGE_READING_LIST, PAGE_IMPORT_CENTER, PAGE_CARD_MANAGER, PAGE_IMPORT_STATS, PAGE_HELP_SHORTCUTS, PAGE_SETTINGS, NOTIFY_EXTRACT, NOTIFY_CLOZE, NOTIFY_READPOINT, NOTIFY_SELECT_FIRST, NOTIFY_EXTRACT_NOTE, NOTIFY_SECTION_DONE, NOTIFY_LATER, NOTIFY_DONE, NOTIFY_UNSUPPORTED, NOTIFY_CONGRATULATION, NOTIFY_STUDY_ENDED, IMPORT_BAG_TITLE;
+var NS_DOCS, NS_ASSETS, NS_DECKS, NS_DECKS_SCATTER, CRUMB_SEP, DECK_PREFIX, QUEUE_EXCLUDE, DECK_TAG, NOT_DECK_FILTER, TOPIC_QUEUE_FILTER, TITLE_UNSAFE_CHARS, FOLDED_STATE_PREFIX, CARD_OPEN_AT_TITLE, PDF_PAGE_STATE_PREFIX, AUTOPOSTPONE_LAST_TITLE, DECK_LOG_SUFFIX, CONFIG_TITLE_PREFIX, QUEUE_MODE_TITLE, QUEUE_MIX_TITLE, PRIORITY_DYNAMICS_TITLE, LOG_RETENTION_TITLE, ROLLOVER_HOUR_TITLE, OCR_TITLE, SEMANTIC_SPLIT_TITLE, PAGE_INCREMENTAL_LEARNING, PAGE_TODAY, PAGE_READING_LIST, PAGE_IMPORT_CENTER, PAGE_CARD_MANAGER, PAGE_IMPORT_STATS, PAGE_HELP_SHORTCUTS, PAGE_SETTINGS, NOTIFY_EXTRACT, NOTIFY_CLOZE, NOTIFY_READPOINT, NOTIFY_SELECT_FIRST, NOTIFY_EXTRACT_NOTE, NOTIFY_SECTION_DONE, NOTIFY_LATER, NOTIFY_DONE, NOTIFY_UNSUPPORTED, NOTIFY_CONGRATULATION, NOTIFY_STUDY_ENDED, IMPORT_BAG_TITLE;
 var init_ns = __esm({
   "src/tidme/core/ns.ts"() {
     NS_DOCS = "Tidme/Docs/";
@@ -148,6 +149,7 @@ var init_ns = __esm({
     QUEUE_MIX_TITLE = CONFIG_TITLE_PREFIX + "QueueMix";
     PRIORITY_DYNAMICS_TITLE = CONFIG_TITLE_PREFIX + "PriorityDynamics";
     LOG_RETENTION_TITLE = CONFIG_TITLE_PREFIX + "LogRetention";
+    ROLLOVER_HOUR_TITLE = CONFIG_TITLE_PREFIX + "RolloverHour";
     OCR_TITLE = CONFIG_TITLE_PREFIX + "Ocr";
     SEMANTIC_SPLIT_TITLE = CONFIG_TITLE_PREFIX + "SemanticSplit";
     PAGE_INCREMENTAL_LEARNING = "$:/IncrementalLearning";
@@ -182,6 +184,7 @@ __export(schema_exports, {
   assertCardFields: () => assertCardFields,
   escapeHtml: () => escapeHtml,
   initialFsrsFields: () => initialFsrsFields,
+  learningDayOf: () => learningDayOf,
   missingFsrsFields: () => missingFsrsFields,
   parseTwDate: () => parseTwDate,
   todayKey: () => todayKey,
@@ -191,6 +194,12 @@ __export(schema_exports, {
 function twDateString(d) {
   const p = (n, l) => String(n).padStart(l, "0");
   return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1, 2)}${p(d.getUTCDate(), 2)}${p(d.getUTCHours(), 2)}${p(d.getUTCMinutes(), 2)}${p(d.getUTCSeconds(), 2)}${p(d.getUTCMilliseconds(), 3)}`;
+}
+function learningDayOf(now = new Date(), rolloverHour = 4) {
+  const h = Math.min(23, Math.max(0, Math.floor(Number(rolloverHour) || 0)));
+  const effective = new Date(now.getTime() - h * 36e5);
+  const p = (n, l = 2) => String(n).padStart(l, "0");
+  return `${effective.getFullYear()}${p(effective.getMonth() + 1)}${p(effective.getDate())}`;
 }
 function todayKey(now = new Date()) {
   return now.toISOString().slice(0, 10).replace(/-/g, "");

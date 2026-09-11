@@ -49,7 +49,21 @@ export function twDateString(d: Date): string {
   }`;
 }
 
-/** 日期键（UTC，YYYYMMDD）：统计口径与日志 tiddler 命名共用（日期归本模块唯一产地）。
+/**
+ * 学习日键（YYYYMMDD 本地学习日）。
+ * 对标 Anki 默认凌晨 4:00 本地换天（可配置 0–23 点）：
+ * 将时刻减去换天偏移量后取本地自然日，确保夜间（如 01:00）复习仍计入同一学习日。
+ * @param now 待判定时刻，默认当前
+ * @param rolloverHour 换天时刻（0–23 小时，默认 4）
+ */
+export function learningDayOf(now: Date = new Date(), rolloverHour = 4): string {
+  const h = Math.min(23, Math.max(0, Math.floor(Number(rolloverHour) || 0)));
+  const effective = new Date(now.getTime() - h * 3600000);
+  const p = (n: number, l = 2) => String(n).padStart(l, '0');
+  return `${effective.getFullYear()}${p(effective.getMonth() + 1)}${p(effective.getDate())}`;
+}
+
+/** 日期键（UTC，YYYYMMDD）：日志修剪与跨端绝对日期比较（日期归本模块唯一产地）。
  *  @param now 默认当前时刻；传偏移时刻可算"保留截止日"（见 server/scheduler 日志修剪） */
 export function todayKey(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10).replace(/-/g, '');

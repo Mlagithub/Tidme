@@ -189,6 +189,25 @@ export function writeLogRetentionDays(wiki: any, days: number): void {
   wiki.addTiddler({ title: LOG_RETENTION_TITLE, text: String(n) });
 }
 
+// ---------- 学习日换天时刻（Rollover Hour，对标 Anki 默认 4:00 AM） ----------
+
+export const ROLLOVER_HOUR_DEFAULT = 4;
+
+export function readRolloverHour(wiki: any): number {
+  if (!wiki) return ROLLOVER_HOUR_DEFAULT;
+  const raw = String(wiki.getTiddlerText?.(ns.ROLLOVER_HOUR_TITLE, '') || wiki.getTiddler?.(ns.ROLLOVER_HOUR_TITLE)?.fields?.text || '').trim();
+  if (raw === '') return ROLLOVER_HOUR_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 23) return ROLLOVER_HOUR_DEFAULT;
+  return Math.floor(n);
+}
+
+export function writeRolloverHour(wiki: any, hour: number): void {
+  if (!wiki) return;
+  const n = Math.min(23, Math.max(0, Math.floor(Number(hour) || 0)));
+  wiki.addTiddler({ title: ns.ROLLOVER_HOUR_TITLE, text: String(n) });
+}
+
 // ---------- PDF 导入与 LLM-OCR ----------
 
 /** PDF/OCR 与语义切分配置地址（唯一产地在 core/ns；此处别名保留既有引用） */

@@ -21,6 +21,7 @@ const workflow = require('$:/plugins/keepone/tidme/review/widgets/workflow.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
+const config = require('$:/plugins/keepone/tidme/core/config.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 function lingo(wiki: any, key: string, fallback: string): string {
   return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
@@ -34,15 +35,23 @@ const bindWidgetRefresh = primitives.bindWidgetRefresh;
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
-/** 今日复习卡数：遍历全部牌组日志单文件，按今天的日期前缀计数（日期键唯一产地 = core/schema） */
+/** 今日复习卡数：遍历全部牌组日志单文件，按今天的学习日计数（日期键唯一产地 = core/schema） */
 function todayReviewCount(wiki: any): number {
-  const key = schema.todayKey();
+  const rollover = config && typeof config.readRolloverHour === 'function' ? config.readRolloverHour(wiki) : 4;
+  const currentDay = schema.learningDayOf(new Date(), rollover);
   let n = 0;
   for (const lt of wiki.filterTiddlers(`[prefix[${ns.DECK_PREFIX}]]`)) {
     if (!ns.isDeckLogTitle(lt)) continue;
     const data = wiki.getTiddlerData(lt);
     if (data && typeof data === 'object') {
-      for (const k of Object.keys(data)) if (String(k).startsWith(key)) n += 1;
+      for (const k of Object.keys(data)) {
+        const d = schema.tryParseTwDate(k);
+        if (d) {
+          if (schema.learningDayOf(d, rollover) === currentDay) n += 1;
+        } else if (String(k).startsWith(currentDay)) {
+          n += 1;
+        }
+      }
     }
   }
   return n;
