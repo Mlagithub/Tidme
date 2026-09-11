@@ -127,10 +127,10 @@ export function configToFields(wiki: any, cfg: DeckConfig): Record<string, any> 
   set('order', cfg.order, 'due-new');
   if (cfg.leechThreshold !== undefined) fields.leech_threshold = String(cfg.leechThreshold);
   if (cfg.p !== undefined) fields.p = typeof cfg.p === 'string' ? cfg.p : JSON.stringify(cfg.p);
-  // 每日新卡上限 → order_new 尾部 limit[N]（不设则保持模板）
+  // 每日新卡上限 → order_new 尾部 +[limit[N]]（不设则保持模板）
   if (cfg.newPerDay !== undefined && Number(cfg.newPerDay) > 0) {
-    const base = String(fields.order_new || '[sortan[title]]');
-    if (!/limit\[\d+\]/.test(base)) fields.order_new = `${base}limit[${Math.floor(Number(cfg.newPerDay))}]`;
+    const base = String(fields.order_new || '[sortan[title]]').trim();
+    if (!/limit\[\d+\]/.test(base)) fields.order_new = `${base} +[limit[${Math.floor(Number(cfg.newPerDay))}]]`;
   }
   // subset 标记（兼容 fsrs4tw 的 tidme.subset-doc 清理过滤器）
   if (cfg.kind === 'subset' && cfg.sourceDoc) fields['tidme.subset-doc'] = cfg.sourceDoc;

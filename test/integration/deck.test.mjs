@@ -102,3 +102,21 @@ test('deck: 手写 deck title 含过滤器不安全字符时不产出假卡（�
   const out = [...wiki.filterTiddlers(f.queue || '[!is[missing]]')];
   assert.ok(!out.some((t) => String(t).includes('Filter error')), '空过滤器不产生假结果');
 });
+
+test('deck: newPerDay 产出合法 limit 过滤器且正确截断新卡队列（防 Filter error 回归）', () => {
+  const deckEngine = mod('core/deck-engine.js');
+  mkItem('限额新卡A');
+  mkItem('限额新卡B');
+  mkItem('限额新卡C');
+  const fields = deckMod.configToFields(wiki, {
+    name: '限额牌组',
+    card: '[tidme.kind[item]]',
+    newPerDay: 2,
+  });
+  assert.ok(fields.order_new.includes('+[limit[2]]'), 'order_new 包含合法 run 级 limit');
+  const dTitle = deckMod.createDeck(wiki, { name: '限额牌组', card: '[tidme.kind[item]]', newPerDay: 2 });
+  const f = deckEngine.composeDeckFilters(dTitle, wiki.getTiddler(dTitle).fields);
+  const newly = [...wiki.filterTiddlers(f.newly)];
+  assert.ok(!newly.some((t) => String(t).includes('Filter error')), '无 Filter error');
+  assert.equal(newly.length, 2, '正确截断为 2 张新卡');
+});
