@@ -154,6 +154,8 @@ manager.inqueue: 在队
 manager.read: 已读
 manager.suspended: 搁置
 manager.overdue: 逾期
+manager.leech: 难点
+manager.resetleech: 重置难点
 manager.bydoc: 按文档
 manager.bydeck: 按牌组
 manager.flatlist: 列表

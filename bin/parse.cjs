@@ -1085,14 +1085,17 @@ var init_deck = __esm({
 var stats_exports = {};
 __export(stats_exports, {
   FOCUS_SEGMENT_MAX_SECONDS: () => FOCUS_SEGMENT_MAX_SECONDS,
+  MATURE_INTERVAL_DAYS: () => MATURE_INTERVAL_DAYS,
   READTIME_TIDDLER: () => READTIME_TIDDLER,
   deckLoad: () => deckLoad,
   formatDuration: () => formatDuration,
   funnelCounts: () => funnelCounts,
+  futureDueSchedule: () => futureDueSchedule,
   getReadTimeStats: () => getReadTimeStats,
   priorityBuckets: () => priorityBuckets,
   recordReadTime: () => recordReadTime,
-  retentionFromLogs: () => retentionFromLogs
+  retentionFromLogs: () => retentionFromLogs,
+  trueRetentionFromLogs: () => trueRetentionFromLogs
 });
 function deckLoad(cards, now = new Date()) {
   const load = { total: cards.length, learn: 0, due: 0, overdue: 0, newCount: 0 };
@@ -1127,6 +1130,94 @@ function retentionFromLogs(logEntries) {
   }
   const againRate = again / logEntries.length;
   return { reviews: logEntries.length, againRate, retention: 1 - againRate };
+}
+function trueRetentionFromLogs(logEntries, matureIntervalDays = MATURE_INTERVAL_DAYS) {
+  const result = {
+    matureReviews: 0,
+    maturePass: 0,
+    matureAgain: 0,
+    trueRetention: 1,
+    youngReviews: 0,
+    youngPass: 0,
+    youngAgain: 0,
+    youngRetention: 1,
+    allReviews: logEntries.length,
+    overallRetention: 1
+  };
+  if (!logEntries.length)
+    return result;
+  let totalAgain = 0;
+  for (const e of logEntries) {
+    const r = Number(e.rating);
+    const isAgain = r === 1;
+    if (isAgain)
+      totalAgain++;
+    const stateStr = String(e.state ?? "");
+    const isReviewState = stateStr === "2" || stateStr.toLowerCase() === "review";
+    const elapsed = Number(e.last_elapsed_days !== void 0 ? e.last_elapsed_days : e.elapsed_days);
+    if (isReviewState && Number.isFinite(elapsed) && elapsed >= matureIntervalDays) {
+      result.matureReviews++;
+      if (isAgain)
+        result.matureAgain++;
+      else
+        result.maturePass++;
+    } else if (isReviewState) {
+      result.youngReviews++;
+      if (isAgain)
+        result.youngAgain++;
+      else
+        result.youngPass++;
+    }
+  }
+  result.trueRetention = result.matureReviews > 0 ? result.maturePass / result.matureReviews : 1;
+  result.youngRetention = result.youngReviews > 0 ? result.youngPass / result.youngReviews : 1;
+  result.overallRetention = result.allReviews > 0 ? (result.allReviews - totalAgain) / result.allReviews : 1;
+  return result;
+}
+function futureDueSchedule(cards, days = 30, now = new Date(), rolloverHour = 4) {
+  const currentDayStr = schema2.learningDayOf(now, rolloverHour);
+  const currentDayTime = schema2.parseTwDate(currentDayStr + "000000000").getTime();
+  const schedule = [];
+  for (let i = 0; i < days; i++) {
+    const dayDate = new Date(currentDayTime + i * 864e5);
+    const dateString = schema2.learningDayOf(dayDate, 0);
+    schedule.push({
+      dayIndex: i,
+      dateString,
+      dueCount: 0,
+      cumulativeDue: 0
+    });
+  }
+  for (const c of cards) {
+    const f = c.fields;
+    if (!isInQueue2(f))
+      continue;
+    if (f["tidme.kind"] !== "item")
+      continue;
+    const state = String(f.state || "0");
+    if (state === "0")
+      continue;
+    const dueStr = f.due;
+    if (!dueStr)
+      continue;
+    const parsed = schema2.tryParseTwDate(dueStr);
+    if (!parsed)
+      continue;
+    const cardDayStr = schema2.learningDayOf(parsed, rolloverHour);
+    const cardDayTime = schema2.parseTwDate(cardDayStr + "000000000").getTime();
+    const dayDiff = Math.floor((cardDayTime - currentDayTime) / 864e5);
+    if (dayDiff <= 0) {
+      schedule[0].dueCount++;
+    } else if (dayDiff < days) {
+      schedule[dayDiff].dueCount++;
+    }
+  }
+  let runningTotal = 0;
+  for (const day of schedule) {
+    runningTotal += day.dueCount;
+    day.cumulativeDue = runningTotal;
+  }
+  return schedule;
 }
 function funnelCounts(items) {
   const f = { docs: 0, sections: 0, extracts: 0, concepts: 0, cards: 0 };
@@ -1215,7 +1306,7 @@ function priorityBuckets(cards) {
   }
   return b;
 }
-var schema2, parseTwDate3, sched, nsMod, isCardOutOfQueue2, isInQueue2, todayKey2, READTIME_TIDDLER, FOCUS_SEGMENT_MAX_SECONDS;
+var schema2, parseTwDate3, sched, nsMod, isCardOutOfQueue2, isInQueue2, todayKey2, MATURE_INTERVAL_DAYS, READTIME_TIDDLER, FOCUS_SEGMENT_MAX_SECONDS;
 var init_stats = __esm({
   "src/tidme/core/stats.ts"() {
     schema2 = (init_schema(), __toCommonJS(schema_exports));
@@ -1225,6 +1316,7 @@ var init_stats = __esm({
     isCardOutOfQueue2 = sched.isCardOutOfQueue;
     isInQueue2 = sched.isInQueue;
     todayKey2 = schema2.todayKey;
+    MATURE_INTERVAL_DAYS = 21;
     READTIME_TIDDLER = "$:/plugins/keepone/tidme/stats/readtime";
     FOCUS_SEGMENT_MAX_SECONDS = 3600;
   }

@@ -33,7 +33,7 @@ const navigateTo = dom.navigateTo;
 const renderEmpty = primitives.renderEmpty;
 const bindWidgetRefresh = primitives.bindWidgetRefresh;
 
-type View = 'all' | 'inqueue' | 'done' | 'suspended' | 'overdue';
+type View = 'all' | 'inqueue' | 'done' | 'suspended' | 'overdue' | 'leech';
 type Org = 'doc' | 'deck' | 'list';
 type SortKey = 'breadcrumb' | 'priority' | 'due' | 'deck' | 'mixed';
 
@@ -43,6 +43,7 @@ const VIEWS: { id: View; label: string; key: string }[] = [
   { id: 'done', label: 'Read', key: 'manager.read' },
   { id: 'suspended', label: 'Suspended', key: 'manager.suspended' },
   { id: 'overdue', label: 'Overdue', key: 'manager.overdue' },
+  { id: 'leech', label: 'Leech', key: 'manager.leech' },
 ];
 
 const ORGS: { id: Org; label: string; tip: string; key: string }[] = [
@@ -130,6 +131,11 @@ function inView(f: Record<string, any>, v: View): boolean {
   if (v === 'done') return done;
   if (v === 'suspended') return suspended;
   if (v === 'overdue') return String(f.state || '0') === '2' && schema.parseTwDate(f.due).getTime() < Date.now();
+  if (v === 'leech') {
+    const lapses = Number(f.lapses || 0);
+    const hasLeechMark = f['tidme.leech'] === 'yes' || (Array.isArray(f.tags) && f.tags.includes('leech'));
+    return hasLeechMark || lapses >= sched.DECK_PARAM_DEFAULTS.leechThreshold;
+  }
   return true;
 }
 
@@ -875,6 +881,12 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.done', 'Done'), () => doneFields()));
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.suspend', 'Suspend'), () => sched.suspendCard()));
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.restore', 'Restore'), () => resumePatch()));
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.resetleech', 'Reset Leech'), () => ({
+    'tidme.leech': undefined,
+    'tidme.suspended': undefined,
+    lapses: '0',
+    ...sched.forgetCard(),
+  })));
   row.appendChild(stateGroup);
 
   const dangerGroup = el(doc, 'span', 'tm-cm-bar-group', '');

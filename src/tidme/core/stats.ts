@@ -68,6 +68,150 @@ export function retentionFromLogs(logEntries: Array<{ rating?: number | string }
   return { reviews: logEntries.length, againRate, retention: 1 - againRate };
 }
 
+export interface TrueRetention {
+  matureReviews: number;
+  maturePass: number;
+  matureAgain: number;
+  trueRetention: number;
+  youngReviews: number;
+  youngPass: number;
+  youngAgain: number;
+  youngRetention: number;
+  allReviews: number;
+  overallRetention: number;
+}
+
+export const MATURE_INTERVAL_DAYS = 21;
+
+/**
+ * 真实保留率（True Retention）：对标 Anki / SuperMemo 成熟卡（间隔 ≥ 21 天）及格率指标。
+ * 过滤掉短期新学/重学步的干扰，精确反映长期记忆稳定性。
+ */
+export function trueRetentionFromLogs(
+  logEntries: Array<{
+    rating?: number | string;
+    state?: number | string;
+    elapsed_days?: number | string;
+    last_elapsed_days?: number | string;
+  }>,
+  matureIntervalDays = MATURE_INTERVAL_DAYS,
+): TrueRetention {
+  const result: TrueRetention = {
+    matureReviews: 0,
+    maturePass: 0,
+    matureAgain: 0,
+    trueRetention: 1,
+    youngReviews: 0,
+    youngPass: 0,
+    youngAgain: 0,
+    youngRetention: 1,
+    allReviews: logEntries.length,
+    overallRetention: 1,
+  };
+
+  if (!logEntries.length) return result;
+
+  let totalAgain = 0;
+
+  for (const e of logEntries) {
+    const r = Number(e.rating);
+    const isAgain = r === 1;
+    if (isAgain) totalAgain++;
+
+    const stateStr = String(e.state ?? '');
+    const isReviewState = stateStr === '2' || stateStr.toLowerCase() === 'review';
+    const elapsed = Number(e.last_elapsed_days !== undefined ? e.last_elapsed_days : e.elapsed_days);
+
+    if (isReviewState && Number.isFinite(elapsed) && elapsed >= matureIntervalDays) {
+      result.matureReviews++;
+      if (isAgain) result.matureAgain++;
+      else result.maturePass++;
+    } else if (isReviewState) {
+      result.youngReviews++;
+      if (isAgain) result.youngAgain++;
+      else result.youngPass++;
+    }
+  }
+
+  result.trueRetention = result.matureReviews > 0
+    ? result.maturePass / result.matureReviews
+    : 1;
+
+  result.youngRetention = result.youngReviews > 0
+    ? result.youngPass / result.youngReviews
+    : 1;
+
+  result.overallRetention = result.allReviews > 0
+    ? (result.allReviews - totalAgain) / result.allReviews
+    : 1;
+
+  return result;
+}
+
+export interface FutureDueDay {
+  dayIndex: number;
+  dateString: string;
+  dueCount: number;
+  cumulativeDue: number;
+}
+
+/**
+ * 未来到期负荷预测（Future Due）：按卡片排期预测未来 N 天的每日复习量。
+ * 逾期卡归入第 0 天（今天）；跨天边界遵循 rolloverHour 本地学习日。
+ */
+export function futureDueSchedule(
+  cards: CardLike[],
+  days = 30,
+  now = new Date(),
+  rolloverHour = 4,
+): FutureDueDay[] {
+  const currentDayStr = schema.learningDayOf(now, rolloverHour);
+  const currentDayTime = schema.parseTwDate(currentDayStr + '000000000').getTime();
+
+  const schedule: FutureDueDay[] = [];
+  for (let i = 0; i < days; i++) {
+    const dayDate = new Date(currentDayTime + i * 86400000);
+    const dateString = schema.learningDayOf(dayDate, 0);
+    schedule.push({
+      dayIndex: i,
+      dateString,
+      dueCount: 0,
+      cumulativeDue: 0,
+    });
+  }
+
+  for (const c of cards) {
+    const f = c.fields;
+    if (!isInQueue(f)) continue;
+    if (f['tidme.kind'] !== 'item') continue;
+    const state = String(f.state || '0');
+    if (state === '0') continue; // 新卡尚未排期
+
+    const dueStr = f.due;
+    if (!dueStr) continue;
+    const parsed = schema.tryParseTwDate(dueStr);
+    if (!parsed) continue;
+
+    const cardDayStr = schema.learningDayOf(parsed, rolloverHour);
+    const cardDayTime = schema.parseTwDate(cardDayStr + '000000000').getTime();
+    const dayDiff = Math.floor((cardDayTime - currentDayTime) / 86400000);
+
+    if (dayDiff <= 0) {
+      schedule[0].dueCount++;
+    } else if (dayDiff < days) {
+      schedule[dayDiff].dueCount++;
+    }
+  }
+
+  let runningTotal = 0;
+  for (const day of schedule) {
+    runningTotal += day.dueCount;
+    day.cumulativeDue = runningTotal;
+  }
+
+  return schedule;
+}
+
 export interface Funnel {
   docs: number;
   sections: number;

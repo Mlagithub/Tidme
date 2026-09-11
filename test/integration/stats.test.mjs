@@ -133,3 +133,64 @@ test('recordReadTime and getReadTimeStats: 记录与获取阅读时长（真实 
   assert.equal(res.docSeconds['stats-doc-1'], 180);
   assert.equal(res.docSeconds['stats-doc-2'], 300);
 });
+
+test('trueRetentionFromLogs: 区分成熟卡（>=21天）与年轻卡保留率', () => {
+  const logs = [
+    // 成熟卡：state=2, elapsed_days>=21 (2 次 Good, 1 次 Again)
+    { rating: 3, state: '2', elapsed_days: 30 },
+    { rating: 4, state: '2', elapsed_days: 45 },
+    { rating: 1, state: '2', elapsed_days: 25 },
+    // 年轻卡：state=2, elapsed_days<21 (1 次 Good, 1 次 Again)
+    { rating: 3, state: '2', elapsed_days: 5 },
+    { rating: 1, state: '2', elapsed_days: 10 },
+    // 学习中卡片：state=1 (不计入成熟/年轻复习)
+    { rating: 1, state: '1', elapsed_days: 0 },
+    { rating: 3, state: '1', elapsed_days: 0 },
+  ];
+
+  const tr = stats.trueRetentionFromLogs(logs);
+  assert.equal(tr.matureReviews, 3);
+  assert.equal(tr.maturePass, 2);
+  assert.equal(tr.matureAgain, 1);
+  assert.equal(Math.round(tr.trueRetention * 100), 67); // 2 / 3 ≈ 66.7%
+
+  assert.equal(tr.youngReviews, 2);
+  assert.equal(tr.youngPass, 1);
+  assert.equal(tr.youngAgain, 1);
+  assert.equal(tr.youngRetention, 0.5); // 1 / 2 = 50%
+
+  assert.equal(tr.allReviews, 7);
+  assert.equal(Math.round(tr.overallRetention * 100), 57); // 4 / 7 ≈ 57.1%
+});
+
+test('futureDueSchedule: 未来 30 天负荷预测与累计到期计算', () => {
+  const now = new Date('2026-09-11T12:00:00Z');
+  const cards = [
+    // 逾期卡片 (归入第 0 天)
+    { fields: { 'tidme.kind': 'item', state: '2', due: '20260905000000000' } },
+    // 今天到期 (第 0 天)
+    { fields: { 'tidme.kind': 'item', state: '2', due: '20260911080000000' } },
+    // 3 天后到期 (第 3 天)
+    { fields: { 'tidme.kind': 'item', state: '2', due: '20260914100000000' } },
+    // 3 天后到期另 1 张 (第 3 天)
+    { fields: { 'tidme.kind': 'item', state: '2', due: '20260914150000000' } },
+    // 新卡 (不计入排期)
+    { fields: { 'tidme.kind': 'item', state: '0', due: '20260910000000000' } },
+    // 出队卡片 (忽略)
+    { fields: { 'tidme.kind': 'item', state: '2', due: '20260914100000000', 'tidme.done': 'yes' } },
+  ];
+
+  const schedule = stats.futureDueSchedule(cards, 10, now);
+  assert.equal(schedule.length, 10);
+  assert.equal(schedule[0].dueCount, 2, '第 0 天包含逾期与今天到期');
+  assert.equal(schedule[0].cumulativeDue, 2);
+
+  assert.equal(schedule[1].dueCount, 0);
+  assert.equal(schedule[1].cumulativeDue, 2);
+
+  assert.equal(schedule[2].dueCount, 0);
+  assert.equal(schedule[2].cumulativeDue, 2);
+
+  assert.equal(schedule[3].dueCount, 2, '第 3 天有 2 张卡到期');
+  assert.equal(schedule[3].cumulativeDue, 4, '第 3 天累计为 4');
+});
