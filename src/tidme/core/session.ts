@@ -17,6 +17,7 @@ const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const statsMod = require('$:/plugins/keepone/tidme/core/stats.js');
+const config = require('$:/plugins/keepone/tidme/core/config.js');
 
 /** 牌组学习会话列表的 title 后缀（<deck>/study，fsrs4tw 契约） */
 export const DECK_STUDY_SUFFIX = '/study';
@@ -77,7 +78,7 @@ export function removeFromSessionMany(wiki: any, titles: Iterable<string>): bool
 }
 
 /** 会话内推进：从当前卡之后找下一张"当前可学"的卡（cur 为 null/不在会话时从头找）。
- * canLearn 缺省 = scheduler.isDueNow（未出队且 due≤now，与阅读流/复习流一致）。
+ * canLearn 缺省 = scheduler.isDueNow（含提前学习放行限制）。
  * 注意：cur 之后找（不回选 cur 之前的滞留卡）——这是与旧 startstudy"从头找"的
  * 语义统一点（曾导致未处理卡被反复拉回的 1:1 死循环）。
  */
@@ -88,11 +89,14 @@ export function advanceSession(
 ): string | null {
   const s = getSession(wiki);
   if (!s) return null;
+  const learnAhead = config && typeof config.readLearnAheadMinutes === 'function'
+    ? config.readLearnAheadMinutes(wiki)
+    : 20;
   const learn = canLearn
     ? canLearn
     : (t: string) => {
       const f = wiki.getTiddler(t);
-      return f ? sched.isDueNow(f.fields) : false;
+      return f ? sched.isDueNow(f.fields, new Date(), learnAhead) : false;
     };
   return sched.nextSchedulable(s.list, cur, learn);
 }
@@ -213,7 +217,7 @@ interface FocusAnchor {
 }
 
 /** 读锚点：无 tiddler / 时刻不可解析 → null（脏数据按"没有锚点"处理，不猜） */
-function readFocusAnchor(wiki: any): FocusAnchor | null {
+export function readFocusAnchor(wiki: any): FocusAnchor | null {
   if (!wiki || typeof wiki.getTiddler !== 'function') return null;
   const fields = wiki.getTiddler(ns.CARD_OPEN_AT_TITLE)?.fields;
   if (!fields) return null;

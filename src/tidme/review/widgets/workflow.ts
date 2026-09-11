@@ -59,13 +59,23 @@ function makeWorkflow(): any {
 function startGlobalLearning(wiki: any, widget: any): void {
   const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
   const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
-  // 队列构成与交错比唯一收口 = core/config（设置页配置；topic 混入 + item:topic 交错比）
   const opts = config.readQueueOptions(wiki);
+  const quota = sched.readDailyQuota(wiki);
+  const newCap = config.readNewPerDay(wiki);
+  const reviewCap = config.readReviewsPerDay(wiki);
+  const suppress = config.readLimitsSuppressNew(wiki);
+
+  const newLimit = newCap > 0 ? Math.max(0, newCap - quota.newCount) : undefined;
+  const reviewLimit = reviewCap > 0 ? Math.max(0, reviewCap - quota.reviewCount) : undefined;
+
   const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), {
     mode: opts.mode,
     topics: opts.topics,
     itemRatio: opts.itemRatio,
     topicRatio: opts.topicRatio,
+    newLimit,
+    reviewLimit,
+    suppressNewOnOverdue: suppress,
   });
 
   if (!queue || queue.length === 0) {

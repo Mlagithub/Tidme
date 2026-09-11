@@ -151,6 +151,18 @@ export const PRIORITY_DYNAMICS_TITLE = CONFIG_TITLE_PREFIX + 'PriorityDynamics';
 export const LOG_RETENTION_TITLE = CONFIG_TITLE_PREFIX + 'LogRetention';
 /** 学习日换天时刻（小时 0–23，默认 4，对标 Anki 4:00 AM） */
 export const ROLLOVER_HOUR_TITLE = CONFIG_TITLE_PREFIX + 'RolloverHour';
+/** 每日新卡上限（默认 20，0 = 不限） */
+export const NEW_PER_DAY_TITLE = CONFIG_TITLE_PREFIX + 'NewPerDay';
+/** 每日复习卡上限（默认 200，0 = 不限） */
+export const REVIEWS_PER_DAY_TITLE = CONFIG_TITLE_PREFIX + 'ReviewsPerDay';
+/** 复习超额时压制新卡引入（默认 true，对标 Anki 行为） */
+export const LIMITS_SUPPRESS_NEW_TITLE = CONFIG_TITLE_PREFIX + 'LimitsSuppressNew';
+/** 提前学习上限（分钟，默认 20，对标 Anki learn ahead limit） */
+export const LEARN_AHEAD_TITLE = CONFIG_TITLE_PREFIX + 'LearnAhead';
+/** 每日配额消耗状态 tiddler */
+export const DAILY_QUOTA_STATE_TITLE = '$:/state/tidme/daily-quota';
+/** 撤销状态 tiddler */
+export const UNDO_STATE_TITLE = '$:/state/tidme/undo-state';
 /** PDF 与 OCR 配置（JSON） */
 export const OCR_TITLE = CONFIG_TITLE_PREFIX + 'Ocr';
 /** 语义切分配置（JSON；服务端 importer 与导入预览共用） */

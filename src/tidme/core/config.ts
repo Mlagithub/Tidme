@@ -208,6 +208,68 @@ export function writeRolloverHour(wiki: any, hour: number): void {
   wiki.addTiddler({ title: ns.ROLLOVER_HOUR_TITLE, text: String(n) });
 }
 
+// ---------- 每日上限配额与提前学习（对标 Anki 默认值：新卡 20、复习 200、压制开启、提前 20 分钟） ----------
+
+export const NEW_PER_DAY_DEFAULT = 20;
+export const REVIEWS_PER_DAY_DEFAULT = 200;
+export const LEARN_AHEAD_DEFAULT_MINUTES = 20;
+
+export function readNewPerDay(wiki: any): number {
+  if (!wiki) return NEW_PER_DAY_DEFAULT;
+  const raw = String(wiki.getTiddlerText?.(ns.NEW_PER_DAY_TITLE, '') || wiki.getTiddler?.(ns.NEW_PER_DAY_TITLE)?.fields?.text || '').trim();
+  if (raw === '') return NEW_PER_DAY_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return NEW_PER_DAY_DEFAULT;
+  return Math.floor(n);
+}
+
+export function writeNewPerDay(wiki: any, count: number): void {
+  if (!wiki) return;
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  wiki.addTiddler({ title: ns.NEW_PER_DAY_TITLE, text: String(n) });
+}
+
+export function readReviewsPerDay(wiki: any): number {
+  if (!wiki) return REVIEWS_PER_DAY_DEFAULT;
+  const raw = String(wiki.getTiddlerText?.(ns.REVIEWS_PER_DAY_TITLE, '') || wiki.getTiddler?.(ns.REVIEWS_PER_DAY_TITLE)?.fields?.text || '').trim();
+  if (raw === '') return REVIEWS_PER_DAY_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return REVIEWS_PER_DAY_DEFAULT;
+  return Math.floor(n);
+}
+
+export function writeReviewsPerDay(wiki: any, count: number): void {
+  if (!wiki) return;
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  wiki.addTiddler({ title: ns.REVIEWS_PER_DAY_TITLE, text: String(n) });
+}
+
+export function readLimitsSuppressNew(wiki: any): boolean {
+  if (!wiki) return true;
+  const raw = wiki.getTiddlerText?.(ns.LIMITS_SUPPRESS_NEW_TITLE, '') || wiki.getTiddler?.(ns.LIMITS_SUPPRESS_NEW_TITLE)?.fields?.text;
+  return boolish(raw, true);
+}
+
+export function writeLimitsSuppressNew(wiki: any, suppress: boolean): void {
+  if (!wiki) return;
+  wiki.addTiddler({ title: ns.LIMITS_SUPPRESS_NEW_TITLE, text: suppress ? 'yes' : 'no' });
+}
+
+export function readLearnAheadMinutes(wiki: any): number {
+  if (!wiki) return LEARN_AHEAD_DEFAULT_MINUTES;
+  const raw = String(wiki.getTiddlerText?.(ns.LEARN_AHEAD_TITLE, '') || wiki.getTiddler?.(ns.LEARN_AHEAD_TITLE)?.fields?.text || '').trim();
+  if (raw === '') return LEARN_AHEAD_DEFAULT_MINUTES;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 1440) return LEARN_AHEAD_DEFAULT_MINUTES;
+  return Math.floor(n);
+}
+
+export function writeLearnAheadMinutes(wiki: any, minutes: number): void {
+  if (!wiki) return;
+  const n = Math.min(1440, Math.max(0, Math.floor(Number(minutes) || 0)));
+  wiki.addTiddler({ title: ns.LEARN_AHEAD_TITLE, text: String(n) });
+}
+
 // ---------- PDF 导入与 LLM-OCR ----------
 
 /** PDF/OCR 与语义切分配置地址（唯一产地在 core/ns；此处别名保留既有引用） */

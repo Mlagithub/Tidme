@@ -102,6 +102,29 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   // 2. 字段写回：FSRS 补丁 + annotate-colour + 优先级动态（合并一次写，少一轮 refresh）
   const delta = sched.priorityDeltaForRating(rating, config.readPriorityDynamics(wiki));
   const priority = Math.max(0, Math.min(100, sched.normalizePriority(f['tidme.priority']) + delta));
+
+  // 记录快照以支持 Undo 撤销（内存栈，深度 MAX_UNDO_DEPTH = 30）
+  const currentSession = session.getSession(wiki);
+  const logKey = schema.twDateString(now);
+  const isNewCard = !f.state || f.state === '0';
+  const rollover = config && typeof config.readRolloverHour === 'function' ? config.readRolloverHour(wiki) : 4;
+  const learningDay = schema.learningDayOf(now, rollover);
+
+  undoStack.push({
+    title: opts.title,
+    deckTitle: deck.title,
+    logKey,
+    prevFields: { ...f },
+    prevSession: currentSession
+      ? { list: [...currentSession.list], mode: currentSession.mode, currentIndex: currentSession.currentIndex }
+      : null,
+    wasNew: isNewCard,
+    learningDay,
+    at: now,
+  });
+  if (undoStack.length > MAX_UNDO_DEPTH) undoStack.shift();
+  wiki.addTiddler({ title: ns.UNDO_STATE_TITLE, depth: String(undoStack.length), can_undo: 'yes' });
+
   wiki.addTiddler({
     ...f,
     ...target.card,
@@ -110,7 +133,10 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   });
 
   // 3. 复习日志（<deck>/log 单文件，键 = 17 位复习时刻，值 = review_log JSON）
-  wiki.setText(ns.deckLogTitle(deck.title), null, schema.twDateString(now), JSON.stringify(target.review_log));
+  wiki.setText(ns.deckLogTitle(deck.title), null, logKey, JSON.stringify(target.review_log));
+
+  // 3.5 每日配额记账
+  sched.recordDailyQuota(wiki, isNewCard, now, rollover);
 
   // 4. 会话推进（Again 挪队尾重学，其余移出；<deck>/study 不在此维护——
   //  那是 fsrs4tw 起学路径的契约，队头推进由 startstudy.tid 决策）。
@@ -138,4 +164,69 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
   result.ok = true;
   result.due = target.card.due !== undefined ? String(target.card.due) : null;
   return result;
+}
+
+export interface GradeSnapshot {
+  title: string;
+  deckTitle: string;
+  logKey: string;
+  prevFields: Record<string, any>;
+  prevSession: { list: string[]; mode?: string; currentIndex?: string } | null;
+  wasNew: boolean;
+  learningDay: string;
+  at: Date;
+}
+
+const undoStack: GradeSnapshot[] = [];
+export const MAX_UNDO_DEPTH = 30;
+
+export function getUndoStackDepth(): number {
+  return undoStack.length;
+}
+
+export function clearUndoStack(): void {
+  undoStack.length = 0;
+}
+
+/**
+ * 撤销上一次评分（Undo）：
+ * 1. 恢复卡片所有字段（FSRS 字段族 + annotate-colour + priority）
+ * 2. 从 <deck>/log 中删除对应时间戳的单条复习日志
+ * 3. 恢复评分前的会话列表与焦点
+ * 4. 回滚当日新卡/复习卡配额计数
+ * 5. 更新撤销状态 tiddler
+ */
+export function undoLastGrade(wiki: any): { ok: boolean; title?: string } {
+  if (!wiki || !undoStack.length) return { ok: false };
+  const snapshot = undoStack.pop()!;
+
+  // 1. 恢复卡片原始字段
+  wiki.addTiddler(snapshot.prevFields);
+
+  // 2. 撤销复习日志
+  const logTitle = ns.deckLogTitle(snapshot.deckTitle);
+  const logData = wiki.getTiddlerData(logTitle);
+  if (logData && typeof logData === 'object' && logData[snapshot.logKey]) {
+    delete logData[snapshot.logKey];
+    wiki.addTiddler({ title: logTitle, type: 'application/json', text: JSON.stringify(logData) });
+  }
+
+  // 3. 恢复会话状态并重新进入该卡
+  if (snapshot.prevSession) {
+    session.setSession(wiki, snapshot.prevSession);
+    session.enterCard(wiki, snapshot.title, snapshot.at);
+  }
+
+  // 4. 回滚每日配额
+  const rollover = config && typeof config.readRolloverHour === 'function' ? config.readRolloverHour(wiki) : 4;
+  sched.rollbackDailyQuota(wiki, snapshot.wasNew, snapshot.at, rollover);
+
+  // 5. 更新撤销状态
+  wiki.addTiddler({
+    title: ns.UNDO_STATE_TITLE,
+    depth: String(undoStack.length),
+    can_undo: undoStack.length > 0 ? 'yes' : 'no',
+  });
+
+  return { ok: true, title: snapshot.title };
 }

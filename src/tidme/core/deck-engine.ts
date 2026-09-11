@@ -89,6 +89,12 @@ export interface GlobalQueueOptions {
    * 需要 SM 交错时显式 topics: true。
    */
   topics?: boolean;
+  /** 每日新卡上限截断（默认 undefined = 不限；0 = 禁止新卡引入） */
+  newLimit?: number;
+  /** 每日复习卡上限截断（默认 undefined = 不限；0 = 禁止到期复习引入） */
+  reviewLimit?: number;
+  /** 复习卡达到上限时是否压制新卡（对标 Anki 默认行为） */
+  suppressNewOnOverdue?: boolean;
 }
 
 // 学习队列 Topic 过滤：直接以 ns.TOPIC_QUEUE_FILTER 完整契约组合（勿对契约字符串做
@@ -115,6 +121,7 @@ function topicPendingFilter(): string {
  * - 默认（topics 未开）：纯知识卡队列（default deck 的 learn+due+new）——阅读材料不打断复习。
  * - topics:true + interleaved：到期/待读 Topic（Priority 升序）与 Item 队列按 itemRatio:topicRatio 交错。
  * - topics:true + strict：宏观三段式 —— 到期 Items → 到期/逾期 Topics → 新导入 Pending。
+ * - 支持每日上限配额截断（reviewLimit / newLimit）与超额压制。
  */
 export function composeGlobalLearningQueue(
   evaluate: (filter: string) => string[],
@@ -124,18 +131,37 @@ export function composeGlobalLearningQueue(
   const mode = opts.mode || 'interleaved';
   const includeTopics = opts.topics === true;
 
+  const learnItems = evaluate(defaultDeckFilters.learn);
+  let dueItems = evaluate(defaultDeckFilters.due);
+  let newItems = evaluate(defaultDeckFilters.newly);
+
+  const initialDueCount = dueItems.length;
+  if (opts.reviewLimit !== undefined) {
+    dueItems = dueItems.slice(0, Math.max(0, opts.reviewLimit));
+  }
+
+  const suppress = opts.suppressNewOnOverdue === true &&
+    opts.reviewLimit !== undefined &&
+    opts.reviewLimit > 0 &&
+    initialDueCount >= opts.reviewLimit;
+
+  if (suppress) {
+    newItems = [];
+  } else if (opts.newLimit !== undefined) {
+    newItems = newItems.slice(0, Math.max(0, opts.newLimit));
+  }
+
   if (mode === 'strict') {
-    const dueItems = evaluate(`${defaultDeckFilters.learn} ${defaultDeckFilters.due}`);
-    const newItems = evaluate(defaultDeckFilters.newly);
-    if (!includeTopics) return [...dueItems, ...newItems];
+    const dueAll = [...learnItems, ...dueItems];
+    if (!includeTopics) return [...dueAll, ...newItems];
     const dueTopics = evaluate(topicDueFilter());
     const pendingTopics = evaluate(topicPendingFilter());
-    return [...dueItems, ...dueTopics, ...newItems, ...pendingTopics];
+    return [...dueAll, ...dueTopics, ...newItems, ...pendingTopics];
   }
 
   // interleaved：item 队列为主体；topics:true 时按比例交错优先 topic（否则纯知识卡）。
   // 到期/待读两段分别求值再 JS 侧拼接（拼接进同一次求值会触发累计过滤互杀，见文件头部 run 语义说明）
-  const rawItems = evaluate(defaultDeckFilters.queue);
+  const rawItems = [...learnItems, ...dueItems, ...newItems];
   const rawTopics = includeTopics
     ? [...evaluate(topicDueFilter()), ...evaluate(topicPendingFilter())]
     : [];

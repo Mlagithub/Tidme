@@ -276,16 +276,98 @@ export function restoreCard(): Record<string, any> {
 }
 
 /**
- * 当前是否可调度：在队（未完成/未忽略/未搁置）且 due ≤ now。
+ * 当前是否可调度：在队（未完成/未忽略/未搁置）且 due ≤ now（或符合提前学习放行限制）。
  * 尊重评分/顺延写出的未来排期——"下一张/继续阅读"导航用此跳过未来到期的卡，不提前重放。
  * 无 due 的卡（Pending 语义）视为可读；**无法解析的 due 视为不可调度**（脏数据不伪装成"立即到期"）。
+ * @param fields 卡片字段集
+ * @param now 当前基准时刻
+ * @param learnAheadMinutes 提前学习放行上限（分钟，默认 0 = 严格不提前；>0 时放行窗口内的学习步卡片）
  */
-export function isDueNow(fields: Record<string, any> | null | undefined, now = new Date()): boolean {
+export function isDueNow(
+  fields: Record<string, any> | null | undefined,
+  now = new Date(),
+  learnAheadMinutes = 0,
+): boolean {
   if (!isInQueue(fields)) return false;
   const due = fields!.due;
   if (due === undefined || due === null || String(due) === '') return true;
   const parsed = tryParseTwDate(due);
-  return parsed ? parsed.getTime() <= now.getTime() : false;
+  if (!parsed) return false;
+
+  const dueMs = parsed.getTime();
+  const nowMs = now.getTime();
+  if (dueMs <= nowMs) return true;
+
+  // 提前学习放行（Learn Ahead Limit）：仅对会内学习步卡片（state 1/3）生效
+  if (learnAheadMinutes > 0 && (fields!.state === '1' || fields!.state === '3')) {
+    return dueMs <= nowMs + learnAheadMinutes * 60000;
+  }
+  return false;
+}
+
+export interface DailyQuotaState {
+  learningDay: string;
+  newCount: number;
+  reviewCount: number;
+}
+
+/** 读今日配额消耗状态（跨天自动重置） */
+export function readDailyQuota(wiki: any, now = new Date(), rolloverHour?: number): DailyQuotaState {
+  const h = rolloverHour !== undefined
+    ? rolloverHour
+    : (wiki?.getTiddlerText ? Number(wiki.getTiddlerText(ns.ROLLOVER_HOUR_TITLE)) || 4 : 4);
+  const currentDay = schema.learningDayOf(now, h);
+  const fallback: DailyQuotaState = { learningDay: currentDay, newCount: 0, reviewCount: 0 };
+  if (!wiki || typeof wiki.getTiddler !== 'function') return fallback;
+  const raw = wiki.getTiddlerText?.(ns.DAILY_QUOTA_STATE_TITLE, '');
+  if (!raw) return fallback;
+  try {
+    const data = JSON.parse(raw);
+    if (data && data.learningDay === currentDay) {
+      return {
+        learningDay: currentDay,
+        newCount: Math.max(0, Math.floor(Number(data.newCount) || 0)),
+        reviewCount: Math.max(0, Math.floor(Number(data.reviewCount) || 0)),
+      };
+    }
+  } catch {}
+  return fallback;
+}
+
+/** 记入今日配额消耗（评分成功后调用） */
+export function recordDailyQuota(wiki: any, isNew: boolean, now = new Date(), rolloverHour?: number): DailyQuotaState {
+  const current = readDailyQuota(wiki, now, rolloverHour);
+  const updated: DailyQuotaState = {
+    learningDay: current.learningDay,
+    newCount: current.newCount + (isNew ? 1 : 0),
+    reviewCount: current.reviewCount + (isNew ? 0 : 1),
+  };
+  if (wiki && typeof wiki.addTiddler === 'function') {
+    wiki.addTiddler({
+      title: ns.DAILY_QUOTA_STATE_TITLE,
+      type: 'application/json',
+      text: JSON.stringify(updated),
+    });
+  }
+  return updated;
+}
+
+/** 回滚今日配额消耗（Undo 评分时调用） */
+export function rollbackDailyQuota(wiki: any, isNew: boolean, now = new Date(), rolloverHour?: number): DailyQuotaState {
+  const current = readDailyQuota(wiki, now, rolloverHour);
+  const updated: DailyQuotaState = {
+    learningDay: current.learningDay,
+    newCount: Math.max(0, current.newCount - (isNew ? 1 : 0)),
+    reviewCount: Math.max(0, current.reviewCount - (isNew ? 0 : 1)),
+  };
+  if (wiki && typeof wiki.addTiddler === 'function') {
+    wiki.addTiddler({
+      title: ns.DAILY_QUOTA_STATE_TITLE,
+      type: 'application/json',
+      text: JSON.stringify(updated),
+    });
+  }
+  return updated;
 }
 
 /**
