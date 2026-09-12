@@ -123,7 +123,7 @@ export function parseAnchor(raw: any): { section: string; snippet: string; page?
  * 派生卡命名空间解析：从父卡 title 的实际位置派生（folder 冲突时可能带 ~docId 后缀，slug 重算会错位）。
  * - 摘录：与父卡同目录，叶段 += "--extract"
  * - 挖空/问答（阅读材料来源）：目录 Docs→Decks 镜像，叶段 += "--cloze"/"--qa"
- * - 普通笔记（非 Tidme/Docs 来源）：统一收进 Tidme/Decks/散卡/<笔记名>--<类型>
+ * - 普通笔记（非 Tidme/Docs 来源）：统一收进 Tidme/Decks/standalone/<笔记名>--<类型>
  *   （item 类卡片全部入 Decks 命名空间，不再散落在来源目录） */
 export function derivedCardBase(pf: Record<string, any>, parentTitle: string, kind: 'extract' | 'cloze' | 'qa'): string {
   const leaf = paths.leafIdOf(parentTitle);
@@ -133,9 +133,9 @@ export function derivedCardBase(pf: Record<string, any>, parentTitle: string, ki
     if (kind === 'extract') return dir + leaf + '--extract';
     return ns.docsToDecksRoot(dir) + leaf + '--' + kind;
   }
-  // 普通笔记（无 doc 来源）→ 散卡桶：Tidme/Decks/散卡/<笔记名 slug>--<类型>
+  // 普通笔记（无 doc 来源）→ 独立卡桶：Tidme/Decks/standalone/<笔记名 slug>--<类型>
   const parentSlug = paths.slugify(parentTitle) || 'untitled';
-  return paths.joinPath(ns.NS_DECKS_SCATTER, parentSlug) + '--' + kind;
+  return paths.joinPath(ns.NS_DECKS_STANDALONE, parentSlug) + '--' + kind;
 }
 
 /** 规整片段（紧凑空白 + 截断），用于 anchor.snippet / caption 预览 */
@@ -164,7 +164,7 @@ export function derivedImageQABase(pf: Record<string, any>, parentTitle: string,
     dir = ns.NS_DECKS + docName + '/';
   } else {
     const parentSlug = paths.slugify(parentTitle) || 'untitled';
-    dir = paths.joinPath(ns.NS_DECKS_SCATTER, parentSlug) + '/';
+    dir = paths.joinPath(ns.NS_DECKS_STANDALONE, parentSlug) + '/';
   }
   const pagePrefix = page && page > 0 ? `P${page}-` : '';
   const labelSuffix = label ? paths.slugify(label).slice(0, 25) : 'QA';
@@ -273,6 +273,8 @@ export function buildCloze(wiki: any, parentTitle: string, block: string, select
 export function buildQA(wiki: any, parentTitle: string, question: string, answer: string, pending?: Iterable<string>): Record<string, any> {
   const pf = wiki.getTiddler(parentTitle)?.fields || {};
   const title = titleMod.freeTitle(wiki, derivedCardBase(pf, parentTitle, 'qa'), pending);
+  const q = String(question || '').trim();
+  const a = String(answer || '').trim();
   return derivedCardFields({
     parentTitle,
     pf,
@@ -280,7 +282,7 @@ export function buildQA(wiki: any, parentTitle: string, question: string, answer
     kind: 'item',
     subkind: 'qa',
     caption: safeCaption(question, answer),
-    text: `Q: ${question}\n\nA: ${answer}`,
+    text: [q, a].filter(Boolean).join('\n\n'),
     snippet: compactSnippet(answer, 80),
     breadcrumbSuffix: 'Q&A',
   });
@@ -314,7 +316,7 @@ export function buildImageQA(wiki: any, parentTitle: string, opts: ImageQAOption
     kind: 'item',
     subkind: 'qa',
     caption,
-    text: `Q: ${qBody}\n\nA: ${answerText || '(Answer pending)'}`,
+    text: [qBody, answerText || '(Answer pending)'].filter(Boolean).join('\n\n'),
     snippet: compactSnippet(answerText || labelText, 80),
     breadcrumbSuffix: 'Image Q&A',
   });
@@ -332,7 +334,7 @@ export function buildImageQA(wiki: any, parentTitle: string, opts: ImageQAOption
 export interface StandaloneCardOptions {
   type: 'qa' | 'cloze' | 'concept';
   title?: string;
-  deck?: string; // 牌组名；空 / STANDALONE_DECK_TOKEN / 'inbox' / 'standalone' 均归散卡桶
+  deck?: string; // 牌组名；空 / STANDALONE_DECK_TOKEN / 'standalone' 均归散卡桶
   question?: string;
   answer?: string;
   clozeContent?: string;
@@ -343,20 +345,24 @@ export interface StandaloneCardOptions {
   pending?: Iterable<string>;
 }
 
-/** 独立制卡「散卡桶」的内部标识（omni-creator 下拉 value 与此共用同一来源） */
-export const STANDALONE_DECK_TOKEN = '__inbox__';
+/** 独立制卡「散卡桶 / standalone」的内部标识（omni-creator 下拉 value 与此共用同一来源） */
+export const STANDALONE_DECK_TOKEN = '__standalone__';
 
-/** 全局独立卡片构建（无需依附特定阅读材料）。kind 由模板决定，归属于指定牌组或散卡桶 */
+/** 全局独立卡片构建（无需依附特定阅读材料）。kind 由模板决定，归属于指定牌组或独立卡桶 */
 export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Record<string, any> {
   const deck = (opts.deck || STANDALONE_DECK_TOKEN).trim();
   const lower = deck.toLowerCase();
-  const isScatter = !deck ||
+  const isStandalone = !deck ||
     deck === STANDALONE_DECK_TOKEN ||
-    lower === 'inbox' ||
-    lower === 'standalone';
-  const deckDir = isScatter ? ns.NS_DECKS_SCATTER : `Tidme/Decks/${deck}`;
-  // tidme.deck/breadcrumb 落展示名：散卡桶不落内部哨兵 token
-  const deckName = isScatter ? String(ns.NS_DECKS_SCATTER).slice(String(ns.NS_DECKS).length) : deck;
+    lower === 'standalone' ||
+    deck === '散卡' ||
+    deck === ns.NS_DECKS_STANDALONE ||
+    deck === ns.DECK_PREFIX + 'standalone' ||
+    deck === 'Tidme/Decks/散卡' ||
+    deck === ns.DECK_PREFIX + '散卡';
+  const deckDir = isStandalone ? ns.NS_DECKS_STANDALONE : `Tidme/Decks/${deck}`;
+  // tidme.deck/breadcrumb 落展示名：独立卡桶不落内部哨兵 token
+  const deckName = isStandalone ? String(ns.NS_DECKS_STANDALONE).slice(String(ns.NS_DECKS).length) : deck;
 
   // 智能标题基座
   let slug = '';
@@ -387,7 +393,7 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
     const q = (opts.question || '').trim();
     const a = (opts.answer || '').trim();
     caption = opts.title ? opts.title : safeCaption(q, a);
-    text = `Q: ${q}\n\nA: ${a}`;
+    text = [q, a].filter(Boolean).join('\n\n');
   } else if (opts.type === 'cloze') {
     kind = 'item';
     subkind = 'cloze';

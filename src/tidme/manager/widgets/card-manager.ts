@@ -531,7 +531,7 @@ function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
       });}
     treeBox.appendChild(details);
   }
-  // 未入组：不被任何牌组命中的卡（已读/搁置/手动散卡）
+  // 未入组：不被任何牌组命中的卡（已读/搁置/未指定牌组的独立概念卡等）
   const orphans = cards.filter((c) => !anyStrict(st, c));
   const ob = el(doc, 'details', 'tm-cm-deck tm-cm-orphan');
   const orphanFold = foldStateTitle('deck', '__orphan__');
@@ -555,7 +555,7 @@ function renderDeckTree(ctx: Ctx, treeBox: HTMLElement, cards: Card[]) {
 
   const unassignedLabel = lingoMod.lingo(wiki, 'manager.unassigned', 'Unassigned');
   os.appendChild(el(doc, 'strong', '', ` ${unassignedLabel}（${orphans.length}）`));
-  os.title = lingoMod.lingo(wiki, 'manager.unassigned.tip', 'Cards not belonging to any deck queue: read, suspended or standalone cards');
+  os.title = lingoMod.lingo(wiki, 'manager.unassigned.tip', 'Cards not belonging to any deck queue: read, suspended or unassigned concept topics');
   ob.appendChild(os);
   let orphansRendered = false;
   const renderOrphanGroups = () => {

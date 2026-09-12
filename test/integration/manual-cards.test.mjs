@@ -72,7 +72,7 @@ test('编辑器真制卡: tidme-make-cloze 从选区建卡（draft.of 解析 + c
   const operation = { text: 'x', selStart: 0, selEnd: 4, selection: '间隔重复' };
   opMod['tidme-make-cloze'].call(editWidget, {}, operation);
 
-  const cardTitle = 'Tidme/Decks/散卡/我的笔记--cloze';
+  const cardTitle = 'Tidme/Decks/standalone/我的笔记--cloze';
   const card = wiki.getTiddler(cardTitle);
   assert.ok(card, '挖空卡已写库（父卡解析自 draft.of）');
   assert.equal(card.fields['tidme.kind'], 'item');

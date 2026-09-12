@@ -659,7 +659,7 @@ function makeFileWidget(): WidgetCtor {
               doc,
               'div',
               'tm-import-summary tm-import-muted',
-              `-- ${totalSections} ${lingo(this.wiki, 'import.sectionsadded', 'sections imported into default deck, ready to study.')}`,
+              `-- ${totalSections} ${lingo(this.wiki, 'import.sectionsadded', 'sections imported into the global queue, ready to study.')}`,
             ),
           );
         }

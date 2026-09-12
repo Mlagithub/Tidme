@@ -74,6 +74,7 @@ test('title 净化：危险字符集合同源（slugify 删除 / titleOf 换 -�
   // 合法完整 title 原样通过（内部调用方传的是已构造好的 title）
   assert.equal(deck.titleOf('$:/Deck/默认'), '$:/Deck/默认');
   assert.equal(deck.titleOf('Tidme/Decks/散卡'), 'Tidme/Decks/散卡');
+  assert.equal(deck.titleOf('Tidme/Decks/standalone'), 'Tidme/Decks/standalone');
 });
 
 // === 集成：runSplit 产物 ===

@@ -5,7 +5,7 @@ tags: $:/tags/SideBar
 
 <div class="tm-page-header">
   <div class="tm-page-title-row">
-    <span class="tm-page-title"><$transclude tiddler="$:/language/tidme/clips.title">Web Clips Inbox</$transclude></span>
+    <span class="tm-page-title"><$transclude tiddler="$:/language/tidme/clips.title">Web Clips</$transclude></span>
     <span class="tm-page-badge">{{{ [tag[tidme-inbox]!is[draft]count[]] }}} <$transclude tiddler="$:/language/tidme/clips.badge">Clips</$transclude></span>
   </div>
 </div>
@@ -13,5 +13,5 @@ tags: $:/tags/SideBar
 <$tidme-nav/>
 
 <div class="tm-page-body">
-  <$inbox-split/>
+  <$clips-split/>
 </div>

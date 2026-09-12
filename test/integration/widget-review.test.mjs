@@ -54,8 +54,8 @@ test('双轨分类: 默认牌组只装 item（含挖空，不含节卡/摘录）
   const autoDeck = wiki.getTiddler('$:/Deck/read/书名甲');
   assert.equal(autoDeck, undefined, '不生成自动阅读牌组（书只出现在阅读列表）');
   const decks = wiki.filterTiddlers('[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]]');
-  assert.equal(decks.length, 1, '牌组库只剩默认牌组（item 复习流）');
-  assert.equal(decks[0], '$:/Deck/default');
+  assert.equal(decks.length, 2, '出厂牌组库 = 默认牌组 + 散卡（item 复习流）');
+  assert.ok([...decks].includes('$:/Deck/default') && [...decks].includes('$:/Deck/standalone'), '默认与散卡两块 shadow 牌组在库');
   // 补一张未读节卡：它只在阅读列表（kind[topic]），不进入任何牌组队列
   const docId = wiki.getTiddler(F.extractTitle).fields['tidme.doc'];
   const newSection = `${F.docTitle}/新节-${Date.now().toString(36)}`;
@@ -69,6 +69,7 @@ test('视图互斥: 阅读条栏只显示 topic，复习帧只接管 item', () =
   // section-nav.tid（阅读条栏）只匹配 kind=topic
   const secNav = wiki.getTiddler('$:/plugins/keepone/tidme/import/ui/section-nav').fields.text;
   assert.ok(secNav.includes('tidme.kind[topic]'), '阅读条栏只显示 topic 卡');
+  assert.ok(secNav.includes('!tag[$:/tags/TidmeDeck]'), '阅读条栏排除牌组');
   assert.ok(!secNav.includes('has[tidme.doc]!tag[tidme-doc]'), '不再按 doc 判定（避免 item 卡混入）');
   // card.tid（复习帧）排除 topic
   const cardFilter = wiki.getTiddler('$:/config/Tidme/StoryTiddlerTemplateFilters/card').fields.text;
@@ -78,6 +79,15 @@ test('视图互斥: 阅读条栏只显示 topic，复习帧只接管 item', () =
   const item = wiki.filterTiddlers('[tidme.kind[item]]')[0];
   assert.ok(topic, '存在未读 topic 卡');
   assert.ok(item, '存在 item 卡');
+  // 即使牌组带有 legacy tidme.kind=topic，也不会被 section-nav 误判为 topic
+  wiki.addTiddler({
+    title: '$:/Deck/LegacyTestDeck',
+    tags: ['$:/tags/TidmeDeck'],
+    'tidme.kind': 'topic',
+    'tidme.doc': 'legacy_doc',
+  });
+  const directMatches = wiki.filterTiddlers('[[$:/Deck/LegacyTestDeck]tidme.kind[topic]!tag[tidme-doc]!tag[$:/tags/TidmeDeck]]');
+  assert.equal(directMatches.length, 0, '牌组即使带 legacy kind=topic 也被 section-nav 排除');
 });
 
 test('视图互斥: 复习帧故事级联对 topic 卡落回默认帧（阅读模式无评分条）', () => {

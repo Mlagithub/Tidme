@@ -169,8 +169,10 @@ test('card-factory: buildStandaloneCard 全局独立制卡构建（QA / Cloze / 
   assert.equal(qaCard['tidme.subkind'], 'qa');
   assert.equal(qaCard['tidme.deck'], '算法');
   assert.equal(qaCard.caption, '二叉查找树性质');
-  assert.ok(qaCard.text.includes('Q: BST 中序遍历'));
-  assert.ok(qaCard.text.includes('A: 单调非递减'));
+  assert.ok(qaCard.text.includes('BST 中序遍历'));
+  assert.ok(qaCard.text.includes('单调非递减'));
+  assert.ok(!qaCard.text.includes('Q:'), '不含 Q: 前缀');
+  assert.ok(!qaCard.text.includes('A:'), '不含 A: 前缀');
   assert.equal(qaCard.state, '0');
   assert.equal(qaCard['tidme.priority'], '50', '独立卡未指定 priority 时默认 50');
 
@@ -180,10 +182,10 @@ test('card-factory: buildStandaloneCard 全局独立制卡构建（QA / Cloze / 
     clozeContent: '计算机硬件由 <<C "运算器">>、控制器、存储器、输入设备和输出设备组成。',
   });
 
-  assert.ok(clozeCard.title.startsWith('Tidme/Decks/散卡/') || clozeCard.title.startsWith('Tidme/Decks/Inbox/'));
+  assert.ok(clozeCard.title.startsWith('Tidme/Decks/standalone/'), '散卡路径收敛为 Tidme/Decks/standalone/');
   assert.equal(clozeCard['tidme.kind'], 'item');
   assert.equal(clozeCard['tidme.subkind'], 'cloze');
-  assert.ok(clozeCard['tidme.deck'] === '散卡' || clozeCard['tidme.deck'] === 'Inbox');
+  assert.equal(clozeCard['tidme.deck'], 'standalone', 'tidme.deck 落标识 standalone');
   assert.equal(clozeCard.state, '0');
   assert.equal(clozeCard['tidme.priority'], '50');
 
@@ -220,7 +222,7 @@ test('omni-creator: 全局制卡模态弹窗与 Widget 结构导出', () => {
   assert.ok(omni['tidme-card-creator'], 'Widget 已导出');
 
   const decks = omni.listAvailableDecks(wiki);
-  assert.ok(decks.includes('散卡') || decks.includes('Inbox'), '默认包含散卡桶');
+  assert.ok(decks.includes('散卡'), '默认包含散卡桶');
 
   let clickSubmit = null;
   const mockDoc = {
@@ -251,12 +253,64 @@ test('omni-creator: 全局制卡模态弹窗与 Widget 结构导出', () => {
   assert.ok(mockDoc.body.childNodes.length > 0, '全局模态窗成功挂载');
   assert.ok(clickSubmit, '保存按钮成功绑定');
 
+  const byClass = (node, cls, out = []) => {
+    if (!node) return out;
+    if (String(node.className || '').includes(cls)) out.push(node);
+    for (const c of node.childNodes || []) byClass(c, cls, out);
+    return out;
+  };
+  const cmContainers = byClass(mockDoc.body, 'tm-omni-cm-container');
+  assert.equal(cmContainers.length, 2, 'QA 问答模式挂载 2 个 CodeMirror 容器（正面与背面）');
+
   // 模拟输入并保存
   clickSubmit();
   // 校验回调
   assert.ok(createdCard, '保存成功触发 onSuccess');
   assert.equal(createdCard['tidme.kind'], 'item');
   assert.equal(createdCard['tidme.subkind'], 'qa');
+});
+
+test('omni-creator: 标签支持已有下拉与手动输入并正确写入卡片', () => {
+  const omni = mod('ui/components/omni-creator.js');
+  wiki.addTiddler({ title: 'TagTest1', tags: ['算法', '数据结构'] });
+
+  const tags = omni.listAvailableTags(wiki);
+  assert.ok(tags.includes('算法'), 'listAvailableTags 包含已有标签');
+  assert.ok(tags.includes('数据结构'), 'listAvailableTags 包含数据结构');
+
+  let clickSubmit = null;
+  const mockDoc = {
+    createElement: (t) => {
+      const el = fakeDocument.createElement(t);
+      el.addEventListener = (evt, fn) => {
+        if (evt === 'click' && String(el.className).includes('tm-card-modal-submit')) {
+          clickSubmit = fn;
+        }
+      };
+      return el;
+    },
+    body: fakeDocument.createElement('body'),
+    querySelector: () => null,
+  };
+
+  let createdCard = null;
+  omni.openOmniCardModal(mockDoc, wiki, {
+    defaultType: 'qa',
+    defaultTitle: '标签测试卡',
+    defaultTags: ['默认标签'],
+    defaultQuestion: '什么是树？',
+    defaultAnswer: '非线性数据结构。',
+    onSuccess: (card) => {
+      createdCard = card;
+    },
+  });
+
+  assert.ok(clickSubmit, '保存按钮存在');
+  clickSubmit();
+
+  assert.ok(createdCard, '制卡成功');
+  assert.ok(Array.isArray(createdCard.tags), '卡片包含 tags 数组');
+  assert.ok(createdCard.tags.includes('默认标签'), '包含预置标签');
 });
 
 test('omni-creator: <$tidme-card-creator/> widget 在 TW 真实解析并渲染为 DOM 节点', () => {
@@ -342,7 +396,7 @@ test('ui/components/omni-creator: listDeckOptions 解耦内部值与显示文本
   const options = omni.listDeckOptions(wiki);
   assert.ok(Array.isArray(options));
   assert.ok(options.length >= 1);
-  assert.equal(options[0].value, '__inbox__', '散卡首项内部值必须为 __inbox__');
+  assert.equal(options[0].value, '__standalone__', '散卡首项内部值必须为 __standalone__');
   assert.ok(options[0].label, '散卡首项必须有本地化显示标签');
 
   // 向后兼容测试
@@ -353,7 +407,7 @@ test('ui/components/omni-creator: listDeckOptions 解耦内部值与显示文本
   const card = cardFactory.buildStandaloneCard(wiki, {
     type: 'qa',
     title: 'Test Q',
-    deck: '__inbox__',
+    deck: '__standalone__',
     question: 'Q',
     answer: 'A',
   });

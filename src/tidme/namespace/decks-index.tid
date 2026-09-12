@@ -6,7 +6,7 @@ tags: $:/tags/SideBar
 <div class="tm-page-header">
   <div class="tm-page-title-row">
     <span class="tm-page-title"><$transclude tiddler="$:/language/tidme/decks.title">Decks & Workflow</$transclude></span>
-    <span class="tm-page-badge">{{{ [prefix[$:/Deck/]!is[draft]count[]] }}} <$transclude tiddler="$:/language/tidme/decks.badge">Decks</$transclude></span>
+    <span class="tm-page-badge">{{{ [all[shadows+tiddlers]tag[$:/tags/TidmeDeck]![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]![$:/Deck/default]count[]] }}} <$transclude tiddler="$:/language/tidme/decks.badge">Decks</$transclude></span>
   </div>
 </div>
 
@@ -20,6 +20,9 @@ tags: $:/tags/SideBar
       <$deck-create/>
     </div>
     <div class="tm-today-sub"><$transclude tiddler="$:/language/tidme/decks.views.sub">Decks are filtered views: cards are unique, progress is shared</$transclude></div>
-    <<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row" storyview:"classic">>
+    <!-- 默认牌组是全局队列载体（fsrs4tw 模板 + 兜底收录），不再以同级牌组行示人：
+         全局口径由上方工作流「开始学习」承担，此处只列用户自建牌组（与 Today 页同口径） -->
+    <<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]![$:/Deck/default]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row" storyview:"classic">>
+    <$list filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]![$:/Deck/default]count[]match[0]]"><div class="tm-today-sub"><$transclude tiddler="$:/language/tidme/decks.empty">No custom decks yet - all cards are handled by the global queue</$transclude></div></$list>
   </div>
 </div>

@@ -51,7 +51,7 @@ function makeSettings(): any {
         {
           id: 'schedule',
           title: l('settings.review.title', 'Review Scheduling'),
-          subtitle: l('settings.review.subtitle', 'Default Deck & Auto-Postpone'),
+          subtitle: l('settings.review.subtitle', 'Global Queue & Auto-Postpone'),
           items: [
             {
               id: 'order',
@@ -303,7 +303,7 @@ function makeSettings(): any {
         {
           id: 'memory-params',
           title: l('settings.memory.title', 'Memory Parameters'),
-          subtitle: l('settings.memory.subtitle', 'Default Deck FSRS'),
+          subtitle: l('settings.memory.subtitle', 'Global Queue FSRS'),
           items: [
             {
               id: 'request-retention',

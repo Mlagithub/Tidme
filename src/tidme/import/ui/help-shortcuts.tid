@@ -24,12 +24,12 @@ tags: [[Tidme Manual]]
 !! Document Page
 
 * ▶ Continue Reading · 📖 Review Book (subset review of book test cards)
-* Read Sections (can be re-added) · Extracted & Cloze Cards inbox (with back to source & delete)
+* Read Sections (can be re-added) · Extract & Cloze Cards (standalone bucket, with back to source & delete)
 
 !! Reading List (Navigation > Reading)
 
 * Pending reading list: Unread sections/extracts grouped by document, sorted by priority and due date
-* Each document group displays progress + "▶ Continue Reading" + "🗑 Clean Reading Materials"; knowledge cards are reviewed in decks
+* Each document group displays progress + "▶ Continue Reading" + "🗑 Clean Reading Materials"; knowledge cards are reviewed via the global queue and decks
 
 !! Card Manager (Navigation > Manager)
 

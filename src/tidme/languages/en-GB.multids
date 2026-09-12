@@ -2,8 +2,10 @@ title: $:/language/tidme/
 
 tidme: Tidme
 tidmetip: Lifelong knowledge, deep in mind
-default: Default
-defaulttip: <center>All knowledge cards (cloze / Q&amp;A) are collected into this deck automatically for review.</center>
+default: All Cards
+defaulttip: <center>Global queue: all active knowledge cards (cloze / Q&amp;A) are collected here automatically and scheduled as one queue. Tune parameters in Settings; create decks for filtered views.</center>
+scatter: Standalone
+scattertip: <center>Landing deck for standalone cards (cloze / Q&amp;A) created via the global creator or from ordinary notes; concept cards (topics) follow the reading flow. Progress is shared with All Cards.</center>
 deck: Deck
 learn: Learn
 due: Due
@@ -54,7 +56,7 @@ optionsmodaltip: Review Options
 lastdue: Due
 lastreview: Reviewed
 createdeck: Create Deck
-createdecktip: Create a new deck using the default deck as template
+createdecktip: Create a new deck using the All Cards deck (global queue) as template
 getshared: Get Shared Decks
 importfile: Import File
 pluginlibrary: Tidme Plugin Library
@@ -225,7 +227,7 @@ deck.create: + New Deck
 deck.name.placeholder: Name, e.g. Vocabulary
 deck.caption.placeholder: Caption (leave blank to use name)
 deck.src.custom: Custom Filter
-deck.src.item: All Knowledge Cards
+deck.src.item: All Knowledge Cards (same as the global queue, usually no need)
 deck.caption: Caption
 deck.membersrc: Member Source
 deck.filter: Filter
@@ -236,9 +238,9 @@ deck.name.empty: Please enter a deck name
 deck.created: ✔ Created
 deck.create.failed: Creation failed:
 deck.delete: Delete Deck
-deck.delete.tip: Delete deck definition (cards are kept and reviewed in default deck)
+deck.delete.tip: Delete deck definition (cards are kept and reviewed in the global queue)
 deck.notfound: Deck not found
-deck.nodeletedefault: Default deck cannot be deleted
+deck.nodeletedefault: All Cards (global queue) cannot be deleted
 deck.subset: Subset Deck
 deck.subset.deleteprompt: Delete cards together? (OK = delete cards; Cancel = delete deck only)
 deck.deletecards: Delete Cards
@@ -256,6 +258,9 @@ creator.mode.cloze: Cloze Card
 creator.mode.extract: Extract Note
 creator.field.title: Card Title
 creator.field.title.placeholder: Optional concise summary...
+creator.field.tags: Tags
+creator.field.tags.placeholder: Type tag and press Enter, or choose from dropdown...
+creator.tags.select: Choose existing tag...
 creator.field.question: Question (Front)
 creator.field.question.placeholder: Enter question or prompt...
 creator.field.answer: Answer (Back)
@@ -378,7 +383,7 @@ settings.title: Settings
 settings.caption: Settings
 settings.tip: Configure Tidme scheduling, review, reading, and AI parameters
 settings.review.title: Review Scheduling
-settings.review.subtitle: Default Deck & Auto-Postpone
+settings.review.subtitle: Global Queue & Auto-Postpone
 settings.review.order: Study Order
 settings.review.order.desc: Interleaving order of due and new cards in study queue
 settings.review.order.duenew: Due cards first
@@ -403,7 +408,7 @@ settings.ai.key: API Key
 settings.ai.model: Model Name
 import.title: Import Center
 import.caption: Import Center
-import.tip: Import books, split documents, and manage inbox clips
+import.tip: Import books, split documents, and manage web clips
 import.tab.file: File Import
 import.tab.split: Text Split
 import.tab.clips: Web Clips
@@ -456,7 +461,7 @@ import.dropped: Duplicate sections discarded
 import.skippedexisting: Skipped (title exists)
 import.collision: Possible book title collision - rename and re-import
 import.pdfimported: imported
-import.sectionsadded: sections imported into default deck, ready to study.
+import.sectionsadded: sections imported into the global queue, ready to study.
 split.sourcemissing: Source tiddler does not exist
 split.emptysections: No sections split (content too short or no recognizable structure)
 split.pastetitle: Paste Text
@@ -465,8 +470,8 @@ split.btn: Split & Import
 split.emptycontent: Content is empty
 split.parsing: Parsing...
 split.failed: Split failed:
-split.inboxtitle: Inbox Clips (tidme-inbox)
-split.inboxempty: Inbox is empty - clip articles from browser to import here.
+split.inboxtitle: Web Clips (tidme-inbox)
+split.inboxempty: No web clips yet - clip articles from browser to import here.
 stats.title: Statistics
 stats.caption: Statistics
 stats.tip: Learning progress, retention rate, and study habits
@@ -546,7 +551,7 @@ settings.limits.learnAhead.desc: Show in-session learning cards up to N minutes 
 settings.limits.bury: Bury Siblings
 settings.limits.bury.desc: After grading a card, hide its same-source siblings until the next learning day (cards in learning steps are never buried)
 settings.memory.title: Memory Parameters
-settings.memory.subtitle: Default Deck FSRS
+settings.memory.subtitle: Global Queue FSRS
 settings.memory.retention: Target Retention
 settings.memory.retention.desc: Standard is 0.9; higher retention yields slower forgetting but heavier load
 settings.memory.maxinterval: Maximum Interval (Days)
@@ -581,19 +586,20 @@ sidebar.decks: Decks
 sidebar.dashboard: Dashboard
 books.title: All Reading Materials
 books.badge: Documents
-clips.title: Web Clips Inbox
+clips.title: Web Clips
 clips.badge: Clips
 decks.title: Decks & Workflow
 decks.badge: Decks
-decks.views.sub: Decks are filtered views: cards are unique, progress is shared
+decks.views.sub: All cards are scheduled by the global queue; decks are filtered views: cards are unique, progress is shared
+decks.empty: No custom decks yet - all cards are handled by the global queue (Start Review above)
 tidme.title: Incremental Learning & Spaced Repetition
 tidme.badge: Cockpit
 today.cockpit: Incremental learning cockpit - System schedules, you advance
-today.decks.sub: Decks are filtered views: cards are unique, progress is shared
-read.readinglist.footer: Reading queue: section cards and extracts sorted by priority and due date. Cloze / Q&A cards are reviewed in [[Default Deck|$:/Deck/default]].
+today.decks.sub: All cards are scheduled by the global queue; decks are filtered views: cards are unique, progress is shared
+read.readinglist.footer: Reading queue: section cards and extracts sorted by priority and due date. Cloze / Q&A cards are reviewed in [[All Cards (global queue)|$:/Deck/default]].
 import.tab.localfiles: Local Files
 import.tab.pastetext: Paste Text
-import.tab.inboxclips: Inbox Clips
+import.tab.inboxclips: Web Clips
 import.shortcuts.manual: Shortcuts & Manual
 manager.desc: Browse, organize, and manage all learning cards (including read, suspended, and manual cards).
 manager.autopostpone.help.title: Auto-Postpone Documentation

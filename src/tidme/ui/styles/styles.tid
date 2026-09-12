@@ -699,10 +699,108 @@ type: text/css
 	background: var(--tm-surface-2, #f8fafc) !important;
 	color: var(--tm-text-1, #0f172a) !important;
 }
+.tm-omni-tag-pills {
+	display: flex !important;
+	flex-wrap: wrap !important;
+	gap: 6px !important;
+}
+.tm-omni-tag-pills:empty {
+	display: none !important;
+}
+.tm-omni-tag-pill {
+	display: inline-flex !important;
+	align-items: center !important;
+	gap: 4px !important;
+	background: var(--tm-surface-2, #f1f5f9) !important;
+	border: 1px solid var(--tm-border-strong, #cbd5e1) !important;
+	border-radius: 6px !important;
+	padding: 2px 8px !important;
+	font-size: 0.84em !important;
+	font-weight: 500 !important;
+	color: var(--tm-primary, #2563eb) !important;
+	user-select: none !important;
+	transition: all 0.15s ease !important;
+}
+.tm-omni-tag-pill:hover {
+	border-color: var(--tm-primary, #2563eb) !important;
+}
+.tm-omni-tag-del {
+	border: none !important;
+	background: transparent !important;
+	padding: 0 2px !important;
+	margin-left: 2px !important;
+	font-size: 1.1em !important;
+	line-height: 1 !important;
+	color: var(--tm-text-3, #94a3b8) !important;
+	cursor: pointer !important;
+	border-radius: 4px !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+}
+.tm-omni-tag-del:hover {
+	color: #ef4444 !important;
+	background: rgba(239, 68, 68, 0.1) !important;
+}
+.tm-omni-tag-row {
+	display: flex !important;
+	gap: 8px !important;
+	align-items: center !important;
+}
+.tm-omni-tag-input {
+	flex: 1 !important;
+}
+.tm-omni-tag-select {
+	width: auto !important;
+	min-width: 140px !important;
+	max-width: 220px !important;
+	flex-shrink: 0 !important;
+	cursor: pointer !important;
+}
 .tm-omni-fields-container {
 	display: flex !important;
 	flex-direction: column !important;
 	gap: 12px !important;
+}
+.tm-omni-cm-container {
+	width: 100% !important;
+	box-sizing: border-box !important;
+}
+.tm-omni-cm-container .cm-editor {
+	width: 100% !important;
+	max-width: 100% !important;
+	min-height: 85px !important;
+	max-height: 200px !important;
+	border: 1.5px solid var(--tm-border-strong, #cbd5e1) !important;
+	border-radius: 8px !important;
+	background: var(--tm-surface-2, #f8fafc) !important;
+	color: var(--tm-text-1, #0f172a) !important;
+	box-sizing: border-box !important;
+	font-family: inherit !important;
+	font-size: 0.95em !important;
+	line-height: 1.6 !important;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
+}
+.tm-omni-cm-container .cm-editor.cm-focused {
+	outline: none !important;
+	border-color: var(--tm-primary, #2563eb) !important;
+	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
+	background: var(--tm-surface, #ffffff) !important;
+}
+.tm-omni-cm-container .cm-scroller {
+	min-height: 85px !important;
+	max-height: 200px !important;
+	overflow-y: auto !important;
+	font-family: inherit !important;
+	padding: 6px 12px !important;
+}
+.tm-omni-cm-container .cm-content {
+	padding: 4px 0 !important;
+	caret-color: var(--tm-primary, #3b82f6) !important;
+}
+.tm-omni-cm-container .cm-placeholder {
+	color: var(--tm-text-3, #94a3b8) !important;
+	font-style: normal !important;
 }
 .tm-omni-cloze-header {
 	display: flex !important;
@@ -1258,7 +1356,7 @@ mark.tm-readpoint {
 	padding: 20px;
 }
 
-/* ---- 粘贴文本 (Paste Split) & 收件箱 (Inbox Split) ---- */
+/* ---- 粘贴文本 (Paste Split) & 网页摘录 (Clips Split) ---- */
 .tm-paste-split {
 	display: flex;
 	flex-direction: column;
@@ -1290,12 +1388,12 @@ mark.tm-readpoint {
 }
 
 /* 剪藏收件箱 */
-.tm-inbox-split {
+.tm-clips-split {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
 }
-.tm-inbox-split .tm-import-row {
+.tm-clips-split .tm-import-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -1303,15 +1401,15 @@ mark.tm-readpoint {
 	border-bottom: 1px solid var(--tm-border);
 	transition: var(--tm-transition);
 }
-.tm-inbox-split .tm-import-row:hover {
+.tm-clips-split .tm-import-row:hover {
 	background: var(--tm-surface-2);
 }
-.tm-inbox-split .tm-import-row strong {
+.tm-clips-split .tm-import-row strong {
 	font-weight: 600;
 	color: var(--tm-text-1);
 	font-size: 0.95em;
 }
-.tm-inbox-split .tm-import-row button {
+.tm-clips-split .tm-import-row button {
 	padding: 5px 12px !important;
 	font-size: 0.85em !important;
 	border-radius: var(--tm-radius-xs) !important;

@@ -105,11 +105,22 @@ function makeStatsPanel(): WidgetCtor {
         const deckRows = decks.map((deck: string) => {
           const cards2 = deckMod.deckCards(wiki, deck).map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
           const load = stats.deckLoad(cards2);
-          return { deck, total: load.total, newCount: load.newCount, learn: load.learn, due: load.due, overdue: load.overdue };
+          const df = wiki.getTiddler(deck)?.fields || {};
+          // 展示名走 caption（默认牌组 caption 是语言转义 → captionText 解析为「全部卡片」），裸标题进 tooltip
+          const name = display.captionText(wiki, displayTitle(df, deck), this) || deck;
+          return { deck, name, total: load.total, newCount: load.newCount, learn: load.learn, due: load.due, overdue: load.overdue };
         });
         primitives.renderTable(doc, cardLoad, {
           columns: [
-            { key: 'deck', title: lingo(wiki, 'deck', 'Deck'), render: (row: any) => el(doc, 'span', 'tm-stats-deck', row.deck) },
+            {
+              key: 'deck',
+              title: lingo(wiki, 'deck', 'Deck'),
+              render: (row: any) => {
+                const s = el(doc, 'span', 'tm-stats-deck', row.name);
+                s.title = row.deck;
+                return s;
+              },
+            },
             { key: 'total', title: lingo(wiki, 'col.total', 'Total') },
             { key: 'newCount', title: lingo(wiki, 'state.new', 'New') },
             { key: 'learn', title: lingo(wiki, 'state.learning', 'Learn') },

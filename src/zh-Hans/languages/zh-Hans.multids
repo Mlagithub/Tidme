@@ -2,8 +2,10 @@ title: $:/language/tidme/
 
 tidme: 墨屉
 tidmetip: 终身知识，深入脑海
-default: 默认
-defaulttip: <center>此为不可自定义的默认牌组，可通过“创建牌组”进行自定义。</center>
+default: 全部卡片
+defaulttip: <center>全局队列：全部在队知识卡（挖空/问答）自动收录于此，统一调度复习；参数在设置页调整，需要圈定范围时用「创建牌组」另建过滤视图。</center>
+scatter: 散卡
+scattertip: <center>全局独立制卡（挖空/问答）与普通笔记卡片的落点；概念卡（topic）走阅读流，不进本牌组。进度与全部卡片共享。</center>
 deck: 牌组
 learn: 学习中
 due: 待复习
@@ -54,7 +56,7 @@ optionsmodaltip: 复习选项
 lastdue: 到期
 lastreview: 复习
 createdeck: 创建牌组
-createdecktip: 以默认牌组为模板创建新牌组
+createdecktip: 以全部卡片（全局队列）为模板创建新牌组
 getshared: 获取牌组
 importfile: 导入文件
 pluginlibrary: 墨屉插件库
@@ -225,7 +227,7 @@ deck.create: ＋ 新建牌组
 deck.name.placeholder: 名称，如 六级词汇
 deck.caption.placeholder: 显示名（留空 = 名称）
 deck.src.custom: 自定义过滤器
-deck.src.item: 全库测试卡（与默认牌组相同，通常无需另建）
+deck.src.item: 全部测试卡（与全局队列相同，通常无需另建）
 deck.caption: 显示名
 deck.membersrc: 成员来源
 deck.filter: 过滤器
@@ -236,9 +238,9 @@ deck.name.empty: 请输入牌组名称
 deck.created: ✔ 已创建
 deck.create.failed: 创建失败：
 deck.delete: 删除牌组
-deck.delete.tip: 删除牌组定义（成员卡保留，仍由默认牌组复习）
+deck.delete.tip: 删除牌组定义（成员卡保留，仍由全局队列复习）
 deck.notfound: 牌组不存在
-deck.nodeletedefault: 默认牌组不可删除
+deck.nodeletedefault: 全部卡片（全局队列）不可删除
 deck.subset: 子集牌组
 deck.subset.deleteprompt: 连成员卡一起删除？（确定 = 连卡删；取消 = 仅删牌组定义）
 deck.deletecards: 连卡删
@@ -256,6 +258,9 @@ creator.mode.cloze: 挖空卡
 creator.mode.extract: 摘录笔记
 creator.field.title: 卡片标题
 creator.field.title.placeholder: 可选简明题面/卡片标题...
+creator.field.tags: 标签
+creator.field.tags.placeholder: 输入新标签按回车添加，或从右侧下拉选择...
+creator.tags.select: 选择已有标签...
 creator.field.question: 问题 / 正面
 creator.field.question.placeholder: 输入问题或提示...
 creator.field.answer: 答案 / 背面
@@ -378,7 +383,7 @@ settings.title: 设置
 settings.caption: 设置
 settings.tip: 配置 Tidme 调度算法、复习偏好、阅读流及 AI 密钥
 settings.review.title: 复习调度
-settings.review.subtitle: 默认牌组与自动顺延
+settings.review.subtitle: 全局队列与自动顺延
 settings.review.order: 出题顺序
 settings.review.order.desc: 到期卡与新卡在学习流中的交错顺序
 settings.review.order.duenew: 到期卡优先
@@ -456,7 +461,7 @@ import.dropped: 同名节已丢弃
 import.skippedexisting: 同名条目已跳过
 import.collision: 疑似同名书碰撞，请改标题后重新导入
 import.pdfimported: 已导入
-import.sectionsadded: 节已入库并进入默认牌堆，随时可学。
+import.sectionsadded: 节已入库并进入全局队列（全部卡片），随时可学。
 split.sourcemissing: 源 tiddler 不存在
 split.emptysections: 未切分出任何节（内容过短或无可识别结构）
 split.pastetitle: 粘贴文本
@@ -465,8 +470,8 @@ split.btn: 切分文本并入库
 split.emptycontent: 内容为空
 split.parsing: 解析中…
 split.failed: 切分失败：
-split.inboxtitle: 剪藏收件箱 (tidme-inbox)
-split.inboxempty: 收件箱为空——支持使用浏览器剪藏插件自动捕获内容入库。
+split.inboxtitle: 网页摘录 (tidme-inbox)
+split.inboxempty: 暂无网页摘录——支持使用浏览器剪藏插件自动捕获内容入库。
 stats.title: 统计
 stats.caption: 统计
 stats.tip: 学习进度、记忆保留率与复习习惯
@@ -546,7 +551,7 @@ settings.limits.learnAhead.desc: 队列空时提前放行会内学习卡的上�
 settings.limits.bury: 兄弟卡搁置
 settings.limits.bury.desc: 评分后把同源兄弟卡藏到次日（会内学习步卡永不搁置）
 settings.memory.title: 记忆参数
-settings.memory.subtitle: 默认牌组 FSRS
+settings.memory.subtitle: 全局队列 FSRS
 settings.memory.retention: 目标记忆率
 settings.memory.retention.desc: 0.9 为标准值；更高目标意味着遗忘更慢但每日复习量激增
 settings.memory.maxinterval: 最大间隔（天）
@@ -600,16 +605,17 @@ sidebar.decks: 牌组
 sidebar.dashboard: 渐进学习
 books.title: 全部阅读材料
 books.badge: 篇文档
-clips.title: 摘录收集箱
+clips.title: 网页摘录
 clips.badge: 条摘录
 decks.title: 牌组与工作流
 decks.badge: 个牌组
-decks.views.sub: 牌组即过滤视图：卡片全局唯一，进度天然共享
+decks.views.sub: 全部卡片由全局队列统一调度；牌组即过滤视图：卡片全局唯一，进度天然共享
+decks.empty: 还没有自定义牌组——全部卡片由全局队列统一调度，点上方「开始复习」即可
 tidme.title: 渐进学习与间隔重复
 tidme.badge: 驾驶舱
 today.cockpit: 渐进学习驾驶舱：系统规划调度，助你稳步推进
-today.decks.sub: 牌组即过滤视图：卡片全局唯一，进度天然共享
-read.readinglist.footer: 本页是待读清单：节卡与摘录按优先级和到期时间排序。挖空/问答卡在[[$:/Deck/default]]复习。
+today.decks.sub: 全部卡片由全局队列统一调度；牌组即过滤视图：卡片全局唯一，进度天然共享
+read.readinglist.footer: 本页是待读清单：节卡与摘录按优先级和到期时间排序。挖空/问答卡在[[全部卡片（全局队列）|$:/Deck/default]]复习。
 import.tab.localfiles: 本地文件
 import.tab.pastetext: 粘贴文本
 import.tab.inboxclips: 网页摘录

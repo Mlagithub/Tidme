@@ -1,4 +1,4 @@
 title: $:/plugins/keepone/tidme/import/ui/notify-done
 type: text/vnd.tiddlywiki
 
-导入完成 ✔ 节卡进入阅读列表，挖空/问答卡进入默认牌组。
+导入完成 ✔ 节卡进入阅读列表，挖空/问答卡进入全局队列（全部卡片）。

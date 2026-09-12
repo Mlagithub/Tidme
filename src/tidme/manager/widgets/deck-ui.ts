@@ -68,7 +68,12 @@ function makeDeckCreate(): WidgetCtor {
       capIn.placeholder = lingo(wiki, 'deck.caption.placeholder', 'Caption (leave blank to use name)');
       const srcSel = doc.createElement('select');
       srcSel.className = 'tm-select';
-      for (const [v, l] of [['custom', lingo(wiki, 'deck.src.custom', 'Custom Filter')], ['item', lingo(wiki, 'deck.src.item', 'All Knowledge Cards')]] as const) {
+      for (
+        const [v, l] of [['custom', lingo(wiki, 'deck.src.custom', 'Custom Filter')], [
+          'item',
+          lingo(wiki, 'deck.src.item', 'All Knowledge Cards (same as the global queue, usually no need)'),
+        ]] as const
+      ) {
         const o = doc.createElement('option');
         o.value = v;
         o.textContent = l;
@@ -195,14 +200,14 @@ function makeDeckDelete(): WidgetCtor {
       const deckTitle = String(this.getAttribute('deck', '') || '');
       const label = this.getAttribute('label', lingo(wiki, 'deck.delete', 'Delete Deck'));
       const btn = el(doc, 'button', 'tm-btn tm-btn--danger', label);
-      btn.title = lingo(wiki, 'deck.delete.tip', 'Delete deck definition (cards are kept and reviewed in default deck)');
+      btn.title = lingo(wiki, 'deck.delete.tip', 'Delete deck definition (cards are kept and reviewed in the global queue)');
       const d = deckTitle ? deckMod.getDeck(wiki, deckTitle) : null;
       if (!d) {
         btn.setAttribute('disabled', 'true');
         btn.title = lingo(wiki, 'deck.notfound', 'Deck not found');
-      } else if (d.title === deckMod.DEFAULT_DECK) {
+      } else if (deckMod.SYSTEM_DECKS.includes(d.title)) {
         btn.setAttribute('disabled', 'true');
-        btn.title = lingo(wiki, 'deck.nodeletedefault', 'Default deck cannot be deleted');
+        btn.title = lingo(wiki, 'deck.nodeletedefault', 'All Cards (global queue) cannot be deleted');
       }
       btn.addEventListener('click', async () => {
         if (!deckTitle || !d) return;
@@ -220,7 +225,7 @@ function makeDeckDelete(): WidgetCtor {
         }
         const msg = subset
           ? `删除子集牌组${also ? '及其成员卡' : '（卡片保留）'}？`
-          : `删除牌组「${captionText(wiki, d.fields.caption || d.name, this) || d.name}」的定义？\n成员卡会保留（挖空/问答卡仍由默认牌组收录）。`;
+          : `删除牌组「${captionText(wiki, d.fields.caption || d.name, this) || d.name}」的定义？\n成员卡会保留（挖空/问答卡仍由全局队列「全部卡片」收录）。`;
         if (
           !(await dialog.confirmDialog(doc, {
             title: lingo(wiki, 'deck.delete', 'Delete Deck'),

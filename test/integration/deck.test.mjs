@@ -86,6 +86,8 @@ test('deck: 删除语义 —— 默认仅删容器（卡保留）；alsoCards �
   assert.equal(wiki.getTiddler('doomCard'), undefined, '卡已删');
   // default 保护
   assert.throws(() => deckMod.deleteDeck(wiki, '$:/Deck/default'), 'default 不可删');
+  // 系统独立卡（散卡）牌组同受保护（shadow 被删会从列表静默消失直到重启）
+  assert.throws(() => deckMod.deleteDeck(wiki, '$:/Deck/standalone'), 'standalone 系统牌组不可删');
 });
 
 test('deck: 手写 deck title 含过滤器不安全字符时不产出假卡（回归：Filter error 冒充卡标题）', () => {

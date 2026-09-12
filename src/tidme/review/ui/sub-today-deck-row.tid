@@ -3,7 +3,6 @@ title: $:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row
 <$let deckTiddler=<<currentTiddler>>>
 <div class="tm-today-deck-row">
 <$link to=<<deckTiddler>>><span class="tm-today-deck-name"><$wikify name="deckCaption" text={{{ [<deckTiddler>get[caption]] ~[<deckTiddler>split[/]last[]] }}} mode="inline" output="text"><<deckCaption>></$wikify></span></$link>
-<$list filter="[<deckTiddler>prefix[$:/Deck/default]]"><span class="tm-badge tm-badge-scope" title="Default scope: Contains all active test cards (progress is shared)"><$transclude tiddler="$:/language/tidme/all">All</$transclude></span></$list>
 <$tidme-deck-badges deck=<<deckTiddler>> class="tm-today-deck-counts"/>
 <span class="tm-today-deck-open">
 <!-- 行内「选项」：与牌组详情视图共用同一套按钮模板——temp 初始化、弹窗参数、

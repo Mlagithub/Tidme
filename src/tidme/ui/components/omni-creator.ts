@@ -9,7 +9,6 @@ ui/components/omni-creator.ts — 全局独立制卡中心（Omni Card Creator�
 - 既支持全屏模态浮窗（openOmniCardModal），也支持页面嵌入 Widget。
 */
 
-declare var exports: any;
 declare function require(module: string): any;
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
@@ -18,7 +17,22 @@ const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const nsMod = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
+import { TidmeLiveEditor } from '../../editor/codemirror-editor';
+
 const el = dom.el;
+
+/** 检查当前宿主环境是否支持 CodeMirror 6（浏览器 DOM 环境且具备选区与 Range） */
+function canUseCodeMirror(doc: any): boolean {
+  try {
+    return typeof window !== 'undefined' &&
+      typeof window.document !== 'undefined' &&
+      typeof (window as any).getSelection === 'function' &&
+      typeof (window as any).Range === 'function' &&
+      (doc === window.document || doc?.defaultView === window || doc?.nodeType === 9);
+  } catch {
+    return false;
+  }
+}
 
 type OmniCardType = 'qa' | 'cloze' | 'concept';
 
@@ -26,6 +40,7 @@ interface OmniCreatorOptions {
   defaultType?: OmniCardType;
   defaultDeck?: string;
   defaultTitle?: string;
+  defaultTags?: string[];
   defaultContent?: string;
   defaultQuestion?: string;
   defaultAnswer?: string;
@@ -65,6 +80,16 @@ function listDeckOptions(wiki: any): DeckOption[] {
 /** 收集当前 wiki 中的所有牌组名称（保持外部兼容） */
 function listAvailableDecks(wiki: any): string[] {
   return listDeckOptions(wiki).map((opt) => opt.label);
+}
+
+/** 收集当前 wiki 中的所有用户标签（按字母排序，排除系统标签） */
+function listAvailableTags(wiki: any): string[] {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
+  try {
+    return wiki.filterTiddlers('[tags[]!is[system]sortan[]]');
+  } catch {
+    return [];
+  }
 }
 
 /** 打开全局独立制卡模态弹窗 */
@@ -145,14 +170,137 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   fieldTitle.appendChild(titleInput);
   modal.appendChild(fieldTitle);
 
+  // 3.5 标签输入与下拉选择（可选）
+  const fieldTags = el(doc, 'div', 'tm-card-modal-field tm-omni-tags-field');
+  const tagsLabel = el(doc, 'label', '', `${l('creator.field.tags', 'Tags')} (${l('optional', 'Optional')}):`);
+  fieldTags.appendChild(tagsLabel);
+
+  const selectedTags: string[] = opts.defaultTags ? [...opts.defaultTags] : [];
+  const pillsContainer = el(doc, 'div', 'tm-omni-tag-pills');
+  fieldTags.appendChild(pillsContainer);
+
+  const tagRow = el(doc, 'div', 'tm-omni-tag-row');
+  const tagInput = el(doc, 'input', 'tm-card-modal-input tm-omni-tag-input') as HTMLInputElement;
+  tagInput.placeholder = l('creator.field.tags.placeholder', 'Type tag and press Enter, or choose from dropdown...');
+
+  const tagSelect = el(doc, 'select', 'tm-card-modal-input tm-omni-tag-select') as HTMLSelectElement;
+  const defaultTagOpt = el(doc, 'option', '', `+ ${l('creator.tags.select', 'Choose existing tag...')}`) as HTMLOptionElement;
+  defaultTagOpt.value = '';
+  tagSelect.appendChild(defaultTagOpt);
+
+  const availableTags = listAvailableTags(wiki);
+  for (const t of availableTags) {
+    const opt = el(doc, 'option', '', t) as HTMLOptionElement;
+    opt.value = t;
+    tagSelect.appendChild(opt);
+  }
+
+  tagRow.appendChild(tagInput);
+  tagRow.appendChild(tagSelect);
+  fieldTags.appendChild(tagRow);
+  modal.appendChild(fieldTags);
+
+  const renderTagPills = () => {
+    pillsContainer.textContent = '';
+    for (const tag of selectedTags) {
+      const pill = el(doc, 'span', 'tm-omni-tag-pill');
+      const textSpan = el(doc, 'span', 'tm-omni-tag-text', tag);
+      const delBtn = el(doc, 'button', 'tm-omni-tag-del', '×') as HTMLButtonElement;
+      delBtn.type = 'button';
+      delBtn.title = l('remove', 'Remove');
+      delBtn.addEventListener('click', (e: MouseEvent) => {
+        e.stopPropagation();
+        removeTag(tag);
+      });
+      pill.appendChild(textSpan);
+      pill.appendChild(delBtn);
+      pillsContainer.appendChild(pill);
+    }
+  };
+
+  const addTag = (tag: string) => {
+    const clean = tag.trim();
+    if (!clean || selectedTags.includes(clean)) return;
+    selectedTags.push(clean);
+    renderTagPills();
+  };
+
+  const removeTag = (tag: string) => {
+    const idx = selectedTags.indexOf(tag);
+    if (idx >= 0) {
+      selectedTags.splice(idx, 1);
+      renderTagPills();
+    }
+  };
+
+  const addTagFromInput = () => {
+    const raw = String(tagInput.value || '').trim();
+    if (!raw) return;
+    const parts = raw.includes(',') || raw.includes('，')
+      ? raw.split(/[,，]+/)
+      : [raw];
+    for (const part of parts) {
+      let clean = part.trim();
+      if (clean.startsWith('[[') && clean.endsWith(']]')) {
+        clean = clean.slice(2, -2).trim();
+      }
+      if (clean) addTag(clean);
+    }
+    tagInput.value = '';
+  };
+
+  tagInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      addTagFromInput();
+    }
+  });
+
+  tagInput.addEventListener('blur', () => {
+    addTagFromInput();
+  });
+
+  tagSelect.addEventListener('change', () => {
+    const val = String(tagSelect.value || '').trim();
+    if (val) {
+      addTag(val);
+      tagSelect.value = '';
+      tagInput.focus();
+    }
+  });
+
+  renderTagPills();
+
   // 4. 动态表单容器
   const fieldsContainer = el(doc, 'div', 'tm-omni-fields-container');
   modal.appendChild(fieldsContainer);
 
+  let qEditor: TidmeLiveEditor | null = null;
+  let aEditor: TidmeLiveEditor | null = null;
   let qInput: HTMLTextAreaElement | null = null;
   let aInput: HTMLTextAreaElement | null = null;
   let clozeInput: HTMLTextAreaElement | null = null;
   let conceptInput: HTMLTextAreaElement | null = null;
+
+  const cleanupEditors = () => {
+    if (qEditor) {
+      try {
+        qEditor.destroy();
+      } catch { /* 容错 */ }
+      qEditor = null;
+    }
+    if (aEditor) {
+      try {
+        aEditor.destroy();
+      } catch { /* 容错 */ }
+      aEditor = null;
+    }
+    qInput = null;
+    aInput = null;
+    clozeInput = null;
+    conceptInput = null;
+  };
 
   const focusEl = (target: HTMLElement | null) => {
     if (!target) return;
@@ -164,26 +312,78 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   };
 
   const renderFields = () => {
+    cleanupEditors();
     fieldsContainer.innerHTML = '';
     if (currentType === 'qa') {
-      // 问答卡：Q + A
+      // 问答卡：Q + A（优先 CodeMirror 6 Live Preview 容器，无头环境降级 textarea）
       const fQ = el(doc, 'div', 'tm-card-modal-field');
       fQ.appendChild(el(doc, 'label', '', `${l('creator.field.question', 'Question')}:`));
-      qInput = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
-      qInput.placeholder = l('creator.field.question.placeholder', 'Enter question or prompt (Markdown / Images supported)...');
-      if (opts.defaultQuestion) qInput.value = opts.defaultQuestion;
-      fQ.appendChild(qInput);
+      const qContainer = el(doc, 'div', 'tm-omni-cm-container');
+      const qPlaceholder = l('creator.field.question.placeholder', 'Enter question or prompt (Markdown / Images supported)...');
+
+      let qSuccess = false;
+      if (canUseCodeMirror(doc)) {
+        try {
+          qEditor = new TidmeLiveEditor({
+            parent: qContainer,
+            initialText: opts.defaultQuestion || '',
+            placeholder: qPlaceholder,
+            onSubmit: () => submit(),
+          });
+          qSuccess = true;
+        } catch (err) {
+          console.warn('[Tidme] Question LiveEditor init error, fallback to textarea:', err);
+          qEditor = null;
+        }
+      }
+      if (!qSuccess) {
+        qInput = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
+        qInput.placeholder = qPlaceholder;
+        if (opts.defaultQuestion) qInput.value = opts.defaultQuestion;
+        qContainer.appendChild(qInput);
+      }
+      fQ.appendChild(qContainer);
 
       const fA = el(doc, 'div', 'tm-card-modal-field');
       fA.appendChild(el(doc, 'label', '', `${l('creator.field.answer', 'Answer')}:`));
-      aInput = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
-      aInput.placeholder = l('creator.field.answer.placeholder', 'Enter answer or key explanation...');
-      if (opts.defaultAnswer) aInput.value = opts.defaultAnswer;
-      fA.appendChild(aInput);
+      const aContainer = el(doc, 'div', 'tm-omni-cm-container');
+      const aPlaceholder = l('creator.field.answer.placeholder', 'Enter answer or key explanation...');
+
+      let aSuccess = false;
+      if (canUseCodeMirror(doc)) {
+        try {
+          aEditor = new TidmeLiveEditor({
+            parent: aContainer,
+            initialText: opts.defaultAnswer || '',
+            placeholder: aPlaceholder,
+            onSubmit: () => submit(),
+          });
+          aSuccess = true;
+        } catch (err) {
+          console.warn('[Tidme] Answer LiveEditor init error, fallback to textarea:', err);
+          aEditor = null;
+        }
+      }
+      if (!aSuccess) {
+        aInput = el(doc, 'textarea', 'tm-card-modal-textarea') as HTMLTextAreaElement;
+        aInput.placeholder = aPlaceholder;
+        if (opts.defaultAnswer) aInput.value = opts.defaultAnswer;
+        aContainer.appendChild(aInput);
+      }
+      fA.appendChild(aContainer);
 
       fieldsContainer.appendChild(fQ);
       fieldsContainer.appendChild(fA);
-      focusEl(qInput);
+
+      if (qEditor) {
+        if (typeof queueMicrotask === 'function') {
+          queueMicrotask(() => qEditor?.focus());
+        } else {
+          qEditor.focus();
+        }
+      } else {
+        focusEl(qInput);
+      }
     } else if (currentType === 'cloze') {
       // 挖空卡：Toolbar + Text
       const fC = el(doc, 'div', 'tm-card-modal-field');
@@ -222,6 +422,101 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
     }
   };
 
+  const close = () => {
+    cleanupEditors();
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  };
+
+  const submit = () => {
+    addTagFromInput();
+    const selectedDeck = String(deckSelect.value || cardFactory.STANDALONE_DECK_TOKEN || '').trim();
+    const userTitle = String(titleInput.value || '').trim();
+    const cardTags = selectedTags.length ? [...selectedTags] : undefined;
+
+    let draft: Record<string, any> | null = null;
+
+    if (currentType === 'qa') {
+      const q = String(qEditor ? qEditor.getText() : (qInput?.value || '')).trim();
+      const a = String(aEditor ? aEditor.getText() : (aInput?.value || '')).trim();
+      if (!q) {
+        if (qEditor) qEditor.focus();
+        else focusEl(qInput);
+        return;
+      }
+      draft = cardFactory.buildStandaloneCard(wiki, {
+        type: 'qa',
+        title: userTitle,
+        deck: selectedDeck,
+        tags: cardTags,
+        question: q,
+        answer: a,
+      });
+    } else if (currentType === 'cloze') {
+      const c = String(clozeInput?.value || '').trim();
+      if (!c) {
+        focusEl(clozeInput);
+        return;
+      }
+      draft = cardFactory.buildStandaloneCard(wiki, {
+        type: 'cloze',
+        title: userTitle,
+        deck: selectedDeck,
+        tags: cardTags,
+        clozeContent: c,
+      });
+    } else {
+      const content = String(conceptInput?.value || '').trim();
+      if (!content) {
+        focusEl(conceptInput);
+        return;
+      }
+      draft = cardFactory.buildStandaloneCard(wiki, {
+        type: 'concept',
+        title: userTitle,
+        deck: selectedDeck,
+        tags: cardTags,
+        conceptContent: content,
+      });
+    }
+
+    if (draft) {
+      cardFactory.commitCard(wiki, draft);
+      dom.showToast(doc, doc.body, `${l('creator.toast.success', 'Card created:')} ${draft.caption || draft.title}`, 'ok', 2500);
+      opts.onSuccess?.(draft);
+
+      if (keepOpen) {
+        // 连续录入：清空内容并重新聚焦
+        titleInput.value = '';
+        selectedTags.length = 0;
+        tagInput.value = '';
+        renderTagPills();
+        if (qEditor) qEditor.setText('');
+        if (aEditor) aEditor.setText('');
+        if (qInput) qInput.value = '';
+        if (aInput) aInput.value = '';
+        if (clozeInput) clozeInput.value = '';
+        if (conceptInput) conceptInput.value = '';
+        if (currentType === 'qa') {
+          if (qEditor) {
+            if (typeof queueMicrotask === 'function') {
+              queueMicrotask(() => qEditor?.focus());
+            } else {
+              qEditor.focus();
+            }
+          } else {
+            focusEl(qInput);
+          }
+        } else if (currentType === 'cloze') {
+          focusEl(clozeInput);
+        } else {
+          focusEl(conceptInput);
+        }
+      } else {
+        close();
+      }
+    }
+  };
+
   updateTypeBtns();
   renderFields();
 
@@ -247,77 +542,6 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   btnGroup.appendChild(submitBtn);
   bottomRow.appendChild(btnGroup);
   modal.appendChild(bottomRow);
-
-  const close = () => {
-    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-  };
-
-  const submit = () => {
-    const selectedDeck = (deckSelect.value || cardFactory.STANDALONE_DECK_TOKEN).trim();
-    const userTitle = titleInput.value.trim();
-
-    let draft: Record<string, any> | null = null;
-
-    if (currentType === 'qa') {
-      const q = String(qInput?.value || '').trim();
-      const a = String(aInput?.value || '').trim();
-      if (!q) {
-        qInput?.focus();
-        return;
-      }
-      draft = cardFactory.buildStandaloneCard(wiki, {
-        type: 'qa',
-        title: userTitle,
-        deck: selectedDeck,
-        question: q,
-        answer: a,
-      });
-    } else if (currentType === 'cloze') {
-      const c = String(clozeInput?.value || '').trim();
-      if (!c) {
-        clozeInput?.focus();
-        return;
-      }
-      draft = cardFactory.buildStandaloneCard(wiki, {
-        type: 'cloze',
-        title: userTitle,
-        deck: selectedDeck,
-        clozeContent: c,
-      });
-    } else {
-      const content = String(conceptInput?.value || '').trim();
-      if (!content) {
-        conceptInput?.focus();
-        return;
-      }
-      draft = cardFactory.buildStandaloneCard(wiki, {
-        type: 'concept',
-        title: userTitle,
-        deck: selectedDeck,
-        conceptContent: content,
-      });
-    }
-
-    if (draft) {
-      cardFactory.commitCard(wiki, draft);
-      dom.showToast(doc, doc.body, `${l('creator.toast.success', 'Card created:')} ${draft.caption || draft.title}`, 'ok', 2500);
-      opts.onSuccess?.(draft);
-
-      if (keepOpen) {
-        // 连续录入：清空内容并重新聚焦
-        titleInput.value = '';
-        if (qInput) qInput.value = '';
-        if (aInput) aInput.value = '';
-        if (clozeInput) clozeInput.value = '';
-        if (conceptInput) conceptInput.value = '';
-        if (currentType === 'qa') qInput?.focus();
-        else if (currentType === 'cloze') clozeInput?.focus();
-        else conceptInput?.focus();
-      } else {
-        close();
-      }
-    }
-  };
 
   cancelBtn.addEventListener('click', close);
   submitBtn.addEventListener('click', submit);
@@ -407,3 +631,4 @@ exports.openOmniCardModal = openOmniCardModal;
 exports.initGlobalCardShortcut = initGlobalCardShortcut;
 exports.listAvailableDecks = listAvailableDecks;
 exports.listDeckOptions = listDeckOptions;
+exports.listAvailableTags = listAvailableTags;

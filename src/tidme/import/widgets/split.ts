@@ -3,7 +3,7 @@ const { lingo } = require('$:/plugins/keepone/tidme/core/lingo.js');
 widgets/split.ts — 切分入口组件（优先级三档 + 预览干预）
 
 - <$paste-split/> 粘贴切分：textarea → runSplit → 写库
-- <$inbox-split/> 剪藏收件箱：列出 tidme-inbox tiddler，逐条/批量切分
+- <$clips-split/> 网页摘录：列出 tidme-inbox tiddler（外部剪藏插件落库契约标签），逐条/批量切分
 切分后源 tiddler 被文档页覆盖（保留 url/author/date 等溯源字段，移除 tidme-inbox 标签）。
 */
 
@@ -84,7 +84,7 @@ async function splitAndCommit(
   return { split: r, commit };
 }
 
-/** 剪藏入口：源 tiddler 被文档页覆盖（合并溯源字段、移除 inbox 标签） */
+/** 剪藏入口：源 tiddler 被文档页覆盖（合并溯源字段、移除 tidme-inbox 标签） */
 async function commitSplit(wiki: any, title: string, extraSourceFields: Record<string, string> = {}, priority?: number) {
   const t = wiki.getTiddler(title);
   if (!t) throw new Error(lingo(wiki, 'split.sourcemissing', 'Source tiddler does not exist'));
@@ -170,8 +170,8 @@ function makePasteSplit(): WidgetCtor {
   return PasteSplitWidget as any;
 }
 
-function makeInboxSplit(): WidgetCtor {
-  class InboxSplitWidget extends Widget {
+function makeClipsSplit(): WidgetCtor {
+  class ClipsSplitWidget extends Widget {
     render(parent: any, nextSibling: any) {
       this.parentDomNode = parent;
       this.computeAttributes();
@@ -179,14 +179,14 @@ function makeInboxSplit(): WidgetCtor {
       const doc = this.document;
       const wiki = this.wiki;
       const wrap = el(doc, 'div', 'tm-dashboard-card');
-      wrap.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'split.inboxtitle', 'Inbox Clips (tidme-inbox)')));
-      const inner = el(doc, 'div', 'tm-inbox-split');
+      wrap.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'split.inboxtitle', 'Web Clips (tidme-inbox)')));
+      const inner = el(doc, 'div', 'tm-clips-split');
       const listBox = el(doc, 'div', '');
       const refresh = () => {
         listBox.textContent = '';
         const items = this.wiki.filterTiddlers('[tag[tidme-inbox]!is[draft]]');
         if (!items.length) {
-          listBox.appendChild(renderEmpty(doc, { text: lingo(wiki, 'split.inboxempty', 'Inbox is empty - clip articles from browser to import here.'), icon: '📥' }));
+          listBox.appendChild(renderEmpty(doc, { text: lingo(wiki, 'split.inboxempty', 'No web clips yet - clip articles from browser to import here.'), icon: '📥' }));
           return;
         }
         for (const item of items) {
@@ -224,10 +224,10 @@ function makeInboxSplit(): WidgetCtor {
       return false;
     }
   }
-  return InboxSplitWidget as any;
+  return ClipsSplitWidget as any;
 }
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
 
 exports['paste-split'] = makePasteSplit();
-exports['inbox-split'] = makeInboxSplit();
+exports['clips-split'] = makeClipsSplit();

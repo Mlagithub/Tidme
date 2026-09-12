@@ -16,7 +16,10 @@ type: text/vnd.tiddlywiki
 <$deck-create/>
 </div>
 <div class="tm-today-sub"><$transclude tiddler="$:/language/tidme/today.decks.sub">Decks are filtered views: cards are unique, progress is shared</$transclude></div>
-<<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row" storyview:"classic">>
+<!-- 默认牌组是全局队列载体（fsrs4tw 模板 + 兜底收录），成员=全库测试卡，数字必为一切用户牌组的超集，
+     不再以同级牌组行示人：全局口径由上方 today-hero（开始复习/今日待学）承担，此处只列用户自建牌组 -->
+<<list-tagged-draggable tag:"$:/tags/TidmeDeck" subFilter:"![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]![$:/Deck/default]" itemTemplate:"$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row" storyview:"classic">>
+<$list filter="[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]![$:/Deck/default]count[]match[0]]"><div class="tm-today-sub"><$transclude tiddler="$:/language/tidme/decks.empty">No custom decks yet - all cards are handled by the global queue</$transclude></div></$list>
 </div>
 
 <$tidme-today-recent/>

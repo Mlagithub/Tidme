@@ -30,11 +30,16 @@ export const NS_DOCS = 'Tidme/Docs/';
 /** 附件/二进制命名空间（type application/pdf 等原文件） */
 export const NS_ASSETS = 'Tidme/Assets/';
 
-/** 知识卡命名空间（挖空/问答/散卡；与 Docs 平行镜像） */
+/** 知识卡命名空间（挖空/问答/独立卡；与 Docs 平行镜像） */
 export const NS_DECKS = 'Tidme/Decks/';
 
-/** 无来源散卡桶（普通笔记上挖空/问答的落点） */
-export const NS_DECKS_SCATTER = NS_DECKS + '散卡';
+/**
+ * 独立卡桶（Standalone Deck）：普通笔记上挖空/问答与全局独立制卡的统一落点。
+ * 属于无需依附于特定阅读文档的自足原子记忆单元（item 卡），直接进 FSRS 学习循环。
+ * 与外部原始摄入缓冲区（[tag[tidme-inbox]]）及文档派生卡（tm-doc-derived）严格区分。
+ */
+export const NS_DECKS_STANDALONE = NS_DECKS + 'standalone';
+export const NS_DECKS_SCATTER = NS_DECKS_STANDALONE; // 向后兼容别名
 
 /** 面包屑层级分隔符（tidme.breadcrumb / 显示层共用） */
 export const CRUMB_SEP = ' › ';

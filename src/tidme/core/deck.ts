@@ -17,6 +17,11 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
 export const DECK_TAG = ns.DECK_TAG;
 export const DEFAULT_DECK = ns.DECK_PREFIX + 'default';
+/** 系统独立卡牌组（shadow，固定入列 Today；成员 = standalone 目录下的在队 item） */
+export const STANDALONE_DECK = ns.DECK_PREFIX + 'standalone';
+export const SCATTER_DECK = STANDALONE_DECK; // 向后兼容别名
+/** 系统内置牌组：不可删除（shadow 被删会藏进已删除记录，列表静默消失直到重启） */
+export const SYSTEM_DECKS = [DEFAULT_DECK, STANDALONE_DECK, ns.DECK_PREFIX + '散卡'];
 
 /**
  * 牌组判定（字段级，无需 wiki）：tag $:/tags/TidmeDeck 的 tiddler 即牌组。
@@ -185,7 +190,7 @@ export function updateDeck(wiki: any, nameOrTitle: string, patch: Record<string,
 export function deleteDeck(wiki: any, nameOrTitle: string, opts: { alsoCards?: boolean } = {}): number {
   const deck = getDeck(wiki, nameOrTitle);
   if (!deck) return 0;
-  if (deck.title === DEFAULT_DECK) throw new Error('deck: default deck cannot be deleted');
+  if (SYSTEM_DECKS.includes(deck.title)) throw new Error('deck: system deck cannot be deleted: ' + deck.title);
   let removed = 0;
   if (opts.alsoCards) {
     for (const c of deckCards(wiki, deck.title)) {

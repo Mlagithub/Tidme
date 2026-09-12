@@ -53,9 +53,9 @@ function addLooseCard() {
   });
 }
 
-test('queue-ops: 每牌组渲染批量操作按钮（只剩默认牌组）', () => {
+test('queue-ops: 每牌组渲染批量操作按钮（出厂 = 默认牌组 + 散卡）', () => {
   const decks = wiki.filterTiddlers('[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]]');
-  assert.equal(decks.length, 1, '牌组库只剩默认牌组（topic 不进牌组）');
+  assert.equal(decks.length, 2, '出厂牌组库 = 默认牌组 + 散卡（topic 不进牌组）');
   const root = renderWidget(wiki, queueOps, 'queue-ops');
   const text = collectText(root);
   assert.ok(text.includes('顺延7d'), '应有顺延按钮');
@@ -467,21 +467,21 @@ test('deck-ui: 新建牌组成员预览 —— 默认来源改为自定义过滤
   assert.ok(collectElementsByClass(root, 'tm-decks-create-actions').length === 1, '动作行独立成行（无内联样式）');
 });
 
-test('today-deck-row: Default 牌组行带兜底视图徽章，用户牌组不带', () => {
-  const deckMod = mod('core/deck.js');
-  // 注意：{{模板}} 转插会把 currentTiddler 覆盖为模板自身——必须解析模板文本并以父变量传牌组
+test('today-deck-row: 默认牌组专用「全部」徽章已移除（列表排除 default，兜底语义由全局队列承担）', () => {
+  // 牌组列表不再列出 default（见 deck-list 用例），模板里的 default 专用徽章成为死分支
   const tplText = wiki.getTiddler('$:/plugins/keepone/tidme/review/ui/viewtemplate/today-deck-row').fields.text;
-  const renderRow = (deckTitle) => {
-    const parent = wiki.makeWidget({ tree: [] }, { document: fakeDocument });
-    parent.setVariable('currentTiddler', deckTitle);
-    const w = wiki.makeWidget(wiki.parseText('text/vnd.tiddlywiki', tplText, {}), { parentWidget: parent, document: fakeDocument });
-    const root = fakeDocument.createElement('div');
-    w.render(root);
-    return collectText(root);
-  };
-  assert.ok(renderRow('$:/Deck/default').includes('全部'), 'Default 行带兜底视图徽章');
-  const userDeck = deckMod.createDeck(wiki, { name: '行徽章书', card: '[all[]match[预览甲]]' });
-  assert.ok(!renderRow(userDeck).includes('全部'), '用户牌组行不带兜底徽章');
+  assert.ok(!tplText.includes('prefix[$:/Deck/default]'), '模板不再对 default 做行内特判');
+  assert.ok(!tplText.includes('tm-badge-scope'), '兜底视图徽章标记已清除');
+});
+
+test('deck-list: 默认牌组对外正名 —— caption 解析为「全部卡片」，文案不再以「默认牌组」示人', () => {
+  const display = mod('core/display.js');
+  const f = wiki.getTiddler('$:/Deck/default')?.fields || {};
+  const cap = display.captionText(wiki, f.caption).trim();
+  assert.equal(cap, '全部卡片', '默认牌组 caption 正名为全部卡片');
+  const tip = wiki.getTiddlerText('$:/language/tidme/defaulttip') || '';
+  assert.ok(tip.includes('全局队列'), 'defaulttip 描述全局队列语义');
+  assert.ok(!tip.includes('默认牌组'), '用户可见描述不再出现「默认牌组」字样');
 });
 
 test('today-deck-row: 行内「选项」按钮 —— 用户牌组有、默认牌组无（其参数入口在设置页）', () => {
@@ -506,6 +506,58 @@ test('today-deck-row: 行内「选项」按钮 —— 用户牌组有、默认�
     `行内按钮应带「选项」提示（实际 title：${userBtns.map((b) => b.getAttribute('title')).join(' / ')}）`,
   );
   assert.equal(rowButtons('$:/Deck/default').length, 0, '默认牌组行无任何按钮（options 的 condition 显式排除 default）');
+});
+
+test('deck-list: Today/$:/Decks 列表排除默认牌组 —— 全局队列不再以同级牌组示人', () => {
+  const deckMod = mod('core/deck.js');
+  // 两处页面模板（Today / $:/Decks）同口径：列表 subFilter 与空态提示都排除 default
+  const todayText = wiki.getTiddler('$:/IncrementalLearning')?.fields?.text || '';
+  // decks-index 的生效标题以 .meta 为准（.tid 头部的 $:/Decks 是死字段）
+  const decksText = wiki.getTiddler('Tidme/Decks/index')?.fields?.text || '';
+  for (const [name, text] of [['today', todayText], ['decks-index', decksText]]) {
+    assert.ok(text.includes('![$:/Deck/default]'), `${name} 列表 subFilter 排除默认牌组`);
+    assert.ok(text.includes('$:/language/tidme/decks.empty'), `${name} 无用户牌组时显示空态提示`);
+  }
+  // $:/Decks 徽章计数与可见列表同口径（旧 prefix[$:/Deck/] 会把 default 与 /log 数据条目都计入）
+  assert.ok(
+    decksText.includes('[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]![$:/Deck/default]count[]]'),
+    '$:/Decks 徽章 = 可见用户牌组数',
+  );
+
+  // 行为口径：与页面 subFilter 等价的组合过滤器（tag 输入 + 各排除 run）。
+  // 注意不做 alsoSystem 清场——deleteTiddler 会把 shadow 牌组藏进已删除记录，tag[] 查不到；
+  // 改用成员式断言，对本文件此前用例遗留的 $:/Deck/* 普通牌组免疫
+  // 裸 tag[] 不含 shadow：列表/计数一律 all[shadows+tiddlers] 前缀（散卡/默认都是 shadow）
+  const listFilter = '[all[shadows+tiddlers]tag[$:/tags/TidmeDeck]![$:/temp/tidme/options]!is[draft]!has[tidme.subset-doc]![$:/Deck/default]]';
+  const snap = () => [...wiki.filterTiddlers(listFilter)];
+  const before = snap();
+  assert.ok(!before.includes('$:/Deck/default'), 'default 不入列');
+  assert.ok(before.includes('$:/Deck/standalone'), '散卡/standalone 固定入列');
+  const d1 = deckMod.createDeck(wiki, { name: '列表视图甲', card: '[title[无关卡]]' });
+  const after = snap();
+  assert.ok(after.includes(d1) && !after.includes('$:/Deck/default'), '用户牌组入列，default 不入列');
+  // 子集 / 草稿 / options 弹窗临时副本都不入列
+  wiki.addTiddler({ title: '$:/Deck/临时子集甲', tags: '$:/tags/TidmeDeck', 'tidme.subset-doc': 'doc-x' });
+  wiki.addTiddler({ title: '列表视图甲草稿', 'draft.of': d1, tags: '$:/tags/TidmeDeck' });
+  wiki.addTiddler({ title: '$:/temp/tidme/options', tags: '$:/tags/TidmeDeck' });
+  const fin = snap();
+  for (const t of ['$:/Deck/临时子集甲', '列表视图甲草稿', '$:/temp/tidme/options']) {
+    assert.ok(!fin.includes(t), `${t} 不入列`);
+  }
+  assert.equal(fin.length, after.length, '子集/草稿/options 临时项均不改变列表');
+});
+
+test('deck-list: 散卡牌组成员口径 —— 独立制卡 item 归入散卡，topic 概念卡不进（双轨不变）', () => {
+  const deckMod = mod('core/deck.js');
+  const cardFactory = mod('core/card-factory.js');
+  const qa = cardFactory.buildStandaloneCard(wiki, { type: 'qa', question: '散卡问甲', answer: '散卡答甲' });
+  wiki.addTiddler(qa);
+  assert.ok(qa.title.startsWith('Tidme/Decks/standalone/'), '独立卡落 standalone 目录');
+  assert.ok(deckMod.deckCards(wiki, '$:/Deck/standalone').includes(qa.title), '独立 item 卡进 standalone 牌组成员');
+  const concept = cardFactory.buildStandaloneCard(wiki, { type: 'concept', conceptContent: '概念卡内容' });
+  wiki.addTiddler(concept);
+  assert.equal(concept['tidme.kind'], 'topic');
+  assert.ok(!deckMod.deckCards(wiki, '$:/Deck/standalone').includes(concept.title), 'topic 概念卡不进 standalone 牌组（走阅读流）');
 });
 
 test('card-manager: 搜索输入只重建卡片区 —— 输入框 DOM 身份稳定（每键丢光标的回归）', () => {

@@ -61,7 +61,7 @@ function sortTopicCards(cards: TopicCard[]): TopicCard[] {
   return sched.sortTopicQueue(cards);
 }
 
-/** 按文档分组（组间按文档名；无 doc 的散卡收进「未分组」） */
+/** 按文档分组（组间按文档名；无 doc 归属的独立概念卡/独立主题收进「未分组」） */
 function groupByDoc(a: any, b?: any): { doc: string; cards: TopicCard[] }[] {
   const wiki = b ? a : null;
   const cards: TopicCard[] = Array.isArray(a) ? a : (Array.isArray(b) ? b : []);

@@ -57,7 +57,8 @@ export function bootPlugin({ langs, prefix = 'tidme-test-', preload = [] } = {})
     reset: ({ alsoSystem = [] } = {}) => {
       for (const t of wiki.filterTiddlers('[!is[system]]')) wiki.deleteTiddler(t);
       // $:/ 前缀的 system tiddler（$:/Deck/*、$:/state/* 等）默认保留；
-      // 需要清 system 残留时显式传前缀（plugin shadow 如 $:/Deck/default 删除后查询时重现）
+      // 注意：deleteTiddler 会把 shadow 牌组藏进已删除记录，之后 tag[] 等查询不再可见——
+      // 需要 $:/Deck/ 内只留出厂 shadow 时，应显式 deleteTiddler 具体标题，而非按前缀全量清场
       for (const prefix of alsoSystem) {
         for (const t of wiki.filterTiddlers(`[all[tiddlers]prefix[${prefix}]]`)) wiki.deleteTiddler(t);
       }

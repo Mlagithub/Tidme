@@ -106,7 +106,7 @@ function topicsOfDoc(wiki: any, doc: string): string[] {
       const f = wiki.getTiddler(t)?.fields;
       if (!f) return false;
       if (String(f['tidme.doc']) !== String(doc)) return false;
-      return f['tidme.kind'] === 'topic' && !docOps.isDocPage(f);
+      return f['tidme.kind'] === 'topic' && !docOps.isDocPage(f) && !deckMod.isDeckFields(f);
     });
 }
 
@@ -1240,10 +1240,11 @@ function appendDocDoneSection(doc: Document, wiki: any, wrap: HTMLElement, all: 
   wrap.appendChild(doneBox);
 }
 
-/** 摘录收件箱：聚合本书全部摘录/挖空/问答卡（加工路径：可回原文、挖空、删除）。
+/** 文档派生卡片（Derived Cards）：聚合本书全部摘录/挖空/问答卡（加工路径：可回原文、挖空、删除）。
  *  分类：subkind extract/cloze/qa（摘录=阅读材料待加工；挖空/问答=测试卡）。
+ *  注意：此区是文档阅读产出聚合，并非外部原始剪藏缓冲区（[tag[tidme-inbox]]），也不是独立卡（standalone）。
  *  默认展开——这些是文档页的核心产出，折叠会让「形成了却看不见」。 */
-function appendDerivedInbox(widget: any, doc: Document, wiki: any, wrap: HTMLElement, docId: string) {
+function appendDerivedCards(widget: any, doc: Document, wiki: any, wrap: HTMLElement, docId: string) {
   const derived = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.doc[${docId}]!is[draft]]`)
     .map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }))
     .filter((c: any) => ['extract', 'cloze', 'qa'].includes(String(c.fields['tidme.subkind'] || '')));
@@ -1364,7 +1365,7 @@ function makeDocResume(): WidgetCtor {
       const all = sectionsOfDoc(wiki, this._docId);
       appendDocBanner(this, doc, wiki, wrap, this._title, this._docId, all);
       appendDocDoneSection(doc, wiki, wrap, all);
-      appendDerivedInbox(this, doc, wiki, wrap, this._docId);
+      appendDerivedCards(this, doc, wiki, wrap, this._docId);
     }
 
     refresh(changedTiddlers: Record<string, any>) {
