@@ -1,3 +1,7 @@
-Installation and usage tutorial is available at [[Tidme Manual|https://oflg.github.io/Tidme/manual/#Included%20plugins]].
+! Tidme 简体中文语言包
 
-可在 [[墨屉手册|https://oflg.github.io/Tidme/manual/zh-Hans#相关插件]] 查看安装使用教程。
+本语言包为 Tidme（墨屉）提供完整的简体中文界面、控制面板与提示文案。
+
+* 📖 查阅详细使用说明与快捷键速查：[[$:/plugins/keepone/tidme/import/ui/help-shortcuts]]
+* ℹ️ 查阅主插件说明手册：[[$:/plugins/keepone/tidme/readme]]
+* ⚙️ 插件配置控制面板：[[$:/plugins/keepone/tidme/manager/ui/settings]]

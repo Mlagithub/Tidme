@@ -1,46 +1,26 @@
 {
   "name": "tidme",
-  "version": "1.17.2",
-  "description": " Lifelong knowledge, deep in mind.",
+  "version": "1.18.0",
+  "description": "Lifelong knowledge, deep in mind. Incremental reading & FSRS spaced repetition for TiddlyWiki 5.",
   "scripts": {
-    "dev": "tiddlywiki-plugin-dev dev",
-    "dev/manual/index": "tiddlywiki-plugin-dev dev --wiki ./wiki/manual/index --exclude [prefix[$:/tidme/languages/]]",
-    "dev/manual/zh-Hans": "tiddlywiki-plugin-dev dev --wiki ./wiki/manual/zh-Hans --exclude [prefix[$:/tidme/languages/]!prefix[$:/tidme/languages/zh-Hans]]",
-    "dev/manual/fr-FR": "tiddlywiki-plugin-dev dev --wiki ./wiki/manual/fr-FR --exclude [prefix[$:/tidme/languages/]!prefix[$:/tidme/languages/fr-FR]]",
-    "reset": "rimraf ./**/node_modules",
-    "clean": "rimraf dist",
-    "update": "npm-check-updates -u",
-    "new": "tiddlywiki-plugin-dev new",
-    "dev/website/index": "tiddlywiki-plugin-dev dev --wiki ./wiki/website/index --exclude [prefix[$:/plugins/keepone/tidme/]]",
-    "dev/website/zh-Hans": "tiddlywiki-plugin-dev dev --wiki ./wiki/website/zh-Hans --exclude [prefix[$:/plugins/keepone/tidme/]]",
-    "dev/website/fr-FR": "tiddlywiki-plugin-dev dev --wiki ./wiki/website/fr-FR --exclude [prefix[$:/plugins/keepone/tidme/]]",
-    "dev/website/de-DE": "tiddlywiki-plugin-dev dev --wiki ./wiki/website/de-DE --exclude [prefix[$:/plugins/keepone/tidme/]]",
-    "publish/website/index": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/website/index --html index.html",
-    "publish/website/zh-Hans": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/website/zh-Hans --html zh-Hans.html",
-    "publish/website/fr-FR": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/website/fr-FR --html fr-FR.html",
-    "publish/website/de-DE": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/website/de-DE --html de-DE.html",
-    "publish/empty/index": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/manual/index --exclude-plugin [prefix[$:/tidme/languages/]] -e '-[!is[system]] -$:/DefaultTiddlers [[GettingStarted]] [[Welcome]] [[TiddlyWiki]] [[Tidme]]' --html empty/index.html",
-    "publish/empty/zh-Hans": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/manual/zh-Hans --exclude-plugin [prefix[$:/tidme/languages/]!prefix[$:/tidme/languages/zh-Hans]] -e '-[!is[system]] -$:/DefaultTiddlers [[GettingStarted]] [[Ã¦Â¬Â¢Ã¨Â¿Å½]] [[TiddlyWiki]] [[Ã¥Â¢Â¨Ã¥Â±â€°]]' --html empty/zh-Hans.html",
-    "publish/empty/fr-FR": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/manual/fr-FR --exclude-plugin [prefix[$:/tidme/languages/]!prefix[$:/tidme/languages/fr-FR]] -e '-[!is[system]] -$:/DefaultTiddlers [[GettingStarted]] [[Bienvenue]] [[TiddlyWiki]] [[Tidme]]' --html empty/fr-FR.html",
-    "publish/manual/index": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/manual/index --exclude-plugin [prefix[$:/tidme/languages/]] --html manual/index.html",
-    "publish/manual/zh-Hans": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/manual/zh-Hans --exclude-plugin [prefix[$:/tidme/languages/]!prefix[$:/tidme/languages/zh-Hans]] --html manual/zh-Hans.html",
-    "publish/manual/fr-FR": "tiddlywiki-plugin-dev publish --offline --wiki ./wiki/manual/fr-FR --exclude-plugin [prefix[$:/tidme/languages/]!prefix[$:/tidme/languages/fr-FR]] --html manual/fr-FR.html",
-    "publish": "npm run clean && tiddlywiki-plugin-dev publish --html full.html",
-    "semantic-release": "semantic-release",
-    "prepare": "husky install",
+    "build": "node tools/build-plugins.cjs",
     "build:plugins": "node tools/build-plugins.cjs",
     "build:plugins:dev": "node tools/build-plugins.cjs --dev",
+    "build:fixture": "node tools/make-fixture.mjs tools/fixtures/demo.epub",
+    "dev": "tiddlywiki-plugin-dev dev",
     "test": "node --test",
     "test:coverage": "node --test --experimental-test-coverage",
-    "build:fixture": "node tools/make-fixture.mjs tools/fixtures/demo.epub",
-    "typecheck": "tsc -p tsconfig.typecheck.json"
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "clean": "rimraf dist",
+    "semantic-release": "semantic-release",
+    "prepare": "husky install"
   },
   "engines": {
     "node": ">=22"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/oflg/Tidme.git"
+    "url": "https://github.com/keepone/Tidme.git"
   },
   "keywords": [
     "tiddlywiki",
@@ -48,22 +28,22 @@
     "tiddlywiki-plugin",
     "incremental-learning",
     "incremental-reading",
+    "fsrs",
     "flashcards",
     "spaced-repetition",
     "active-recall",
     "anki",
-    "supermemo",
-    "lingq"
+    "supermemo"
   ],
-  "author": "oflg",
+  "author": "keepone",
   "license": "MIT",
   "lint-staged": {
     "*.{ts,tsx,js,jsx,cjs,mjs,json,md}": "dprint fmt --allow-no-files"
   },
   "bugs": {
-    "url": "https://github.com/oflg/Tidme/issues"
+    "url": "https://github.com/keepone/Tidme/issues"
   },
-  "homepage": "https://github.com/oflg/Tidme#readme",
+  "homepage": "https://github.com/keepone/Tidme#readme",
   "dependencies": {
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.2",
@@ -116,7 +96,21 @@
           "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
         }
       ],
-      "@semantic-release/github"
+      [
+        "@semantic-release/github",
+        {
+          "assets": [
+            {
+              "path": "bin/$__plugins_keepone_tidme.json",
+              "label": "Tidme Plugin JSON"
+            },
+            {
+              "path": "bin/$__tidme_languages_zh-Hans.json",
+              "label": "Tidme zh-Hans Language Pack"
+            }
+          ]
+        }
+      ]
     ]
   }
 }

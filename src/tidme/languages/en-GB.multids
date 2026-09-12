@@ -189,8 +189,6 @@ manager.setdiff: Set Difficulty
 manager.setdiff.msg: FSRS difficulty 1-10 (displayed as percent)
 manager.badnumber: Please enter a number
 manager.search.placeholder: Search (tag: is: due: ivl: lapses: deck: parent:)
-manager.col.stability: Stability
-manager.col.lapses: Lapses
 manager.bydoc: By Document
 manager.bydeck: By Deck
 manager.flatlist: List

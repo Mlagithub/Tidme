@@ -189,8 +189,6 @@ manager.setdiff: 设定难度
 manager.setdiff.msg: FSRS 难度 1–10（显示为百分比）
 manager.badnumber: 请输入数字
 manager.search.placeholder: 搜索（支持 tag: is: due: ivl: lapses: deck: parent:）
-manager.col.stability: 稳定度
-manager.col.lapses: 失误
 manager.bydoc: 按文档
 manager.bydeck: 按牌组
 manager.flatlist: 列表

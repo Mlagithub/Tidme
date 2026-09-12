@@ -38,6 +38,13 @@ tags: [[Tidme Manual]]
 * Actions: Open · Read · Back to Source · Delete · Edit parameters (due date, priority, notes)
 * Batch: Postpone / Advance / Forget / Remove from Queue / Suspend / Restore / Delete
 
+!! Study Modes & Advanced Features
+
+* ''Daily Due Review'': Review cards scheduled for today based on the FSRS cognitive memory model.
+* ''Final Drill'': Drill all failed or learning cards at the end of the day until fully retained.
+* ''Cram'': Review cards ahead of schedule without advancing their FSRS scheduled intervals.
+* ''Rollover Hour'': Configurable daily reset time (default 04:00 AM) to prevent late-night study sessions from splitting across dates.
+
 !! Keyboard Shortcuts
 
 * Review: [[1]] Again · [[2]] Hard · [[3]] Good · [[4]] Easy · [[Space]] Flip/Unfold · [[p]] Stop study · [[n]] Next · [[e]] Remove from queue · [[u]] Unfold

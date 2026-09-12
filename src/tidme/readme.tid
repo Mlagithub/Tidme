@@ -1,5 +1,51 @@
 title: $:/plugins/keepone/tidme/readme
+type: text/vnd.tiddlywiki
 
 ! Tidme (墨屉)
 
-Lifelong knowledge, deep in mind. Incremental reading & spaced repetition for TiddlyWiki.
+''终身知识，深入脑海'' — 面向 TiddlyWiki 5 的渐进阅读（Incremental Reading）与 FSRS 间隔重复记忆系统。
+
+---
+
+!! 快捷入口
+
+* 📖 [[使用说明与快捷键速查|$:/plugins/keepone/tidme/import/ui/help-shortcuts]]
+* 🗂️ [[卡片管理中心|$:/plugins/keepone/tidme/manager/ui/card-manager]]
+* ⚙️ [[插件设置控制台|$:/plugins/keepone/tidme/manager/ui/settings]]
+
+---
+
+!! 核心工作流
+
+# ''渐进阅读（Incremental Reading）''：
+#* 将 EPUB、PDF 或 Markdown 长文拖入导入中心，系统根据大纲目录自动切分为节卡（Sections）；
+#* 随读随记录：随时使用 `Ctrl+F7` 标记续读点，下次打开 `Alt+F7` 即可精准回跳；
+#* 每篇材料顶部配备控制栏：上一节/下一节顺畅切换，支持「已读（Done）」、「顺延稍读（Later）」与「提前（Advance）」。
+# ''沉浸制卡（In-place Card Creation）''：
+#* 划词唤出制卡气泡，或按 `Alt+K` 调出全局万能制卡器；
+#* 支持摘录卡（`Alt+X`）、挖空卡（`Alt+Z`）、问答卡（`Alt+Q`）与 PDF 图片框选；
+#* 所有卡片自动继承父级文档与上下文，一键溯源回原文。
+# ''FSRS 记忆复习（Spaced Repetition）''：
+#* 采用现代 FSRS 9 参数调度算法，量身契合记忆遗忘曲线；
+#* 智能 Fuzz 间隔抖动防堆积，支持日末操练（Final Drill）、考前突击（Cram）与撤销（Undo）；
+#* 学习日换天（默认凌晨 4:00），跨夜打卡不中断。
+# ''双轨队列与牌组体系''：
+#* 阅读材料（Topic 队列）与 记忆考题（Item 队列）分流调度；
+#* 开箱即用的出厂牌组：全部卡片（`$:/Deck/default`）与独立散卡（`$:/Deck/standalone`）；
+#* 支持按文档名、标签或自定义过滤器创建专属复习牌组。
+
+---
+
+!! 常用快捷键速查
+
+|!快捷键 |!功能 |!说明 |
+|[[Alt+K]] |全局制卡器 |在任意界面唤出万能制卡弹窗，快速沉淀散卡 |
+|[[Alt+X]] |提取摘录卡 |将选中文本制作为摘录卡片，继承文档谱系 |
+|[[Alt+Z]] |制作挖空卡 |将选中文本制作为挖空记忆卡片 |
+|[[Alt+Q]] |制作问答卡 |将选中文本制作为双面问答卡片 |
+|[[Ctrl+F7]] |标记续读点 |锚定当前选中文本为此文档的续读锚点 |
+|[[Alt+F7]] |跳至续读点 |快速回跳至续读锚点位置并高亮段落 |
+|[[Shift+Ctrl+F7]] |清除续读点 |清除当前文档记录的续读锚点 |
+|[[Space]] |翻开答案 / 展开 |复习时翻转卡片正背面，或展开/折叠折叠项 |
+|[[1]] / [[2]] / [[3]] / [[4]] |评分打卡 |`1` 重来 (Again) · `2` 困难 (Hard) · `3` 良好 (Good) · `4` 简单 (Easy) |
+|[[p]] / [[n]] |暂停 / 下一张 |复习时暂停会话或跳过当前卡片 |

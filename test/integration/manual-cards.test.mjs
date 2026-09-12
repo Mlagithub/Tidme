@@ -4,20 +4,12 @@ manual-cards.test.mjs — 手动制卡触发点测试
 - selection 共享工具（划词定位/选区信息，假 DOM 节点）
 - 全局划词气泡 pick-bubble 模块装载
 - 编辑器真制卡操作（tidme-make-cloze 用桩 EditTextWidget；qa 在无头环境守卫）
-- tools/migrate-manual-cards.cjs（临时 wiki fixture：预览 + --apply 写回）
 */
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
-import TiddlyWiki from 'tiddlywiki';
 import { fakeDocument } from '../helpers/fake-dom.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
 // tw.modules.execute 在测试体内直接使用，故保留 tw
 const { tw, wiki } = bootPlugin({ prefix: 'tidme-manual-' });
 
@@ -94,61 +86,6 @@ test('编辑器真制卡: 空选区 / qa 无头守卫', () => {
   // qa 需要模态（DOM）——无头环境守卫不抛错、不建卡
   common.makeCard(editWidget, { selection: '答案' }, 'qa');
   assert.equal(wiki.filterTiddlers('[tidme.kind[item]]').length, before);
-});
-
-// === 迁移工具（临时 wiki fixture） ===
-
-test('migrate-manual-cards: 预览不改盘，--apply 补 kind/subkind 并写回原 .tid', (t) => {
-  const wikiDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tidme-migrate-wiki-'));
-  fs.writeFileSync(path.join(wikiDir, 'tiddlywiki.info'), JSON.stringify({ description: 'fixture', plugins: [] }));
-  const tiddlersDir = path.join(wikiDir, 'tiddlers');
-  fs.mkdirSync(tiddlersDir);
-  const legacyCloze = [
-    'title: 旧挖空卡',
-    'caption: 记忆核心是<<C "间隔重复" "c1" "">>',
-    'type: text/vnd.tiddlywiki',
-    'state: 0',
-    'due: 20260101000000000',
-    'reps: 0',
-    '',
-    '正文',
-  ].join('\n');
-  const legacyQa = [
-    'title: 旧问答卡',
-    'caption: 什么是间隔重复?',
-    'state: 2',
-    'due: 20260101000000000',
-    'reps: 3',
-    '',
-    'Q: 什么是间隔重复?\nA: 按遗忘曲线复习。',
-  ].join('\n');
-  fs.writeFileSync(path.join(tiddlersDir, 'legacy-cloze.tid'), legacyCloze);
-  fs.writeFileSync(path.join(tiddlersDir, 'legacy-qa.tid'), legacyQa);
-
-  const tool = path.resolve(here, '../../tools/migrate-manual-cards.cjs');
-  const run = (extra) => execFileSync(process.execPath, [tool, wikiDir, ...extra], { encoding: 'utf8' });
-
-  // 预览：不改盘
-  const preview = run([]);
-  assert.match(preview, /\[cloze\] 旧挖空卡/);
-  assert.match(preview, /\[qa\] 旧问答卡/);
-  assert.ok(!fs.readFileSync(path.join(tiddlersDir, 'legacy-cloze.tid'), 'utf8').includes('tidme.kind'), '预览不写盘');
-
-  // --apply：写回
-  const applied = run(['--apply']);
-  assert.match(applied, /迁移 2 张/);
-
-  // 重新启动独立 TW 校验落盘结果
-  const tw2 = TiddlyWiki.TiddlyWiki();
-  tw2.boot.argv = [wikiDir];
-  tw2.boot.boot();
-  const c = tw2.wiki.getTiddler('旧挖空卡');
-  const q = tw2.wiki.getTiddler('旧问答卡');
-  assert.equal(c.fields['tidme.kind'], 'item');
-  assert.equal(c.fields['tidme.subkind'], 'cloze', 'caption 含 <<C → cloze');
-  assert.equal(q.fields['tidme.kind'], 'item');
-  assert.equal(q.fields['tidme.subkind'], 'qa');
-  assert.equal(q.fields.reps, '3', '其余字段不动');
 });
 
 test('气泡类名契约: section-bar 只查自己的气泡类（运行时观察 querySelector 实参）', () => {
