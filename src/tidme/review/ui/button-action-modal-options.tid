@@ -1,16 +1,13 @@
 title: $:/plugins/keepone/tidme/review/buttons/action/modal/options
-footer: <div style="display:flex;width:100%;justify-content:space-between;align-items:center;gap:8px;"><$deck-delete deck=<<deckTiddler>>/><div style="display:flex;gap:8px;margin-left:auto;"><$button message="tm-close-tiddler" class="tm-btn"><$action-deletetiddler $tiddler="$:/temp/tidme/options"/>{{$:/language/Buttons/Cancel/Caption}}</$button>  <$button message="tm-close-tiddler" class="tm-btn tm-btn-primary"><$action-createtiddler $basetitle=<<deckTiddler>> $template="$:/temp/tidme/options" $overwrite="yes"/>{{$:/language/Buttons/Save/Caption}}</$button></div></div>
+footer: <div style="display:flex;width:100%;justify-content:space-between;align-items:center;gap:8px;"><$deck-delete deck=<<deckTiddler>>/><div style="display:flex;gap:8px;margin-left:auto;"><$button message="tm-close-tiddler" class="tm-btn"><$action-deletetiddler $tiddler="$:/temp/tidme/options"/>{{$:/language/Buttons/Cancel/Caption}}</$button>  <$button message="tm-close-tiddler" class="tm-btn tm-btn-primary"><$deck-fsrs-save/><$action-createtiddler $basetitle=<<deckTiddler>> $template="$:/temp/tidme/options" $overwrite="yes"/>{{$:/language/Buttons/Save/Caption}}</$button></div></div>
 subtitle: {{$:/language/tidme/options}}: <$text text=<<deckTiddler>> />
 code-body: yes
 
-\define inputfield(field)
-<$edit-text
-    tiddler="$:/temp/tidme/options"
-    tag="input"
-    field=<<__field__>>
-    placeholder={{{ [<deckTiddler>get<__field__>] ~[[$:/Deck/default]get<__field__>] }}}
-/>
-\end
+<!-- 表单结构复用设置页的 tm-setting-* 设计语言（分组卡片 + 信息/控件行）；
+     数据绑定不变：全部控件仍编辑 $:/temp/tidme/options 字段，保存链 =
+     <$deck-fsrs-save/> 合并 p → 原生 temp → 牌组覆写。宽输入（筛选器/动作/状态/参数）
+     用 tm-setting-row--stack 上下排布。注意缺失回退必须用 [title]get[field]
+     （缺失返回零结果，~ 前缀才会接续；{title!!field} 缺失时产出空串，~ 不触发）。 -->
 
 \define textfield(field)
 <$edit-text
@@ -19,6 +16,7 @@ code-body: yes
     field=<<__field__>>
     placeholder={{{ [<deckTiddler>get<__field__>] ~[[$:/Deck/default]get<__field__>] }}}
     minHeight={{$:/themes/tiddlywiki/vanilla/metrics/lineheight}}
+    class="tm-textarea"
 />
 \end
 
@@ -27,6 +25,7 @@ code-body: yes
     tiddler="$:/temp/tidme/options"
     tag="input"
     field=<<__field__>>
+    class="tm-input"
 />
 \end
 
@@ -36,7 +35,12 @@ code-body: yes
     tag="textarea"
     field=<<__field__>>
     minHeight={{$:/themes/tiddlywiki/vanilla/metrics/lineheight}}
+    class="tm-textarea"
 />
+\end
+
+\define disablededit(field)
+<$edit-text tiddler="$:/temp/tidme/options" tag="textarea" field=<<__field__>> class="tm-textarea" placeholder={{{ [<deckTiddler>get<__field__>] ~[[$:/Deck/default]get<__field__>] }}} minHeight={{$:/themes/tiddlywiki/vanilla/metrics/lineheight}} disabled={{{ [{$:/config/Tidme/Options/expert}match[yes]then[no]else[yes]] }}}/>
 \end
 
 \define studyorder()
@@ -44,6 +48,7 @@ code-body: yes
     tiddler="$:/temp/tidme/options"
     field="order"
     default={{$:/Deck/default!!order}}
+    class="tm-select"
 >
     <option value="due-new">
        {{$:/language/tidme/learn}} -> {{$:/language/tidme/due}} -> {{$:/language/tidme/new}}
@@ -58,25 +63,74 @@ code-body: yes
 \end
 
 \define leechthreshold()
-<center>{{$:/language/tidme/leechthreshold}}: ''<$text text={{{ [{$:/temp/tidme/options!!leech_threshold}else{$:/Deck/default!!leech_threshold}] }}}/>''</center>
-<$range
+<div class="tm-options-range-line">
+    <span class="tm-options-range-value">{{$:/language/tidme/leechthreshold}}: ''<$text text={{{ [{$:/temp/tidme/options!!leech_threshold}else{$:/Deck/default!!leech_threshold}] }}}/>''</span>
+    <$range
+        tiddler="$:/temp/tidme/options"
+        field="leech_threshold"
+        min="3"
+        max="10"
+        default={{{ [<deckTiddler>get[leech_threshold]] ~[{$:/Deck/default!!leech_threshold}] }}}
+        increment="1"
+        class="tm-range"
+    />
+</div>
+\end
+
+<!-- FSRS 友好参数：滑杆/输入写 temp 的 helper 字段，保存时由 <$deck-fsrs-save/> 换算合并进
+     p JSON（百分数量纲与 clamp 都在 core/config.mergeDeckPJson），再由原生覆写落库。
+     展示值链 = temp 已编辑值 → 本牌组 p → default 牌组 p → 出厂缺省。 -->
+\define fsrsretention()
+<div class="tm-options-range-line">
+    <span class="tm-options-range-value">{{{ [[$:/temp/tidme/options]get[request_retention_pct]] ~[<deckTiddler>get[p]jsonget[request_retention]multiply[100]round[]] ~[[$:/Deck/default]get[p]jsonget[request_retention]multiply[100]round[]] ~[[90]] }}}%</span>
+    <$range
+        tiddler="$:/temp/tidme/options"
+        field="request_retention_pct"
+        min="50"
+        max="100"
+        default={{{ [<deckTiddler>get[p]jsonget[request_retention]multiply[100]round[]] ~[[$:/Deck/default]get[p]jsonget[request_retention]multiply[100]round[]] ~[[90]] }}}
+        increment="1"
+        class="tm-range"
+    />
+</div>
+\end
+
+\define fsrsmaxinterval()
+<$edit-text
     tiddler="$:/temp/tidme/options"
-    field="leech_threshold"
-    min="3"
-    max="10"
-    default={{{ [<deckTiddler>get[leech_threshold]] ~[{$:/Deck/default!!leech_threshold}] }}}
-    increment="1"
+    tag="input"
+    field="maximum_interval"
+    placeholder={{{ [<deckTiddler>get[p]jsonget[maximum_interval]] ~[[$:/Deck/default]get[p]jsonget[maximum_interval]] ~[[36500]] }}}
+    class="tm-input"
 />
 \end
 
-\define disablededit(field)
-<$edit-text tiddler="$:/temp/tidme/options" tag="textarea" field=<<__field__>> placeholder={{{ [<deckTiddler>get<__field__>] ~[[$:/Deck/default]get<__field__>] }}} minHeight={{$:/themes/tiddlywiki/vanilla/metrics/lineheight}} disabled={{{ [{$:/config/Tidme/Options/expert}match[yes]then[no]else[yes]] }}}/>
-\end
-
-|tc-max-width tc-edit-max-width|k
-|{{$:/language/tidme/caption}}|<<inputfield-noph caption>>|
-|{{$:/language/tidme/cardfilter}}|<<textfield card>><br>@@font-size:10px;{{$:/language/tidme/cardfiltertip}}@@|
-|{{$:/language/tidme/description}}|<<textfield-noph description>>|
+<div class="tm-setting-group">
+    <div class="tm-setting-head">
+        <div class="tm-setting-group-title">{{$:/language/tidme/basics}}</div>
+    </div>
+    <div class="tm-setting-card">
+        <div class="tm-setting-row">
+            <div class="tm-setting-info">
+                <div class="tm-setting-title">{{$:/language/tidme/caption}}</div>
+            </div>
+            <div class="tm-setting-control"><<inputfield-noph caption>></div>
+        </div>
+        <div class="tm-setting-row tm-setting-row--stack">
+            <div class="tm-setting-info">
+                <div class="tm-setting-title">{{$:/language/tidme/cardfilter}}</div>
+                <div class="tm-setting-desc">{{$:/language/tidme/cardfiltertip}}</div>
+            </div>
+            <div class="tm-setting-control"><<textfield card>></div>
+        </div>
+        <div class="tm-setting-row tm-setting-row--stack">
+            <div class="tm-setting-info">
+                <div class="tm-setting-title">{{$:/language/tidme/description}}</div>
+            </div>
+            <div class="tm-setting-control"><<textfield-noph description>></div>
+        </div>
+    </div>
+</div>
 
 <$reveal
     default={{$:/config/Tidme/Options/advanced}}
@@ -84,15 +138,15 @@ code-body: yes
     text="yes"
     animate="yes"
 >
-    <center>
+    <div class="tm-options-fold-row">
         <$button
             set="$:/config/Tidme/Options/advanced"
             setTo="yes"
-            class="tc-btn-invisible"
+            class="tm-btn tm-btn--ghost"
         >
-            {{$:/core/images/unfold-button}}
+            {{$:/core/images/unfold-button}} {{$:/language/tidme/advanced}}
         </$button>
-    </center>
+    </div>
 </$reveal>
 
 <$reveal
@@ -101,59 +155,177 @@ code-body: yes
     text="yes"
     animate="yes"
 >
-
-    <center>
+    <div class="tm-options-fold-row">
         <$button
             set="$:/config/Tidme/Options/advanced"
             setTo="no"
-            class="tc-btn-invisible"
+            class="tm-btn tm-btn--ghost"
         >
-            {{$:/core/images/fold-button}}
+            {{$:/core/images/fold-button}} {{$:/language/tidme/advanced}}
         </$button>
-    </center>
+    </div>
 
+    <div class="tm-setting-group">
+        <div class="tm-setting-head">
+            <div class="tm-setting-group-title">{{$:/language/tidme/studyorder}}</div>
+        </div>
+        <div class="tm-setting-card">
+            <div class="tm-setting-row">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/cardstate}}</div>
+                </div>
+                <div class="tm-setting-control"><<studyorder>></div>
+            </div>
+        </div>
+    </div>
 
-!! {{$:/language/tidme/advanced}}
+    <div class="tm-setting-group">
+        <div class="tm-setting-head">
+            <div class="tm-setting-group-title">FSRS</div>
+        </div>
+        <div class="tm-setting-card">
+            <div class="tm-setting-row">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/settings.memory.retention}}</div>
+                    <div class="tm-setting-desc">{{$:/language/tidme/settings.memory.retention.desc}}</div>
+                </div>
+                <div class="tm-setting-control"><<fsrsretention>></div>
+            </div>
+            <div class="tm-setting-row">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/settings.memory.maxinterval}}</div>
+                    <div class="tm-setting-desc">{{$:/language/tidme/settings.memory.maxinterval.desc}}</div>
+                </div>
+                <div class="tm-setting-control"><<fsrsmaxinterval>></div>
+            </div>
+        </div>
+    </div>
 
-!!! {{$:/language/tidme/studyorder}}
+    <div class="tm-setting-group">
+        <div class="tm-setting-head">
+            <div class="tm-setting-group-title">{{$:/language/tidme/displayorderfilter}}</div>
+        </div>
+        <div class="tm-setting-card">
+            <div class="tm-setting-row tm-setting-row--stack">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/due}}</div>
+                </div>
+                <div class="tm-setting-control"><<textfield order_due>></div>
+            </div>
+            <div class="tm-setting-row tm-setting-row--stack">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/new}}</div>
+                </div>
+                <div class="tm-setting-control"><<textfield order_new>></div>
+            </div>
+        </div>
+    </div>
 
-|tc-max-width tc-edit-max-width|k
-|{{$:/language/tidme/cardstate}}|<<studyorder>>|
+    <div class="tm-setting-group">
+        <div class="tm-setting-head">
+            <div class="tm-setting-group-title">{{$:/language/tidme/cardtypefilter}}</div>
+        </div>
+        <div class="tm-setting-card">
+            <div class="tm-setting-row tm-setting-row--stack">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/exclude}}</div>
+                </div>
+                <div class="tm-setting-control"><<textfield card_exclude>></div>
+            </div>
+            <div class="tm-setting-row tm-setting-row--stack">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/unfold}}</div>
+                </div>
+                <div class="tm-setting-control"><<textfield card_unfold>></div>
+            </div>
+        </div>
+    </div>
 
-!!! {{$:/language/tidme/displayorderfilter}}
+    <div class="tm-setting-group">
+        <div class="tm-setting-head">
+            <div class="tm-setting-group-title">{{$:/language/tidme/action}}</div>
+        </div>
+        <div class="tm-setting-card">
+            <div class="tm-setting-row tm-setting-row--stack">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/exclude}}</div>
+                </div>
+                <div class="tm-setting-control"><<textfield exclude_action>></div>
+            </div>
+            <div class="tm-setting-row tm-setting-row--stack">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/unfold}}</div>
+                </div>
+                <div class="tm-setting-control"><<textfield unfold_action>></div>
+            </div>
+            <div class="tm-setting-row">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/leech}}</div>
+                    <div class="tm-setting-desc">{{$:/language/tidme/leechthreshold}}</div>
+                </div>
+                <div class="tm-setting-control"><<leechthreshold>></div>
+            </div>
+            <div class="tm-setting-row tm-setting-row--stack">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/leech}}</div>
+                    <div class="tm-setting-desc">{{$:/language/tidme/leechactiontip}}</div>
+                </div>
+                <div class="tm-setting-control"><<textfield leech_action>></div>
+            </div>
+        </div>
+    </div>
 
-|tc-max-width tc-edit-max-width|k
-|{{$:/language/tidme/due}}|<<textfield order_due>>|
-|{{$:/language/tidme/new}}|<<textfield order_new>>|
-
-!!! {{$:/language/tidme/cardtypefilter}}
-
-|tc-max-width tc-edit-max-width|k
-|{{$:/language/tidme/exclude}}|<<textfield card_exclude>>|
-|{{$:/language/tidme/unfold}}|<<textfield card_unfold>>|
-
-!!! {{$:/language/tidme/action}}
-
-|tc-max-width tc-edit-max-width|k
-|{{$:/language/tidme/exclude}}|<<textfield exclude_action>>|
-|{{$:/language/tidme/unfold}}|<<textfield unfold_action>>|
-|{{$:/language/tidme/leech}}|<<leechthreshold>><br><<textfield leech_action>>|
-
-
-!! {{$:/language/tidme/expert}}
-
-<$checkbox tiddler="$:/config/Tidme/Options/expert" field="text" checked="yes" unchecked="no" default="no"> @@color:red;font-size:10px;{{$:/language/tidme/experttip}}@@ </$checkbox>
-
-!!! {{$:/language/tidme/cardstatefilter}}
-
-|tc-max-width tc-edit-max-width|k
-|{{$:/language/tidme/learn}}|<<disablededit state_learn>>|
-|{{$:/language/tidme/due}}|<<disablededit state_due>>|
-|{{$:/language/tidme/new}}|<<disablededit state_new>>|
-
-!!! {{$:/language/tidme/param}}
-
-|tc-max-width tc-edit-max-width|k
-|{{$:/language/tidme/fsrsparam}}|<<disablededit p>>|
-
+    <div class="tm-setting-group">
+        <div class="tm-setting-head">
+            <div class="tm-setting-group-title">{{$:/language/tidme/expert}}</div>
+        </div>
+        <div class="tm-setting-card">
+            <div class="tm-setting-row">
+                <div class="tm-setting-info">
+                    <div class="tm-setting-title">{{$:/language/tidme/expert}}</div>
+                    <div class="tm-setting-desc">{{$:/language/tidme/experttip}}</div>
+                </div>
+                <div class="tm-setting-control">
+                    <$checkbox tiddler="$:/config/Tidme/Options/expert" field="text" checked="yes" unchecked="no" default="no"/>
+                </div>
+            </div>
+        </div>
+        <$reveal
+            default={{$:/config/Tidme/Options/expert}}
+            type="match"
+            text="yes"
+            animate="yes"
+        >
+            <div class="tm-setting-card">
+                <div class="tm-setting-row tm-setting-row--stack">
+                    <div class="tm-setting-info">
+                        <div class="tm-setting-title">{{$:/language/tidme/learn}}</div>
+                        <div class="tm-setting-desc">{{$:/language/tidme/cardstatefilter}}</div>
+                    </div>
+                    <div class="tm-setting-control"><<disablededit state_learn>></div>
+                </div>
+                <div class="tm-setting-row tm-setting-row--stack">
+                    <div class="tm-setting-info">
+                        <div class="tm-setting-title">{{$:/language/tidme/due}}</div>
+                        <div class="tm-setting-desc">{{$:/language/tidme/cardstatefilter}}</div>
+                    </div>
+                    <div class="tm-setting-control"><<disablededit state_due>></div>
+                </div>
+                <div class="tm-setting-row tm-setting-row--stack">
+                    <div class="tm-setting-info">
+                        <div class="tm-setting-title">{{$:/language/tidme/new}}</div>
+                        <div class="tm-setting-desc">{{$:/language/tidme/cardstatefilter}}</div>
+                    </div>
+                    <div class="tm-setting-control"><<disablededit state_new>></div>
+                </div>
+                <div class="tm-setting-row tm-setting-row--stack">
+                    <div class="tm-setting-info">
+                        <div class="tm-setting-title">{{$:/language/tidme/fsrsparam}}</div>
+                        <div class="tm-setting-desc">{{$:/language/tidme/param}}</div>
+                    </div>
+                    <div class="tm-setting-control"><<disablededit p>></div>
+                </div>
+            </div>
+        </$reveal>
+    </div>
 </$reveal>

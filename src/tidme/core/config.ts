@@ -314,6 +314,55 @@ export function writeOcrConfig(wiki: any, patch: { enable?: boolean; model?: str
   wiki.addTiddler({ title: OCR_TITLE, type: 'application/json', text: JSON.stringify(stored) });
 }
 
+// ---------- 保存的搜索条件（卡片管理器；对标 Anki Browse 的已保存搜索） ----------
+
+export interface SavedSearch {
+  name: string;
+  query: string;
+}
+
+/** 读保存的搜索（坏 JSON / 坏条目一律宽容丢弃，不抛错） */
+export function readSavedSearches(wiki: any): SavedSearch[] {
+  const raw = readJson(wiki, ns.SAVED_SEARCHES_TITLE);
+  if (!Array.isArray(raw)) return [];
+  const out: SavedSearch[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const name = String((item as any).name ?? '').trim();
+    const query = String((item as any).query ?? '').trim();
+    if (name && query) out.push({ name, query });
+  }
+  return out;
+}
+
+/** 写保存的搜索（同名覆盖，保持顺序） */
+export function writeSavedSearches(wiki: any, list: SavedSearch[]): void {
+  if (!wiki) return;
+  const clean: SavedSearch[] = [];
+  for (const s of list || []) {
+    const name = String(s?.name ?? '').trim();
+    const query = String(s?.query ?? '').trim();
+    if (!name || !query) continue;
+    const dup = clean.findIndex((x) => x.name === name);
+    if (dup >= 0) clean.splice(dup, 1);
+    clean.push({ name, query });
+  }
+  wiki.addTiddler({ title: ns.SAVED_SEARCHES_TITLE, type: 'application/json', text: JSON.stringify(clean) });
+}
+
+/** 新增/覆盖一条保存的搜索 */
+export function saveSearch(wiki: any, name: string, query: string): SavedSearch[] {
+  writeSavedSearches(wiki, [...readSavedSearches(wiki), { name, query }]);
+  return readSavedSearches(wiki);
+}
+
+/** 删除一条保存的搜索 */
+export function removeSavedSearch(wiki: any, name: string): SavedSearch[] {
+  const next = readSavedSearches(wiki).filter((s) => s.name !== name);
+  writeSavedSearches(wiki, next);
+  return next;
+}
+
 // ---------- 默认牌组参数（读写一律经 core/deck 唯一入口） ----------
 
 export function readDefaultDeckParams(wiki: any): Record<string, any> {
@@ -371,4 +420,44 @@ export function writeDefaultDeckParams(wiki: any, patch: Record<string, any>): v
     out.p = JSON.stringify(p);
   }
   deckMod.updateDeck(wiki, deckMod.DEFAULT_DECK, out);
+}
+
+// ---------- 任意牌组的 FSRS 参数（p JSON 友好编辑；消费方 = 牌组选项弹窗 <$deck-fsrs-save/>） ----------
+
+/**
+ * 合并牌组 p JSON：prev 非法/缺失宽容为 {}（w 等其余键原样保留），patch 键缺省 = 不动。
+ * retentionPct 是百分数量纲（50–100，与牌组选项弹窗滑杆一致），在此唯一一处换算成
+ * p 内 0.5–1 的存储值；clamp 口径与 readDefaultDeckParams 读侧相同。
+ * 返回 null = 输入没有产生有效改动（调用方可跳过写库）。
+ */
+export function mergeDeckPJson(
+  prevP: unknown,
+  patch: { retentionPct?: unknown; maximumInterval?: unknown },
+): string | null {
+  const out: Record<string, any> = {};
+  try {
+    const v = typeof prevP === 'string' ? JSON.parse(prevP || '{}') : prevP;
+    if (v && typeof v === 'object') Object.assign(out, v);
+  } catch {
+    /* 非法 p 宽容兜底 */
+  }
+  let changed = false;
+  if (patch.retentionPct !== undefined && String(patch.retentionPct).trim() !== '') {
+    const n = Number(patch.retentionPct);
+    if (Number.isFinite(n)) {
+      const clamped = Math.min(100, Math.max(50, n)) / 100;
+      if (out.request_retention !== clamped) changed = true;
+      out.request_retention = clamped;
+    }
+  }
+  if (patch.maximumInterval !== undefined && String(patch.maximumInterval).trim() !== '') {
+    const n = Number(patch.maximumInterval);
+    if (Number.isFinite(n)) {
+      const clamped = Math.min(365000, Math.max(1, Math.floor(n)));
+      if (out.maximum_interval !== clamped) changed = true;
+      out.maximum_interval = clamped;
+    }
+  }
+  if (!changed) return null;
+  return JSON.stringify(out);
 }

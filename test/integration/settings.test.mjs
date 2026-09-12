@@ -215,3 +215,86 @@ test('config: 牌组参数默认值与 $:/Deck/default 的出厂值一致（防 
   assert.equal(p.leech_threshold, Number(shadow.leech_threshold), 'leech_threshold 与出厂字段一致');
   assert.equal(p.maximum_interval, 36500, '出厂值为 36500（曾代码写死 365）');
 });
+
+test('config.mergeDeckPJson: 百分数换算 + 保留 w 等其余键 + clamp 与宽容', () => {
+  const prevP = JSON.stringify({
+    request_retention: 0.9,
+    maximum_interval: 36500,
+    w: [0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61],
+  });
+  // 1. 百分数 → 0.5–1 存储量纲，其余键原样保留
+  const merged = JSON.parse(config.mergeDeckPJson(prevP, { retentionPct: 85, maximumInterval: 7300 }));
+  assert.equal(merged.request_retention, 0.85, '85% → 0.85');
+  assert.equal(merged.maximum_interval, 7300);
+  assert.deepEqual(merged.w, JSON.parse(prevP).w, 'FSRS 权重 w 不得被合并抹掉');
+
+  // 2. clamp：百分数出界与间隔下限
+  const clamped = JSON.parse(config.mergeDeckPJson(prevP, { retentionPct: 130, maximumInterval: 0 }));
+  assert.equal(clamped.request_retention, 1, '130% → 上限 1.0');
+  assert.equal(clamped.maximum_interval, 1, '0 → 下限 1');
+
+  // 3. 非法/缺失 prev p → 从 patch 兜底重建
+  const rebuilt = JSON.parse(config.mergeDeckPJson('{bad', { retentionPct: '90' }));
+  assert.equal(rebuilt.request_retention, 0.9, "非法 JSON 宽容为 {}，'90' 字符串也接受");
+
+  // 4. no-op：两键都空 / 值与现值一致 → null（调用方跳过写库）
+  assert.equal(config.mergeDeckPJson(prevP, {}), null);
+  assert.equal(config.mergeDeckPJson(prevP, { retentionPct: '', maximumInterval: undefined }), null);
+  assert.equal(config.mergeDeckPJson(prevP, { retentionPct: 90 }), null, '拖回原值不落库');
+  assert.equal(config.mergeDeckPJson(prevP, { retentionPct: 'abc' }), null, '非数值输入忽略');
+});
+
+test('widgets/deck-ui: <$deck-fsrs-save/> 合并 temp 友好输入进 p 并清理 helper 字段', () => {
+  const TEMP = '$:/temp/tidme/options';
+  const DeckFsrsSave = mod('manager/widgets/deck-ui.js')['deck-fsrs-save'];
+  const widgetOf = () => {
+    const w = new DeckFsrsSave({ type: 'deck-fsrs-save', attributes: {} }, { wiki, document: fakeDocument });
+    w.render();
+    return w;
+  };
+
+  // 1. temp 缺失 → no-op 且返回 true（不阻塞保存链）
+  wiki.deleteTiddler(TEMP);
+  assert.equal(widgetOf().invokeAction(), true, 'temp 不存在时不抛错');
+
+  // 2. 编辑后保存：p 合并 + helper 字段清理 + 其余字段保留
+  wiki.addTiddler({
+    title: TEMP,
+    card: '[tidme.kind[item]]',
+    p: JSON.stringify({ request_retention: 0.9, maximum_interval: 36500, w: [1, 2, 3] }),
+    request_retention_pct: '85',
+    maximum_interval: '7300',
+  });
+  assert.equal(widgetOf().invokeAction(), true, 'invokeAction 返回 true（后续 createtiddler 继续）');
+  const saved = wiki.getTiddler(TEMP).fields;
+  assert.equal(saved.request_retention_pct, undefined, '百分数 helper 字段不得残留在 temp（会随覆写落牌组）');
+  assert.equal(saved.maximum_interval, undefined, '间隔 helper 字段同上');
+  const p = JSON.parse(String(saved.p));
+  assert.equal(p.request_retention, 0.85, '85% 已换算合并');
+  assert.equal(p.maximum_interval, 7300);
+  assert.deepEqual(p.w, [1, 2, 3], 'w 保留');
+  assert.equal(saved.card, '[tidme.kind[item]]', '非 FSRS 字段原样保留（覆写语义依赖完整字段拷贝）');
+
+  // 3. 拖回原值再保存：p 不变，但 helper 字段仍清理
+  wiki.addTiddler({
+    title: TEMP,
+    p: JSON.stringify({ request_retention: 0.9 }),
+    request_retention_pct: '90',
+  });
+  widgetOf().invokeAction();
+  const untouched = wiki.getTiddler(TEMP).fields;
+  assert.equal(untouched.request_retention_pct, undefined, 'no-op 也要清理 helper 字段');
+  assert.equal(JSON.parse(String(untouched.p)).request_retention, 0.9, '原值不变');
+});
+
+test('牌组选项弹窗: 保存链接入 <$deck-fsrs-save/>、含 FSRS 参数区块、走 tm-setting 设计语言（bin 产物冒烟）', () => {
+  const modal = wiki.getTiddler('$:/plugins/keepone/tidme/review/buttons/action/modal/options');
+  assert.ok(modal, '弹窗模板随插件加载');
+  assert.ok(String(modal.fields.footer).includes('<$deck-fsrs-save/>'), '保存按钮必须先合并 p 再覆写落库');
+  const text = String(modal.fields.text);
+  assert.ok(/fsrsretention/.test(text), '期望保留率滑杆宏存在');
+  assert.ok(/fsrsmaxinterval/.test(text), '最大间隔输入宏存在');
+  assert.ok(text.includes('tm-setting-row'), '表单行复用设置页 tm-setting-* 结构');
+  assert.ok(text.includes('class="tm-textarea"') && text.includes('class="tm-input"'), '控件挂统一输入类');
+  assert.ok(!text.includes('tc-edit-max-width'), '旧 TW 裸表格布局已移除');
+});

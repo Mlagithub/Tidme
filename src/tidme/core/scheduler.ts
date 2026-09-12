@@ -674,6 +674,22 @@ export type QueueSortMode = 'priority-first' | 'due-first' | 'hybrid';
  * 管理器列表等处的单对比较共用此定义，勿对二元数组整体排序（同一判序只此一份）。
  * now 可注入（与 isDueNow/postponeCard 同风格）：hybrid 的逾期权重依赖"现在"，不可注入则不可重放。
  */
+/**
+ * 混合排序分值（hybrid：逾期天数抵扣 priority，使高逾期的低优先卡也能被调度，
+ * 但不打破整体优先级框架）。无 due 视为 now（score = priority，不伪装成"逾期多年"）。
+ * 唯一产地：`comparePriorityMixed` 与展示层（管理器「混合」列）共用本函数，避免各写一套公式。
+ */
+export function priorityMixedScore(
+  fields: Record<string, any>,
+  overdueWeight = 0.5,
+  now = new Date(),
+): number {
+  const p = normalizePriority(fields['tidme.priority']);
+  const due = parseTwDate(fields.due, new Date(0)).getTime();
+  const days = due === 0 ? 0 : Math.max(0, (now.getTime() - due) / 86400000);
+  return p - days * overdueWeight * 10;
+}
+
 export function comparePriorityMixed(
   a: CardLike,
   b: CardLike,
@@ -681,7 +697,6 @@ export function comparePriorityMixed(
   overdueWeight = 0.5,
   now = new Date(),
 ): number {
-  const nowMs = now.getTime();
   const pa = normalizePriority(a.fields['tidme.priority']);
   const pb = normalizePriority(b.fields['tidme.priority']);
   const da = parseTwDate(a.fields.due, new Date(0)).getTime();
@@ -697,13 +712,9 @@ export function comparePriorityMixed(
     return pa - pb;
   }
 
-  // hybrid 模式：逾期天数抵扣 priority（使高逾期的低优先卡也能被调度，但不打破整体优先级框架）
-  // 无 due = 视为 now（score 0）—— 不应伪装成"逾期多年"排到队首
-  const overMs = (d: number) => (d === 0 ? 0 : Math.max(0, (nowMs - d) / 86400000));
-  const daysA = overMs(da);
-  const daysB = overMs(db);
-  const scoreA = pa - daysA * overdueWeight * 10;
-  const scoreB = pb - daysB * overdueWeight * 10;
+  // hybrid 模式：评分公式见 priorityMixedScore（同一实现）
+  const scoreA = priorityMixedScore(a.fields, overdueWeight, now);
+  const scoreB = priorityMixedScore(b.fields, overdueWeight, now);
   if (Math.abs(scoreA - scoreB) > 0.001) return scoreA - scoreB;
   return pa - pb || da - db;
 }

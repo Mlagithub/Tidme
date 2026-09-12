@@ -109,6 +109,7 @@ __export(ns_exports, {
   QUEUE_MODE_TITLE: () => QUEUE_MODE_TITLE,
   REVIEWS_PER_DAY_TITLE: () => REVIEWS_PER_DAY_TITLE,
   ROLLOVER_HOUR_TITLE: () => ROLLOVER_HOUR_TITLE,
+  SAVED_SEARCHES_TITLE: () => SAVED_SEARCHES_TITLE,
   SEMANTIC_SPLIT_TITLE: () => SEMANTIC_SPLIT_TITLE,
   TITLE_UNSAFE_CHARS: () => TITLE_UNSAFE_CHARS,
   TOPIC_QUEUE_FILTER: () => TOPIC_QUEUE_FILTER,
@@ -140,7 +141,7 @@ function buriedExcludeFilter(learningDay) {
     return "";
   return `-[${BURIED_FIELD}[${day}]]`;
 }
-var NS_DOCS, NS_ASSETS, NS_DECKS, NS_DECKS_SCATTER, CRUMB_SEP, DECK_PREFIX, QUEUE_EXCLUDE, DECK_TAG, NOT_DECK_FILTER, TOPIC_QUEUE_FILTER, TITLE_UNSAFE_CHARS, FOLDED_STATE_PREFIX, CARD_OPEN_AT_TITLE, PDF_PAGE_STATE_PREFIX, AUTOPOSTPONE_LAST_TITLE, DECK_LOG_SUFFIX, CONFIG_TITLE_PREFIX, QUEUE_MODE_TITLE, QUEUE_MIX_TITLE, PRIORITY_DYNAMICS_TITLE, LOG_RETENTION_TITLE, ROLLOVER_HOUR_TITLE, NEW_PER_DAY_TITLE, REVIEWS_PER_DAY_TITLE, LIMITS_SUPPRESS_NEW_TITLE, LEARN_AHEAD_TITLE, DAILY_QUOTA_STATE_TITLE, BURY_SIBLINGS_TITLE, BURIED_FIELD, FINAL_DRILL_STATE_TITLE, OCR_TITLE, SEMANTIC_SPLIT_TITLE, PAGE_INCREMENTAL_LEARNING, PAGE_TODAY, PAGE_READING_LIST, PAGE_IMPORT_CENTER, PAGE_CARD_MANAGER, PAGE_IMPORT_STATS, PAGE_HELP_SHORTCUTS, PAGE_SETTINGS, NOTIFY_EXTRACT, NOTIFY_CLOZE, NOTIFY_READPOINT, NOTIFY_SELECT_FIRST, NOTIFY_EXTRACT_NOTE, NOTIFY_SECTION_DONE, NOTIFY_LATER, NOTIFY_DONE, NOTIFY_UNSUPPORTED, NOTIFY_CONGRATULATION, NOTIFY_STUDY_ENDED, IMPORT_BAG_TITLE;
+var NS_DOCS, NS_ASSETS, NS_DECKS, NS_DECKS_SCATTER, CRUMB_SEP, DECK_PREFIX, QUEUE_EXCLUDE, DECK_TAG, NOT_DECK_FILTER, TOPIC_QUEUE_FILTER, TITLE_UNSAFE_CHARS, FOLDED_STATE_PREFIX, CARD_OPEN_AT_TITLE, PDF_PAGE_STATE_PREFIX, AUTOPOSTPONE_LAST_TITLE, DECK_LOG_SUFFIX, CONFIG_TITLE_PREFIX, QUEUE_MODE_TITLE, QUEUE_MIX_TITLE, PRIORITY_DYNAMICS_TITLE, LOG_RETENTION_TITLE, ROLLOVER_HOUR_TITLE, NEW_PER_DAY_TITLE, REVIEWS_PER_DAY_TITLE, LIMITS_SUPPRESS_NEW_TITLE, LEARN_AHEAD_TITLE, DAILY_QUOTA_STATE_TITLE, BURY_SIBLINGS_TITLE, BURIED_FIELD, FINAL_DRILL_STATE_TITLE, OCR_TITLE, SEMANTIC_SPLIT_TITLE, SAVED_SEARCHES_TITLE, PAGE_INCREMENTAL_LEARNING, PAGE_TODAY, PAGE_READING_LIST, PAGE_IMPORT_CENTER, PAGE_CARD_MANAGER, PAGE_IMPORT_STATS, PAGE_HELP_SHORTCUTS, PAGE_SETTINGS, NOTIFY_EXTRACT, NOTIFY_CLOZE, NOTIFY_READPOINT, NOTIFY_SELECT_FIRST, NOTIFY_EXTRACT_NOTE, NOTIFY_SECTION_DONE, NOTIFY_LATER, NOTIFY_DONE, NOTIFY_UNSUPPORTED, NOTIFY_CONGRATULATION, NOTIFY_STUDY_ENDED, IMPORT_BAG_TITLE;
 var init_ns = __esm({
   "src/tidme/core/ns.ts"() {
     NS_DOCS = "Tidme/Docs/";
@@ -175,6 +176,7 @@ var init_ns = __esm({
     FINAL_DRILL_STATE_TITLE = "$:/state/tidme/final-drill";
     OCR_TITLE = CONFIG_TITLE_PREFIX + "Ocr";
     SEMANTIC_SPLIT_TITLE = CONFIG_TITLE_PREFIX + "SemanticSplit";
+    SAVED_SEARCHES_TITLE = CONFIG_TITLE_PREFIX + "SavedSearches";
     PAGE_INCREMENTAL_LEARNING = "$:/IncrementalLearning";
     PAGE_TODAY = PAGE_INCREMENTAL_LEARNING;
     PAGE_READING_LIST = "$:/plugins/keepone/tidme/import/ui/reading-list";
@@ -592,6 +594,7 @@ __export(config_exports, {
   ROLLOVER_HOUR_DEFAULT: () => ROLLOVER_HOUR_DEFAULT,
   SEMANTIC_SPLIT_DEFAULTS: () => SEMANTIC_SPLIT_DEFAULTS,
   SEMANTIC_SPLIT_TITLE: () => SEMANTIC_SPLIT_TITLE2,
+  mergeDeckPJson: () => mergeDeckPJson,
   readAutoPostpone: () => readAutoPostpone,
   readBurySiblings: () => readBurySiblings,
   readDefaultDeckParams: () => readDefaultDeckParams,
@@ -604,7 +607,10 @@ __export(config_exports, {
   readQueueOptions: () => readQueueOptions,
   readReviewsPerDay: () => readReviewsPerDay,
   readRolloverHour: () => readRolloverHour,
+  readSavedSearches: () => readSavedSearches,
   readSemanticSplit: () => readSemanticSplit,
+  removeSavedSearch: () => removeSavedSearch,
+  saveSearch: () => saveSearch,
   writeAutoPostpone: () => writeAutoPostpone,
   writeBurySiblings: () => writeBurySiblings,
   writeDefaultDeckParams: () => writeDefaultDeckParams,
@@ -616,6 +622,7 @@ __export(config_exports, {
   writeQueueOptions: () => writeQueueOptions,
   writeReviewsPerDay: () => writeReviewsPerDay,
   writeRolloverHour: () => writeRolloverHour,
+  writeSavedSearches: () => writeSavedSearches,
   writeSemanticSplit: () => writeSemanticSplit
 });
 function boolish(v, dflt) {
@@ -845,6 +852,46 @@ function writeOcrConfig(wiki, patch) {
     stored.apiKey = next.apiKey;
   wiki.addTiddler({ title: OCR_TITLE2, type: "application/json", text: JSON.stringify(stored) });
 }
+function readSavedSearches(wiki) {
+  const raw = readJson(wiki, ns2.SAVED_SEARCHES_TITLE);
+  if (!Array.isArray(raw))
+    return [];
+  const out = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object")
+      continue;
+    const name = String(item.name ?? "").trim();
+    const query = String(item.query ?? "").trim();
+    if (name && query)
+      out.push({ name, query });
+  }
+  return out;
+}
+function writeSavedSearches(wiki, list) {
+  if (!wiki)
+    return;
+  const clean = [];
+  for (const s of list || []) {
+    const name = String(s?.name ?? "").trim();
+    const query = String(s?.query ?? "").trim();
+    if (!name || !query)
+      continue;
+    const dup = clean.findIndex((x) => x.name === name);
+    if (dup >= 0)
+      clean.splice(dup, 1);
+    clean.push({ name, query });
+  }
+  wiki.addTiddler({ title: ns2.SAVED_SEARCHES_TITLE, type: "application/json", text: JSON.stringify(clean) });
+}
+function saveSearch(wiki, name, query) {
+  writeSavedSearches(wiki, [...readSavedSearches(wiki), { name, query }]);
+  return readSavedSearches(wiki);
+}
+function removeSavedSearch(wiki, name) {
+  const next = readSavedSearches(wiki).filter((s) => s.name !== name);
+  writeSavedSearches(wiki, next);
+  return next;
+}
 function readDefaultDeckParams(wiki) {
   const f = deckMod.getDeck(wiki, deckMod.DEFAULT_DECK)?.fields || {};
   let p = {};
@@ -901,6 +948,37 @@ function writeDefaultDeckParams(wiki, patch) {
     out.p = JSON.stringify(p);
   }
   deckMod.updateDeck(wiki, deckMod.DEFAULT_DECK, out);
+}
+function mergeDeckPJson(prevP, patch) {
+  const out = {};
+  try {
+    const v = typeof prevP === "string" ? JSON.parse(prevP || "{}") : prevP;
+    if (v && typeof v === "object")
+      Object.assign(out, v);
+  } catch {
+  }
+  let changed = false;
+  if (patch.retentionPct !== void 0 && String(patch.retentionPct).trim() !== "") {
+    const n = Number(patch.retentionPct);
+    if (Number.isFinite(n)) {
+      const clamped = Math.min(100, Math.max(50, n)) / 100;
+      if (out.request_retention !== clamped)
+        changed = true;
+      out.request_retention = clamped;
+    }
+  }
+  if (patch.maximumInterval !== void 0 && String(patch.maximumInterval).trim() !== "") {
+    const n = Number(patch.maximumInterval);
+    if (Number.isFinite(n)) {
+      const clamped = Math.min(365e3, Math.max(1, Math.floor(n)));
+      if (out.maximum_interval !== clamped)
+        changed = true;
+      out.maximum_interval = clamped;
+    }
+  }
+  if (!changed)
+    return null;
+  return JSON.stringify(out);
 }
 var sched, deckMod, ns2, AUTOPOSTPONE_DEFAULTS, SEMANTIC_SPLIT_DEFAULTS, DECK_ORDERS, QUEUE_MIX_DEFAULT, QUEUE_MODE_TITLE2, QUEUE_MIX_TITLE2, PRIORITY_DYNAMICS_TITLE2, LOG_RETENTION_DEFAULT_DAYS, LOG_RETENTION_TITLE2, ROLLOVER_HOUR_DEFAULT, NEW_PER_DAY_DEFAULT, REVIEWS_PER_DAY_DEFAULT, LEARN_AHEAD_DEFAULT_MINUTES, OCR_TITLE2, SEMANTIC_SPLIT_TITLE2;
 var init_config = __esm({
@@ -980,6 +1058,7 @@ __export(scheduler_exports, {
   postponeTopicByAFactor: () => postponeTopicByAFactor,
   priorityBucket: () => priorityBucket,
   priorityDeltaForRating: () => priorityDeltaForRating,
+  priorityMixedScore: () => priorityMixedScore,
   readDailyQuota: () => readDailyQuota,
   recordDailyQuota: () => recordDailyQuota,
   resetLeechCard: () => resetLeechCard,
@@ -1339,8 +1418,13 @@ function nextSchedulable(ordered, cur, canLearn) {
   }
   return null;
 }
+function priorityMixedScore(fields, overdueWeight = 0.5, now = new Date()) {
+  const p = normalizePriority(fields["tidme.priority"]);
+  const due = parseTwDate2(fields.due, new Date(0)).getTime();
+  const days = due === 0 ? 0 : Math.max(0, (now.getTime() - due) / 864e5);
+  return p - days * overdueWeight * 10;
+}
 function comparePriorityMixed(a, b, mode = "hybrid", overdueWeight = 0.5, now = new Date()) {
-  const nowMs = now.getTime();
   const pa = normalizePriority(a.fields["tidme.priority"]);
   const pb = normalizePriority(b.fields["tidme.priority"]);
   const da = parseTwDate2(a.fields.due, new Date(0)).getTime();
@@ -1355,11 +1439,8 @@ function comparePriorityMixed(a, b, mode = "hybrid", overdueWeight = 0.5, now = 
       return da - db;
     return pa - pb;
   }
-  const overMs = (d) => d === 0 ? 0 : Math.max(0, (nowMs - d) / 864e5);
-  const daysA = overMs(da);
-  const daysB = overMs(db);
-  const scoreA = pa - daysA * overdueWeight * 10;
-  const scoreB = pb - daysB * overdueWeight * 10;
+  const scoreA = priorityMixedScore(a.fields, overdueWeight, now);
+  const scoreB = priorityMixedScore(b.fields, overdueWeight, now);
   if (Math.abs(scoreA - scoreB) > 1e-3)
     return scoreA - scoreB;
   return pa - pb || da - db;
@@ -1593,15 +1674,22 @@ __export(stats_exports, {
   FOCUS_SEGMENT_MAX_SECONDS: () => FOCUS_SEGMENT_MAX_SECONDS,
   MATURE_INTERVAL_DAYS: () => MATURE_INTERVAL_DAYS,
   READTIME_TIDDLER: () => READTIME_TIDDLER,
+  collectReviewLogs: () => collectReviewLogs,
   deckLoad: () => deckLoad,
+  difficultyHistogram: () => difficultyHistogram,
+  forecastSummary: () => forecastSummary,
   formatDuration: () => formatDuration,
   funnelCounts: () => funnelCounts,
   futureDueSchedule: () => futureDueSchedule,
   getReadTimeStats: () => getReadTimeStats,
+  histogram: () => histogram,
+  intervalHistogram: () => intervalHistogram,
   priorityBuckets: () => priorityBuckets,
   recordReadTime: () => recordReadTime,
+  retentionByPeriod: () => retentionByPeriod,
   retentionFromLogs: () => retentionFromLogs,
   reviewCountToday: () => reviewCountToday,
+  stabilityHistogram: () => stabilityHistogram,
   todayWorkload: () => todayWorkload,
   trueRetentionFromLogs: () => trueRetentionFromLogs
 });
@@ -1639,6 +1727,169 @@ function retentionFromLogs(logEntries) {
   const againRate = again / logEntries.length;
   return { reviews: logEntries.length, againRate, retention: 1 - againRate };
 }
+function collectReviewLogs(wiki) {
+  if (!wiki || typeof wiki.filterTiddlers !== "function")
+    return [];
+  const logs = [];
+  for (const lt of wiki.filterTiddlers(`[all[shadows+tiddlers]prefix[${nsMod.DECK_PREFIX}]]`)) {
+    if (!nsMod.isDeckLogTitle(lt))
+      continue;
+    const data = wiki.getTiddlerData(lt);
+    if (!data || typeof data !== "object")
+      continue;
+    for (const k of Object.keys(data)) {
+      const row = data[k];
+      if (typeof row === "string") {
+        try {
+          logs.push({ at: k, ...JSON.parse(row) });
+        } catch {
+        }
+      } else if (row && typeof row === "object") {
+        logs.push({ at: k, ...row });
+      }
+    }
+  }
+  return logs;
+}
+function maturityOf(row) {
+  return maturityWithThreshold(row, MATURE_INTERVAL_DAYS);
+}
+function maturityWithThreshold(row, matureIntervalDays) {
+  const stateStr = String(row.state ?? "");
+  if (!(stateStr === "2" || stateStr.toLowerCase() === "review"))
+    return "other";
+  const elapsed = Number(row.last_elapsed_days !== void 0 ? row.last_elapsed_days : row.elapsed_days);
+  if (!Number.isFinite(elapsed))
+    return "other";
+  return elapsed >= matureIntervalDays ? "mature" : "young";
+}
+function emptyCell() {
+  return { reviews: 0, pass: 0, again: 0, retention: 1 };
+}
+function fillCell(cell, isAgain) {
+  cell.reviews++;
+  if (isAgain)
+    cell.again++;
+  else
+    cell.pass++;
+}
+function closeCell(cell) {
+  cell.retention = cell.reviews > 0 ? cell.pass / cell.reviews : 1;
+}
+function retentionByPeriod(logEntries, now = new Date(), rolloverHour = 4) {
+  const periods = ["today", "yesterday", "lastWeek", "lastMonth", "all"];
+  const currentDay = schema2.learningDayOf(now, rolloverHour);
+  const rows = new Map(
+    periods.map((p) => [p, { period: p, mature: emptyCell(), young: emptyCell(), total: emptyCell() }])
+  );
+  for (const e of logEntries) {
+    const at = schema2.tryParseTwDate(e.at);
+    if (!at)
+      continue;
+    const diff = schema2.learningDayDiff(currentDay, schema2.learningDayOf(at, rolloverHour));
+    if (diff > 0)
+      continue;
+    const maturity = maturityOf(e);
+    if (maturity === "other")
+      continue;
+    const isAgain = Number(e.rating) === 1;
+    const row = rows.get("all");
+    fillCell(row[maturity], isAgain);
+    for (const p of periods) {
+      if (p === "all")
+        continue;
+      const inRange = p === "today" ? diff === 0 : p === "yesterday" ? diff === -1 : p === "lastWeek" ? diff >= -6 : diff >= -29;
+      if (!inRange)
+        continue;
+      const r = rows.get(p);
+      fillCell(r[maturity], isAgain);
+    }
+  }
+  for (const r of rows.values()) {
+    fillCellTotal(r);
+  }
+  return periods.map((p) => rows.get(p));
+}
+function fillCellTotal(row) {
+  row.total = {
+    reviews: row.mature.reviews + row.young.reviews,
+    pass: row.mature.pass + row.young.pass,
+    again: row.mature.again + row.young.again,
+    retention: 1
+  };
+  closeCell(row.mature);
+  closeCell(row.young);
+  closeCell(row.total);
+}
+function histogram(values, edges, labels) {
+  const bins = labels.map((label) => ({ label, count: 0 }));
+  if (edges.length !== labels.length + 1)
+    return bins;
+  for (const v of values) {
+    if (!Number.isFinite(v))
+      continue;
+    const last = labels.length - 1;
+    if (v < edges[0])
+      continue;
+    let idx = last;
+    for (let i = 0; i < labels.length; i++) {
+      if (v < edges[i + 1]) {
+        idx = i;
+        break;
+      }
+    }
+    bins[idx].count++;
+  }
+  return bins;
+}
+function reviewCardValues(cards, field) {
+  const out = [];
+  for (const c of cards) {
+    const f = c?.fields;
+    if (!f || !isInQueue2(f))
+      continue;
+    if (String(f.state ?? "") !== "2")
+      continue;
+    const v = Number(f[field]);
+    if (Number.isFinite(v) && v >= 0)
+      out.push(v);
+  }
+  return out;
+}
+function intervalHistogram(cards) {
+  return histogram(reviewCardValues(cards, "scheduled_days"), INTERVAL_EDGES, INTERVAL_LABELS);
+}
+function stabilityHistogram(cards) {
+  return histogram(reviewCardValues(cards, "stability"), STABILITY_EDGES, STABILITY_LABELS);
+}
+function difficultyHistogram(cards) {
+  const values = reviewCardValues(cards, "difficulty").map((d) => d <= 1 ? d * 100 : d * 10);
+  return histogram(values, DIFFICULTY_EDGES, DIFFICULTY_LABELS);
+}
+function forecastSummary(cards, days = 30, now = new Date(), rolloverHour = 4) {
+  const schedule = futureDueSchedule(cards, Math.max(1, days), now, rolloverHour);
+  const total = schedule.reduce((n, d) => n + d.dueCount, 0);
+  let burden = 0;
+  for (const c of cards) {
+    const f = c?.fields;
+    if (!f || !isInQueue2(f))
+      continue;
+    if (f["tidme.kind"] !== "item")
+      continue;
+    if (String(f.state ?? "") !== "2")
+      continue;
+    const ivl = Number(f.scheduled_days);
+    if (Number.isFinite(ivl) && ivl > 0)
+      burden += 1 / ivl;
+  }
+  return {
+    days: schedule.length,
+    total,
+    averagePerDay: schedule.length > 0 ? total / schedule.length : 0,
+    dueTomorrow: schedule.length > 1 ? schedule[1].dueCount : 0,
+    burden
+  };
+}
 function trueRetentionFromLogs(logEntries, matureIntervalDays = MATURE_INTERVAL_DAYS) {
   const result = {
     matureReviews: 0,
@@ -1656,20 +1907,17 @@ function trueRetentionFromLogs(logEntries, matureIntervalDays = MATURE_INTERVAL_
     return result;
   let totalAgain = 0;
   for (const e of logEntries) {
-    const r = Number(e.rating);
-    const isAgain = r === 1;
+    const isAgain = Number(e.rating) === 1;
     if (isAgain)
       totalAgain++;
-    const stateStr = String(e.state ?? "");
-    const isReviewState = stateStr === "2" || stateStr.toLowerCase() === "review";
-    const elapsed = Number(e.last_elapsed_days !== void 0 ? e.last_elapsed_days : e.elapsed_days);
-    if (isReviewState && Number.isFinite(elapsed) && elapsed >= matureIntervalDays) {
+    const maturity = matureIntervalDays === MATURE_INTERVAL_DAYS ? maturityOf(e) : maturityWithThreshold(e, matureIntervalDays);
+    if (maturity === "mature") {
       result.matureReviews++;
       if (isAgain)
         result.matureAgain++;
       else
         result.maturePass++;
-    } else if (isReviewState) {
+    } else if (maturity === "young") {
       result.youngReviews++;
       if (isAgain)
         result.youngAgain++;
@@ -1859,7 +2107,7 @@ function todayWorkload(wiki) {
     toRead: count(nsMod.TOPIC_QUEUE_FILTER)
   };
 }
-var schema2, parseTwDate3, sched2, nsMod, isCardOutOfQueue2, isInQueue2, MATURE_INTERVAL_DAYS, READTIME_TIDDLER, FOCUS_SEGMENT_MAX_SECONDS;
+var schema2, parseTwDate3, sched2, nsMod, isCardOutOfQueue2, isInQueue2, INTERVAL_EDGES, INTERVAL_LABELS, STABILITY_EDGES, STABILITY_LABELS, DIFFICULTY_EDGES, DIFFICULTY_LABELS, MATURE_INTERVAL_DAYS, READTIME_TIDDLER, FOCUS_SEGMENT_MAX_SECONDS;
 var init_stats = __esm({
   "src/tidme/core/stats.ts"() {
     schema2 = (init_schema(), __toCommonJS(schema_exports));
@@ -1868,6 +2116,12 @@ var init_stats = __esm({
     nsMod = (init_ns(), __toCommonJS(ns_exports));
     isCardOutOfQueue2 = sched2.isCardOutOfQueue;
     isInQueue2 = sched2.isInQueue;
+    INTERVAL_EDGES = [0, 1, 3, 7, 14, 30, 60, 120, 365, Infinity];
+    INTERVAL_LABELS = ["1", "2-3", "4-7", "8-14", "15-30", "31-60", "61-120", "121-365", ">365"];
+    STABILITY_EDGES = [0, 1, 3, 7, 30, 90, 180, 365, Infinity];
+    STABILITY_LABELS = ["0-1", "1-3", "3-7", "7-30", "30-90", "90-180", "180-365", ">365"];
+    DIFFICULTY_EDGES = [0, 20, 40, 60, 80, 100.0001];
+    DIFFICULTY_LABELS = ["0-20%", "20-40%", "40-60%", "60-80%", "80-100%"];
     MATURE_INTERVAL_DAYS = 21;
     READTIME_TIDDLER = "$:/plugins/keepone/tidme/stats/readtime";
     FOCUS_SEGMENT_MAX_SECONDS = 3600;

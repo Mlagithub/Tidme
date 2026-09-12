@@ -208,6 +208,111 @@ test('futureDueSchedule: 未来 30 天负荷预测与累计到期计算', () => 
   assert.equal(schedule[3].cumulativeDue, 4, '第 3 天累计为 4');
 });
 
+test('collectReviewLogs: 对象行与字符串行都收（历史行形态兼容），坏行不拖垮整体', () => {
+  const nsMod = mod('core/ns.js');
+  const deckLog = nsMod.deckLogTitle('$:/Deck/default');
+  wiki.addTiddler({
+    title: deckLog,
+    type: 'application/json',
+    text: '{"20260911090000000":{"rating":3},"20260911090100000":"{\\"rating\\":1}","20260911090200000":"not-json"}',
+  });
+  // getTiddlerData 已把 application/json 解析成对象：行值此时是对象；字符串行是历史/手写形态
+  const logs = stats.collectReviewLogs(wiki);
+  assert.equal(logs.length, 2, '坏行被忽略，其余行照收');
+  assert.deepEqual([...logs].map((r) => Number(r.rating)).sort(), [1, 3]);
+  assert.equal(stats.retentionFromLogs(logs).retention, 0.5, '保留率由真实行算出');
+  wiki.deleteTiddler(deckLog);
+});
+
+test('retentionByPeriod: 今天/昨天/最近7天/最近30天/全部 × 成熟/年轻/总计（学习步不计入）', () => {
+  const schedMod = mod('core/scheduler.js');
+  const now = new Date();
+  const rollover = 4;
+  const day = schedMod.learningDayContext(wiki, now).learningDay;
+  const at = (dayOffset, minute = 0) => {
+    const d = new Date(learningDayInstant(schema.addLearningDays(day, dayOffset), rollover).getTime() + minute * 60000);
+    return twDate(d);
+  };
+  const logs = [
+    // 今天：成熟卡 Good + 年轻卡 Again
+    { at: at(0, 1), rating: 3, state: '2', last_elapsed_days: 30 },
+    { at: at(0, 2), rating: 1, state: '2', last_elapsed_days: 5 },
+    // 昨天：成熟卡 Again
+    { at: at(-1, 1), rating: 1, state: '2', last_elapsed_days: 40 },
+    // 10 天前：年轻卡 Good（只进"最近 30 天"和"全部"）
+    { at: at(-10, 1), rating: 3, state: '2', last_elapsed_days: 3 },
+    // 40 天前：成熟卡 Good（只进"全部"）
+    { at: at(-40, 1), rating: 4, state: '2', last_elapsed_days: 99 },
+    // 今天的学习步（不进任何保留率列）
+    { at: at(0, 3), rating: 1, state: '1', last_elapsed_days: 0 },
+  ];
+  const rows = stats.retentionByPeriod(logs, now, rollover);
+  const by = (p) => rows.find((r) => r.period === p);
+  const today = by('today');
+  assert.equal(today.mature.reviews, 1);
+  assert.equal(today.mature.retention, 1, '今日成熟卡 1/1 通过');
+  assert.equal(today.young.reviews, 1);
+  assert.equal(today.young.retention, 0, '今日年轻卡 1 次 Again');
+  assert.equal(today.total.reviews, 2, '总计 = 成熟 + 年轻（学习步不计入）');
+  assert.equal(today.total.retention, 0.5);
+
+  assert.equal(by('yesterday').total.reviews, 1);
+  assert.equal(by('yesterday').mature.again, 1);
+  assert.equal(by('lastWeek').total.reviews, 3, '最近 7 天 = 今天 + 昨天（10 天前不在内）');
+  assert.equal(by('lastMonth').total.reviews, 4);
+  assert.equal(by('all').total.reviews, 5);
+  assert.equal(by('all').mature.reviews, 3);
+  assert.equal(by('all').young.reviews, 2);
+});
+
+test('histogram: 分桶边界与非法值（间隔/稳定度/难度）', () => {
+  const bins = stats.histogram([0, 1, 2.9, 3, 7, 14, -5, NaN, Infinity, 400], [0, 1, 3, 7, 14, 365, Infinity], ['0', '1', '2-3', '4-7', '8-14', '15+']);
+  assert.deepEqual([...bins.map((b) => b.count)], [1, 2, 1, 1, 1, 1], '负值/NaN/Infinity 忽略；边界值归下桶');
+  assert.deepEqual([...bins.map((b) => b.label)], ['0', '1', '2-3', '4-7', '8-14', '15+']);
+  assert.deepEqual([...stats.histogram([1], [0, 1], ['a', 'b']).map((b) => b.count)], [0, 0], 'edges 长度不符 → 全零（不抛错）');
+});
+
+test('interval/stability/difficulty 直方图: 只统计在队复习卡，难度按 1–10 量纲折成百分比', () => {
+  const cards = [
+    { fields: { 'tidme.kind': 'item', state: '2', scheduled_days: '5', stability: '20', difficulty: '5' } },
+    { fields: { 'tidme.kind': 'item', state: '2', scheduled_days: '40', stability: '200', difficulty: '2' } },
+    { fields: { 'tidme.kind': 'item', state: '0', scheduled_days: '5', stability: '20', difficulty: '5' } }, // 新卡不计
+    { fields: { 'tidme.kind': 'item', state: '2', scheduled_days: '5', stability: '20', difficulty: '5', 'tidme.done': 'yes' } }, // 出队不计
+  ];
+  const ivl = stats.intervalHistogram(cards);
+  assert.equal(ivl.reduce((n, b) => n + b.count, 0), 2, '只算在队复习卡');
+  assert.equal(ivl.find((b) => b.label === '4-7').count, 1);
+  assert.equal(ivl.find((b) => b.label === '31-60').count, 1);
+
+  const stab = stats.stabilityHistogram(cards);
+  assert.equal(stab.find((b) => b.label === '7-30').count, 1);
+  assert.equal(stab.find((b) => b.label === '180-365').count, 1);
+
+  const diff = stats.difficultyHistogram(cards);
+  assert.equal(diff.find((b) => b.label === '40-60%').count, 1, 'difficulty 5（1–10 量纲）应落 40–60%');
+  assert.equal(diff.find((b) => b.label === '20-40%').count, 1, 'difficulty 2 → 20–40%');
+  assert.equal(diff.find((b) => b.label === '0-20%').count, 0, '曾因不折算把全部卡塞进第一桶');
+});
+
+test('forecastSummary: 总量/平均/明天到期/每日负载（Σ1/间隔）', () => {
+  const now = new Date('2026-09-11T12:00:00Z');
+  const rollover = 4;
+  const day = schema.learningDayOf(now, rollover);
+  const dueOn = (offset) => twDate(learningDayInstant(schema.addLearningDays(day, offset), rollover));
+  const cards = [
+    { fields: { 'tidme.kind': 'item', state: '2', due: dueOn(-2), scheduled_days: '2' } }, // 逾期 → 第 0 天
+    { fields: { 'tidme.kind': 'item', state: '2', due: dueOn(1), scheduled_days: '4' } }, // 明天
+    { fields: { 'tidme.kind': 'item', state: '0', due: dueOn(0), scheduled_days: '0' } }, // 新卡不计
+    { fields: { 'tidme.kind': 'item', state: '2', due: dueOn(1000), scheduled_days: '10' } }, // 窗口外，但计入负载
+  ];
+  const f = stats.forecastSummary(cards, 30, now, rollover);
+  assert.equal(f.days, 30);
+  assert.equal(f.total, 2, '窗口内 2 张（逾期并入第 0 天）');
+  assert.equal(f.dueTomorrow, 1);
+  assert.ok(Math.abs(f.averagePerDay - 2 / 30) < 1e-9);
+  assert.ok(Math.abs(f.burden - (1 / 2 + 1 / 4 + 1 / 10)) < 1e-9, '负载 = Σ1/间隔（只算在队复习卡）');
+});
+
 test('learningDay 纯日历换算：addLearningDays / learningDayDiff（跨月跨年）', () => {
   assert.equal(schema.addLearningDays('20260911', 3), '20260914');
   assert.equal(schema.addLearningDays('20260930', 1), '20261001', '跨月');

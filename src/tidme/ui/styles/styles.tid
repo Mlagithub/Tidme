@@ -1197,57 +1197,22 @@ mark.tm-readpoint {
 }
 .tm-cb-state-done { background: var(--tm-badge-due); }
 
-/* ---- 仪表盘分栏网格 (Fluid Flexbox + 容器查询 @container 双重响应式) ---- */
+/* ---- 仪表盘瀑布布局（CSS 多栏自动均衡）----
+   columns: 2 420px = 最多两栏、每栏至少 420px：宽容器分两栏，放不下两栏时自动回落单栏，
+   无需再配容器/媒体查询断点。卡片高度参差，由多栏贪婪填充 + 矮卡在前高卡垫底的
+   DOM 排列（见 stats-panel）共同保证两栏高度接近，避免一侧大片留白 */
 .tm-stats-panel {
-	container-type: inline-size;
 	width: 100%;
 	box-sizing: border-box;
 }
-.tm-stats-grid {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 20px;
+.tm-stats-masonry {
+	columns: 2 420px;
+	column-gap: 20px;
 	margin-top: 20px;
 }
-.tm-stats-col-main {
-	flex: 2 1 420px;
-	min-width: 0; /* 消除表格撑破父容器 */
-	display: flex;
-	flex-direction: column;
-	gap: 18px;
-}
-.tm-stats-col-side {
-	flex: 1 1 240px;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 18px;
-}
-
-/* 方案 1：容器查询——当组件自身宽度小于 760px 时显式锁定为单列流式堆叠 */
-@container (max-width: 760px) {
-	.tm-stats-grid {
-		flex-direction: column;
-		gap: 16px;
-	}
-	.tm-stats-col-main,
-	.tm-stats-col-side {
-		flex: 1 1 100%;
-		width: 100%;
-	}
-}
-
-/* 传统视口媒体查询兜底（兼顾旧版本宿主） */
-@media (max-width: 760px) {
-	.tm-stats-grid {
-		flex-direction: column;
-		gap: 16px;
-	}
-	.tm-stats-col-main,
-	.tm-stats-col-side {
-		flex: 1 1 100%;
-		width: 100%;
-	}
+.tm-stats-masonry > .tm-dashboard-card {
+	/* 卡片是分栏原子：整体落进一栏，不在卡片中间断栏 */
+	break-inside: avoid;
 }
 
 /* ---- 导入小部件容器与全页面拖拽覆盖层 (Uploader & Fullpage Drag Overlay) ---- */
@@ -1471,6 +1436,33 @@ mark.tm-readpoint {
 	margin-bottom: 12px;
 }
 .tm-cm-search-row { display: flex; gap: 6px; align-items: center; }
+.tm-cm-saved {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	flex-wrap: wrap;
+	margin-top: 6px;
+	font-size: 0.86em;
+}
+.tm-cm-saved-label { color: var(--tm-text-2); }
+.tm-cm-saved-chip { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.tm-cm-saved-del { cursor: pointer; opacity: 0.55; }
+.tm-cm-saved-del:hover { opacity: 1; }
+.tm-stat-subtitle {
+	margin: 8px 0 2px;
+	font-size: 0.88em;
+	color: var(--tm-text-2);
+}
+.tm-dialog-input {
+	width: 100%;
+	margin: 8px 0;
+	padding: 6px 10px;
+	font-family: var(--tm-font);
+	border: 1px solid var(--tm-border);
+	border-radius: var(--tm-radius-xs);
+	background: var(--tm-surface);
+	color: var(--tm-text-1);
+}
 .tm-cm-search {
 	flex: 1;
 	max-width: 280px;
@@ -2267,6 +2259,7 @@ mark.tm-readpoint {
 .tm-today-deck-row:hover { background: var(--tm-surface-2); transform: translateY(-1px); }
 .tm-today-deck-name { font-weight: 600; color: var(--tm-text-1); flex: 1; cursor: pointer; }
 .tm-today-deck-counts { display: flex; gap: var(--tm-gap); }
+.tm-today-deck-open { display: inline-flex; align-items: center; gap: 4px; }
 
 .tm-today-recent { margin-top: var(--tm-gap-2xl); }
 .tm-today-recent .tm-today-section-title { margin-bottom: var(--tm-gap); }
@@ -2285,7 +2278,13 @@ a.tm-today-read-name:hover { text-decoration: underline; color: var(--tm-primary
 
 /* ===== 牌组视图语义（Today 牌组行角色徽章 + 新建牌组成员预览） ===== */
 .tm-badge-scope { color: var(--tm-text-2); background: var(--tm-surface-3); }
-.tm-decks-preview { color: var(--tm-text-2); font-size: 0.85em; padding: 2px 0 4px; }
+.tm-today-section-head { flex-wrap: wrap; }
+/* 展开态：表单换行占满整行，不再挤在分区头右侧悬空（toggle 时由 widget 挂 tm-decks-create--open） */
+.tm-decks-create--open { flex: 1 1 100%; order: 9; }
+.tm-decks-create-form { margin-top: 12px; }
+.tm-decks-create-form .tm-textarea { font-family: var(--tm-font-mono); }
+.tm-decks-preview { color: var(--tm-text-2); font-size: 0.85em; padding: 10px 18px 0; }
+.tm-decks-create-actions { display: flex; gap: 8px; padding: 12px 18px 16px; }
 .tm-today-section > .tm-today-sub { margin: 0 0 6px; }
 
 /* ===== 条栏「更多」菜单（低频调控收进下拉） ===== */
@@ -2410,6 +2409,18 @@ a.tm-today-read-name:hover { text-decoration: underline; color: var(--tm-primary
 .tm-setting-control input[type='text'],
 .tm-setting-control input[type='password'] { width: 16em; max-width: 100%; }
 .tm-setting-control select { cursor: pointer; }
+
+/* 选项弹窗（wikitext 表单复用 tm-setting 行结构）的补充：
+   宽输入行上下排布；滑杆行数值 + 滑杆横排 */
+.tm-setting-row--stack { flex-direction: column; align-items: stretch; }
+.tm-setting-row--stack .tm-setting-control { width: 100%; }
+.tm-setting-row--stack .tm-setting-control .tm-input,
+.tm-setting-row--stack .tm-setting-control .tm-textarea,
+.tm-setting-row--stack .tm-setting-control .tm-select { width: 100%; }
+.tm-options-fold-row { display: flex; justify-content: center; margin: 6px 0; }
+.tm-options-range-line { display: flex; align-items: center; gap: 10px; }
+.tm-options-range-value { font-variant-numeric: tabular-nums; color: var(--tm-text-1); white-space: nowrap; }
+.tm-range { accent-color: var(--tm-accent); width: 11em; max-width: 100%; cursor: pointer; }
 
 /* 现代 Switch 开关 */
 .tm-switch {

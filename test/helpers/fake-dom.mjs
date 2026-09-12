@@ -40,7 +40,17 @@ export function fakeElement(tag = 'div') {
     removeChild(c) {
       this.childNodes = this.childNodes.filter((x) => x !== c);
       this.children = this.children.filter((x) => x !== c);
+      c.parentNode = null;
       return c;
+    },
+    replaceChild(n, old) {
+      const i = this.childNodes.indexOf(old);
+      if (i < 0) throw new Error('fake-dom: replaceChild target is not a child');
+      this.childNodes[i] = n;
+      this.children[i] = n;
+      n.parentNode = this;
+      old.parentNode = null;
+      return old;
     },
     addEventListener(t, fn) {
       if (!this._elListeners) this._elListeners = {};

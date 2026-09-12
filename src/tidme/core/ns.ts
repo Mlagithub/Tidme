@@ -185,6 +185,8 @@ export const FINAL_DRILL_STATE_TITLE = '$:/state/tidme/final-drill';
 export const OCR_TITLE = CONFIG_TITLE_PREFIX + 'Ocr';
 /** 语义切分配置（JSON；服务端 importer 与导入预览共用） */
 export const SEMANTIC_SPLIT_TITLE = CONFIG_TITLE_PREFIX + 'SemanticSplit';
+/** 卡片管理器「保存的搜索条件」（JSON 数组：[{name, query}]，对标 Anki Browse 的已保存搜索） */
+export const SAVED_SEARCHES_TITLE = CONFIG_TITLE_PREFIX + 'SavedSearches';
 
 // ---------- 本插件 UI 页面地址（tm-navigate 目标；.tid 引用见头部跨端契约清单） ----------
 

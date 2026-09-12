@@ -27,6 +27,8 @@ unfoldtip: 学习时不折叠此卡片
 action: 动作
 leech: 记忆难点
 leechthreshold: 阈值
+basics: 基本信息
+leechactiontip: 达到记忆难点阈值时执行的 wikitext 动作
 expert: 专业
 experttip: 我已完全理解以下专业选项的含义，接受可能产生的破坏性后果。
 cardstatefilter: 卡片状态筛选器
@@ -172,6 +174,21 @@ manager.cram: 突击复习选中卡
 manager.cram.tip: 只操练选中卡，不写 FSRS 状态与复习日志（考前突击用）
 manager.cram.empty: 选中卡中没有可操练的卡
 manager.noselection: 请先选中卡片
+manager.savesearch: 保存搜索
+manager.savesearch.tip: 保存当前查询（tag:/is:/due:/lapses: …）以便一键复用
+manager.savesearch.empty: 请先输入查询条件
+manager.savedsearches: 已保存的搜索
+manager.savedsearches.remove: 删除这条保存的搜索
+manager.setdue: 设定到期日
+manager.setdue.msg: 距今天数（0 = 今天，负数 = 逾期）
+manager.setivl: 设定间隔
+manager.setivl.msg: 间隔天数（到期日同时推到 now + 间隔）
+manager.setdiff: 设定难度
+manager.setdiff.msg: FSRS 难度 1–10（显示为百分比）
+manager.badnumber: 请输入数字
+manager.search.placeholder: 搜索（支持 tag: is: due: ivl: lapses: deck: parent:）
+manager.col.stability: 稳定度
+manager.col.lapses: 失误
 manager.bydoc: 按文档
 manager.bydeck: 按牌组
 manager.flatlist: 列表
@@ -459,6 +476,23 @@ stats.total.cards: 在队卡片
 stats.retention: 保留率
 stats.trueretention: 真实保留率（成熟卡）
 stats.futuredue: 未来到期负荷（14 天）
+stats.forecast.avg: 平均
+stats.forecast.tomorrow: 明天到期
+stats.forecast.burden: 每日负载
+stats.day: 天
+stats.distributions: 卡片分布
+stats.dist.interval: 复习间隔（天）
+stats.dist.stability: 记忆稳定度（天）
+stats.dist.difficulty: 卡片难度
+stats.period: 时间范围
+stats.period.today: 今天
+stats.period.yesterday: 昨天
+stats.period.lastweek: 最近 7 天
+stats.period.lastmonth: 最近 30 天
+stats.period.all: 全部时间
+stats.mature: 成熟卡
+stats.young: 年轻卡
+stats.noreviews: 暂无复习记录
 stats.forecast: 到期预测
 stats.decks: 牌组
 stats.docs: 文档
@@ -587,7 +621,6 @@ manager.subset.desc: 子集复习：文档页上的“复习本书”按钮会�
 manager.bydoc.tip: 按文档/面包屑树状层级组织所有卡片
 manager.bydeck.tip: 按复习牌组组织，未入组卡片归入未分配分支
 manager.flatlist.tip: 平铺浏览所有卡片（类似 SuperMemo Browser 列表）
-manager.search.placeholder: 搜索卡片...
 manager.selectall.tip: 全选 / 取消全选当前可见卡片
 manager.autopostpone.none: 当前无需顺延
 manager.autopostpone.done: 已顺延低优先级逾期卡片

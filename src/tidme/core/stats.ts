@@ -67,6 +67,259 @@ export function retentionFromLogs(logEntries: Array<{ rating?: number | string }
   return { reviews: logEntries.length, againRate, retention: 1 - againRate };
 }
 
+/** 复习日志行：`at` = 日志键（17 位复习时刻，UTC），其余字段照 review_log 原样带出 */
+export interface ReviewLogRow {
+  at: string;
+  rating?: number | string;
+  state?: number | string;
+  elapsed_days?: number | string;
+  last_elapsed_days?: number | string;
+  [k: string]: any;
+}
+
+/**
+ * 收集全部牌组的复习日志行（`<deck>/log` 单文件；键 = 17 位时刻，值 = review_log）。
+ *
+ * 行取值必须**同时接受对象与字符串**：`wiki.getTiddlerData` 对 application/json tiddler
+ * 已经解析成对象，此时再 `JSON.parse(String(row))` 会得到 `"[object Object]"` 并抛错——
+ * 展示层曾这样写，错误被 catch 吞掉，于是"累计复习/保留率"长期恒为 0 / 100%（静默失真）。
+ * 解析与清洗收口在此，展示层不要再手写遍历。`at` 保留日志键供时间范围分桶（键是唯一可靠时刻）。
+ */
+export function collectReviewLogs(wiki: any): ReviewLogRow[] {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
+  const logs: ReviewLogRow[] = [];
+  for (const lt of wiki.filterTiddlers(`[all[shadows+tiddlers]prefix[${nsMod.DECK_PREFIX}]]`)) {
+    if (!nsMod.isDeckLogTitle(lt)) continue;
+    const data = wiki.getTiddlerData(lt);
+    if (!data || typeof data !== 'object') continue;
+    for (const k of Object.keys(data)) {
+      const row = (data as any)[k];
+      if (typeof row === 'string') {
+        try {
+          logs.push({ at: k, ...JSON.parse(row) });
+        } catch { /* 坏行忽略（不影响其余行） */ }
+      } else if (row && typeof row === 'object') {
+        logs.push({ at: k, ...row });
+      }
+    }
+  }
+  return logs;
+}
+
+/** 日志行成熟度分类（默认 21 天阈值）：review（state 2）且上次间隔 ≥ 21 天 = 成熟；
+ *  < 21 天 = 年轻；其余（新卡/学习步）不计入。阈值可注入版见 maturityWithThreshold。 */
+function maturityOf(row: { state?: unknown; elapsed_days?: unknown; last_elapsed_days?: unknown }): 'mature' | 'young' | 'other' {
+  return maturityWithThreshold(row, MATURE_INTERVAL_DAYS);
+}
+
+function maturityWithThreshold(
+  row: { state?: unknown; elapsed_days?: unknown; last_elapsed_days?: unknown },
+  matureIntervalDays: number,
+): 'mature' | 'young' | 'other' {
+  const stateStr = String(row.state ?? '');
+  if (!(stateStr === '2' || stateStr.toLowerCase() === 'review')) return 'other';
+  const elapsed = Number(row.last_elapsed_days !== undefined ? row.last_elapsed_days : row.elapsed_days);
+  if (!Number.isFinite(elapsed)) return 'other';
+  return elapsed >= matureIntervalDays ? 'mature' : 'young';
+}
+
+export type RetentionPeriod = 'today' | 'yesterday' | 'lastWeek' | 'lastMonth' | 'all';
+
+export interface RetentionCell {
+  reviews: number;
+  pass: number;
+  again: number;
+  /** 通过率（无复习时 = 1，展示侧按 reviews=0 决定是否显示） */
+  retention: number;
+}
+
+export interface RetentionByPeriodRow {
+  period: RetentionPeriod;
+  mature: RetentionCell;
+  young: RetentionCell;
+  /** 复习卡合计（= mature + young；学习步与新卡不计入，对标 Anki true retention） */
+  total: RetentionCell;
+}
+
+function emptyCell(): RetentionCell {
+  return { reviews: 0, pass: 0, again: 0, retention: 1 };
+}
+
+function fillCell(cell: RetentionCell, isAgain: boolean): void {
+  cell.reviews++;
+  if (isAgain) cell.again++;
+  else cell.pass++;
+}
+
+function closeCell(cell: RetentionCell): void {
+  cell.retention = cell.reviews > 0 ? cell.pass / cell.reviews : 1;
+}
+
+/**
+ * 真实保留率 × 时间范围分桶（对标 Anki Stats：「记忆保留率」表的 今天/昨天/上周/上月/全年 × 成熟/年轻/总计）。
+ *
+ * 口径：
+ * - 时间范围按**学习日**切（今天 = 当前学习日；昨天 = 前一个学习日；最近 7 / 30 天 = 含今天往回数）；
+ * - 成熟 = state 2 且上次间隔 ≥ 21 天，年轻 = state 2 且 < 21 天，其余（新卡/学习步）不进任何一列；
+ * - total = 年轻 + 成熟（与 Anki 同：保留率不把学习步算进去）。
+ */
+export function retentionByPeriod(
+  logEntries: ReviewLogRow[],
+  now = new Date(),
+  rolloverHour = 4,
+): RetentionByPeriodRow[] {
+  const periods: RetentionPeriod[] = ['today', 'yesterday', 'lastWeek', 'lastMonth', 'all'];
+  const currentDay = schema.learningDayOf(now, rolloverHour);
+  const rows = new Map<RetentionPeriod, RetentionByPeriodRow>(
+    periods.map((p) => [p, { period: p, mature: emptyCell(), young: emptyCell(), total: emptyCell() }]),
+  );
+
+  for (const e of logEntries) {
+    const at = schema.tryParseTwDate(e.at);
+    if (!at) continue;
+    const diff = schema.learningDayDiff(currentDay, schema.learningDayOf(at, rolloverHour));
+    if (diff > 0) continue; // 未来时刻（时钟回拨/脏键）不计入任何历史范围
+    const maturity = maturityOf(e);
+    if (maturity === 'other') continue;
+    const isAgain = Number(e.rating) === 1;
+    const row = rows.get('all')!;
+    fillCell(row[maturity], isAgain);
+    for (const p of periods) {
+      if (p === 'all') continue;
+      const inRange = p === 'today'
+        ? diff === 0
+        : p === 'yesterday'
+        ? diff === -1
+        : p === 'lastWeek'
+        ? diff >= -6
+        : diff >= -29;
+      if (!inRange) continue;
+      const r = rows.get(p)!;
+      fillCell(r[maturity], isAgain);
+    }
+  }
+
+  for (const r of rows.values()) {
+    fillCellTotal(r);
+  }
+  return periods.map((p) => rows.get(p)!);
+}
+
+function fillCellTotal(row: RetentionByPeriodRow): void {
+  row.total = {
+    reviews: row.mature.reviews + row.young.reviews,
+    pass: row.mature.pass + row.young.pass,
+    again: row.mature.again + row.young.again,
+    retention: 1,
+  };
+  closeCell(row.mature);
+  closeCell(row.young);
+  closeCell(row.total);
+}
+
+export interface HistogramBin {
+  label: string;
+  count: number;
+}
+
+/**
+ * 通用直方图分桶：`edges` 升序且长度 = labels.length + 1；
+ * 落入 [edges[i], edges[i+1])，最后一桶含上界；非有限值/负值忽略。
+ */
+export function histogram(values: number[], edges: number[], labels: string[]): HistogramBin[] {
+  const bins = labels.map((label) => ({ label, count: 0 }));
+  if (edges.length !== labels.length + 1) return bins;
+  for (const v of values) {
+    if (!Number.isFinite(v)) continue;
+    const last = labels.length - 1;
+    if (v < edges[0]) continue;
+    let idx = last;
+    for (let i = 0; i < labels.length; i++) {
+      if (v < edges[i + 1]) {
+        idx = i;
+        break;
+      }
+    }
+    bins[idx].count++;
+  }
+  return bins;
+}
+
+/** 复习卡（在队、state 2）的字段数值序列——分布图只统计真正排过期的卡 */
+function reviewCardValues(cards: CardLike[], field: string): number[] {
+  const out: number[] = [];
+  for (const c of cards) {
+    const f = c?.fields;
+    if (!f || !isInQueue(f)) continue;
+    if (String(f.state ?? '') !== '2') continue;
+    const v = Number(f[field]);
+    if (Number.isFinite(v) && v >= 0) out.push(v);
+  }
+  return out;
+}
+
+const INTERVAL_EDGES = [0, 1, 3, 7, 14, 30, 60, 120, 365, Infinity];
+const INTERVAL_LABELS = ['1', '2-3', '4-7', '8-14', '15-30', '31-60', '61-120', '121-365', '>365'];
+const STABILITY_EDGES = [0, 1, 3, 7, 30, 90, 180, 365, Infinity];
+const STABILITY_LABELS = ['0-1', '1-3', '3-7', '7-30', '30-90', '90-180', '180-365', '>365'];
+const DIFFICULTY_EDGES = [0, 20, 40, 60, 80, 100.0001];
+const DIFFICULTY_LABELS = ['0-20%', '20-40%', '40-60%', '60-80%', '80-100%'];
+
+/** 复习间隔分布（天） */
+export function intervalHistogram(cards: CardLike[]): HistogramBin[] {
+  return histogram(reviewCardValues(cards, 'scheduled_days'), INTERVAL_EDGES, INTERVAL_LABELS);
+}
+
+/** 记忆稳定度分布（天，FSRS stability） */
+export function stabilityHistogram(cards: CardLike[]): HistogramBin[] {
+  return histogram(reviewCardValues(cards, 'stability'), STABILITY_EDGES, STABILITY_LABELS);
+}
+
+/**
+ * 卡片难度分布（0–100%）。
+ * 量纲归一：fsrs.js 的 difficulty 是 1–10 分（评分后实测约 5.0），此处按百分比折算
+ * （>1 视为 1–10 分 ×10；≤1 视为 0–1 比例 ×100），否则整库都会落进第一桶。
+ */
+export function difficultyHistogram(cards: CardLike[]): HistogramBin[] {
+  const values = reviewCardValues(cards, 'difficulty').map((d) => (d <= 1 ? d * 100 : d * 10));
+  return histogram(values, DIFFICULTY_EDGES, DIFFICULTY_LABELS);
+}
+
+export interface ForecastSummary {
+  /** 预测窗口天数 */
+  days: number;
+  /** 窗口内到期总量（含逾期并入第 0 天） */
+  total: number;
+  /** 平均每天到期量 */
+  averagePerDay: number;
+  /** 明天到期量 */
+  dueTomorrow: number;
+  /** 每日负载 Σ 1/间隔（SuperMemo Burden）：复习卡把未来平均摊到每天的工作量 */
+  burden: number;
+}
+
+/** 未来到期汇总（对标 Anki「预测」卡的 总计/平均/明天到期/每日工作量） */
+export function forecastSummary(cards: CardLike[], days = 30, now = new Date(), rolloverHour = 4): ForecastSummary {
+  const schedule = futureDueSchedule(cards, Math.max(1, days), now, rolloverHour);
+  const total = schedule.reduce((n, d) => n + d.dueCount, 0);
+  let burden = 0;
+  for (const c of cards) {
+    const f = c?.fields;
+    if (!f || !isInQueue(f)) continue;
+    if (f['tidme.kind'] !== 'item') continue;
+    if (String(f.state ?? '') !== '2') continue;
+    const ivl = Number(f.scheduled_days);
+    if (Number.isFinite(ivl) && ivl > 0) burden += 1 / ivl;
+  }
+  return {
+    days: schedule.length,
+    total,
+    averagePerDay: schedule.length > 0 ? total / schedule.length : 0,
+    dueTomorrow: schedule.length > 1 ? schedule[1].dueCount : 0,
+    burden,
+  };
+}
+
 export interface TrueRetention {
   matureReviews: number;
   maturePass: number;
@@ -85,6 +338,7 @@ export const MATURE_INTERVAL_DAYS = 21;
 /**
  * 真实保留率（True Retention）：对标 Anki / SuperMemo 成熟卡（间隔 ≥ 21 天）及格率指标。
  * 过滤掉短期新学/重学步的干扰，精确反映长期记忆稳定性。
+ * 成熟/年轻的判定与 retentionByPeriod 共用 maturityOf（唯一产地）。
  */
 export function trueRetentionFromLogs(
   logEntries: Array<{
@@ -113,19 +367,19 @@ export function trueRetentionFromLogs(
   let totalAgain = 0;
 
   for (const e of logEntries) {
-    const r = Number(e.rating);
-    const isAgain = r === 1;
+    const isAgain = Number(e.rating) === 1;
     if (isAgain) totalAgain++;
 
-    const stateStr = String(e.state ?? '');
-    const isReviewState = stateStr === '2' || stateStr.toLowerCase() === 'review';
-    const elapsed = Number(e.last_elapsed_days !== undefined ? e.last_elapsed_days : e.elapsed_days);
+    // 阈值可注入；默认阈值下与 retentionByPeriod 共用同一 maturityOf
+    const maturity = matureIntervalDays === MATURE_INTERVAL_DAYS
+      ? maturityOf(e)
+      : maturityWithThreshold(e, matureIntervalDays);
 
-    if (isReviewState && Number.isFinite(elapsed) && elapsed >= matureIntervalDays) {
+    if (maturity === 'mature') {
       result.matureReviews++;
       if (isAgain) result.matureAgain++;
       else result.maturePass++;
-    } else if (isReviewState) {
+    } else if (maturity === 'young') {
       result.youngReviews++;
       if (isAgain) result.youngAgain++;
       else result.youngPass++;

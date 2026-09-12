@@ -27,6 +27,8 @@ unfoldtip: Unfold this card when studying
 action: Action
 leech: Leech
 leechthreshold: Threshold
+basics: Basics
+leechactiontip: Wikitext actions to run when a card reaches the leech threshold
 expert: Expert
 experttip: I have fully understood the implications of the following expert options and accept the potentially damaging consequences.
 cardstatefilter: Card State Filter
@@ -172,6 +174,21 @@ manager.cram: Cram Selected
 manager.cram.tip: Practice selected cards without writing FSRS state or review logs
 manager.cram.empty: No cards in the selection can be practiced
 manager.noselection: Select cards first
+manager.savesearch: Save Search
+manager.savesearch.tip: Save the current query (tag:/is:/due:/lapses: ...) for one-click reuse
+manager.savesearch.empty: Type a query first
+manager.savedsearches: Saved searches
+manager.savedsearches.remove: Remove this saved search
+manager.setdue: Set Due
+manager.setdue.msg: Days from now (0 = today, negative = overdue)
+manager.setivl: Set Interval
+manager.setivl.msg: Interval in days (due is moved to now + interval)
+manager.setdiff: Set Difficulty
+manager.setdiff.msg: FSRS difficulty 1-10 (displayed as percent)
+manager.badnumber: Please enter a number
+manager.search.placeholder: Search (tag: is: due: ivl: lapses: deck: parent:)
+manager.col.stability: Stability
+manager.col.lapses: Lapses
 manager.bydoc: By Document
 manager.bydeck: By Deck
 manager.flatlist: List
@@ -459,6 +476,23 @@ stats.total.cards: Cards in Queue
 stats.retention: Retention Rate
 stats.trueretention: True retention (mature)
 stats.futuredue: Future Due (14 days)
+stats.forecast.avg: Average
+stats.forecast.tomorrow: Tomorrow
+stats.forecast.burden: Daily workload
+stats.day: day
+stats.distributions: Card Distributions
+stats.dist.interval: Interval (days)
+stats.dist.stability: Stability (days)
+stats.dist.difficulty: Difficulty
+stats.period: Period
+stats.period.today: Today
+stats.period.yesterday: Yesterday
+stats.period.lastweek: Last 7 days
+stats.period.lastmonth: Last 30 days
+stats.period.all: All time
+stats.mature: Mature
+stats.young: Young
+stats.noreviews: No reviews yet
 stats.forecast: Due Forecast
 stats.decks: Decks
 stats.docs: Documents
@@ -568,7 +602,6 @@ manager.subset.desc: Subset Review: The "Review Book" button on document pages c
 manager.bydoc.tip: All cards organized by document / breadcrumb tree
 manager.bydeck.tip: Organized by study decks, unassigned cards in unassigned branch
 manager.flatlist.tip: Flat list of all cards (SuperMemo Browser style)
-manager.search.placeholder: Find cards...
 manager.selectall.tip: Select / Deselect all currently visible cards
 manager.autopostpone.none: No postponement needed
 manager.autopostpone.done: Postponed low-priority overdue cards

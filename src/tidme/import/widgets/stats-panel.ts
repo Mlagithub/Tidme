@@ -25,6 +25,15 @@ const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
 const renderProgressBar = primitives.renderProgressBar;
+
+/** 横向条形（0–1 比例）：用与漏斗同一套进度条样式，避免自造类名导致条不可见 */
+function barCell(doc: Document, ratio: number): HTMLElement {
+  const wrap = dom.el(doc, 'span', 'tm-progress tm-stat-bar');
+  const fill = dom.el(doc, 'span', 'tm-progress-fill tm-stat-bar-fill', '');
+  fill.style.width = `${Math.max(0, Math.min(100, Math.round(ratio * 100)))}%`;
+  wrap.appendChild(fill);
+  return wrap;
+}
 const bindWidgetRefresh = primitives.bindWidgetRefresh;
 const displayTitle = display.displayTitle;
 
@@ -53,24 +62,15 @@ function makeStatsPanel(): WidgetCtor {
         // 文档页同样是 kind=topic 的卡片，一个 run 即可
         const all = cardLikes('[all[shadows+tiddlers]!is[draft]has[tidme.kind]]');
         const funnel = stats.funnelCounts(all);
-        // log tiddler title 形如 $:/Deck/<deck>/log（repeat.tid 写入，单文件），用 prefix + JS 后过滤匹配
-        const logTitles = wiki.filterTiddlers('[all[shadows+tiddlers]prefix[$:/Deck/]]')
-          .filter((t: string) => /\/log$/.test(t));
-        const entries: any[] = [];
-        for (const lt of logTitles) {
-          const data = wiki.getTiddlerData(lt);
-          if (data && typeof data === 'object') {
-            for (const k of Object.keys(data)) {
-              try {
-                entries.push(JSON.parse(String((data as any)[k])));
-              } catch { /* 忽略坏行 */ }
-            }
-          }
-        }
+        // 复习日志行收集收口在 core/stats.collectReviewLogs（对象/字符串两种行形态、坏行宽容都在那实现一次）
+        const entries = stats.collectReviewLogs(wiki);
         const ret = stats.retentionFromLogs(entries);
         // 真实保留率（Anki true retention 口径）：只统计成熟卡（间隔 ≥ 21 天）的复习。
         // 旧的 1 − Again 占比会把新卡/学习步一锅算，系统性低估记忆表现（见 doc/concept-gaps.md 错位 2）。
         const trueRet = stats.trueRetentionFromLogs(entries);
+        // 今日复习数：与「今天」页同源（core/stats.reviewCountToday，按学习日换天）。
+        // 曾直接用 ret.reviews（= 全库全部时间日志行数）当"今日"值 —— 标签与数字不符。
+        const todayReviews = stats.reviewCountToday(wiki);
         const buckets = stats.priorityBuckets(cardLikes('[tidme.kind[item]]'));
         const rt = stats.getReadTimeStats ? stats.getReadTimeStats(wiki) : { totalSeconds: 0, todaySeconds: 0, docSeconds: {} };
         const fmtDur = stats.formatDuration ? stats.formatDuration : (s: number) => `${s}s`;
@@ -81,25 +81,23 @@ function makeStatsPanel(): WidgetCtor {
           { label: lingo(wiki, 'stats.docs', 'Documents'), value: String(docs.length) },
           { label: lingo(wiki, 'stats.total.cards', 'Cards in Queue'), value: String(funnel.cards) },
           {
-            label: lingo(wiki, 'stats.today.reviewed', 'Reviews'),
-            value: String(ret.reviews),
-            // 成熟卡真实保留率优先展示（有成熟复习时）；无则回落到总口径并标注
-            sub: trueRet.matureReviews > 0
+            label: lingo(wiki, 'stats.today.reviewed', 'Today Reviewed'),
+            value: String(todayReviews),
+            // 累计次数给足上下文；保留率优先展示成熟卡真实值（有成熟复习时）
+            sub: `${lingo(wiki, 'stats.total', 'Total')} ${ret.reviews} · ` + (trueRet.matureReviews > 0
               ? `${lingo(wiki, 'stats.trueretention', 'True retention (mature)')} ${Math.round(trueRet.trueRetention * 100)}% · ${lingo(wiki, 'stats.retention', 'Retention')} ${
                 Math.round(ret.retention * 100)
               }%`
-              : `${lingo(wiki, 'stats.retention', 'Retention')} ${Math.round(ret.retention * 100)}%`,
+              : `${lingo(wiki, 'stats.retention', 'Retention')} ${Math.round(ret.retention * 100)}%`),
           },
           { label: lingo(wiki, 'stats.todayread', 'Today Read'), value: fmtDur(rt.todaySeconds), sub: `${lingo(wiki, 'stats.total', 'Total')} ${fmtDur(rt.totalSeconds)}` },
         ]);
 
-        // 创建分栏网格布局
-        const grid = el(doc, 'div', 'tm-stats-grid');
-        const mainCol = el(doc, 'div', 'tm-stats-col-main');
-        const sideCol = el(doc, 'div', 'tm-stats-col-side');
-        grid.appendChild(mainCol);
-        grid.appendChild(sideCol);
-        wrap.appendChild(grid);
+        // 瀑布布局：全部卡片进同一容器，CSS 多栏按内容高度自动均衡分栏（窄容器回落单栏）。
+        // 矮表格卡在前、行数最多的直方图卡（卡片分布）垫底，贪婪填充后两栏高度接近，
+        // 避免旧版「主栏两张矮卡 + 侧栏五张高卡」造成的一侧大片留白
+        const masonry = el(doc, 'div', 'tm-stats-masonry');
+        wrap.appendChild(masonry);
 
         // 1) 牌组负载（声明式卡片表格）
         const cardLoad = el(doc, 'div', 'tm-dashboard-card');
@@ -121,7 +119,7 @@ function makeStatsPanel(): WidgetCtor {
           data: deckRows,
           emptyText: lingo(wiki, 'stats.nodecks', 'No decks'),
         });
-        mainCol.appendChild(cardLoad);
+        masonry.appendChild(cardLoad);
 
         // 2) 文档进度（声明式表格）
         const cardDoc = el(doc, 'div', 'tm-dashboard-card');
@@ -168,36 +166,39 @@ function makeStatsPanel(): WidgetCtor {
           emptyText: lingo(wiki, 'stats.nodocs', 'No documents imported - import books to track progress.'),
         });
         docTableWrap.classList.add('tm-scroll');
-        mainCol.appendChild(cardDoc);
+        masonry.appendChild(cardDoc);
 
-        // 2.5) 未来到期负荷（Anki Future Due 的简化版）：按学习日分桶的未来 14 天到期量。
-        // 逾期卡并入第 0 天（不重复计）；新卡未排期不入桶。看得到未来负载才能提前顺延/限额干预。
+        // 3) 预测（对标 Anki「预测」卡）：未来 14 天到期条形 + 四个汇总数
+        // （窗口总量 / 平均每天 / 明天到期 / 每日负载 Σ 1/间隔）。逾期并入第 0 天，不重复计；
+        // 新卡未排期不入桶。看得到未来负载才能提前顺延/限额干预。
         const futureDays = 14;
-        const future = stats.futureDueSchedule(
-          cardLikes('[tidme.kind[item]]'),
-          futureDays,
-          new Date(),
-          config.readRolloverHour(wiki),
-        );
+        const itemCards = cardLikes('[tidme.kind[item]]');
+        const future = stats.futureDueSchedule(itemCards, futureDays, new Date(), config.readRolloverHour(wiki));
+        const forecast = stats.forecastSummary(itemCards, futureDays, new Date(), config.readRolloverHour(wiki));
         const cardFuture = el(doc, 'div', 'tm-dashboard-card');
-        cardFuture.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.futuredue', 'Future Due (14 days)')));
+        cardFuture.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.forecast', 'Due Forecast')));
         const futureBox = el(doc, 'div', 'tm-stat-funnel');
         const futureMax = Math.max(1, ...future.map((d: any) => d.dueCount));
         for (const d of future) {
           const row = el(doc, 'div', 'tm-stat-funnel-row');
           row.appendChild(el(doc, 'span', 'tm-stat-funnel-label', d.dateString.slice(4, 6) + '-' + d.dateString.slice(6, 8)));
-          const bar = el(doc, 'span', 'tm-stat-funnel-bar');
-          const fill = el(doc, 'span', 'tm-stat-funnel-fill');
-          fill.style.width = `${Math.round((d.dueCount / futureMax) * 100)}%`;
-          bar.appendChild(fill);
-          row.appendChild(bar);
-          row.appendChild(el(doc, 'span', 'tm-stat-funnel-count', String(d.dueCount)));
+          row.appendChild(barCell(doc, d.dueCount / futureMax));
+          row.appendChild(el(doc, 'span', 'tm-stat-funnel-num', String(d.dueCount)));
           futureBox.appendChild(row);
         }
         cardFuture.appendChild(futureBox);
-        sideCol.appendChild(cardFuture);
+        const forecastBox = el(doc, 'div', 'tm-stat-pills');
+        const one = (n: number) => (Math.round(n * 10) / 10).toString();
+        forecastBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `${lingo(wiki, 'stats.total', 'Total')} ${forecast.total}`));
+        forecastBox.appendChild(
+          el(doc, 'span', 'tm-badge tm-badge-due', `${lingo(wiki, 'stats.forecast.avg', 'Average')} ${one(forecast.averagePerDay)}/${lingo(wiki, 'stats.day', 'day')}`),
+        );
+        forecastBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-new', `${lingo(wiki, 'stats.forecast.tomorrow', 'Tomorrow')} ${forecast.dueTomorrow}`));
+        forecastBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-suspended', `${lingo(wiki, 'stats.forecast.burden', 'Daily workload')} ${one(forecast.burden)}`));
+        cardFuture.appendChild(forecastBox);
+        masonry.appendChild(cardFuture);
 
-        // 3) 漏斗
+        // 4) 漏斗
         const cardFunnel = el(doc, 'div', 'tm-dashboard-card');
         cardFunnel.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.funnel', 'Learning Funnel')));
         const funnelBox = el(doc, 'div', 'tm-stat-funnel');
@@ -219,31 +220,42 @@ function makeStatsPanel(): WidgetCtor {
         funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.concepts', 'Concepts'), funnel.concepts));
         funnelBox.appendChild(funnelRow(lingo(wiki, 'stats.funnel.cards', 'Cards'), funnel.cards));
         cardFunnel.appendChild(funnelBox);
-        sideCol.appendChild(cardFunnel);
+        masonry.appendChild(cardFunnel);
 
-        // 4) 复习与保留率
+        // 5) 复习与保留率
         const cardRet = el(doc, 'div', 'tm-dashboard-card');
         cardRet.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.reviewretention', 'Review & Retention')));
+        // 保留率表（对标 Anki Stats）：时间范围 × 成熟/年轻/总计，全部走真实保留率口径
+        // （学习步与新卡不计入——用被新卡拉低的数字去调 request_retention 会调错方向）
+        const periodRows = stats.retentionByPeriod(entries, new Date(), config.readRolloverHour(wiki));
+        const periodLabel: Record<string, string> = {
+          today: lingo(wiki, 'stats.period.today', 'Today'),
+          yesterday: lingo(wiki, 'stats.period.yesterday', 'Yesterday'),
+          lastWeek: lingo(wiki, 'stats.period.lastweek', 'Last 7 days'),
+          lastMonth: lingo(wiki, 'stats.period.lastmonth', 'Last 30 days'),
+          all: lingo(wiki, 'stats.period.all', 'All time'),
+        };
+        const cell = (c: any) => (c.reviews ? `${Math.round(c.retention * 100)}% (${c.reviews})` : '—');
+        primitives.renderTable(doc, cardRet, {
+          columns: [
+            { key: 'period', title: lingo(wiki, 'stats.period', 'Period'), render: (row: any) => el(doc, 'span', '', periodLabel[row.period] || row.period) },
+            { key: 'mature', title: lingo(wiki, 'stats.mature', 'Mature'), render: (row: any) => el(doc, 'span', '', cell(row.mature)) },
+            { key: 'young', title: lingo(wiki, 'stats.young', 'Young'), render: (row: any) => el(doc, 'span', '', cell(row.young)) },
+            { key: 'total', title: lingo(wiki, 'stats.total', 'Total'), render: (row: any) => el(doc, 'span', '', cell(row.total)) },
+          ],
+          data: periodRows.filter((r: any) => r.total.reviews > 0 || r.period === 'today' || r.period === 'all'),
+          emptyText: lingo(wiki, 'stats.noreviews', 'No reviews yet'),
+        });
         const retBox = el(doc, 'div', 'tm-stat-pills');
-        retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `${ret.reviews} ${lingo(wiki, 'stats.reviews', 'Reviews')}`));
+        // 明确"累计"：全部时间口径（"今日"在上方指标卡，按学习日统计）
+        retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `${lingo(wiki, 'stats.total', 'Total')} ${ret.reviews} ${lingo(wiki, 'stats.reviews', 'Reviews')}`));
         if (ret.reviews) {
           retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-due', `${lingo(wiki, 'stats.retention', 'Retention')}: ${Math.round(ret.retention * 100)}%`));
         }
-        // 真实保留率（成熟卡）：与总口径并列，避免用被新卡拉低的数字去调 request_retention
-        if (trueRet.matureReviews > 0) {
-          retBox.appendChild(
-            el(
-              doc,
-              'span',
-              'tm-badge tm-badge-new',
-              `${lingo(wiki, 'stats.trueretention', 'True retention (mature)')}: ${Math.round(trueRet.trueRetention * 100)}% (${trueRet.matureReviews})`,
-            ),
-          );
-        }
         cardRet.appendChild(retBox);
-        sideCol.appendChild(cardRet);
+        masonry.appendChild(cardRet);
 
-        // 5) 优先级分桶
+        // 6) 优先级分桶
         const cardBucket = el(doc, 'div', 'tm-dashboard-card');
         cardBucket.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.prioritybuckets', 'Priority Distribution')));
         const bucketBox = el(doc, 'div', 'tm-stat-pills');
@@ -252,7 +264,29 @@ function makeStatsPanel(): WidgetCtor {
         bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `${lingo(wiki, 'priority.low', 'Low')}: ${buckets.low}`));
         bucketBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-suspended', `${lingo(wiki, 'priority.none', 'None')}: ${buckets.none}`));
         cardBucket.appendChild(bucketBox);
-        sideCol.appendChild(cardBucket);
+        masonry.appendChild(cardBucket);
+
+        // 7) 卡片分布（对标 Anki 的间隔 / 稳定度 / 难度三图，纯聚合直方图）——
+        // 三张直方图行数最多，放序列末尾垫底，多栏贪婪填充后两栏高度才接近
+        const cardDist = el(doc, 'div', 'tm-dashboard-card');
+        cardDist.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.distributions', 'Card Distributions')));
+        const histBlock = (title: string, bins: any[]) => {
+          cardDist.appendChild(el(doc, 'div', 'tm-stat-subtitle', title));
+          const box = el(doc, 'div', 'tm-stat-funnel');
+          const max = Math.max(1, ...bins.map((b: any) => b.count));
+          for (const b of bins) {
+            const row = el(doc, 'div', 'tm-stat-funnel-row');
+            row.appendChild(el(doc, 'span', 'tm-stat-funnel-label', b.label));
+            row.appendChild(barCell(doc, b.count / max));
+            row.appendChild(el(doc, 'span', 'tm-stat-funnel-num', String(b.count)));
+            box.appendChild(row);
+          }
+          cardDist.appendChild(box);
+        };
+        histBlock(lingo(wiki, 'stats.dist.interval', 'Interval (days)'), stats.intervalHistogram(itemCards));
+        histBlock(lingo(wiki, 'stats.dist.stability', 'Stability (days)'), stats.stabilityHistogram(itemCards));
+        histBlock(lingo(wiki, 'stats.dist.difficulty', 'Difficulty'), stats.difficultyHistogram(itemCards));
+        masonry.appendChild(cardDist);
       };
       build();
 

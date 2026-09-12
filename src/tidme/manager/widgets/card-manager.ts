@@ -19,15 +19,20 @@ const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
+const config = require('$:/plugins/keepone/tidme/core/config.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const queryMod = require('$:/plugins/keepone/tidme/core/card-query.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
+
+/** 「逾期」视图与 is:due 搜索共用同一查询（单一实现，见 inView） */
+const OVERDUE_QUERY = queryMod.parseCardQuery('is:due');
 
 const showToast = dom.showToast;
 const navigateTo = dom.navigateTo;
@@ -36,7 +41,7 @@ const bindWidgetRefresh = primitives.bindWidgetRefresh;
 
 type View = 'all' | 'inqueue' | 'done' | 'suspended' | 'overdue' | 'leech';
 type Org = 'doc' | 'deck' | 'list';
-type SortKey = 'breadcrumb' | 'priority' | 'due' | 'deck' | 'mixed';
+type SortKey = 'breadcrumb' | 'priority' | 'due' | 'deck' | 'mixed' | 'interval' | 'stability' | 'difficulty' | 'lapses';
 
 const VIEWS: { id: View; label: string; key: string }[] = [
   { id: 'all', label: 'All', key: 'manager.all' },
@@ -73,6 +78,8 @@ interface CMState {
   sortKey: SortKey;
   sortAsc: boolean;
   searchText: string;
+  /** 解析后的查询（searchText 每变一次重算；匹配走 core/card-query.matchCardQuery） */
+  query: any;
   previewTitle: string | null;
   editTitle: string | null;
   selected: Set<string>;
@@ -85,6 +92,10 @@ interface CMState {
   cardCbUpdaters: (() => void)[];
   bulkCb: HTMLInputElement | null;
   selLabel: HTMLElement | null;
+  /** 当前卡片区根节点（refreshCards 原位替换用；querySelector 在假 DOM/部分宿主不可靠） */
+  bodyEl: HTMLElement | null;
+  /** 学习日换天时刻（逾期/埋卡判定口径；collectAll 时读一次配置） */
+  rolloverHour: number;
 }
 
 /** 渲染上下文：模块级视图函数统一收 ctx */
@@ -106,6 +117,7 @@ const intervalLabel = display.intervalLabel;
 const repsLabel = display.repsLabel;
 const lapsesLabel = display.lapsesLabel;
 const diffLabel = display.diffLabel;
+const stabilityLabel = display.stabilityLabel;
 const dateLabel = display.dateLabel;
 
 /** 卡片收集：带 tidme.kind 的 tiddler（topic/item）。卡片一律带 kind——制卡工厂
@@ -136,7 +148,11 @@ function inView(st: CMState, f: Record<string, any>, v: View, title = ''): boole
   if (v === 'inqueue') return !done && !suspended;
   if (v === 'done') return done;
   if (v === 'suspended') return suspended;
-  if (v === 'overdue') return String(f.state || '0') === '2' && schema.parseTwDate(f.due).getTime() < Date.now();
+  if (v === 'overdue') {
+    // 「逾期」与搜索语法 is:due 是同一概念：一律走 core/card-query 单一实现，
+    // 保证视图计数与搜索结果永远一致（曾各自手写口径漂移，视图 9 条搜索 0 条）
+    return queryMod.matchCardQuery(f, title, OVERDUE_QUERY, { now: new Date(), rolloverHour: st.rolloverHour });
+  }
   if (v === 'leech') {
     const lapses = Number(f.lapses || 0);
     // 触发期落库的标记（repeat.tid 达阈值时写 tidme.leech）+ lapses 兜底（历史卡/阈值调低后）
@@ -146,10 +162,16 @@ function inView(st: CMState, f: Record<string, any>, v: View, title = ''): boole
   return true;
 }
 
+/** 查找：一框即查询（core/card-query 语法：tag:/is:/due:/ivl:/lapses:/deck:/parent: + 自由文本）。
+ *  语法解析与匹配唯一实现在 core/card-query，本组件只把 UI 状态喂进去。 */
 function matches(st: CMState, c: Card): boolean {
   if (!st.searchText.trim()) return true;
-  const hay = String(c.title + ' ' + (c.fields['tidme.breadcrumb'] || '')).toLowerCase();
-  return hay.includes(st.searchText.trim().toLowerCase());
+  const query = st.query || queryMod.parseCardQuery(st.searchText);
+  return queryMod.matchCardQuery(c.fields, c.title, query, {
+    now: new Date(),
+    rolloverHour: st.rolloverHour,
+    deckNamesOf: (title: string) => decksOf(st, { title, fields: {} } as Card).map((d) => d.caption),
+  });
 }
 
 function decksOf(st: CMState, c: Card): DeckInfo[] {
@@ -198,6 +220,7 @@ function docGroupsOf(cards: Card[], wiki?: any): [string, Card[]][] {
 
 function collectAll(ctx: Ctx) {
   const { wiki, st } = ctx;
+  st.rolloverHour = config.readRolloverHour(wiki);
   // 单条 run 即可：卡片一律带 tidme.kind（含 topic 节卡与 item 测试卡），文档页已排除
   st.allCards = wiki.filterTiddlers(CARD_FILTER)
     .map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
@@ -347,18 +370,30 @@ function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
 }
 
 /** 卡片行基础：复选框 + 状态 + 类型 + 优先级 + 标题链接（勾选含子孙联动与 shift 区选） */
-function appendRowBase(ctx: Ctx, row: HTMLElement, c: Card, cb: HTMLInputElement) {
+/**
+ * 行基础件（状态徽章 / 类型标记 / 优先级 / 标题链接 + 复选框联动）。
+ * 返回**分离的件**而不是直接写进行里：列表视图要把它们各自放进一个 td（与表头逐列对齐），
+ * 树视图则内联排在同一行内。曾经把四件塞进同一个 td、而表头是四列 → 整表列错位。
+ */
+function buildRowBase(ctx: Ctx, c: Card, cb: HTMLInputElement): {
+  state: HTMLElement;
+  kind: HTMLElement | null;
+  priority: HTMLElement | null;
+  mixed: HTMLElement;
+  title: HTMLElement;
+  sync: () => void;
+} {
   const { doc, st } = ctx;
   const bd = badgeOf(c.fields);
   const badge = el(doc, 'span', `tm-badge tm-cm-badge ${bd.cls}`, bd.text);
   badge.title = stateLabel(c.fields);
-  row.appendChild(badge);
   const km = kindMark(c.fields);
-  if (km) row.appendChild(el(doc, 'span', 'tm-cm-kind', km));
+  const kind = km ? el(doc, 'span', 'tm-cm-kind', km) : null;
   const pri = c.fields['tidme.priority'];
-  if (pri !== undefined) {
-    row.appendChild(el(doc, 'span', 'tm-cm-pri', `p${String(pri).padStart(2, '0')}`));
-  }
+  const priority = pri !== undefined ? el(doc, 'span', 'tm-cm-pri', `p${String(pri).padStart(2, '0')}`) : null;
+  // 混合分值（与"混合"排序同源 = scheduler.priorityMixedScore）；仅复习卡有意义，其余显示 '—'
+  const reviewLike = String(c.fields.state || '0') === '2' || c.fields.due !== undefined;
+  const mixed = el(doc, 'span', 'tm-cm-mixed', reviewLike ? String(Math.round(sched.priorityMixedScore(c.fields))) : '—');
   const link = el(doc, 'a', 'tc-tiddlylink tm-cm-link', String(c.fields['tidme.breadcrumb'] || c.title).split(ns.CRUMB_SEP).pop() || c.title);
   link.href = '#';
   link.title = crumbOf(c);
@@ -366,7 +401,6 @@ function appendRowBase(ctx: Ctx, row: HTMLElement, c: Card, cb: HTMLInputElement
     e.preventDefault();
     navigateTo(ctx.widget, c.title);
   });
-  row.appendChild(link);
 
   const updateCardCb = () => {
     const children = st.allCards.filter((child) => isDescendantOf(ctx.wiki, child, c));
@@ -398,6 +432,17 @@ function appendRowBase(ctx: Ctx, row: HTMLElement, c: Card, cb: HTMLInputElement
     st.lastCheckedCardTitle = c.title;
     updateSelectionUI(ctx);
   });
+
+  return { state: badge, kind, priority, mixed, title: link, sync: updateCardCb };
+}
+
+/** 树视图行：把基础件内联排进行内（div 行，无列概念） */
+function appendRowBase(ctx: Ctx, row: HTMLElement, c: Card, cb: HTMLInputElement) {
+  const parts = buildRowBase(ctx, c, cb);
+  row.appendChild(parts.state);
+  if (parts.kind) row.appendChild(parts.kind);
+  if (parts.priority) row.appendChild(parts.priority);
+  row.appendChild(parts.title);
 }
 
 /** 文档分组 details（带折叠状态 + 分组三态复选） */
@@ -562,6 +607,14 @@ function cmpCards(ctx: Ctx): (a: Card, b: Card) => number {
       r = da - db;
     } else if (st.sortKey === 'deck') {
       r = cmpStr((c: Card) => decksOf(st, c).map((d) => d.caption).join('·'))(a, b);
+    } else if (st.sortKey === 'interval' || st.sortKey === 'stability' || st.sortKey === 'difficulty' || st.sortKey === 'lapses') {
+      // 数值列排序：缺失值排在最后（Anki 的列排序同样是"没值不挤到前面"）
+      const field = st.sortKey === 'interval' ? 'scheduled_days' : st.sortKey;
+      const na = Number(a.fields[field]);
+      const nb = Number(b.fields[field]);
+      const va = Number.isFinite(na) ? na : Infinity;
+      const vb = Number.isFinite(nb) ? nb : Infinity;
+      r = va - vb;
     } else {
       r = cmpStr(crumbOf)(a, b);
     }
@@ -569,7 +622,8 @@ function cmpCards(ctx: Ctx): (a: Card, b: Card) => number {
   };
 }
 
-/** 列表行（Browser 式表格行）：勾选 + 状态/类型/优先/标题 + 牌组/到期/信息列 + 行点击预览联动 */
+/** 列表行（Browser 式表格行）：**一个表头列对应一个单元格**（列与数据必须逐列对齐）。
+ *  顺序 = renderList 的表头顺序：勾选 | 状态 | 类型 | 优先级 | 混合 | 标题 | 牌组 | 到期 | 间隔 | 稳定度 | 重复 | 失误 | 难度 | 操作 */
 function renderListRow(ctx: Ctx, tbody: HTMLElement, c: Card) {
   const { doc, st } = ctx;
   st.renderedCardTitles.push(c.title);
@@ -580,14 +634,25 @@ function renderListRow(ctx: Ctx, tbody: HTMLElement, c: Card) {
   cb.checked = st.selected.has(c.title);
   cbTd.appendChild(cb);
   tr.appendChild(cbTd);
-  const baseTd = el(doc, 'td', 'tm-cm-cell-flex', '');
-  appendRowBase(ctx, baseTd, c, cb);
-  tr.appendChild(baseTd);
+
+  const parts = buildRowBase(ctx, c, cb);
+  tr.appendChild(el(doc, 'td', 'tm-cm-col-state', '')).appendChild(parts.state);
+  const kindTd = el(doc, 'td', 'tm-cm-col-kind', '');
+  if (parts.kind) kindTd.appendChild(parts.kind);
+  tr.appendChild(kindTd);
+  const priTd = el(doc, 'td', 'tm-cm-col-pri', '');
+  if (parts.priority) priTd.appendChild(parts.priority);
+  tr.appendChild(priTd);
+  tr.appendChild(el(doc, 'td', 'tm-cm-col-mixed', '')).appendChild(parts.mixed);
+  tr.appendChild(el(doc, 'td', 'tm-cm-cell-flex', '')).appendChild(parts.title);
+
   const ds = decksOf(st, c);
   tr.appendChild(el(doc, 'td', 'tm-cm-col-deck', ds.length ? ds.map((d) => d.caption).join('·') : '—'));
   tr.appendChild(el(doc, 'td', 'tm-cm-col-due', dueLabel(c.fields)));
   tr.appendChild(el(doc, 'td', 'tm-cm-col-info', intervalLabel(c.fields)));
+  tr.appendChild(el(doc, 'td', 'tm-cm-col-info', stabilityLabel(c.fields)));
   tr.appendChild(el(doc, 'td', 'tm-cm-col-info', repsLabel(c.fields)));
+  tr.appendChild(el(doc, 'td', 'tm-cm-col-info', lapsesLabel(c.fields)));
   tr.appendChild(el(doc, 'td', 'tm-cm-col-info', diffLabel(c.fields)));
   const opTd = el(doc, 'td', 'tm-cm-cell-flex', '');
   appendOps(ctx, opTd, c);
@@ -693,9 +758,11 @@ function renderList(ctx: Ctx, listBox: HTMLElement, cards: Card[]) {
   trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.title', 'Title'), 'breadcrumb'));
   trh.appendChild(th(lingoMod.lingo(wiki, 'deck', 'Deck'), 'deck'));
   trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.due', 'Due'), 'due'));
-  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.interval', 'Interval')));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.interval', 'Interval'), 'interval'));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.stability', 'Stability'), 'stability'));
   trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.reps', 'Reps')));
-  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.diff', 'Difficulty')));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.lapses', 'Lapses'), 'lapses'));
+  trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.diff', 'Difficulty'), 'difficulty'));
   trh.appendChild(th(lingoMod.lingo(wiki, 'manager.col.actions', 'Actions')));
   thead.appendChild(trh);
   table.appendChild(thead);
@@ -762,6 +829,36 @@ function renderList(ctx: Ctx, listBox: HTMLElement, cards: Card[]) {
 
 // ---------- 工具条与主渲染 ----------
 
+/** 批量写字段的唯一执行体（batchButton 与"设定到期/间隔/易度"弹窗动作共用） */
+function applyToSelection(ctx: Ctx, apply: (f: Record<string, any>) => Record<string, any>, label: string): number {
+  const { wiki, st } = ctx;
+  let n = 0;
+  for (const title of st.selected) {
+    const t = wiki.getTiddler(title);
+    if (!t) continue;
+    wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
+    n++;
+  }
+  st.selected.clear();
+  render(ctx);
+  toast(ctx, `${label}: ${n}`, 'ok');
+  return n;
+}
+
+/** 「now + N 天」的 17 位 TW 日期串（唯一实现见 core/schema；这里只做日期算术） */
+function twDateStringFromNow(days: number): string {
+  return schema.twDateString(new Date(Date.now() + Math.round(days) * 86400000));
+}
+
+/** 弹窗类批量动作按钮（点击 → 先弹输入，再对选中卡应用） */
+function promptButton(ctx: Ctx, label: string, onClick: () => void | Promise<void>): HTMLElement {
+  const b = el(ctx.doc, 'button', 'tm-btn', label);
+  b.addEventListener('click', () => {
+    void onClick();
+  });
+  return b;
+}
+
 /** 批量动作按钮：对选中卡逐张写字段（删除带确认） */
 function batchButton(ctx: Ctx, label: string, apply: (f: Record<string, any>) => Record<string, any>, destructive = false): HTMLElement {
   const { doc, wiki, st } = ctx;
@@ -820,25 +917,78 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   const toolbar = el(doc, 'div', 'tm-cm-toolbar');
   const topRow = el(doc, 'div', 'tm-cm-top-row');
 
-  // 查找（按标题/面包屑过滤当前视图）
+  // 查找（按标题/面包屑过滤当前视图）。输入只重建卡片区（refreshCards）——
+  // 光标就活在这棵工具栏 DOM 里，重建它等于每键丢一次光标
   const searchRow = el(doc, 'div', 'tm-cm-search-row');
   const input = el(doc, 'input', 'tm-cm-search');
   input.placeholder = lingoMod.lingo(wiki, 'manager.search.placeholder', 'Find cards...');
   input.value = st.searchText;
   input.addEventListener('input', () => {
-    st.searchText = (input.value || '').trim().toLowerCase();
-    render(ctx);
+    // 保留原始大小写与 key:value 结构（解析在 core/card-query；仅自由文本按忽略大小写处理）
+    st.searchText = (input.value || '').trim();
+    st.query = queryMod.parseCardQuery(st.searchText);
+    clear.style.display = st.searchText ? '' : 'none';
+    refreshCards(ctx);
   });
   searchRow.appendChild(input);
-  if (st.searchText) {
-    const clear = el(doc, 'button', 'tm-btn tm-cm-clear', '✕');
-    clear.addEventListener('click', () => {
-      st.searchText = '';
-      render(ctx);
+  // ✕ 常驻节点、只切显隐：条件式增删节点就得走全量重建，回到丢光标的老路
+  const clear = el(doc, 'button', 'tm-btn tm-cm-clear', '✕');
+  clear.style.display = st.searchText ? '' : 'none';
+  clear.addEventListener('click', () => {
+    st.searchText = '';
+    st.query = queryMod.parseCardQuery('');
+    input.value = '';
+    clear.style.display = 'none';
+    refreshCards(ctx);
+  });
+  searchRow.appendChild(clear);
+  // 保存当前搜索（对标 Anki Browse 的"已保存的搜索条件"）
+  const saveBtn = el(doc, 'button', 'tm-btn tm-cm-save-search', lingoMod.lingo(wiki, 'manager.savesearch', 'Save Search'));
+  saveBtn.title = lingoMod.lingo(wiki, 'manager.savesearch.tip', 'Save the current query (tag:/is:/due:/lapses: ...) for one-click reuse');
+  saveBtn.addEventListener('click', async () => {
+    if (!st.searchText.trim()) {
+      toast(ctx, `${lingoMod.lingo(wiki, 'manager.savesearch.empty', 'Type a query first')}`, 'err');
+      return;
+    }
+    const name = await dialog.promptDialog(doc, {
+      title: lingoMod.lingo(wiki, 'manager.savesearch', 'Save Search'),
+      message: st.searchText,
+      defaultValue: st.searchText.slice(0, 24),
     });
-    searchRow.appendChild(clear);
-  }
+    if (!name) return;
+    config.saveSearch(wiki, name, st.searchText);
+    render(ctx);
+  });
+  searchRow.appendChild(saveBtn);
   topRow.appendChild(searchRow);
+
+  // 已保存的搜索：点击套用，✕ 删除
+  const saved = config.readSavedSearches(wiki);
+  if (saved.length) {
+    const savedRow = el(doc, 'div', 'tm-cm-saved');
+    savedRow.appendChild(el(doc, 'span', 'tm-cm-saved-label', lingoMod.lingo(wiki, 'manager.savedsearches', 'Saved searches')));
+    for (const s of saved) {
+      const chip = el(doc, 'span', 'tm-badge tm-badge-learn tm-cm-saved-chip', s.name);
+      chip.title = s.query;
+      chip.addEventListener('click', () => {
+        st.searchText = s.query;
+        st.query = queryMod.parseCardQuery(s.query);
+        input.value = st.searchText;
+        clear.style.display = st.searchText ? '' : 'none';
+        refreshCards(ctx);
+      });
+      const del = el(doc, 'span', 'tm-cm-saved-del', '✕');
+      del.title = lingoMod.lingo(wiki, 'manager.savedsearches.remove', 'Remove this saved search');
+      del.addEventListener('click', (e: Event) => {
+        e.stopPropagation();
+        config.removeSavedSearch(wiki, s.name);
+        render(ctx);
+      });
+      chip.appendChild(del);
+      savedRow.appendChild(chip);
+    }
+    topRow.appendChild(savedRow);
+  }
 
   // 组织方式切换
   const orgRow = el(doc, 'div', 'tm-cm-orgs');
@@ -896,6 +1046,39 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   const schedGroup = el(doc, 'span', 'tm-cm-bar-group', '');
   schedGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.postpone7d', 'Postpone 7d'), (f) => sched.postponeCard(f, 7)));
   schedGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.advance', 'Advance'), () => sched.advanceCard()));
+  // 设定到期日 / 间隔 / 易度（对标 Anki Browse 的"设定到期日/间隔/易度"批量动作）：
+  // 弹窗输入数值；间隔会同时把 due 推到 now + N 天（间隔与到期是一对，不能只改一半）
+  const fieldPrompt = async (title: string, message: string, def: string, apply: (n: number, f: Record<string, any>) => Record<string, any>) => {
+    const raw = await dialog.promptDialog(doc, { title, message, defaultValue: def });
+    if (raw === null || raw === '') return;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      toast(ctx, lingoMod.lingo(wiki, 'manager.badnumber', 'Please enter a number'), 'err');
+      return;
+    }
+    applyToSelection(ctx, (f) => apply(n, f), title);
+  };
+  schedGroup.appendChild(promptButton(ctx, lingoMod.lingo(wiki, 'manager.setdue', 'Set Due'), () =>
+    fieldPrompt(
+      lingoMod.lingo(wiki, 'manager.setdue', 'Set Due'),
+      lingoMod.lingo(wiki, 'manager.setdue.msg', 'Days from now (0 = today, negative = overdue)'),
+      '0',
+      (n) => ({ due: twDateStringFromNow(n) }),
+    )));
+  schedGroup.appendChild(promptButton(ctx, lingoMod.lingo(wiki, 'manager.setivl', 'Set Interval'), () =>
+    fieldPrompt(
+      lingoMod.lingo(wiki, 'manager.setivl', 'Set Interval'),
+      lingoMod.lingo(wiki, 'manager.setivl.msg', 'Interval in days (due is moved to now + interval)'),
+      '7',
+      (n) => ({ scheduled_days: String(Math.max(0, Math.round(n))), due: twDateStringFromNow(n) }),
+    )));
+  schedGroup.appendChild(promptButton(ctx, lingoMod.lingo(wiki, 'manager.setdiff', 'Set Difficulty'), () =>
+    fieldPrompt(
+      lingoMod.lingo(wiki, 'manager.setdiff', 'Set Difficulty'),
+      lingoMod.lingo(wiki, 'manager.setdiff.msg', 'FSRS difficulty 0-100'),
+      '50',
+      (n) => ({ difficulty: String(Math.max(0, Math.min(100, n))) }),
+    )));
   schedGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.forget', 'Forget'), () => sched.forgetCard()));
   schedGroup.appendChild(autoPostponeButton(ctx));
   row.appendChild(schedGroup);
@@ -950,26 +1133,51 @@ function buildToolbar(ctx: Ctx): HTMLElement {
 }
 
 /** 主渲染：保存滚动 → 收集 → 工具条 → 按组织方式分派主体 */
-function render(ctx: Ctx) {
-  const { doc, wrap, st } = ctx;
-  const oldBody = wrap.querySelector('.tm-cm-body') as HTMLElement | null;
-  const savedScrollTop = oldBody ? oldBody.scrollTop : 0;
-
-  wrap.textContent = '';
-  collectAll(ctx);
+/** 重建卡片区前的状态复位（render 与 refreshCards 共用的准备步骤） */
+function resetCardRenderState(st: CMState) {
   st.renderedCardTitles = [];
   st.groupCbUpdaters = [];
   st.cardCbUpdaters = [];
-  st.visibleCards = st.allCards.filter((c) => inView(st, c.fields, st.view, c.title) && matches(st, c));
+}
 
-  wrap.appendChild(buildToolbar(ctx));
-
+function buildBody(ctx: Ctx): HTMLElement {
+  const { doc, st } = ctx;
   const body = el(doc, 'div', 'tm-cm-body');
   if (st.org === 'deck') renderDeckTree(ctx, body, st.visibleCards);
   else if (st.org === 'list') renderList(ctx, body, st.visibleCards);
   else renderDocTree(ctx, body, st.visibleCards);
+  return body;
+}
+
+/** 只重建卡片区（搜索输入/清空/套用已存条件走这里）。工具栏 DOM 必须保持不动——
+ *  整组件重建会连搜索框一起换掉，每敲一个字符光标就被丢一次（真实踩坑） */
+function refreshCards(ctx: Ctx) {
+  const { wrap, st } = ctx;
+  const savedScrollTop = st.bodyEl ? st.bodyEl.scrollTop : 0;
+  resetCardRenderState(st);
+  st.visibleCards = st.allCards.filter((c) => inView(st, c.fields, st.view, c.title) && matches(st, c));
+  const body = buildBody(ctx);
+  body.scrollTop = savedScrollTop;
+  if (st.bodyEl && st.bodyEl.parentNode === wrap) wrap.replaceChild(body, st.bodyEl);
+  else wrap.appendChild(body);
+  st.bodyEl = body;
+}
+
+function render(ctx: Ctx) {
+  const { wrap, st } = ctx;
+  const savedScrollTop = st.bodyEl && st.bodyEl.parentNode === wrap ? st.bodyEl.scrollTop : 0;
+
+  wrap.textContent = '';
+  collectAll(ctx);
+  resetCardRenderState(st);
+  st.visibleCards = st.allCards.filter((c) => inView(st, c.fields, st.view, c.title) && matches(st, c));
+
+  wrap.appendChild(buildToolbar(ctx));
+
+  const body = buildBody(ctx);
   body.scrollTop = savedScrollTop;
   wrap.appendChild(body);
+  st.bodyEl = body;
 }
 
 // ---------- Widget ----------
@@ -998,6 +1206,7 @@ function makeCardManager(): WidgetCtor {
           sortKey: 'breadcrumb',
           sortAsc: true,
           searchText: '',
+          query: null,
           previewTitle: null,
           editTitle: null,
           selected: new Set<string>(),
@@ -1010,6 +1219,8 @@ function makeCardManager(): WidgetCtor {
           cardCbUpdaters: [],
           bulkCb: null,
           selLabel: null,
+          bodyEl: null,
+          rolloverHour: 4,
         },
       };
 

@@ -72,6 +72,14 @@ export function intervalLabel(fields: Record<string, any>, wiki?: any): string {
   return `${Math.round(s)}${unit}`;
 }
 
+/** 记忆稳定度（FSRS stability，天） */
+export function stabilityLabel(fields: Record<string, any>, wiki?: any): string {
+  const s = Number(fields.stability);
+  if (!Number.isFinite(s) || s <= 0) return '—';
+  const unit = wiki ? lingoMod.lingo(wiki, 'unit.days', 'd') : 'd';
+  return `${Math.round(s * 10) / 10}${unit}`;
+}
+
 export function repsLabel(fields: Record<string, any>): string {
   return fields.reps !== undefined && fields.reps !== '' ? String(fields.reps) : '—';
 }
@@ -80,9 +88,21 @@ export function lapsesLabel(fields: Record<string, any>): string {
   return fields.lapses !== undefined && fields.lapses !== '' ? String(fields.lapses) : '—';
 }
 
-export function diffLabel(fields: Record<string, any>): string {
+/**
+ * FSRS 难度 → 百分比。
+ * **量纲**：fsrs.js 的 difficulty 是 1–10 分（实测评分后 4.9993），Anki 界面按 10%–100% 展示；
+ * 旧实现直接 `d*100` 会把 5 显示成 500%（曾如此）。兼容 0–1 比例型历史数据。
+ */
+export function difficultyPercent(fields: Record<string, any>): number | null {
   const d = Number(fields.difficulty);
-  return Number.isFinite(d) && d > 0 ? `${Math.round(d * 100)}%` : '—';
+  if (!Number.isFinite(d) || d <= 0) return null;
+  const pct = d <= 1 ? d * 100 : d * 10;
+  return Math.max(0, Math.min(100, pct));
+}
+
+export function diffLabel(fields: Record<string, any>): string {
+  const pct = difficultyPercent(fields);
+  return pct === null ? '—' : `${Math.round(pct)}%`;
 }
 
 /**
