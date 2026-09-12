@@ -89,12 +89,46 @@ export interface GlobalQueueOptions {
    * 需要 SM 交错时显式 topics: true。
    */
   topics?: boolean;
-  /** 每日新卡上限截断（默认 undefined = 不限；0 = 禁止新卡引入） */
-  newLimit?: number;
-  /** 每日复习卡上限截断（默认 undefined = 不限；0 = 禁止到期复习引入） */
-  reviewLimit?: number;
-  /** 复习卡达到上限时是否压制新卡（对标 Anki 默认行为） */
-  suppressNewOnOverdue?: boolean;
+  /** 今日剩余新卡额度（null/缺省 = 不限；0 = 一张不放）。
+   *  由 core/scheduler.resolveDailyLimits 产出，本模块不自行推算——设置项"0 = 不限"的语义
+   *  已在那一层翻译为 null，"新卡受复习额度封顶"的压制也在那一层算完。 */
+  newLimit?: number | null;
+  /** 今日剩余复习卡额度（null/缺省 = 不限；0 = 一张不放） */
+  reviewLimit?: number | null;
+  /** 当前学习日（YYYYMMDD；缺省 = 不排除当日搁置卡）。
+   *  搁置的过滤器表述唯一产地 = ns.buriedExcludeFilter；本模块把它拼进各段过滤器，
+   *  使"同一天重建队列"不会让被搁置的兄弟卡复活（会话推进侧的 JS 判据见 scheduler.isQueueable）。 */
+  learningDay?: string;
+  /** 丢弃伪标题时的回调（缺省 = console.warn）。
+   *  伪标题 = 过滤器错误文本（TW 把 "Filter error: …" 当结果项返回）或 `$:/` 系统条目。
+   *  保留回调是为了让"不静默掩盖过滤器缺陷"这件事可被调用方/测试观测到。 */
+  onDiscard?: (title: string, reason: 'unsafe' | 'system') => void;
+}
+
+export interface QueueLimitOptions {
+  newLimit?: number | null;
+  reviewLimit?: number | null;
+}
+
+/** 额度截断（数量口径）：与 applyQueueLimits 同一规则（null/缺省 = 不限），
+ *  供只关心数量的调用方（「今日待学」显示）复用，避免展示侧另写一份 min/上限算术。 */
+export function clippedCount(total: number, limit: number | null | undefined): number {
+  return limit === undefined || limit === null ? total : Math.min(total, Math.max(0, Math.floor(limit)));
+}
+
+/** 每日额度截断的唯一实现（全局学习队列与「今日待学」显示共用一份，避免两处各算一套算式）。
+ *  learn 段不受限（对标 Anki：会内学习不受每日上限约束，只有到期复习与新卡受限）。 */
+export function applyQueueLimits(
+  learnItems: string[],
+  dueItems: string[],
+  newItems: string[],
+  limits: QueueLimitOptions = {},
+): { learn: string[]; due: string[]; newly: string[] } {
+  return {
+    learn: learnItems,
+    due: dueItems.slice(0, clippedCount(dueItems.length, limits.reviewLimit)),
+    newly: newItems.slice(0, clippedCount(newItems.length, limits.newLimit)),
+  };
 }
 
 // 学习队列 Topic 过滤：直接以 ns.TOPIC_QUEUE_FILTER 完整契约组合（勿对契约字符串做
@@ -121,7 +155,7 @@ function topicPendingFilter(): string {
  * - 默认（topics 未开）：纯知识卡队列（default deck 的 learn+due+new）——阅读材料不打断复习。
  * - topics:true + interleaved：到期/待读 Topic（Priority 升序）与 Item 队列按 itemRatio:topicRatio 交错。
  * - topics:true + strict：宏观三段式 —— 到期 Items → 到期/逾期 Topics → 新导入 Pending。
- * - 支持每日上限配额截断（reviewLimit / newLimit）与超额压制。
+ * - 支持今日剩余额度截断（reviewLimit / newLimit，来自 core/scheduler.resolveDailyLimits）。
  */
 export function composeGlobalLearningQueue(
   evaluate: (filter: string) => string[],
@@ -131,26 +165,33 @@ export function composeGlobalLearningQueue(
   const mode = opts.mode || 'interleaved';
   const includeTopics = opts.topics === true;
 
-  const isSafeCard = (t: string) => isFilterSafeTitle(t) && !t.startsWith('$:/');
-  const learnItems = evaluate(defaultDeckFilters.learn).filter(isSafeCard);
-  let dueItems = evaluate(defaultDeckFilters.due).filter(isSafeCard);
-  let newItems = evaluate(defaultDeckFilters.newly).filter(isSafeCard);
-
-  const initialDueCount = dueItems.length;
-  if (opts.reviewLimit !== undefined) {
-    dueItems = dueItems.slice(0, Math.max(0, opts.reviewLimit));
-  }
-
-  const suppress = opts.suppressNewOnOverdue === true &&
-    opts.reviewLimit !== undefined &&
-    opts.reviewLimit > 0 &&
-    initialDueCount >= opts.reviewLimit;
-
-  if (suppress) {
-    newItems = [];
-  } else if (opts.newLimit !== undefined) {
-    newItems = newItems.slice(0, Math.max(0, opts.newLimit));
-  }
+  // 过滤器的错误文本/系统条目会冒充卡标题（TW 把 "Filter error: …" 当结果项返回）。
+  // 伪标题要**出声**丢弃，不要静默——静默会把真正的过滤器缺陷藏起来（曾如此）。
+  const onDiscard = opts.onDiscard ||
+    ((title: string, reason: string) => console.warn(`[tidme] 学习队列丢弃${reason === 'system' ? '系统条目' : '过滤器伪标题'}：`, String(title).slice(0, 120)));
+  const isSafeCard = (t: string) => {
+    if (!isFilterSafeTitle(t)) {
+      onDiscard(t, 'unsafe');
+      return false;
+    }
+    if (t.startsWith('$:/')) {
+      onDiscard(t, 'system'); // 系统条目不是卡：正常队列过滤器不会产出它们
+      return false;
+    }
+    return true;
+  };
+  // 当日搁置排除：拼在每段过滤器尾部（run 级 `-[...]` 作用于累计结果，见文件头 run 语义说明）
+  const bury = opts.learningDay ? ns.buriedExcludeFilter(opts.learningDay) : '';
+  const seg = (filter: string) => (bury ? `${filter} ${bury}` : filter);
+  const limited = applyQueueLimits(
+    evaluate(seg(defaultDeckFilters.learn)).filter(isSafeCard),
+    evaluate(seg(defaultDeckFilters.due)).filter(isSafeCard),
+    evaluate(seg(defaultDeckFilters.newly)).filter(isSafeCard),
+    opts,
+  );
+  const learnItems = limited.learn;
+  const dueItems = limited.due;
+  const newItems = limited.newly;
 
   if (mode === 'strict') {
     const dueAll = [...learnItems, ...dueItems];

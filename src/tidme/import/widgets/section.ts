@@ -641,10 +641,10 @@ function makeSectionBar(): WidgetCtor {
       };
       /**
        * 调度判定（统一走 core/scheduler）：
-       * 未完成/未忽略/未搁置且 due ≤ now（sched.isDueNow）——
+       * 未完成/未忽略/未搁置且 due ≤ now（sched.isDueNowFor —— 换天时刻/提前学习窗口经 core 单点解析）——
        * 顺延/评分写出的未来排期卡不被"下一张/已读后推进"提前重放。
        */
-      const learnable = (t: string): boolean => sched.isDueNow(wiki.getTiddler(t)?.fields);
+      const learnable = (t: string): boolean => sched.isDueNowFor(wiki, wiki.getTiddler(t)?.fields);
       /**
        * 下一张可调度卡（阅读流统一决策 = core/scheduler.nextSchedulable）：
        * 1. 全局学习会话（若当前卡在其中）→ 2. 本文档 topic 顺序。
@@ -1130,7 +1130,7 @@ function appendDocBanner(widget: any, doc: Document, wiki: any, wrap: HTMLElemen
   btn.addEventListener('click', () => {
     const rp = parseReadPoint(wiki, docId);
     const list = all.filter((x) => !sched.isCardOutOfQueue(wiki.getTiddler(x)?.fields));
-    const readable = list.filter((x) => sched.isDueNow(wiki.getTiddler(x)?.fields));
+    const readable = list.filter((x) => sched.isDueNowFor(wiki, wiki.getTiddler(x)?.fields));
     // 优先跳到续读点（只要该卡在队且未完成，或指向文档页本身），其次第一张当前可读卡；无节卡则退回文档页本身
     const target = (rp && (list.includes(rp.t) || rp.t === title) ? rp.t : null) || readable[0] || list[0] || title;
     if (target) {

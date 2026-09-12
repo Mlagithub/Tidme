@@ -22,6 +22,7 @@ function lingo(wiki: any, key: string, fallback: string): string {
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const gradeMod = require('$:/plugins/keepone/tidme/core/grade.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const viewState = require('$:/plugins/keepone/tidme/ui/base/view-state.js');
@@ -180,6 +181,23 @@ function makeStudyModeBar(): WidgetCtor {
           advanceStudy(this);
         });
         container.appendChild(advBtn);
+      }
+
+      // 撤销上一次评分（会话内常驻；键盘误评/窄屏误触的兜底）。
+      // 深度来自 core/undo（评分写路径入栈，会话边界清栈）；恢复后回到该卡重新作答。
+      const depth = gradeMod.getUndoStackDepth();
+      if (depth > 0) {
+        const undoBtn = el(doc, 'button', 'tm-btn tm-study-mode-undo', lingo(this.wiki, 'studymode.undo', 'Undo'));
+        undoBtn.title = lingo(this.wiki, 'studymode.undo.tip', 'Undo the last rating: restore card fields, review log, quota and session');
+        undoBtn.addEventListener('click', () => {
+          const res = gradeMod.undoLastGrade(this.wiki);
+          if (res.ok && res.title) {
+            session.enterCard(this.wiki, res.title);
+            navigateTo(this, res.title);
+          }
+          this.build();
+        });
+        container.appendChild(undoBtn);
       }
 
       const btn = el(doc, 'button', 'tm-btn tm-study-mode-end', lingo(this.wiki, 'studymode.end', 'End Study'));

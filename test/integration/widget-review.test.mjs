@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import { collectButtons, collectText, fakeDocument, renderWidget as renderWidgetBase } from '../helpers/fake-dom.mjs';
 import { makeBookFixture } from '../helpers/fixtures.mjs';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
-import { FUTURE, PAST, twDate } from '../helpers/tw-date.mjs';
+import { FUTURE, learningDayInstant, PAST, twDate } from '../helpers/tw-date.mjs';
 
 const { wiki, mod, reset } = bootPlugin({ prefix: 'tidme-wgt-rev-' });
 const parseMod = mod('import/parse.js');
@@ -202,10 +202,23 @@ test('deckfilter: 队列过滤器组合只有一个真源（模板不再手抄�
     last_review: '20261231000000000',
   });
   const deckEngine = mod('core/deck-engine.js');
-  // 1) 操作符输出 = composeDeckFilters 的输出（模板与 JS 同一真源的机器证明）
+  const schedMod = mod('core/scheduler.js');
+  // 1) 操作符输出 = composeDeckFilters 的输出 + 当日搁置排除（模板与 JS 同一真源的机器证明）。
+  //    搁置排除的唯一过滤器表述 = ns.buriedExcludeFilter，deck 视图必须与队列组合同口径，
+  //    否则同一天里被搁置的兄弟卡仍会在牌组页显示为"到期"。
+  const bury = nsMod.buriedExcludeFilter(schedMod.learningDayContext(wiki).learningDay);
   const fromOp = wiki.filterTiddlers('[[$:/Deck/default]deckfilter[queue]]');
   assert.equal(fromOp.length, 1, 'deckfilter 产出单段过滤器字符串');
-  assert.equal(fromOp[0], deckEngine.composeDeckFilters('$:/Deck/default', wiki.getTiddler('$:/Deck/default').fields).queue);
+  assert.equal(
+    fromOp[0],
+    `${deckEngine.composeDeckFilters('$:/Deck/default', wiki.getTiddler('$:/Deck/default').fields).queue} ${bury}`,
+  );
+  // 1b) 被当日搁置的卡不出现在牌组页队列里
+  const buriedTitle = '按钮队列测试卡';
+  wiki.addTiddler({ ...wiki.getTiddler(buriedTitle).fields, [nsMod.BURIED_FIELD]: schedMod.learningDayContext(wiki).learningDay });
+  const afterBury = [...wiki.filterTiddlers(fromOp[0])];
+  assert.ok(!afterBury.includes(buriedTitle), '当日搁置卡被牌组队列排除');
+  wiki.addTiddler({ ...wiki.getTiddler(buriedTitle).fields, [nsMod.BURIED_FIELD]: undefined });
   // 2) 在真实渲染里按模板写法取用 → 能解析出在队卡（按钮 transclude 上下文同构）
   const sim = `<$let
     deckTiddler="$:/Deck/default"
@@ -528,11 +541,14 @@ test('today-recent: 项目书名渲染为超链接并支持点击导航到文档
 test('today-hero: 今日专注时长如实回显统计值（不再为 0 秒补假时间）', () => {
   const todayMod = mod('review/widgets/today.js');
   const statsMod = mod('core/stats.js');
+  const schedMod = mod('core/scheduler.js');
   reset();
+  // 日志键与专注时长都要落在"当前学习日内"：读侧按学习日统计（非 UTC 日）
+  const ctx = schedMod.learningDayContext(wiki);
+  const base = learningDayInstant(ctx.learningDay, ctx.rolloverHour).getTime();
   const logData = {};
-  const todayK = schemaMod.todayKey();
   for (let i = 0; i < 45; i++) {
-    logData[`${todayK}00000${String(i).padStart(4, '0')}`] = { rating: 1 };
+    logData[twDate(new Date(base + i * 1000))] = { rating: 1 };
   }
   wiki.addTiddler({
     title: '$:/Deck/default/log',
@@ -547,6 +563,51 @@ test('today-hero: 今日专注时长如实回显统计值（不再为 0 秒补�
   const text = collectText(root);
   assert.ok(text.includes('今日已复习 45 卡'), '正确统计今日复习卡数');
   assert.ok(text.includes('4 m 30 s'), `如实显示已记录的 270 秒（实际：${text}）`);
+});
+
+test('today-hero: 有日末操练队列时出现「日末操练」入口，点击启动操练会话', () => {
+  const todayMod = mod('review/widgets/today.js');
+  const schedMod = mod('core/scheduler.js');
+  const sessionMod = mod('core/session.js');
+  const drillMod = mod('core/drill.js');
+  reset();
+  wiki.addTiddler({
+    title: '操练卡甲',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
+    state: '2',
+    due: PAST(),
+    reps: '1',
+    lapses: '1',
+    stability: '2',
+    difficulty: '5',
+    elapsed_days: '1',
+    scheduled_days: '2',
+    'tidme.priority': '50',
+  });
+  drillMod.recordFinalDrill(wiki, '操练卡甲', new Date());
+
+  const { root, w } = renderWidgetBase(wiki, todayMod, 'tidme-today-hero');
+  const events = [];
+  const origDispatch = w.dispatchEvent;
+  w.dispatchEvent = (e) => {
+    events.push(e);
+    return typeof origDispatch === 'function' ? origDispatch.call(w, e) : true;
+  };
+  const text = collectText(root);
+  assert.ok(text.includes('日末操练'), `有操练队列时显示入口（实际：${text}）`);
+  const drillBtn = collectButtons(root).find((b) => collectText(b).includes('日末操练'));
+  drillBtn.dispatchEvent({ type: 'click' });
+  assert.equal(sessionMod.getSession(wiki)?.mode, 'final-drill', '点击后进入日末操练会话');
+  const nav = events.filter((e) => e.type === 'tm-navigate').pop();
+  assert.equal(nav?.navigateTo, '操练卡甲', '导航到操练队列首卡');
+});
+
+test('today-hero: 无操练队列时不显示「日末操练」（不占位）', () => {
+  const todayMod = mod('review/widgets/today.js');
+  reset();
+  const { root } = renderWidgetBase(wiki, todayMod, 'tidme-today-hero');
+  assert.ok(!collectText(root).includes('日末操练'), '空队列不显示入口');
 });
 
 test('today-recent: 支持连续型文档（PDF 等）展示页码进度与跳转', () => {

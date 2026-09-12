@@ -147,8 +147,8 @@ async function importTextBytes(bytes: Uint8Array, fileName: string, options: Imp
 export async function runImport(bytes: Uint8Array, fileName: string, options: ImportOptions = {}): Promise<ImportResult> {
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.epub')) return importEpubBytes(bytes, fileName, options);
-  if (/\.(md|markdown|txt|html?)$/.test(lower)) return importTextBytes(bytes, fileName, options);
-  throw new Error(`不支持的格式：${fileName}（支持 .epub / .md / .txt / .html）`);
+  if (/\.(md|markdown|pdf|txt|html?)$/.test(lower)) return importTextBytes(bytes, fileName, options);
+  throw new Error(`不支持的格式：${fileName}（支持 .epub / .md / .pdf / .txt / .html）`);
 }
 
 /**

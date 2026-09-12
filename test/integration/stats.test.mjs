@@ -9,10 +9,11 @@ stats.test.mjs — core 统计聚合测试（node:test + 真实 TW boot）
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
-import { T } from '../helpers/tw-date.mjs';
+import { learningDayInstant, parseTwDate, T, twDate } from '../helpers/tw-date.mjs';
 
 const { wiki, mod } = bootPlugin({ prefix: 'tidme-stats-' });
 const stats = mod('core/stats.js');
+const schema = mod('core/schema.js');
 
 test('deckLoad: new/learn/due/overdue 分类（未来排期的 state2 不计 due）', () => {
   const cards = [
@@ -165,25 +166,37 @@ test('trueRetentionFromLogs: 区分成熟卡（>=21天）与年轻卡保留率',
 
 test('futureDueSchedule: 未来 30 天负荷预测与累计到期计算', () => {
   const now = new Date('2026-09-11T12:00:00Z');
+  // 夹具按"学习日"构造到期时刻（learningDayInstant = 该学习日内的真实本地时刻），
+  // 不用固定 UTC 串——固定串的学习日归属随运行时区漂移（UTC+14 下 +3 天会落到第 4 天）。
+  const rollover = 4;
+  const day0 = schema.learningDayOf(now, rollover);
+  const dueOn = (dayOffset) => twDate(learningDayInstant(schema.addLearningDays(day0, dayOffset), rollover));
   const cards = [
     // 逾期卡片 (归入第 0 天)
-    { fields: { 'tidme.kind': 'item', state: '2', due: '20260905000000000' } },
+    { fields: { 'tidme.kind': 'item', state: '2', due: dueOn(-5) } },
     // 今天到期 (第 0 天)
-    { fields: { 'tidme.kind': 'item', state: '2', due: '20260911080000000' } },
+    { fields: { 'tidme.kind': 'item', state: '2', due: dueOn(0) } },
     // 3 天后到期 (第 3 天)
-    { fields: { 'tidme.kind': 'item', state: '2', due: '20260914100000000' } },
+    { fields: { 'tidme.kind': 'item', state: '2', due: dueOn(3) } },
     // 3 天后到期另 1 张 (第 3 天)
-    { fields: { 'tidme.kind': 'item', state: '2', due: '20260914150000000' } },
+    { fields: { 'tidme.kind': 'item', state: '2', due: twDate(new Date(parseTwDate(dueOn(3)).getTime() + 3600000)) } },
     // 新卡 (不计入排期)
-    { fields: { 'tidme.kind': 'item', state: '0', due: '20260910000000000' } },
+    { fields: { 'tidme.kind': 'item', state: '0', due: dueOn(-1) } },
     // 出队卡片 (忽略)
-    { fields: { 'tidme.kind': 'item', state: '2', due: '20260914100000000', 'tidme.done': 'yes' } },
+    { fields: { 'tidme.kind': 'item', state: '2', due: dueOn(3), 'tidme.done': 'yes' } },
   ];
 
-  const schedule = stats.futureDueSchedule(cards, 10, now);
+  const schedule = stats.futureDueSchedule(cards, 10, now, rollover);
   assert.equal(schedule.length, 10);
   assert.equal(schedule[0].dueCount, 2, '第 0 天包含逾期与今天到期');
   assert.equal(schedule[0].cumulativeDue, 2);
+
+  // 日期标签 = 学习日（纯日历推算）：曾用 parseTwDate(<本地学习日串>) 当 UTC 零点，
+  // 在 UTC 负偏移时区整体错一天（分桶对、标签错）
+  assert.equal(schedule[0].dateString, day0, '第 0 天标签 = 当前学习日');
+  for (let i = 1; i < schedule.length; i++) {
+    assert.equal(schedule[i].dateString, schema.addLearningDays(day0, i), `第 ${i} 天标签连续`);
+  }
 
   assert.equal(schedule[1].dueCount, 0);
   assert.equal(schedule[1].cumulativeDue, 2);
@@ -193,4 +206,25 @@ test('futureDueSchedule: 未来 30 天负荷预测与累计到期计算', () => 
 
   assert.equal(schedule[3].dueCount, 2, '第 3 天有 2 张卡到期');
   assert.equal(schedule[3].cumulativeDue, 4, '第 3 天累计为 4');
+});
+
+test('learningDay 纯日历换算：addLearningDays / learningDayDiff（跨月跨年）', () => {
+  assert.equal(schema.addLearningDays('20260911', 3), '20260914');
+  assert.equal(schema.addLearningDays('20260930', 1), '20261001', '跨月');
+  assert.equal(schema.addLearningDays('20261231', 1), '20270101', '跨年');
+  assert.equal(schema.addLearningDays('20260911', -3), '20260908');
+  assert.equal(schema.learningDayDiff('20260911', '20260914'), 3);
+  assert.equal(schema.learningDayDiff('20260914', '20260911'), -3);
+  assert.equal(schema.learningDayDiff('20261231', '20270101'), 1, '跨年差 1 天');
+});
+
+test('readTime: 日桶键用学习日（与复习计数同一换天口径）', () => {
+  const sched = mod('core/scheduler.js');
+  const tiddler = stats.READTIME_TIDDLER;
+  wiki.deleteTiddler(tiddler);
+  stats.recordReadTime(wiki, 'doc-day', 60);
+  const raw = JSON.parse(wiki.getTiddlerText(tiddler));
+  const day = sched.learningDayContext(wiki).learningDay;
+  assert.equal(raw.days[day], 60, '写入学学习日桶');
+  assert.equal(stats.getReadTimeStats(wiki).todaySeconds, 60, '读回同一学习日');
 });

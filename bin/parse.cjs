@@ -112,7 +112,7 @@ __export(ns_exports, {
   SEMANTIC_SPLIT_TITLE: () => SEMANTIC_SPLIT_TITLE,
   TITLE_UNSAFE_CHARS: () => TITLE_UNSAFE_CHARS,
   TOPIC_QUEUE_FILTER: () => TOPIC_QUEUE_FILTER,
-  UNDO_STATE_TITLE: () => UNDO_STATE_TITLE,
+  buriedExcludeFilter: () => buriedExcludeFilter,
   deckLogTitle: () => deckLogTitle,
   docsToDecksRoot: () => docsToDecksRoot,
   isDeckLogTitle: () => isDeckLogTitle,
@@ -134,7 +134,13 @@ function deckLogTitle(deck) {
 function isDeckLogTitle(title) {
   return title.startsWith(DECK_PREFIX) && title.endsWith(DECK_LOG_SUFFIX);
 }
-var NS_DOCS, NS_ASSETS, NS_DECKS, NS_DECKS_SCATTER, CRUMB_SEP, DECK_PREFIX, QUEUE_EXCLUDE, DECK_TAG, NOT_DECK_FILTER, TOPIC_QUEUE_FILTER, TITLE_UNSAFE_CHARS, FOLDED_STATE_PREFIX, CARD_OPEN_AT_TITLE, PDF_PAGE_STATE_PREFIX, AUTOPOSTPONE_LAST_TITLE, DECK_LOG_SUFFIX, CONFIG_TITLE_PREFIX, QUEUE_MODE_TITLE, QUEUE_MIX_TITLE, PRIORITY_DYNAMICS_TITLE, LOG_RETENTION_TITLE, ROLLOVER_HOUR_TITLE, NEW_PER_DAY_TITLE, REVIEWS_PER_DAY_TITLE, LIMITS_SUPPRESS_NEW_TITLE, LEARN_AHEAD_TITLE, DAILY_QUOTA_STATE_TITLE, UNDO_STATE_TITLE, BURY_SIBLINGS_TITLE, BURIED_FIELD, FINAL_DRILL_STATE_TITLE, OCR_TITLE, SEMANTIC_SPLIT_TITLE, PAGE_INCREMENTAL_LEARNING, PAGE_TODAY, PAGE_READING_LIST, PAGE_IMPORT_CENTER, PAGE_CARD_MANAGER, PAGE_IMPORT_STATS, PAGE_HELP_SHORTCUTS, PAGE_SETTINGS, NOTIFY_EXTRACT, NOTIFY_CLOZE, NOTIFY_READPOINT, NOTIFY_SELECT_FIRST, NOTIFY_EXTRACT_NOTE, NOTIFY_SECTION_DONE, NOTIFY_LATER, NOTIFY_DONE, NOTIFY_UNSUPPORTED, NOTIFY_CONGRATULATION, NOTIFY_STUDY_ENDED, IMPORT_BAG_TITLE;
+function buriedExcludeFilter(learningDay) {
+  const day = String(learningDay || "").trim();
+  if (!/^\d{8}$/.test(day))
+    return "";
+  return `-[${BURIED_FIELD}[${day}]]`;
+}
+var NS_DOCS, NS_ASSETS, NS_DECKS, NS_DECKS_SCATTER, CRUMB_SEP, DECK_PREFIX, QUEUE_EXCLUDE, DECK_TAG, NOT_DECK_FILTER, TOPIC_QUEUE_FILTER, TITLE_UNSAFE_CHARS, FOLDED_STATE_PREFIX, CARD_OPEN_AT_TITLE, PDF_PAGE_STATE_PREFIX, AUTOPOSTPONE_LAST_TITLE, DECK_LOG_SUFFIX, CONFIG_TITLE_PREFIX, QUEUE_MODE_TITLE, QUEUE_MIX_TITLE, PRIORITY_DYNAMICS_TITLE, LOG_RETENTION_TITLE, ROLLOVER_HOUR_TITLE, NEW_PER_DAY_TITLE, REVIEWS_PER_DAY_TITLE, LIMITS_SUPPRESS_NEW_TITLE, LEARN_AHEAD_TITLE, DAILY_QUOTA_STATE_TITLE, BURY_SIBLINGS_TITLE, BURIED_FIELD, FINAL_DRILL_STATE_TITLE, OCR_TITLE, SEMANTIC_SPLIT_TITLE, PAGE_INCREMENTAL_LEARNING, PAGE_TODAY, PAGE_READING_LIST, PAGE_IMPORT_CENTER, PAGE_CARD_MANAGER, PAGE_IMPORT_STATS, PAGE_HELP_SHORTCUTS, PAGE_SETTINGS, NOTIFY_EXTRACT, NOTIFY_CLOZE, NOTIFY_READPOINT, NOTIFY_SELECT_FIRST, NOTIFY_EXTRACT_NOTE, NOTIFY_SECTION_DONE, NOTIFY_LATER, NOTIFY_DONE, NOTIFY_UNSUPPORTED, NOTIFY_CONGRATULATION, NOTIFY_STUDY_ENDED, IMPORT_BAG_TITLE;
 var init_ns = __esm({
   "src/tidme/core/ns.ts"() {
     NS_DOCS = "Tidme/Docs/";
@@ -164,7 +170,6 @@ var init_ns = __esm({
     LIMITS_SUPPRESS_NEW_TITLE = CONFIG_TITLE_PREFIX + "LimitsSuppressNew";
     LEARN_AHEAD_TITLE = CONFIG_TITLE_PREFIX + "LearnAhead";
     DAILY_QUOTA_STATE_TITLE = "$:/state/tidme/daily-quota";
-    UNDO_STATE_TITLE = "$:/state/tidme/undo-state";
     BURY_SIBLINGS_TITLE = CONFIG_TITLE_PREFIX + "BurySiblings";
     BURIED_FIELD = "tidme.buried";
     FINAL_DRILL_STATE_TITLE = "$:/state/tidme/final-drill";
@@ -199,9 +204,11 @@ __export(schema_exports, {
   FSRS_FIELDS: () => FSRS_FIELDS,
   KINDS: () => KINDS,
   SUBKINDS: () => SUBKINDS,
+  addLearningDays: () => addLearningDays,
   assertCardFields: () => assertCardFields,
   escapeHtml: () => escapeHtml,
   initialFsrsFields: () => initialFsrsFields,
+  learningDayDiff: () => learningDayDiff,
   learningDayOf: () => learningDayOf,
   missingFsrsFields: () => missingFsrsFields,
   parseTwDate: () => parseTwDate,
@@ -218,6 +225,17 @@ function learningDayOf(now = new Date(), rolloverHour = 4) {
   const effective = new Date(now.getTime() - h * 36e5);
   const p = (n, l = 2) => String(n).padStart(l, "0");
   return `${effective.getFullYear()}${p(effective.getMonth() + 1)}${p(effective.getDate())}`;
+}
+function learningDayMs(day) {
+  return Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)));
+}
+function addLearningDays(day, days) {
+  const d = new Date(learningDayMs(day) + Math.round(days) * 864e5);
+  const p = (n, l = 2) => String(n).padStart(l, "0");
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`;
+}
+function learningDayDiff(from, to) {
+  return Math.round((learningDayMs(to) - learningDayMs(from)) / 864e5);
 }
 function todayKey(now = new Date()) {
   return now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -369,6 +387,554 @@ var init_paths = __esm({
   }
 });
 
+// src/tidme/core/deck.ts
+var deck_exports = {};
+__export(deck_exports, {
+  DECK_TAG: () => DECK_TAG2,
+  DEFAULT_CARD_FILTER: () => DEFAULT_CARD_FILTER,
+  DEFAULT_DECK: () => DEFAULT_DECK,
+  burnSubsetDeck: () => burnSubsetDeck,
+  configToFields: () => configToFields,
+  createDeck: () => createDeck,
+  deckCards: () => deckCards,
+  deleteDeck: () => deleteDeck,
+  getDeck: () => getDeck,
+  isDeckFields: () => isDeckFields,
+  isSubset: () => isSubset,
+  listDecks: () => listDecks,
+  previewMembership: () => previewMembership,
+  titleOf: () => titleOf,
+  updateDeck: () => updateDeck
+});
+function isDeckFields(fields) {
+  return Array.isArray(fields?.tags) && fields.tags.includes(DECK_TAG2);
+}
+function titleOf(name) {
+  const raw = String(name || "").trim();
+  if (raw.startsWith(ns.DECK_PREFIX) || raw.startsWith(ns.NS_DECKS))
+    return raw;
+  const clean = raw.replace(ns.TITLE_UNSAFE_CHARS, "-").replace(/[\s]+/g, "-");
+  if (!clean || clean === "-")
+    throw new Error("deck: invalid deck name: " + name);
+  return ns.DECK_PREFIX + clean;
+}
+function listDecks(wiki) {
+  if (!wiki || typeof wiki.filterTiddlers !== "function")
+    return [];
+  return wiki.filterTiddlers(`[all[shadows+tiddlers]tag[${DECK_TAG2}]!is[draft]]`);
+}
+function getDeck(wiki, nameOrTitle) {
+  if (!wiki || typeof wiki.getTiddler !== "function" || !nameOrTitle)
+    return null;
+  const title = titleOf(nameOrTitle);
+  const t = wiki.getTiddler(title);
+  if (!t)
+    return null;
+  const name = title.startsWith(ns.DECK_PREFIX) ? title.slice(ns.DECK_PREFIX.length) : title.split("/").pop() || title;
+  return { title, name, fields: t.fields || {} };
+}
+function isSubset(deck) {
+  return !!deck && deck.fields["tidme.subset-doc"] !== void 0 && deck.fields["tidme.subset-doc"] !== "";
+}
+function templateFields(wiki) {
+  const def = getDeck(wiki, DEFAULT_DECK);
+  return def ? { ...def.fields } : {};
+}
+function configToFields(wiki, cfg) {
+  const tpl = templateFields(wiki);
+  delete tpl.title;
+  const fields = {
+    ...tpl,
+    tags: DECK_TAG2,
+    order_learn: tpl.order_learn || "[sort[due]]",
+    order_due: tpl.order_due || "[sort[due]]",
+    order_new: tpl.order_new || "[sortan[title]]",
+    state_learn: tpl.state_learn || "[state[1]] [state[3]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>]",
+    state_due: tpl.state_due || "[state[2]has[due]] -[!days:due[1]]",
+    state_new: tpl.state_new || "[!has[state]] [state[0]]"
+  };
+  const set = (k, v, fallback) => {
+    if (v === void 0) {
+      fields[k] = fallback;
+      return;
+    }
+    fields[k] = v === null || v === "" ? fallback || "" : v;
+  };
+  set("caption", cfg.caption, cfg.name);
+  set("description", cfg.description, "");
+  set("card", cfg.card, DEFAULT_CARD_FILTER);
+  set("card_exclude", cfg.cardExclude, fields.card_exclude);
+  set("card_unfold", cfg.cardUnfold, "");
+  set("order", cfg.order, "due-new");
+  if (cfg.leechThreshold !== void 0)
+    fields.leech_threshold = String(cfg.leechThreshold);
+  if (cfg.p !== void 0)
+    fields.p = typeof cfg.p === "string" ? cfg.p : JSON.stringify(cfg.p);
+  if (cfg.kind === "subset" && cfg.sourceDoc)
+    fields["tidme.subset-doc"] = cfg.sourceDoc;
+  return fields;
+}
+function previewMembership(wiki, card, selfTitle) {
+  if (!wiki || typeof wiki.filterTiddlers !== "function" || !card || !card.trim())
+    return { hits: 0, overlap: 0 };
+  let hits;
+  try {
+    hits = wiki.filterTiddlers(card);
+  } catch {
+    return { hits: -1, overlap: 0 };
+  }
+  const others = /* @__PURE__ */ new Set();
+  for (const d of listDecks(wiki)) {
+    if (selfTitle && d === selfTitle)
+      continue;
+    for (const c of deckCards(wiki, d))
+      others.add(c);
+  }
+  return { hits: hits.length, overlap: hits.filter((t) => others.has(t)).length };
+}
+function createDeck(wiki, cfg) {
+  const title = titleOf(cfg.name);
+  if (getDeck(wiki, title))
+    throw new Error(`deck: deck already exists: ${title}`);
+  wiki.addTiddler({ title, ...configToFields(wiki, cfg) });
+  return title;
+}
+function updateDeck(wiki, nameOrTitle, patch) {
+  const deck = getDeck(wiki, nameOrTitle);
+  if (!deck)
+    throw new Error(`deck: deck not found: ${nameOrTitle}`);
+  const fields = { ...deck.fields };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === void 0)
+      continue;
+    if (v === null)
+      delete fields[k];
+    else
+      fields[k] = v;
+  }
+  wiki.addTiddler({ ...fields, title: deck.title });
+}
+function deleteDeck(wiki, nameOrTitle, opts = {}) {
+  const deck = getDeck(wiki, nameOrTitle);
+  if (!deck)
+    return 0;
+  if (deck.title === DEFAULT_DECK)
+    throw new Error("deck: default deck cannot be deleted");
+  let removed = 0;
+  if (opts.alsoCards) {
+    for (const c of deckCards(wiki, deck.title)) {
+      if (wiki.getTiddler(c)) {
+        wiki.deleteTiddler(c);
+        removed++;
+      }
+    }
+  }
+  wiki.deleteTiddler(deck.title);
+  wiki.deleteTiddler(ns.deckLogTitle(deck.title));
+  return removed;
+}
+function burnSubsetDeck(wiki, nameOrTitle) {
+  if (!wiki || typeof wiki.deleteTiddler !== "function")
+    return 0;
+  const deck = getDeck(wiki, nameOrTitle);
+  if (!deck || !isSubset(deck))
+    return 0;
+  let n = 0;
+  const log = ns.deckLogTitle(deck.title);
+  if (wiki.getTiddler(log)) {
+    wiki.deleteTiddler(log);
+    n++;
+  }
+  if (wiki.getTiddler(deck.title)) {
+    wiki.deleteTiddler(deck.title);
+    n++;
+  }
+  return n;
+}
+function deckCards(wiki, nameOrTitle, opts = {}) {
+  const deck = getDeck(wiki, nameOrTitle);
+  if (!deck)
+    return [];
+  if (!ns.isFilterSafeTitle(deck.title)) {
+    console.warn("[tidme] deck title \u542B\u8FC7\u6EE4\u5668\u4E0D\u5B89\u5168\u5B57\u7B26\uFF0C\u5DF2\u8DF3\u8FC7\u6210\u5458\u6C42\u503C:", deck.title);
+    return [];
+  }
+  const strict = opts.strict !== false;
+  const card = String(deck.fields.card || "");
+  if (!card)
+    return [];
+  if (!strict)
+    return wiki.filterTiddlers(`[subfilter{${deck.title}!!card}]`);
+  const exclude = String(deck.fields.card_exclude || "");
+  return exclude ? wiki.filterTiddlers(`[subfilter{${deck.title}!!card}!subfilter{${deck.title}!!card_exclude}]`) : wiki.filterTiddlers(`[subfilter{${deck.title}!!card}]`);
+}
+var ns, DECK_TAG2, DEFAULT_DECK, DEFAULT_CARD_FILTER;
+var init_deck = __esm({
+  "src/tidme/core/deck.ts"() {
+    ns = (init_ns(), __toCommonJS(ns_exports));
+    DECK_TAG2 = ns.DECK_TAG;
+    DEFAULT_DECK = ns.DECK_PREFIX + "default";
+    DEFAULT_CARD_FILTER = `[all[shadows+tiddlers]tidme.kind[item]${ns.QUEUE_EXCLUDE}]`;
+  }
+});
+
+// src/tidme/core/config.ts
+var config_exports = {};
+__export(config_exports, {
+  AUTOPOSTPONE_DEFAULTS: () => AUTOPOSTPONE_DEFAULTS,
+  LEARN_AHEAD_DEFAULT_MINUTES: () => LEARN_AHEAD_DEFAULT_MINUTES,
+  LOG_RETENTION_DEFAULT_DAYS: () => LOG_RETENTION_DEFAULT_DAYS,
+  LOG_RETENTION_TITLE: () => LOG_RETENTION_TITLE2,
+  NEW_PER_DAY_DEFAULT: () => NEW_PER_DAY_DEFAULT,
+  OCR_TITLE: () => OCR_TITLE2,
+  QUEUE_MIX_DEFAULT: () => QUEUE_MIX_DEFAULT,
+  REVIEWS_PER_DAY_DEFAULT: () => REVIEWS_PER_DAY_DEFAULT,
+  ROLLOVER_HOUR_DEFAULT: () => ROLLOVER_HOUR_DEFAULT,
+  SEMANTIC_SPLIT_DEFAULTS: () => SEMANTIC_SPLIT_DEFAULTS,
+  SEMANTIC_SPLIT_TITLE: () => SEMANTIC_SPLIT_TITLE2,
+  readAutoPostpone: () => readAutoPostpone,
+  readBurySiblings: () => readBurySiblings,
+  readDefaultDeckParams: () => readDefaultDeckParams,
+  readLearnAheadMinutes: () => readLearnAheadMinutes,
+  readLimitsSuppressNew: () => readLimitsSuppressNew,
+  readLogRetentionDays: () => readLogRetentionDays,
+  readNewPerDay: () => readNewPerDay,
+  readOcrConfig: () => readOcrConfig,
+  readPriorityDynamics: () => readPriorityDynamics,
+  readQueueOptions: () => readQueueOptions,
+  readReviewsPerDay: () => readReviewsPerDay,
+  readRolloverHour: () => readRolloverHour,
+  readSemanticSplit: () => readSemanticSplit,
+  writeAutoPostpone: () => writeAutoPostpone,
+  writeBurySiblings: () => writeBurySiblings,
+  writeDefaultDeckParams: () => writeDefaultDeckParams,
+  writeLearnAheadMinutes: () => writeLearnAheadMinutes,
+  writeLimitsSuppressNew: () => writeLimitsSuppressNew,
+  writeLogRetentionDays: () => writeLogRetentionDays,
+  writeNewPerDay: () => writeNewPerDay,
+  writeOcrConfig: () => writeOcrConfig,
+  writeQueueOptions: () => writeQueueOptions,
+  writeReviewsPerDay: () => writeReviewsPerDay,
+  writeRolloverHour: () => writeRolloverHour,
+  writeSemanticSplit: () => writeSemanticSplit
+});
+function boolish(v, dflt) {
+  if (v === void 0 || v === null || String(v).trim() === "")
+    return dflt;
+  const s = String(v).trim().toLowerCase();
+  if (s === "false" || s === "0" || s === "no")
+    return false;
+  if (s === "true" || s === "1" || s === "yes")
+    return true;
+  return dflt;
+}
+function num(v, dflt, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n))
+    return dflt;
+  return Math.min(max, Math.max(min, n));
+}
+function readJson(wiki, title) {
+  const raw = String(wiki.getTiddlerText?.(title, "") || wiki.getTiddler(title)?.fields?.text || "");
+  try {
+    const v = JSON.parse(raw || "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+function readAutoPostpone(wiki) {
+  const raw = { ...AUTOPOSTPONE_DEFAULTS, ...readJson(wiki, sched.AUTOPOSTPONE_CONFIG_TITLE) };
+  return {
+    enable: boolish(raw.enable, AUTOPOSTPONE_DEFAULTS.enable),
+    maxPriority: num(raw.maxPriority, AUTOPOSTPONE_DEFAULTS.maxPriority, 0, 100),
+    postponeDays: num(raw.postponeDays, AUTOPOSTPONE_DEFAULTS.postponeDays, 1, 3650),
+    keepTop: num(raw.keepTop, AUTOPOSTPONE_DEFAULTS.keepTop, 0, 1e5),
+    maxOverdueThreshold: num(raw.maxOverdueThreshold, AUTOPOSTPONE_DEFAULTS.maxOverdueThreshold, 0, 1e5)
+  };
+}
+function writeAutoPostpone(wiki, patch) {
+  if (!wiki)
+    return;
+  const next = { ...readAutoPostpone(wiki), ...patch };
+  wiki.addTiddler({ title: sched.AUTOPOSTPONE_CONFIG_TITLE, type: "application/json", text: JSON.stringify(next) });
+}
+function readSemanticSplit(wiki) {
+  const raw = { ...SEMANTIC_SPLIT_DEFAULTS, ...readJson(wiki, ns2.SEMANTIC_SPLIT_TITLE) };
+  return {
+    enable: boolish(raw.enable, SEMANTIC_SPLIT_DEFAULTS.enable),
+    apiKey: String(raw.apiKey ?? "").trim(),
+    baseUrl: String(raw.baseUrl ?? "").trim(),
+    model: String(raw.model ?? "").trim(),
+    maxParas: num(raw.maxParas, SEMANTIC_SPLIT_DEFAULTS.maxParas, 1, 1e4)
+  };
+}
+function writeSemanticSplit(wiki, patch) {
+  if (!wiki)
+    return;
+  const next = { ...readSemanticSplit(wiki), ...patch };
+  wiki.addTiddler({ title: ns2.SEMANTIC_SPLIT_TITLE, type: "application/json", text: JSON.stringify(next) });
+}
+function defaultMix() {
+  const mm = /^(\d+)\s*[:：]\s*(\d+)$/.exec(QUEUE_MIX_DEFAULT);
+  return { item: mm ? Number(mm[1]) : 4, topic: mm ? Number(mm[2]) : 1 };
+}
+function readQueueOptions(wiki) {
+  const m = String(wiki.getTiddlerText?.(QUEUE_MODE_TITLE2, "") || "").trim();
+  const topics = m !== "";
+  const mode = topics && m === "strict" ? "strict" : "interleaved";
+  const dflt = defaultMix();
+  const mm = /^(\d+)\s*[:：]\s*(\d+)$/.exec(String(wiki.getTiddlerText?.(QUEUE_MIX_TITLE2, "") || "").trim());
+  return {
+    topics,
+    mode,
+    itemRatio: mm ? Math.max(1, Number(mm[1])) : dflt.item,
+    topicRatio: mm ? Math.max(1, Number(mm[2])) : dflt.topic
+  };
+}
+function writeQueueOptions(wiki, patch) {
+  if (!wiki)
+    return;
+  const cur = readQueueOptions(wiki);
+  const topics = patch.topics ?? cur.topics;
+  const mode = patch.mode ?? cur.mode;
+  wiki.addTiddler({ title: QUEUE_MODE_TITLE2, text: topics ? mode === "strict" ? "strict" : "interleaved" : "" });
+  if (patch.itemRatio !== void 0 || patch.topicRatio !== void 0) {
+    const ir = Math.max(1, Math.floor(Number(patch.itemRatio ?? cur.itemRatio) || 4));
+    const tr = Math.max(1, Math.floor(Number(patch.topicRatio ?? cur.topicRatio) || 1));
+    wiki.addTiddler({ title: QUEUE_MIX_TITLE2, text: `${ir}:${tr}` });
+  }
+}
+function readPriorityDynamics(wiki) {
+  const f = wiki?.getTiddler?.(PRIORITY_DYNAMICS_TITLE2)?.fields || {};
+  return {
+    enable: boolish(f.enable, true),
+    again: f.again,
+    hard: f.hard,
+    good: f.good,
+    easy: f.easy
+  };
+}
+function readLogRetentionDays(wiki) {
+  const raw = String(wiki.getTiddlerText?.(LOG_RETENTION_TITLE2, "") ?? "").trim();
+  if (raw === "")
+    return LOG_RETENTION_DEFAULT_DAYS;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0)
+    return LOG_RETENTION_DEFAULT_DAYS;
+  return Math.floor(n);
+}
+function writeLogRetentionDays(wiki, days) {
+  if (!wiki)
+    return;
+  const n = Math.max(0, Math.floor(Number(days) || 0));
+  wiki.addTiddler({ title: LOG_RETENTION_TITLE2, text: String(n) });
+}
+function readRolloverHour(wiki) {
+  if (!wiki)
+    return ROLLOVER_HOUR_DEFAULT;
+  const raw = String(wiki.getTiddlerText?.(ns2.ROLLOVER_HOUR_TITLE, "") || wiki.getTiddler?.(ns2.ROLLOVER_HOUR_TITLE)?.fields?.text || "").trim();
+  if (raw === "")
+    return ROLLOVER_HOUR_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 23)
+    return ROLLOVER_HOUR_DEFAULT;
+  return Math.floor(n);
+}
+function writeRolloverHour(wiki, hour) {
+  if (!wiki)
+    return;
+  const n = Math.min(23, Math.max(0, Math.floor(Number(hour) || 0)));
+  wiki.addTiddler({ title: ns2.ROLLOVER_HOUR_TITLE, text: String(n) });
+}
+function readNewPerDay(wiki) {
+  if (!wiki)
+    return NEW_PER_DAY_DEFAULT;
+  const raw = String(wiki.getTiddlerText?.(ns2.NEW_PER_DAY_TITLE, "") || wiki.getTiddler?.(ns2.NEW_PER_DAY_TITLE)?.fields?.text || "").trim();
+  if (raw === "")
+    return NEW_PER_DAY_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0)
+    return NEW_PER_DAY_DEFAULT;
+  return Math.floor(n);
+}
+function writeNewPerDay(wiki, count) {
+  if (!wiki)
+    return;
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  wiki.addTiddler({ title: ns2.NEW_PER_DAY_TITLE, text: String(n) });
+}
+function readReviewsPerDay(wiki) {
+  if (!wiki)
+    return REVIEWS_PER_DAY_DEFAULT;
+  const raw = String(wiki.getTiddlerText?.(ns2.REVIEWS_PER_DAY_TITLE, "") || wiki.getTiddler?.(ns2.REVIEWS_PER_DAY_TITLE)?.fields?.text || "").trim();
+  if (raw === "")
+    return REVIEWS_PER_DAY_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0)
+    return REVIEWS_PER_DAY_DEFAULT;
+  return Math.floor(n);
+}
+function writeReviewsPerDay(wiki, count) {
+  if (!wiki)
+    return;
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  wiki.addTiddler({ title: ns2.REVIEWS_PER_DAY_TITLE, text: String(n) });
+}
+function readLimitsSuppressNew(wiki) {
+  if (!wiki)
+    return true;
+  const raw = wiki.getTiddlerText?.(ns2.LIMITS_SUPPRESS_NEW_TITLE, "") || wiki.getTiddler?.(ns2.LIMITS_SUPPRESS_NEW_TITLE)?.fields?.text;
+  return boolish(raw, true);
+}
+function writeLimitsSuppressNew(wiki, suppress) {
+  if (!wiki)
+    return;
+  wiki.addTiddler({ title: ns2.LIMITS_SUPPRESS_NEW_TITLE, text: suppress ? "yes" : "no" });
+}
+function readLearnAheadMinutes(wiki) {
+  if (!wiki)
+    return LEARN_AHEAD_DEFAULT_MINUTES;
+  const raw = String(wiki.getTiddlerText?.(ns2.LEARN_AHEAD_TITLE, "") || wiki.getTiddler?.(ns2.LEARN_AHEAD_TITLE)?.fields?.text || "").trim();
+  if (raw === "")
+    return LEARN_AHEAD_DEFAULT_MINUTES;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 1440)
+    return LEARN_AHEAD_DEFAULT_MINUTES;
+  return Math.floor(n);
+}
+function writeLearnAheadMinutes(wiki, minutes) {
+  if (!wiki)
+    return;
+  const n = Math.min(1440, Math.max(0, Math.floor(Number(minutes) || 0)));
+  wiki.addTiddler({ title: ns2.LEARN_AHEAD_TITLE, text: String(n) });
+}
+function readBurySiblings(wiki) {
+  if (!wiki)
+    return true;
+  const raw = wiki.getTiddlerText?.(ns2.BURY_SIBLINGS_TITLE, "") || wiki.getTiddler?.(ns2.BURY_SIBLINGS_TITLE)?.fields?.text;
+  return boolish(raw, true);
+}
+function writeBurySiblings(wiki, enable) {
+  if (!wiki)
+    return;
+  wiki.addTiddler({ title: ns2.BURY_SIBLINGS_TITLE, text: enable ? "yes" : "no" });
+}
+function readOcrConfig(wiki) {
+  const raw = { enable: false, model: "gpt-4o-mini", baseUrl: "", apiKey: "", ...readJson(wiki, OCR_TITLE2) };
+  const cfg = {
+    enable: boolish(raw.enable, false),
+    model: String(raw.model ?? "") || "gpt-4o-mini",
+    baseUrl: String(raw.baseUrl ?? ""),
+    apiKey: String(raw.apiKey ?? "")
+  };
+  if (!cfg.apiKey) {
+    const sem = readSemanticSplit(wiki);
+    if (sem.apiKey)
+      cfg.apiKey = String(sem.apiKey);
+  }
+  return cfg;
+}
+function writeOcrConfig(wiki, patch) {
+  if (!wiki)
+    return;
+  const next = { ...readOcrConfig(wiki), ...patch };
+  const stored = { enable: boolish(next.enable, false), model: next.model, baseUrl: next.baseUrl };
+  const semKey = String(readSemanticSplit(wiki).apiKey || "");
+  if (next.apiKey && next.apiKey !== semKey)
+    stored.apiKey = next.apiKey;
+  wiki.addTiddler({ title: OCR_TITLE2, type: "application/json", text: JSON.stringify(stored) });
+}
+function readDefaultDeckParams(wiki) {
+  const f = deckMod.getDeck(wiki, deckMod.DEFAULT_DECK)?.fields || {};
+  let p = {};
+  try {
+    const v = JSON.parse(f.p || "{}");
+    if (v && typeof v === "object")
+      p = v;
+  } catch {
+  }
+  return {
+    order: DECK_ORDERS.includes(String(f.order)) ? String(f.order) : "due-new",
+    leech_threshold: num(f.leech_threshold, sched.DECK_PARAM_DEFAULTS.leechThreshold, 1, 1e4),
+    request_retention: num(p.request_retention, sched.DECK_PARAM_DEFAULTS.requestRetention, 0.5, 1),
+    maximum_interval: num(p.maximum_interval, sched.DECK_PARAM_DEFAULTS.maximumInterval, 1, 365e3),
+    learn_random: boolish(f.random_learn, false)
+  };
+}
+function writeDefaultDeckParams(wiki, patch) {
+  if (!wiki)
+    return;
+  const deck = deckMod.getDeck(wiki, deckMod.DEFAULT_DECK);
+  if (!deck)
+    return;
+  const out = {};
+  if (patch.order !== void 0 && DECK_ORDERS.includes(String(patch.order))) {
+    out.order = String(patch.order);
+  }
+  if (patch.leech_threshold !== void 0) {
+    const n = Number(patch.leech_threshold);
+    if (Number.isFinite(n))
+      out.leech_threshold = String(Math.max(1, Math.floor(n)));
+  }
+  if (patch.learn_random !== void 0) {
+    out.random_learn = patch.learn_random ? "yes" : null;
+  }
+  if (patch.request_retention !== void 0 || patch.maximum_interval !== void 0) {
+    let p = {};
+    try {
+      const v = JSON.parse(deck.fields.p || "{}");
+      if (v && typeof v === "object")
+        p = v;
+    } catch {
+    }
+    if (patch.request_retention !== void 0) {
+      const r = Number(patch.request_retention);
+      if (Number.isFinite(r))
+        p.request_retention = Math.min(1, Math.max(0.5, r));
+    }
+    if (patch.maximum_interval !== void 0) {
+      const m = Number(patch.maximum_interval);
+      if (Number.isFinite(m))
+        p.maximum_interval = Math.max(1, Math.floor(m));
+    }
+    out.p = JSON.stringify(p);
+  }
+  deckMod.updateDeck(wiki, deckMod.DEFAULT_DECK, out);
+}
+var sched, deckMod, ns2, AUTOPOSTPONE_DEFAULTS, SEMANTIC_SPLIT_DEFAULTS, DECK_ORDERS, QUEUE_MIX_DEFAULT, QUEUE_MODE_TITLE2, QUEUE_MIX_TITLE2, PRIORITY_DYNAMICS_TITLE2, LOG_RETENTION_DEFAULT_DAYS, LOG_RETENTION_TITLE2, ROLLOVER_HOUR_DEFAULT, NEW_PER_DAY_DEFAULT, REVIEWS_PER_DAY_DEFAULT, LEARN_AHEAD_DEFAULT_MINUTES, OCR_TITLE2, SEMANTIC_SPLIT_TITLE2;
+var init_config = __esm({
+  "src/tidme/core/config.ts"() {
+    sched = (init_scheduler(), __toCommonJS(scheduler_exports));
+    deckMod = (init_deck(), __toCommonJS(deck_exports));
+    ns2 = (init_ns(), __toCommonJS(ns_exports));
+    AUTOPOSTPONE_DEFAULTS = {
+      enable: false,
+      ...sched.AUTOPOSTPONE_OPTS_DEFAULTS
+    };
+    SEMANTIC_SPLIT_DEFAULTS = {
+      enable: false,
+      apiKey: "",
+      baseUrl: "",
+      model: "",
+      maxParas: 200
+    };
+    DECK_ORDERS = ["due-new", "new-due", "random"];
+    QUEUE_MIX_DEFAULT = "4:1";
+    QUEUE_MODE_TITLE2 = ns2.QUEUE_MODE_TITLE;
+    QUEUE_MIX_TITLE2 = ns2.QUEUE_MIX_TITLE;
+    PRIORITY_DYNAMICS_TITLE2 = ns2.PRIORITY_DYNAMICS_TITLE;
+    LOG_RETENTION_DEFAULT_DAYS = 90;
+    LOG_RETENTION_TITLE2 = ns2.LOG_RETENTION_TITLE;
+    ROLLOVER_HOUR_DEFAULT = 4;
+    NEW_PER_DAY_DEFAULT = 20;
+    REVIEWS_PER_DAY_DEFAULT = 200;
+    LEARN_AHEAD_DEFAULT_MINUTES = 20;
+    OCR_TITLE2 = ns2.OCR_TITLE;
+    SEMANTIC_SPLIT_TITLE2 = ns2.SEMANTIC_SPLIT_TITLE;
+  }
+});
+
 // src/tidme/core/scheduler.ts
 var scheduler_exports = {};
 __export(scheduler_exports, {
@@ -377,7 +943,6 @@ __export(scheduler_exports, {
   AUTOPOSTPONE_CONFIG_TITLE: () => AUTOPOSTPONE_CONFIG_TITLE,
   AUTOPOSTPONE_OPTS_DEFAULTS: () => AUTOPOSTPONE_OPTS_DEFAULTS,
   DECK_PARAM_DEFAULTS: () => DECK_PARAM_DEFAULTS,
-  FINAL_DRILL_MAX_AGE_DAYS: () => FINAL_DRILL_MAX_AGE_DAYS,
   ITEM_FILTER: () => ITEM_FILTER,
   ITEM_PROTECTION_WEIGHT: () => ITEM_PROTECTION_WEIGHT,
   POSTPONE_DEFAULT_DAYS: () => POSTPONE_DEFAULT_DAYS,
@@ -393,14 +958,21 @@ __export(scheduler_exports, {
   buryCards: () => buryCards,
   calculateFuzzRange: () => calculateFuzzRange,
   comparePriorityMixed: () => comparePriorityMixed,
+  constrainedFuzzBounds: () => constrainedFuzzBounds,
   doneCard: () => doneCard,
   findSiblings: () => findSiblings,
   forgetCard: () => forgetCard,
-  getFinalDrillQueue: () => getFinalDrillQueue,
+  fuzzBounds: () => fuzzBounds,
+  fuzzDelta: () => fuzzDelta,
   ignoreCard: () => ignoreCard,
+  isBuriedToday: () => isBuriedToday,
   isCardOutOfQueue: () => isCardOutOfQueue,
   isDueNow: () => isDueNow,
+  isDueNowFor: () => isDueNowFor,
   isInQueue: () => isInQueue,
+  isQueueable: () => isQueueable,
+  learningDayContext: () => learningDayContext,
+  minimumReviewFuzzInterval: () => minimumReviewFuzzInterval,
   nextSchedulable: () => nextSchedulable,
   normalizeAFactor: () => normalizeAFactor,
   normalizePriority: () => normalizePriority,
@@ -410,16 +982,20 @@ __export(scheduler_exports, {
   priorityDeltaForRating: () => priorityDeltaForRating,
   readDailyQuota: () => readDailyQuota,
   recordDailyQuota: () => recordDailyQuota,
-  recordFinalDrill: () => recordFinalDrill,
-  removeFinalDrill: () => removeFinalDrill,
+  resetLeechCard: () => resetLeechCard,
+  resolveDailyLimits: () => resolveDailyLimits,
+  resolveRolloverHour: () => resolveRolloverHour,
   restoreCard: () => restoreCard,
   resumeCard: () => resumeCard,
   rollbackDailyQuota: () => rollbackDailyQuota,
   shiftPriority: () => shiftPriority,
   sortTopicQueue: () => sortTopicQueue,
+  stateOf: () => stateOf,
   suspendCard: () => suspendCard,
   tierRandom: () => tierRandom,
-  unburyCards: () => unburyCards
+  unburyCard: () => unburyCard,
+  unburyCards: () => unburyCards,
+  withReviewFuzz: () => withReviewFuzz
 });
 function protectionScore(fields) {
   return normalizePriority(fields["tidme.priority"]) + (fields["tidme.kind"] === "item" ? -ITEM_PROTECTION_WEIGHT : 0);
@@ -475,36 +1051,54 @@ function shiftPriority(priority, step = 5) {
 function addDays(d, days) {
   return new Date(d.getTime() + days * 864e5);
 }
-function calculateFuzzRange(interval) {
-  if (interval < 2.5)
-    return { minDelta: 0, maxDelta: 0 };
-  let delta = 1;
-  if (interval < 7) {
-    delta += 0.15 * (interval - 2.5);
-  } else if (interval < 20) {
-    delta += 0.15 * (7 - 2.5) + 0.1 * (interval - 7);
-  } else {
-    delta += 0.15 * (7 - 2.5) + 0.1 * (20 - 7) + 0.05 * (interval - 20);
+function fuzzDelta(interval) {
+  if (!(interval >= 2.5))
+    return 0;
+  return FUZZ_RANGES.reduce((delta, [start, end, factor]) => delta + factor * Math.max(0, Math.min(interval, end) - start), 1);
+}
+function fuzzBounds(interval) {
+  const delta = fuzzDelta(interval);
+  return { lower: Math.round(interval - delta), upper: Math.round(interval + delta) };
+}
+function constrainedFuzzBounds(interval, minimum, maximum) {
+  const lo = Math.min(minimum, maximum);
+  const clamped = Math.min(Math.max(interval, lo), maximum);
+  const bounds = fuzzBounds(clamped);
+  let lower = Math.min(Math.max(bounds.lower, lo), maximum);
+  let upper = Math.min(Math.max(bounds.upper, lo), maximum);
+  if (upper === lower && upper > 2 && upper < maximum)
+    upper = lower + 1;
+  return { lower, upper };
+}
+function minimumReviewFuzzInterval(interval, previousInterval, maximumInterval) {
+  const rounded = Math.round(interval);
+  const { upper } = constrainedFuzzBounds(interval, 1, maximumInterval);
+  if (rounded > previousInterval)
+    return previousInterval + 1;
+  if (previousInterval <= upper)
+    return previousInterval;
+  return 0;
+}
+function withReviewFuzz(fuzzFactor, interval, minimum, maximum) {
+  if (fuzzFactor === null) {
+    return Math.min(Math.max(Math.round(interval), minimum), maximum);
   }
-  const intDelta = Math.min(90, Math.max(1, Math.round(delta)));
-  return { minDelta: -intDelta, maxDelta: intDelta };
+  const { lower, upper } = constrainedFuzzBounds(interval, minimum, maximum);
+  return Math.floor(lower + fuzzFactor * (1 + upper - lower));
+}
+function calculateFuzzRange(interval, opts = {}) {
+  const maximum = opts.maxInterval && opts.maxInterval > 0 ? Math.floor(opts.maxInterval) : DECK_PARAM_DEFAULTS.maximumInterval;
+  const minimum = opts.prevInterval && opts.prevInterval > 0 ? minimumReviewFuzzInterval(interval, Math.floor(opts.prevInterval), maximum) : 1;
+  const { lower, upper } = constrainedFuzzBounds(interval, minimum, maximum);
+  return { minDelta: lower - Math.round(interval), maxDelta: upper - Math.round(interval) };
 }
 function applyFuzz(scheduledDays, opts = {}) {
-  if (scheduledDays < 2.5)
-    return Math.round(scheduledDays);
-  const { minDelta, maxDelta } = calculateFuzzRange(scheduledDays);
-  if (minDelta === 0 && maxDelta === 0)
-    return Math.round(scheduledDays);
-  const rnd = typeof opts.randomFn === "function" ? opts.randomFn() : Math.random();
-  const range = maxDelta - minDelta + 1;
-  const fuzz = minDelta + Math.floor(rnd * range);
-  let fuzzed = scheduledDays + fuzz;
-  const lowerBound = opts.prevInterval && opts.prevInterval > 0 ? Math.min(scheduledDays, opts.prevInterval) : 1;
-  fuzzed = Math.max(lowerBound, fuzzed);
-  if (opts.maxInterval && opts.maxInterval > 0) {
-    fuzzed = Math.min(opts.maxInterval, fuzzed);
-  }
-  return Math.round(fuzzed);
+  const maxInterval = opts.maxInterval && opts.maxInterval > 0 ? Math.floor(opts.maxInterval) : DECK_PARAM_DEFAULTS.maximumInterval;
+  if (!(scheduledDays >= 2.5))
+    return withReviewFuzz(null, scheduledDays, 1, maxInterval);
+  const minimum = opts.prevInterval && opts.prevInterval > 0 ? minimumReviewFuzzInterval(scheduledDays, Math.floor(opts.prevInterval), maxInterval) : 1;
+  const factor = typeof opts.randomFn === "function" ? opts.randomFn() : Math.random();
+  return withReviewFuzz(factor, scheduledDays, minimum, maxInterval);
 }
 function postponeCard(fields, byDays = POSTPONE_DEFAULT_DAYS, now = new Date()) {
   const d = parseTwDate2(fields.due);
@@ -537,6 +1131,18 @@ function forgetCard() {
     last_review: t
   };
 }
+function unburyCard() {
+  return { [ns3.BURIED_FIELD]: void 0 };
+}
+function resetLeechCard() {
+  return {
+    "tidme.leech": void 0,
+    "tidme.ignored": void 0,
+    "tidme.suspended": void 0,
+    ...unburyCard(),
+    ...forgetCard()
+  };
+}
 function isCardOutOfQueue(fields) {
   if (!fields)
     return false;
@@ -553,15 +1159,21 @@ function doneCard() {
 function restoreCard() {
   return { "tidme.done": void 0, "tidme.ignored": void 0, "tidme.suspended": void 0 };
 }
+function stateOf(fields) {
+  const raw = fields ? fields.state : void 0;
+  const s = raw === void 0 || raw === null ? "" : String(raw).trim();
+  return s === "1" || s === "2" || s === "3" ? s : "0";
+}
+function isBuriedToday(fields, learningDay) {
+  const buried = fields ? fields[ns3.BURIED_FIELD] : void 0;
+  return buried !== void 0 && buried !== null && String(buried) === learningDay;
+}
+function isQueueable(fields, learningDay) {
+  return isInQueue(fields) && !isBuriedToday(fields, learningDay);
+}
 function isDueNow(fields, now = new Date(), learnAheadMinutes = 0, rolloverHour = 4) {
-  if (!isInQueue(fields))
+  if (!isQueueable(fields, schema.learningDayOf(now, rolloverHour)))
     return false;
-  const buriedDay = fields[ns.BURIED_FIELD];
-  if (buriedDay) {
-    const currentDay = schema.learningDayOf(now, rolloverHour);
-    if (buriedDay === currentDay)
-      return false;
-  }
   const due = fields.due;
   if (due === void 0 || due === null || String(due) === "")
     return true;
@@ -572,18 +1184,47 @@ function isDueNow(fields, now = new Date(), learnAheadMinutes = 0, rolloverHour 
   const nowMs = now.getTime();
   if (dueMs <= nowMs)
     return true;
-  if (learnAheadMinutes > 0 && (fields.state === "1" || fields.state === "3")) {
+  const state = stateOf(fields);
+  if (learnAheadMinutes > 0 && (state === "1" || state === "3")) {
     return dueMs <= nowMs + learnAheadMinutes * 6e4;
   }
   return false;
 }
-function readDailyQuota(wiki, now = new Date(), rolloverHour) {
-  const h = rolloverHour !== void 0 ? rolloverHour : wiki?.getTiddlerText ? Number(wiki.getTiddlerText(ns.ROLLOVER_HOUR_TITLE)) || 4 : 4;
-  const currentDay = schema.learningDayOf(now, h);
+function configMod() {
+  return init_config(), __toCommonJS(config_exports);
+}
+function resolveRolloverHour(wiki) {
+  return configMod().readRolloverHour(wiki);
+}
+function learningDayContext(wiki, now = new Date()) {
+  const config = configMod();
+  const rolloverHour = config.readRolloverHour(wiki);
+  return {
+    now,
+    rolloverHour,
+    learningDay: schema.learningDayOf(now, rolloverHour),
+    learnAheadMinutes: config.readLearnAheadMinutes(wiki)
+  };
+}
+function isDueNowFor(wiki, fields, now = new Date()) {
+  const ctx = learningDayContext(wiki, now);
+  return isDueNow(fields, ctx.now, ctx.learnAheadMinutes, ctx.rolloverHour);
+}
+function writeDailyQuota(wiki, state) {
+  if (wiki && typeof wiki.addTiddler === "function") {
+    wiki.addTiddler({
+      title: ns3.DAILY_QUOTA_STATE_TITLE,
+      type: "application/json",
+      text: JSON.stringify(state)
+    });
+  }
+}
+function readDailyQuota(wiki, now = new Date()) {
+  const currentDay = schema.learningDayOf(now, resolveRolloverHour(wiki));
   const fallback = { learningDay: currentDay, newCount: 0, reviewCount: 0 };
   if (!wiki || typeof wiki.getTiddler !== "function")
     return fallback;
-  const raw = wiki.getTiddlerText?.(ns.DAILY_QUOTA_STATE_TITLE, "");
+  const raw = wiki.getTiddlerText?.(ns3.DAILY_QUOTA_STATE_TITLE, "");
   if (!raw)
     return fallback;
   try {
@@ -599,49 +1240,69 @@ function readDailyQuota(wiki, now = new Date(), rolloverHour) {
   }
   return fallback;
 }
-function recordDailyQuota(wiki, isNew, now = new Date(), rolloverHour) {
-  const current = readDailyQuota(wiki, now, rolloverHour);
+function recordDailyQuota(wiki, kind, now = new Date()) {
+  const current = readDailyQuota(wiki, now);
   const updated = {
     learningDay: current.learningDay,
-    newCount: current.newCount + (isNew ? 1 : 0),
-    reviewCount: current.reviewCount + (isNew ? 0 : 1)
+    newCount: current.newCount + (kind === "new" ? 1 : 0),
+    reviewCount: current.reviewCount + (kind === "review" ? 1 : 0)
   };
-  if (wiki && typeof wiki.addTiddler === "function") {
-    wiki.addTiddler({
-      title: ns.DAILY_QUOTA_STATE_TITLE,
-      type: "application/json",
-      text: JSON.stringify(updated)
-    });
-  }
+  if (kind !== "learn")
+    writeDailyQuota(wiki, updated);
   return updated;
 }
-function rollbackDailyQuota(wiki, isNew, now = new Date(), rolloverHour) {
-  const current = readDailyQuota(wiki, now, rolloverHour);
+function rollbackDailyQuota(wiki, kind, now = new Date()) {
+  const current = readDailyQuota(wiki, now);
   const updated = {
     learningDay: current.learningDay,
-    newCount: Math.max(0, current.newCount - (isNew ? 1 : 0)),
-    reviewCount: Math.max(0, current.reviewCount - (isNew ? 0 : 1))
+    newCount: Math.max(0, current.newCount - (kind === "new" ? 1 : 0)),
+    reviewCount: Math.max(0, current.reviewCount - (kind === "review" ? 1 : 0))
   };
-  if (wiki && typeof wiki.addTiddler === "function") {
-    wiki.addTiddler({
-      title: ns.DAILY_QUOTA_STATE_TITLE,
-      type: "application/json",
-      text: JSON.stringify(updated)
-    });
-  }
+  if (kind !== "learn")
+    writeDailyQuota(wiki, updated);
   return updated;
+}
+function resolveDailyLimits(wiki, now = new Date()) {
+  const config = configMod();
+  const quota = readDailyQuota(wiki, now);
+  const newCap = config.readNewPerDay(wiki);
+  const reviewCap = config.readReviewsPerDay(wiki);
+  const suppress = config.readLimitsSuppressNew(wiki);
+  let reviewLimit = reviewCap > 0 ? Math.max(0, reviewCap - quota.reviewCount) : null;
+  let newLimit = newCap > 0 ? Math.max(0, newCap - quota.newCount) : null;
+  if (suppress && reviewLimit !== null) {
+    const budget = Math.max(0, reviewLimit - quota.newCount);
+    reviewLimit = budget;
+    newLimit = newLimit === null ? budget : Math.min(newLimit, budget);
+  }
+  return {
+    learningDay: quota.learningDay,
+    rolloverHour: resolveRolloverHour(wiki),
+    newCount: quota.newCount,
+    reviewCount: quota.reviewCount,
+    reviewLimit,
+    newLimit
+  };
 }
 function findSiblings(wiki, cardTitle) {
   if (!wiki || typeof wiki.filterTiddlers !== "function" || !cardTitle)
     return [];
   const f = wiki.getTiddler(cardTitle)?.fields;
   const parent = f?.["tidme.parent"];
-  if (!parent)
+  if (!parent || !ns3.isFilterSafeTitle(parent))
     return [];
   const raw = wiki.filterTiddlers(
-    `[all[shadows+tiddlers]tidme.parent[${parent.replace(/[\[\]]/g, "")}]!is[draft]tidme.kind[item]]`
+    `[all[shadows+tiddlers]tidme.parent[${parent}]!is[draft]tidme.kind[item]]`
   );
-  return raw.filter((t) => t !== cardTitle && isInQueue(wiki.getTiddler(t)?.fields));
+  return raw.filter((t) => {
+    if (t === cardTitle)
+      return false;
+    const sf = wiki.getTiddler(t)?.fields;
+    if (!isInQueue(sf))
+      return false;
+    const state = stateOf(sf);
+    return state !== "1" && state !== "3";
+  });
 }
 function buryCards(wiki, titles, learningDay) {
   if (!wiki || typeof wiki.addTiddler !== "function" || !titles.length)
@@ -649,8 +1310,8 @@ function buryCards(wiki, titles, learningDay) {
   const buried = [];
   for (const t of titles) {
     const f = wiki.getTiddler(t)?.fields;
-    if (f && f[ns.BURIED_FIELD] !== learningDay) {
-      wiki.addTiddler({ ...f, [ns.BURIED_FIELD]: learningDay });
+    if (f && f[ns3.BURIED_FIELD] !== learningDay) {
+      wiki.addTiddler({ ...f, [ns3.BURIED_FIELD]: learningDay });
       buried.push(t);
     }
   }
@@ -659,89 +1320,16 @@ function buryCards(wiki, titles, learningDay) {
 function unburyCards(wiki, titles) {
   if (!wiki || typeof wiki.filterTiddlers !== "function")
     return 0;
-  const targetTitles = titles || wiki.filterTiddlers(`[all[shadows+tiddlers]has[${ns.BURIED_FIELD}]]`);
+  const targetTitles = titles || wiki.filterTiddlers(`[all[shadows+tiddlers]has[${ns3.BURIED_FIELD}]]`);
   let count = 0;
   for (const t of targetTitles) {
     const f = wiki.getTiddler(t)?.fields;
-    if (f && f[ns.BURIED_FIELD]) {
-      const copy = { ...f };
-      delete copy[ns.BURIED_FIELD];
-      wiki.addTiddler(copy);
+    if (f && f[ns3.BURIED_FIELD]) {
+      wiki.addTiddler({ ...f, ...unburyCard() });
       count++;
     }
   }
   return count;
-}
-function getFinalDrillQueue(wiki, now = new Date(), maxAgeDays = FINAL_DRILL_MAX_AGE_DAYS) {
-  if (!wiki || typeof wiki.getTiddlerData !== "function")
-    return [];
-  const data = wiki.getTiddlerData(ns.FINAL_DRILL_STATE_TITLE);
-  const list = Array.isArray(data?.entries) ? data.entries : [];
-  if (!list.length)
-    return [];
-  const nowMs = now.getTime();
-  const maxAgeMs = maxAgeDays * 864e5;
-  const validEntries = [];
-  let changed = false;
-  for (const item of list) {
-    const t = item.title;
-    if (!t || !wiki.getTiddler(t)) {
-      changed = true;
-      continue;
-    }
-    const addedTime = schema.tryParseTwDate(item.addedAt)?.getTime() || 0;
-    if (nowMs - addedTime > maxAgeMs) {
-      changed = true;
-      continue;
-    }
-    validEntries.push(item);
-  }
-  if (changed || validEntries.length !== list.length) {
-    wiki.addTiddler({
-      title: ns.FINAL_DRILL_STATE_TITLE,
-      type: "application/json",
-      text: JSON.stringify({ entries: validEntries })
-    });
-  }
-  return validEntries.map((e) => e.title);
-}
-function recordFinalDrill(wiki, title, now = new Date()) {
-  if (!wiki || typeof wiki.addTiddler !== "function" || !title)
-    return;
-  getFinalDrillQueue(wiki, now);
-  const data = wiki.getTiddlerData?.(ns.FINAL_DRILL_STATE_TITLE);
-  const entries = Array.isArray(data?.entries) ? [...data.entries] : [];
-  const existing = entries.find((e) => e.title === title);
-  if (existing) {
-    existing.failCount = (existing.failCount || 1) + 1;
-    existing.addedAt = schema.twDateString(now);
-  } else {
-    entries.push({
-      title,
-      addedAt: schema.twDateString(now),
-      failCount: 1
-    });
-  }
-  wiki.addTiddler({
-    title: ns.FINAL_DRILL_STATE_TITLE,
-    type: "application/json",
-    text: JSON.stringify({ entries })
-  });
-}
-function removeFinalDrill(wiki, title) {
-  if (!wiki || typeof wiki.getTiddlerData !== "function" || !title)
-    return false;
-  const data = wiki.getTiddlerData(ns.FINAL_DRILL_STATE_TITLE);
-  const entries = Array.isArray(data?.entries) ? data.entries : [];
-  const filtered = entries.filter((e) => e.title !== title);
-  if (filtered.length === entries.length)
-    return false;
-  wiki.addTiddler({
-    title: ns.FINAL_DRILL_STATE_TITLE,
-    type: "application/json",
-    text: JSON.stringify({ entries: filtered })
-  });
-  return true;
 }
 function nextSchedulable(ordered, cur, canLearn) {
   const start = cur === null || cur === void 0 ? 0 : ordered.indexOf(cur) + 1;
@@ -852,11 +1440,11 @@ function autoPostpone(cards, opts = {}, now = new Date()) {
     stats: { overdue: overdue.length, postponed: postponable.length, kept: kept.length }
   };
 }
-var ns, AUTOPOSTPONE_CONFIG_TITLE, PRIORITY_DEFAULT, AFACTOR_DEFAULT, AFACTOR_CONTINUOUS, TOPIC_MIN_INTERVAL_DAYS, ITEM_PROTECTION_WEIGHT, POSTPONE_DEFAULT_DAYS, AUTOPOSTPONE_OPTS_DEFAULTS, DECK_PARAM_DEFAULTS, PRIORITY_TIERS, ITEM_FILTER, schema, parseTwDate2, tryParseTwDate2, twDateString2, PRIORITY_BUCKET_BOUNDS, FINAL_DRILL_MAX_AGE_DAYS;
+var ns3, AUTOPOSTPONE_CONFIG_TITLE, PRIORITY_DEFAULT, AFACTOR_DEFAULT, AFACTOR_CONTINUOUS, TOPIC_MIN_INTERVAL_DAYS, ITEM_PROTECTION_WEIGHT, POSTPONE_DEFAULT_DAYS, AUTOPOSTPONE_OPTS_DEFAULTS, DECK_PARAM_DEFAULTS, PRIORITY_TIERS, ITEM_FILTER, schema, parseTwDate2, tryParseTwDate2, twDateString2, PRIORITY_BUCKET_BOUNDS, FUZZ_RANGES;
 var init_scheduler = __esm({
   "src/tidme/core/scheduler.ts"() {
-    ns = (init_ns(), __toCommonJS(ns_exports));
-    AUTOPOSTPONE_CONFIG_TITLE = ns.CONFIG_TITLE_PREFIX + "AutoPostpone";
+    ns3 = (init_ns(), __toCommonJS(ns_exports));
+    AUTOPOSTPONE_CONFIG_TITLE = ns3.CONFIG_TITLE_PREFIX + "AutoPostpone";
     PRIORITY_DEFAULT = 50;
     AFACTOR_DEFAULT = 1.5;
     AFACTOR_CONTINUOUS = 1.3;
@@ -881,203 +1469,121 @@ var init_scheduler = __esm({
     tryParseTwDate2 = schema.tryParseTwDate;
     twDateString2 = schema.twDateString;
     PRIORITY_BUCKET_BOUNDS = { high: 33, medium: 66 };
-    FINAL_DRILL_MAX_AGE_DAYS = 3;
+    FUZZ_RANGES = [
+      [2.5, 7, 0.15],
+      [7, 20, 0.1],
+      [20, Infinity, 0.05]
+    ];
   }
 });
 
-// src/tidme/core/deck.ts
-var deck_exports = {};
-__export(deck_exports, {
-  DECK_TAG: () => DECK_TAG2,
-  DEFAULT_CARD_FILTER: () => DEFAULT_CARD_FILTER,
-  DEFAULT_DECK: () => DEFAULT_DECK,
-  burnSubsetDeck: () => burnSubsetDeck,
-  configToFields: () => configToFields,
-  createDeck: () => createDeck,
-  deckCards: () => deckCards,
-  deleteDeck: () => deleteDeck,
-  getDeck: () => getDeck,
-  isDeckFields: () => isDeckFields,
-  isSubset: () => isSubset,
-  listDecks: () => listDecks,
-  previewMembership: () => previewMembership,
-  titleOf: () => titleOf,
-  updateDeck: () => updateDeck
+// src/tidme/core/deck-engine.ts
+var deck_engine_exports = {};
+__export(deck_engine_exports, {
+  applyQueueLimits: () => applyQueueLimits,
+  clippedCount: () => clippedCount,
+  composeDeckFilters: () => composeDeckFilters,
+  composeGlobalLearningQueue: () => composeGlobalLearningQueue
 });
-function isDeckFields(fields) {
-  return Array.isArray(fields?.tags) && fields.tags.includes(DECK_TAG2);
+function composeDeckFilters(deckTitle, fields = {}) {
+  const d = deckTitle;
+  if (!isFilterSafeTitle2(d)) {
+    console.warn("[tidme] deck title \u542B\u8FC7\u6EE4\u5668\u4E0D\u5B89\u5168\u5B57\u7B26\uFF0C\u961F\u5217\u8FC7\u6EE4\u5668\u7F6E\u7A7A:", d);
+    return { learn: "", due: "", newly: "", unfold: "", random: "", dueNew: "", newDue: "", randomCombo: "", queue: "" };
+  }
+  const learnSort = String(fields.random_learn || "") === "yes" ? " +[sortrandom[]]" : " +[sort[due]]";
+  const learn = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_learn}]${learnSort}`;
+  const due = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_due}subfilter{${d}!!order_due}]`;
+  const newly = `[subfilter{${d}!!card}!subfilter{${d}!!card_exclude}subfilter{${d}!!state_new}subfilter{${d}!!order_new}]`;
+  const unfold = `[subfilter{${d}!!card_unfold}]`;
+  const random = `${due} ${newly} +[sortrandom[]]`;
+  const dueNew = `${learn} ${due} ${newly}`;
+  const newDue = `${learn} ${newly} ${due}`;
+  const randomCombo = `${learn} ${random}`;
+  const order = fields.order || "due-new";
+  const queue = order === "new-due" ? newDue : order === "random" ? randomCombo : dueNew;
+  return { learn, due, newly, unfold, random, dueNew, newDue, randomCombo, queue };
 }
-function titleOf(name) {
-  const raw = String(name || "").trim();
-  if (raw.startsWith(ns2.DECK_PREFIX) || raw.startsWith(ns2.NS_DECKS))
-    return raw;
-  const clean = raw.replace(ns2.TITLE_UNSAFE_CHARS, "-").replace(/[\s]+/g, "-");
-  if (!clean || clean === "-")
-    throw new Error("deck: invalid deck name: " + name);
-  return ns2.DECK_PREFIX + clean;
+function clippedCount(total, limit) {
+  return limit === void 0 || limit === null ? total : Math.min(total, Math.max(0, Math.floor(limit)));
 }
-function listDecks(wiki) {
-  if (!wiki || typeof wiki.filterTiddlers !== "function")
-    return [];
-  return wiki.filterTiddlers(`[all[shadows+tiddlers]tag[${DECK_TAG2}]!is[draft]]`);
-}
-function getDeck(wiki, nameOrTitle) {
-  if (!wiki || typeof wiki.getTiddler !== "function" || !nameOrTitle)
-    return null;
-  const title = titleOf(nameOrTitle);
-  const t = wiki.getTiddler(title);
-  if (!t)
-    return null;
-  const name = title.startsWith(ns2.DECK_PREFIX) ? title.slice(ns2.DECK_PREFIX.length) : title.split("/").pop() || title;
-  return { title, name, fields: t.fields || {} };
-}
-function isSubset(deck) {
-  return !!deck && deck.fields["tidme.subset-doc"] !== void 0 && deck.fields["tidme.subset-doc"] !== "";
-}
-function templateFields(wiki) {
-  const def = getDeck(wiki, DEFAULT_DECK);
-  return def ? { ...def.fields } : {};
-}
-function configToFields(wiki, cfg) {
-  const tpl = templateFields(wiki);
-  delete tpl.title;
-  const fields = {
-    ...tpl,
-    tags: DECK_TAG2,
-    order_learn: tpl.order_learn || "[sort[due]]",
-    order_due: tpl.order_due || "[sort[due]]",
-    order_new: tpl.order_new || "[sortan[title]]",
-    state_learn: tpl.state_learn || "[state[1]] [state[3]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>]",
-    state_due: tpl.state_due || "[state[2]has[due]] -[!days:due[1]]",
-    state_new: tpl.state_new || "[!has[state]] [state[0]]"
+function applyQueueLimits(learnItems, dueItems, newItems, limits = {}) {
+  return {
+    learn: learnItems,
+    due: dueItems.slice(0, clippedCount(dueItems.length, limits.reviewLimit)),
+    newly: newItems.slice(0, clippedCount(newItems.length, limits.newLimit))
   };
-  const set = (k, v, fallback) => {
-    if (v === void 0) {
-      fields[k] = fallback;
-      return;
+}
+function topicDueFilter() {
+  return `${TOPIC_QUEUE_FILTER2} :filter[has[due]] :filter[{!!due}compare:date:lt<now [UTC]YYYY0MM0DD0hh0mm0ssXXX>] +[nsort[tidme.priority]]`;
+}
+function topicPendingFilter() {
+  return `${TOPIC_QUEUE_FILTER2} +[!has[due]] +[nsort[tidme.priority]]`;
+}
+function composeGlobalLearningQueue(evaluate, opts = {}) {
+  const defaultDeckFilters = composeDeckFilters(DECK_PREFIX2 + "default");
+  const mode = opts.mode || "interleaved";
+  const includeTopics = opts.topics === true;
+  const onDiscard = opts.onDiscard || ((title, reason) => console.warn(`[tidme] \u5B66\u4E60\u961F\u5217\u4E22\u5F03${reason === "system" ? "\u7CFB\u7EDF\u6761\u76EE" : "\u8FC7\u6EE4\u5668\u4F2A\u6807\u9898"}\uFF1A`, String(title).slice(0, 120)));
+  const isSafeCard = (t2) => {
+    if (!isFilterSafeTitle2(t2)) {
+      onDiscard(t2, "unsafe");
+      return false;
     }
-    fields[k] = v === null || v === "" ? fallback || "" : v;
+    if (t2.startsWith("$:/")) {
+      onDiscard(t2, "system");
+      return false;
+    }
+    return true;
   };
-  set("caption", cfg.caption, cfg.name);
-  set("description", cfg.description, "");
-  set("card", cfg.card, DEFAULT_CARD_FILTER);
-  set("card_exclude", cfg.cardExclude, fields.card_exclude);
-  set("card_unfold", cfg.cardUnfold, "");
-  set("order", cfg.order, "due-new");
-  if (cfg.leechThreshold !== void 0)
-    fields.leech_threshold = String(cfg.leechThreshold);
-  if (cfg.p !== void 0)
-    fields.p = typeof cfg.p === "string" ? cfg.p : JSON.stringify(cfg.p);
-  if (cfg.newPerDay !== void 0 && Number(cfg.newPerDay) > 0) {
-    const base = String(fields.order_new || "[sortan[title]]").trim();
-    if (!/limit\[\d+\]/.test(base))
-      fields.order_new = `${base} +[limit[${Math.floor(Number(cfg.newPerDay))}]]`;
+  const bury = opts.learningDay ? ns4.buriedExcludeFilter(opts.learningDay) : "";
+  const seg = (filter) => bury ? `${filter} ${bury}` : filter;
+  const limited = applyQueueLimits(
+    evaluate(seg(defaultDeckFilters.learn)).filter(isSafeCard),
+    evaluate(seg(defaultDeckFilters.due)).filter(isSafeCard),
+    evaluate(seg(defaultDeckFilters.newly)).filter(isSafeCard),
+    opts
+  );
+  const learnItems = limited.learn;
+  const dueItems = limited.due;
+  const newItems = limited.newly;
+  if (mode === "strict") {
+    const dueAll = [...learnItems, ...dueItems];
+    if (!includeTopics)
+      return [...dueAll, ...newItems];
+    const dueTopics = evaluate(topicDueFilter());
+    const pendingTopics = evaluate(topicPendingFilter());
+    return [...dueAll, ...dueTopics, ...newItems, ...pendingTopics];
   }
-  if (cfg.kind === "subset" && cfg.sourceDoc)
-    fields["tidme.subset-doc"] = cfg.sourceDoc;
-  return fields;
-}
-function previewMembership(wiki, card, selfTitle) {
-  if (!wiki || typeof wiki.filterTiddlers !== "function" || !card || !card.trim())
-    return { hits: 0, overlap: 0 };
-  let hits;
-  try {
-    hits = wiki.filterTiddlers(card);
-  } catch {
-    return { hits: -1, overlap: 0 };
-  }
-  const others = /* @__PURE__ */ new Set();
-  for (const d of listDecks(wiki)) {
-    if (selfTitle && d === selfTitle)
-      continue;
-    for (const c of deckCards(wiki, d))
-      others.add(c);
-  }
-  return { hits: hits.length, overlap: hits.filter((t) => others.has(t)).length };
-}
-function createDeck(wiki, cfg) {
-  const title = titleOf(cfg.name);
-  if (getDeck(wiki, title))
-    throw new Error(`deck: deck already exists: ${title}`);
-  wiki.addTiddler({ title, ...configToFields(wiki, cfg) });
-  return title;
-}
-function updateDeck(wiki, nameOrTitle, patch) {
-  const deck = getDeck(wiki, nameOrTitle);
-  if (!deck)
-    throw new Error(`deck: deck not found: ${nameOrTitle}`);
-  const fields = { ...deck.fields };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v === void 0)
-      continue;
-    if (v === null)
-      delete fields[k];
-    else
-      fields[k] = v;
-  }
-  wiki.addTiddler({ ...fields, title: deck.title });
-}
-function deleteDeck(wiki, nameOrTitle, opts = {}) {
-  const deck = getDeck(wiki, nameOrTitle);
-  if (!deck)
-    return 0;
-  if (deck.title === DEFAULT_DECK)
-    throw new Error("deck: default deck cannot be deleted");
-  let removed = 0;
-  if (opts.alsoCards) {
-    for (const c of deckCards(wiki, deck.title)) {
-      if (wiki.getTiddler(c)) {
-        wiki.deleteTiddler(c);
-        removed++;
-      }
+  const rawItems = [...learnItems, ...dueItems, ...newItems];
+  const rawTopics = includeTopics ? [...evaluate(topicDueFilter()), ...evaluate(topicPendingFilter())] : [];
+  const ratio = (v, dflt) => Math.max(1, Math.floor(Number(v)) || dflt);
+  const itemRatio = ratio(opts.itemRatio, 4);
+  const topicRatio = ratio(opts.topicRatio, 1);
+  const result = [];
+  let i = 0;
+  let t = 0;
+  while (i < rawItems.length || t < rawTopics.length) {
+    let count = 0;
+    while (i < rawItems.length && count < itemRatio) {
+      result.push(rawItems[i++]);
+      count++;
+    }
+    count = 0;
+    while (t < rawTopics.length && count < topicRatio) {
+      result.push(rawTopics[t++]);
+      count++;
     }
   }
-  wiki.deleteTiddler(deck.title);
-  wiki.deleteTiddler(ns2.deckLogTitle(deck.title));
-  return removed;
+  return result;
 }
-function burnSubsetDeck(wiki, nameOrTitle) {
-  if (!wiki || typeof wiki.deleteTiddler !== "function")
-    return 0;
-  const deck = getDeck(wiki, nameOrTitle);
-  if (!deck || !isSubset(deck))
-    return 0;
-  let n = 0;
-  const log = ns2.deckLogTitle(deck.title);
-  if (wiki.getTiddler(log)) {
-    wiki.deleteTiddler(log);
-    n++;
-  }
-  if (wiki.getTiddler(deck.title)) {
-    wiki.deleteTiddler(deck.title);
-    n++;
-  }
-  return n;
-}
-function deckCards(wiki, nameOrTitle, opts = {}) {
-  const deck = getDeck(wiki, nameOrTitle);
-  if (!deck)
-    return [];
-  if (!ns2.isFilterSafeTitle(deck.title)) {
-    console.warn("[tidme] deck title \u542B\u8FC7\u6EE4\u5668\u4E0D\u5B89\u5168\u5B57\u7B26\uFF0C\u5DF2\u8DF3\u8FC7\u6210\u5458\u6C42\u503C:", deck.title);
-    return [];
-  }
-  const strict = opts.strict !== false;
-  const card = String(deck.fields.card || "");
-  if (!card)
-    return [];
-  if (!strict)
-    return wiki.filterTiddlers(`[subfilter{${deck.title}!!card}]`);
-  const exclude = String(deck.fields.card_exclude || "");
-  return exclude ? wiki.filterTiddlers(`[subfilter{${deck.title}!!card}!subfilter{${deck.title}!!card_exclude}]`) : wiki.filterTiddlers(`[subfilter{${deck.title}!!card}]`);
-}
-var ns2, DECK_TAG2, DEFAULT_DECK, DEFAULT_CARD_FILTER;
-var init_deck = __esm({
-  "src/tidme/core/deck.ts"() {
-    ns2 = (init_ns(), __toCommonJS(ns_exports));
-    DECK_TAG2 = ns2.DECK_TAG;
-    DEFAULT_DECK = ns2.DECK_PREFIX + "default";
-    DEFAULT_CARD_FILTER = `[all[shadows+tiddlers]tidme.kind[item]${ns2.QUEUE_EXCLUDE}]`;
+var ns4, DECK_PREFIX2, TOPIC_QUEUE_FILTER2, isFilterSafeTitle2;
+var init_deck_engine = __esm({
+  "src/tidme/core/deck-engine.ts"() {
+    ns4 = (init_ns(), __toCommonJS(ns_exports));
+    DECK_PREFIX2 = ns4.DECK_PREFIX;
+    TOPIC_QUEUE_FILTER2 = ns4.TOPIC_QUEUE_FILTER;
+    isFilterSafeTitle2 = ns4.isFilterSafeTitle;
   }
 });
 
@@ -1095,6 +1601,8 @@ __export(stats_exports, {
   priorityBuckets: () => priorityBuckets,
   recordReadTime: () => recordReadTime,
   retentionFromLogs: () => retentionFromLogs,
+  reviewCountToday: () => reviewCountToday,
+  todayWorkload: () => todayWorkload,
   trueRetentionFromLogs: () => trueRetentionFromLogs
 });
 function deckLoad(cards, now = new Date()) {
@@ -1175,15 +1683,12 @@ function trueRetentionFromLogs(logEntries, matureIntervalDays = MATURE_INTERVAL_
   return result;
 }
 function futureDueSchedule(cards, days = 30, now = new Date(), rolloverHour = 4) {
-  const currentDayStr = schema2.learningDayOf(now, rolloverHour);
-  const currentDayTime = schema2.parseTwDate(currentDayStr + "000000000").getTime();
+  const currentDay = schema2.learningDayOf(now, rolloverHour);
   const schedule = [];
   for (let i = 0; i < days; i++) {
-    const dayDate = new Date(currentDayTime + i * 864e5);
-    const dateString = schema2.learningDayOf(dayDate, 0);
     schedule.push({
       dayIndex: i,
-      dateString,
+      dateString: schema2.addLearningDays(currentDay, i),
       dueCount: 0,
       cumulativeDue: 0
     });
@@ -1203,9 +1708,7 @@ function futureDueSchedule(cards, days = 30, now = new Date(), rolloverHour = 4)
     const parsed = schema2.tryParseTwDate(dueStr);
     if (!parsed)
       continue;
-    const cardDayStr = schema2.learningDayOf(parsed, rolloverHour);
-    const cardDayTime = schema2.parseTwDate(cardDayStr + "000000000").getTime();
-    const dayDiff = Math.floor((cardDayTime - currentDayTime) / 864e5);
+    const dayDiff = schema2.learningDayDiff(currentDay, schema2.learningDayOf(parsed, rolloverHour));
     if (dayDiff <= 0) {
       schedule[0].dueCount++;
     } else if (dayDiff < days) {
@@ -1269,9 +1772,12 @@ function getReadTimeStats(wiki) {
   }
   const data = readStatsRaw(wiki);
   const totalSeconds = Number(data.totalSeconds) || 0;
-  const todaySeconds = Number(data.days?.[todayKey2()]) || 0;
+  const todaySeconds = Number(data.days?.[readTimeDayKey(wiki)]) || 0;
   const docSeconds = typeof data.docs === "object" && data.docs ? { ...data.docs } : {};
   return { totalSeconds, todaySeconds, docSeconds };
+}
+function readTimeDayKey(wiki) {
+  return sched2.learningDayContext(wiki).learningDay;
 }
 function recordReadTime(wiki, docId, seconds) {
   if (!wiki || !seconds || seconds <= 0)
@@ -1282,8 +1788,9 @@ function recordReadTime(wiki, docId, seconds) {
   if (!data.days)
     data.days = {};
   const sec = Math.max(1, Math.round(seconds));
+  const day = readTimeDayKey(wiki);
   data.totalSeconds = (Number(data.totalSeconds) || 0) + sec;
-  data.days[todayKey2()] = (Number(data.days[todayKey2()]) || 0) + sec;
+  data.days[day] = (Number(data.days[day]) || 0) + sec;
   if (docId) {
     data.docs[docId] = (Number(data.docs[docId]) || 0) + sec;
   }
@@ -1302,380 +1809,174 @@ function priorityBuckets(cards) {
       b.none++;
       continue;
     }
-    b[sched.priorityBucket(raw)]++;
+    b[sched2.priorityBucket(raw)]++;
   }
   return b;
 }
-var schema2, parseTwDate3, sched, nsMod, isCardOutOfQueue2, isInQueue2, todayKey2, MATURE_INTERVAL_DAYS, READTIME_TIDDLER, FOCUS_SEGMENT_MAX_SECONDS;
+function reviewCountToday(wiki) {
+  if (!wiki || typeof wiki.filterTiddlers !== "function")
+    return 0;
+  const ctx = sched2.learningDayContext(wiki);
+  let n = 0;
+  for (const lt of wiki.filterTiddlers(`[prefix[${nsMod.DECK_PREFIX}]]`)) {
+    if (!nsMod.isDeckLogTitle(lt))
+      continue;
+    const data = wiki.getTiddlerData(lt);
+    if (data && typeof data === "object") {
+      for (const k of Object.keys(data)) {
+        const d = schema2.tryParseTwDate(k);
+        if (d) {
+          if (schema2.learningDayOf(d, ctx.rolloverHour) === ctx.learningDay)
+            n += 1;
+        } else if (String(k).startsWith(ctx.learningDay)) {
+          n += 1;
+        }
+      }
+    }
+  }
+  return n;
+}
+function todayWorkload(wiki) {
+  const deckEngine = (init_deck_engine(), __toCommonJS(deck_engine_exports));
+  const deckMod3 = (init_deck(), __toCommonJS(deck_exports));
+  const limits = sched2.resolveDailyLimits(wiki);
+  const f = deckEngine.composeDeckFilters(deckMod3.DEFAULT_DECK);
+  const bury = nsMod.buriedExcludeFilter(limits.learningDay);
+  const count = (filter) => wiki.filterTiddlers(bury ? `${filter} ${bury}` : filter).length;
+  const learn = count(f.learn);
+  const totalDue = count(f.due);
+  const totalNew = count(f.newly);
+  const due = deckEngine.clippedCount(totalDue, limits.reviewLimit);
+  const newly = deckEngine.clippedCount(totalNew, limits.newLimit);
+  return {
+    learn,
+    due,
+    newly,
+    todayToStudy: learn + due + newly,
+    totalDue,
+    totalNew,
+    totalPool: learn + totalDue + totalNew,
+    toRead: count(nsMod.TOPIC_QUEUE_FILTER)
+  };
+}
+var schema2, parseTwDate3, sched2, nsMod, isCardOutOfQueue2, isInQueue2, MATURE_INTERVAL_DAYS, READTIME_TIDDLER, FOCUS_SEGMENT_MAX_SECONDS;
 var init_stats = __esm({
   "src/tidme/core/stats.ts"() {
     schema2 = (init_schema(), __toCommonJS(schema_exports));
     parseTwDate3 = schema2.parseTwDate;
-    sched = (init_scheduler(), __toCommonJS(scheduler_exports));
+    sched2 = (init_scheduler(), __toCommonJS(scheduler_exports));
     nsMod = (init_ns(), __toCommonJS(ns_exports));
-    isCardOutOfQueue2 = sched.isCardOutOfQueue;
-    isInQueue2 = sched.isInQueue;
-    todayKey2 = schema2.todayKey;
+    isCardOutOfQueue2 = sched2.isCardOutOfQueue;
+    isInQueue2 = sched2.isInQueue;
     MATURE_INTERVAL_DAYS = 21;
     READTIME_TIDDLER = "$:/plugins/keepone/tidme/stats/readtime";
     FOCUS_SEGMENT_MAX_SECONDS = 3600;
   }
 });
 
-// src/tidme/core/config.ts
-var config_exports = {};
-__export(config_exports, {
-  AUTOPOSTPONE_DEFAULTS: () => AUTOPOSTPONE_DEFAULTS,
-  LEARN_AHEAD_DEFAULT_MINUTES: () => LEARN_AHEAD_DEFAULT_MINUTES,
-  LOG_RETENTION_DEFAULT_DAYS: () => LOG_RETENTION_DEFAULT_DAYS,
-  LOG_RETENTION_TITLE: () => LOG_RETENTION_TITLE2,
-  NEW_PER_DAY_DEFAULT: () => NEW_PER_DAY_DEFAULT,
-  OCR_TITLE: () => OCR_TITLE2,
-  QUEUE_MIX_DEFAULT: () => QUEUE_MIX_DEFAULT,
-  REVIEWS_PER_DAY_DEFAULT: () => REVIEWS_PER_DAY_DEFAULT,
-  ROLLOVER_HOUR_DEFAULT: () => ROLLOVER_HOUR_DEFAULT,
-  SEMANTIC_SPLIT_DEFAULTS: () => SEMANTIC_SPLIT_DEFAULTS,
-  SEMANTIC_SPLIT_TITLE: () => SEMANTIC_SPLIT_TITLE2,
-  readAutoPostpone: () => readAutoPostpone,
-  readBurySiblings: () => readBurySiblings,
-  readDefaultDeckParams: () => readDefaultDeckParams,
-  readLearnAheadMinutes: () => readLearnAheadMinutes,
-  readLimitsSuppressNew: () => readLimitsSuppressNew,
-  readLogRetentionDays: () => readLogRetentionDays,
-  readNewPerDay: () => readNewPerDay,
-  readOcrConfig: () => readOcrConfig,
-  readPriorityDynamics: () => readPriorityDynamics,
-  readQueueOptions: () => readQueueOptions,
-  readReviewsPerDay: () => readReviewsPerDay,
-  readRolloverHour: () => readRolloverHour,
-  readSemanticSplit: () => readSemanticSplit,
-  writeAutoPostpone: () => writeAutoPostpone,
-  writeBurySiblings: () => writeBurySiblings,
-  writeDefaultDeckParams: () => writeDefaultDeckParams,
-  writeLearnAheadMinutes: () => writeLearnAheadMinutes,
-  writeLimitsSuppressNew: () => writeLimitsSuppressNew,
-  writeLogRetentionDays: () => writeLogRetentionDays,
-  writeNewPerDay: () => writeNewPerDay,
-  writeOcrConfig: () => writeOcrConfig,
-  writeQueueOptions: () => writeQueueOptions,
-  writeReviewsPerDay: () => writeReviewsPerDay,
-  writeRolloverHour: () => writeRolloverHour,
-  writeSemanticSplit: () => writeSemanticSplit
+// src/tidme/core/undo.ts
+var undo_exports = {};
+__export(undo_exports, {
+  MAX_UNDO_DEPTH: () => MAX_UNDO_DEPTH,
+  clearUndo: () => clearUndo,
+  popUndo: () => popUndo,
+  pushUndo: () => pushUndo,
+  undoDepth: () => undoDepth
 });
-function boolish(v, dflt) {
-  if (v === void 0 || v === null || String(v).trim() === "")
-    return dflt;
-  const s = String(v).trim().toLowerCase();
-  if (s === "false" || s === "0" || s === "no")
+function pushUndo(snapshot) {
+  stack.push(snapshot);
+  while (stack.length > MAX_UNDO_DEPTH)
+    stack.shift();
+  return stack.length;
+}
+function popUndo() {
+  return stack.length ? stack.pop() : null;
+}
+function undoDepth() {
+  return stack.length;
+}
+function clearUndo() {
+  stack.length = 0;
+}
+var MAX_UNDO_DEPTH, stack;
+var init_undo = __esm({
+  "src/tidme/core/undo.ts"() {
+    MAX_UNDO_DEPTH = 30;
+    stack = [];
+  }
+});
+
+// src/tidme/core/drill.ts
+var drill_exports = {};
+__export(drill_exports, {
+  FINAL_DRILL_MAX_AGE_DAYS: () => FINAL_DRILL_MAX_AGE_DAYS,
+  getFinalDrillQueue: () => getFinalDrillQueue,
+  recordFinalDrill: () => recordFinalDrill,
+  removeFinalDrill: () => removeFinalDrill
+});
+function writeEntries(wiki, entries) {
+  wiki.addTiddler({
+    title: ns5.FINAL_DRILL_STATE_TITLE,
+    type: "application/json",
+    text: JSON.stringify({ entries })
+  });
+}
+function readEntries(wiki) {
+  const data = wiki.getTiddlerData?.(ns5.FINAL_DRILL_STATE_TITLE);
+  return Array.isArray(data?.entries) ? data.entries : [];
+}
+function getFinalDrillQueue(wiki, now = new Date(), maxAgeDays = FINAL_DRILL_MAX_AGE_DAYS) {
+  if (!wiki || typeof wiki.getTiddlerData !== "function")
+    return [];
+  const list = readEntries(wiki);
+  if (!list.length)
+    return [];
+  const nowMs = now.getTime();
+  const maxAgeMs = maxAgeDays * 864e5;
+  const validEntries = [];
+  for (const item of list) {
+    const t = item.title;
+    if (!t || !wiki.getTiddler(t))
+      continue;
+    const addedTime = schema3.tryParseTwDate(item.addedAt)?.getTime() || 0;
+    if (nowMs - addedTime > maxAgeMs)
+      continue;
+    validEntries.push(item);
+  }
+  if (validEntries.length !== list.length)
+    writeEntries(wiki, validEntries);
+  return validEntries.map((e) => e.title);
+}
+function recordFinalDrill(wiki, title, now = new Date()) {
+  if (!wiki || typeof wiki.addTiddler !== "function" || !title)
+    return;
+  getFinalDrillQueue(wiki, now);
+  const entries = [...readEntries(wiki)];
+  const existing = entries.find((e) => e.title === title);
+  if (existing) {
+    existing.failCount = (existing.failCount || 1) + 1;
+    existing.addedAt = schema3.twDateString(now);
+  } else {
+    entries.push({ title, addedAt: schema3.twDateString(now), failCount: 1 });
+  }
+  writeEntries(wiki, entries);
+}
+function removeFinalDrill(wiki, title) {
+  if (!wiki || typeof wiki.getTiddlerData !== "function" || !title)
     return false;
-  if (s === "true" || s === "1" || s === "yes")
-    return true;
-  return dflt;
+  const entries = readEntries(wiki);
+  const filtered = entries.filter((e) => e.title !== title);
+  if (filtered.length === entries.length)
+    return false;
+  writeEntries(wiki, filtered);
+  return true;
 }
-function num(v, dflt, min, max) {
-  const n = Number(v);
-  if (!Number.isFinite(n))
-    return dflt;
-  return Math.min(max, Math.max(min, n));
-}
-function readJson(wiki, title) {
-  const raw = String(wiki.getTiddlerText?.(title, "") || wiki.getTiddler(title)?.fields?.text || "");
-  try {
-    const v = JSON.parse(raw || "{}");
-    return v && typeof v === "object" ? v : {};
-  } catch {
-    return {};
-  }
-}
-function readAutoPostpone(wiki) {
-  const raw = { ...AUTOPOSTPONE_DEFAULTS, ...readJson(wiki, sched2.AUTOPOSTPONE_CONFIG_TITLE) };
-  return {
-    enable: boolish(raw.enable, AUTOPOSTPONE_DEFAULTS.enable),
-    maxPriority: num(raw.maxPriority, AUTOPOSTPONE_DEFAULTS.maxPriority, 0, 100),
-    postponeDays: num(raw.postponeDays, AUTOPOSTPONE_DEFAULTS.postponeDays, 1, 3650),
-    keepTop: num(raw.keepTop, AUTOPOSTPONE_DEFAULTS.keepTop, 0, 1e5),
-    maxOverdueThreshold: num(raw.maxOverdueThreshold, AUTOPOSTPONE_DEFAULTS.maxOverdueThreshold, 0, 1e5)
-  };
-}
-function writeAutoPostpone(wiki, patch) {
-  if (!wiki)
-    return;
-  const next = { ...readAutoPostpone(wiki), ...patch };
-  wiki.addTiddler({ title: sched2.AUTOPOSTPONE_CONFIG_TITLE, type: "application/json", text: JSON.stringify(next) });
-}
-function readSemanticSplit(wiki) {
-  const raw = { ...SEMANTIC_SPLIT_DEFAULTS, ...readJson(wiki, ns3.SEMANTIC_SPLIT_TITLE) };
-  return {
-    enable: boolish(raw.enable, SEMANTIC_SPLIT_DEFAULTS.enable),
-    apiKey: String(raw.apiKey ?? "").trim(),
-    baseUrl: String(raw.baseUrl ?? "").trim(),
-    model: String(raw.model ?? "").trim(),
-    maxParas: num(raw.maxParas, SEMANTIC_SPLIT_DEFAULTS.maxParas, 1, 1e4)
-  };
-}
-function writeSemanticSplit(wiki, patch) {
-  if (!wiki)
-    return;
-  const next = { ...readSemanticSplit(wiki), ...patch };
-  wiki.addTiddler({ title: ns3.SEMANTIC_SPLIT_TITLE, type: "application/json", text: JSON.stringify(next) });
-}
-function defaultMix() {
-  const mm = /^(\d+)\s*[:：]\s*(\d+)$/.exec(QUEUE_MIX_DEFAULT);
-  return { item: mm ? Number(mm[1]) : 4, topic: mm ? Number(mm[2]) : 1 };
-}
-function readQueueOptions(wiki) {
-  const m = String(wiki.getTiddlerText?.(QUEUE_MODE_TITLE2, "") || "").trim();
-  const topics = m !== "";
-  const mode = topics && m === "strict" ? "strict" : "interleaved";
-  const dflt = defaultMix();
-  const mm = /^(\d+)\s*[:：]\s*(\d+)$/.exec(String(wiki.getTiddlerText?.(QUEUE_MIX_TITLE2, "") || "").trim());
-  return {
-    topics,
-    mode,
-    itemRatio: mm ? Math.max(1, Number(mm[1])) : dflt.item,
-    topicRatio: mm ? Math.max(1, Number(mm[2])) : dflt.topic
-  };
-}
-function writeQueueOptions(wiki, patch) {
-  if (!wiki)
-    return;
-  const cur = readQueueOptions(wiki);
-  const topics = patch.topics ?? cur.topics;
-  const mode = patch.mode ?? cur.mode;
-  wiki.addTiddler({ title: QUEUE_MODE_TITLE2, text: topics ? mode === "strict" ? "strict" : "interleaved" : "" });
-  if (patch.itemRatio !== void 0 || patch.topicRatio !== void 0) {
-    const ir = Math.max(1, Math.floor(Number(patch.itemRatio ?? cur.itemRatio) || 4));
-    const tr = Math.max(1, Math.floor(Number(patch.topicRatio ?? cur.topicRatio) || 1));
-    wiki.addTiddler({ title: QUEUE_MIX_TITLE2, text: `${ir}:${tr}` });
-  }
-}
-function readPriorityDynamics(wiki) {
-  const f = wiki?.getTiddler?.(PRIORITY_DYNAMICS_TITLE2)?.fields || {};
-  return {
-    enable: boolish(f.enable, true),
-    again: f.again,
-    hard: f.hard,
-    good: f.good,
-    easy: f.easy
-  };
-}
-function readLogRetentionDays(wiki) {
-  const raw = String(wiki.getTiddlerText?.(LOG_RETENTION_TITLE2, "") ?? "").trim();
-  if (raw === "")
-    return LOG_RETENTION_DEFAULT_DAYS;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0)
-    return LOG_RETENTION_DEFAULT_DAYS;
-  return Math.floor(n);
-}
-function writeLogRetentionDays(wiki, days) {
-  if (!wiki)
-    return;
-  const n = Math.max(0, Math.floor(Number(days) || 0));
-  wiki.addTiddler({ title: LOG_RETENTION_TITLE2, text: String(n) });
-}
-function readRolloverHour(wiki) {
-  if (!wiki)
-    return ROLLOVER_HOUR_DEFAULT;
-  const raw = String(wiki.getTiddlerText?.(ns3.ROLLOVER_HOUR_TITLE, "") || wiki.getTiddler?.(ns3.ROLLOVER_HOUR_TITLE)?.fields?.text || "").trim();
-  if (raw === "")
-    return ROLLOVER_HOUR_DEFAULT;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0 || n > 23)
-    return ROLLOVER_HOUR_DEFAULT;
-  return Math.floor(n);
-}
-function writeRolloverHour(wiki, hour) {
-  if (!wiki)
-    return;
-  const n = Math.min(23, Math.max(0, Math.floor(Number(hour) || 0)));
-  wiki.addTiddler({ title: ns3.ROLLOVER_HOUR_TITLE, text: String(n) });
-}
-function readNewPerDay(wiki) {
-  if (!wiki)
-    return NEW_PER_DAY_DEFAULT;
-  const raw = String(wiki.getTiddlerText?.(ns3.NEW_PER_DAY_TITLE, "") || wiki.getTiddler?.(ns3.NEW_PER_DAY_TITLE)?.fields?.text || "").trim();
-  if (raw === "")
-    return NEW_PER_DAY_DEFAULT;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0)
-    return NEW_PER_DAY_DEFAULT;
-  return Math.floor(n);
-}
-function writeNewPerDay(wiki, count) {
-  if (!wiki)
-    return;
-  const n = Math.max(0, Math.floor(Number(count) || 0));
-  wiki.addTiddler({ title: ns3.NEW_PER_DAY_TITLE, text: String(n) });
-}
-function readReviewsPerDay(wiki) {
-  if (!wiki)
-    return REVIEWS_PER_DAY_DEFAULT;
-  const raw = String(wiki.getTiddlerText?.(ns3.REVIEWS_PER_DAY_TITLE, "") || wiki.getTiddler?.(ns3.REVIEWS_PER_DAY_TITLE)?.fields?.text || "").trim();
-  if (raw === "")
-    return REVIEWS_PER_DAY_DEFAULT;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0)
-    return REVIEWS_PER_DAY_DEFAULT;
-  return Math.floor(n);
-}
-function writeReviewsPerDay(wiki, count) {
-  if (!wiki)
-    return;
-  const n = Math.max(0, Math.floor(Number(count) || 0));
-  wiki.addTiddler({ title: ns3.REVIEWS_PER_DAY_TITLE, text: String(n) });
-}
-function readLimitsSuppressNew(wiki) {
-  if (!wiki)
-    return true;
-  const raw = wiki.getTiddlerText?.(ns3.LIMITS_SUPPRESS_NEW_TITLE, "") || wiki.getTiddler?.(ns3.LIMITS_SUPPRESS_NEW_TITLE)?.fields?.text;
-  return boolish(raw, true);
-}
-function writeLimitsSuppressNew(wiki, suppress) {
-  if (!wiki)
-    return;
-  wiki.addTiddler({ title: ns3.LIMITS_SUPPRESS_NEW_TITLE, text: suppress ? "yes" : "no" });
-}
-function readLearnAheadMinutes(wiki) {
-  if (!wiki)
-    return LEARN_AHEAD_DEFAULT_MINUTES;
-  const raw = String(wiki.getTiddlerText?.(ns3.LEARN_AHEAD_TITLE, "") || wiki.getTiddler?.(ns3.LEARN_AHEAD_TITLE)?.fields?.text || "").trim();
-  if (raw === "")
-    return LEARN_AHEAD_DEFAULT_MINUTES;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0 || n > 1440)
-    return LEARN_AHEAD_DEFAULT_MINUTES;
-  return Math.floor(n);
-}
-function writeLearnAheadMinutes(wiki, minutes) {
-  if (!wiki)
-    return;
-  const n = Math.min(1440, Math.max(0, Math.floor(Number(minutes) || 0)));
-  wiki.addTiddler({ title: ns3.LEARN_AHEAD_TITLE, text: String(n) });
-}
-function readBurySiblings(wiki) {
-  if (!wiki)
-    return true;
-  const raw = wiki.getTiddlerText?.(ns3.BURY_SIBLINGS_TITLE, "") || wiki.getTiddler?.(ns3.BURY_SIBLINGS_TITLE)?.fields?.text;
-  return boolish(raw, true);
-}
-function writeBurySiblings(wiki, enable) {
-  if (!wiki)
-    return;
-  wiki.addTiddler({ title: ns3.BURY_SIBLINGS_TITLE, text: enable ? "yes" : "no" });
-}
-function readOcrConfig(wiki) {
-  const raw = { enable: false, model: "gpt-4o-mini", baseUrl: "", apiKey: "", ...readJson(wiki, OCR_TITLE2) };
-  const cfg = {
-    enable: boolish(raw.enable, false),
-    model: String(raw.model ?? "") || "gpt-4o-mini",
-    baseUrl: String(raw.baseUrl ?? ""),
-    apiKey: String(raw.apiKey ?? "")
-  };
-  if (!cfg.apiKey) {
-    const sem = readSemanticSplit(wiki);
-    if (sem.apiKey)
-      cfg.apiKey = String(sem.apiKey);
-  }
-  return cfg;
-}
-function writeOcrConfig(wiki, patch) {
-  if (!wiki)
-    return;
-  const next = { ...readOcrConfig(wiki), ...patch };
-  const stored = { enable: boolish(next.enable, false), model: next.model, baseUrl: next.baseUrl };
-  const semKey = String(readSemanticSplit(wiki).apiKey || "");
-  if (next.apiKey && next.apiKey !== semKey)
-    stored.apiKey = next.apiKey;
-  wiki.addTiddler({ title: OCR_TITLE2, type: "application/json", text: JSON.stringify(stored) });
-}
-function readDefaultDeckParams(wiki) {
-  const f = deckMod.getDeck(wiki, deckMod.DEFAULT_DECK)?.fields || {};
-  let p = {};
-  try {
-    const v = JSON.parse(f.p || "{}");
-    if (v && typeof v === "object")
-      p = v;
-  } catch {
-  }
-  return {
-    order: DECK_ORDERS.includes(String(f.order)) ? String(f.order) : "due-new",
-    leech_threshold: num(f.leech_threshold, sched2.DECK_PARAM_DEFAULTS.leechThreshold, 1, 1e4),
-    request_retention: num(p.request_retention, sched2.DECK_PARAM_DEFAULTS.requestRetention, 0.5, 1),
-    maximum_interval: num(p.maximum_interval, sched2.DECK_PARAM_DEFAULTS.maximumInterval, 1, 365e3),
-    learn_random: boolish(f.random_learn, false)
-  };
-}
-function writeDefaultDeckParams(wiki, patch) {
-  if (!wiki)
-    return;
-  const deck = deckMod.getDeck(wiki, deckMod.DEFAULT_DECK);
-  if (!deck)
-    return;
-  const out = {};
-  if (patch.order !== void 0 && DECK_ORDERS.includes(String(patch.order))) {
-    out.order = String(patch.order);
-  }
-  if (patch.leech_threshold !== void 0) {
-    const n = Number(patch.leech_threshold);
-    if (Number.isFinite(n))
-      out.leech_threshold = String(Math.max(1, Math.floor(n)));
-  }
-  if (patch.learn_random !== void 0) {
-    out.random_learn = patch.learn_random ? "yes" : null;
-  }
-  if (patch.request_retention !== void 0 || patch.maximum_interval !== void 0) {
-    let p = {};
-    try {
-      const v = JSON.parse(deck.fields.p || "{}");
-      if (v && typeof v === "object")
-        p = v;
-    } catch {
-    }
-    if (patch.request_retention !== void 0) {
-      const r = Number(patch.request_retention);
-      if (Number.isFinite(r))
-        p.request_retention = Math.min(1, Math.max(0.5, r));
-    }
-    if (patch.maximum_interval !== void 0) {
-      const m = Number(patch.maximum_interval);
-      if (Number.isFinite(m))
-        p.maximum_interval = Math.max(1, Math.floor(m));
-    }
-    out.p = JSON.stringify(p);
-  }
-  deckMod.updateDeck(wiki, deckMod.DEFAULT_DECK, out);
-}
-var sched2, deckMod, ns3, AUTOPOSTPONE_DEFAULTS, SEMANTIC_SPLIT_DEFAULTS, DECK_ORDERS, QUEUE_MIX_DEFAULT, QUEUE_MODE_TITLE2, QUEUE_MIX_TITLE2, PRIORITY_DYNAMICS_TITLE2, LOG_RETENTION_DEFAULT_DAYS, LOG_RETENTION_TITLE2, ROLLOVER_HOUR_DEFAULT, NEW_PER_DAY_DEFAULT, REVIEWS_PER_DAY_DEFAULT, LEARN_AHEAD_DEFAULT_MINUTES, OCR_TITLE2, SEMANTIC_SPLIT_TITLE2;
-var init_config = __esm({
-  "src/tidme/core/config.ts"() {
-    sched2 = (init_scheduler(), __toCommonJS(scheduler_exports));
-    deckMod = (init_deck(), __toCommonJS(deck_exports));
-    ns3 = (init_ns(), __toCommonJS(ns_exports));
-    AUTOPOSTPONE_DEFAULTS = {
-      enable: false,
-      ...sched2.AUTOPOSTPONE_OPTS_DEFAULTS
-    };
-    SEMANTIC_SPLIT_DEFAULTS = {
-      enable: false,
-      apiKey: "",
-      baseUrl: "",
-      model: "",
-      maxParas: 200
-    };
-    DECK_ORDERS = ["due-new", "new-due", "random"];
-    QUEUE_MIX_DEFAULT = "4:1";
-    QUEUE_MODE_TITLE2 = ns3.QUEUE_MODE_TITLE;
-    QUEUE_MIX_TITLE2 = ns3.QUEUE_MIX_TITLE;
-    PRIORITY_DYNAMICS_TITLE2 = ns3.PRIORITY_DYNAMICS_TITLE;
-    LOG_RETENTION_DEFAULT_DAYS = 90;
-    LOG_RETENTION_TITLE2 = ns3.LOG_RETENTION_TITLE;
-    ROLLOVER_HOUR_DEFAULT = 4;
-    NEW_PER_DAY_DEFAULT = 20;
-    REVIEWS_PER_DAY_DEFAULT = 200;
-    LEARN_AHEAD_DEFAULT_MINUTES = 20;
-    OCR_TITLE2 = ns3.OCR_TITLE;
-    SEMANTIC_SPLIT_TITLE2 = ns3.SEMANTIC_SPLIT_TITLE;
+var ns5, schema3, FINAL_DRILL_MAX_AGE_DAYS;
+var init_drill = __esm({
+  "src/tidme/core/drill.ts"() {
+    ns5 = (init_ns(), __toCommonJS(ns_exports));
+    schema3 = (init_schema(), __toCommonJS(schema_exports));
+    FINAL_DRILL_MAX_AGE_DAYS = 3;
   }
 });
 
@@ -1748,10 +2049,13 @@ function advanceSession(wiki, cur, canLearn) {
   const s = getSession(wiki);
   if (!s)
     return null;
-  const learnAhead = config && typeof config.readLearnAheadMinutes === "function" ? config.readLearnAheadMinutes(wiki) : 20;
+  const ctx = sched3.learningDayContext(wiki);
+  const freeMode = s.mode === "cram" || s.mode === "final-drill";
   const learn = canLearn ? canLearn : (t) => {
     const f = wiki.getTiddler(t);
-    return f ? sched3.isDueNow(f.fields, new Date(), learnAhead) : false;
+    if (!f)
+      return false;
+    return freeMode ? sched3.isQueueable(f.fields, ctx.learningDay) : sched3.isDueNow(f.fields, ctx.now, ctx.learnAheadMinutes, ctx.rolloverHour);
   };
   return sched3.nextSchedulable(s.list, cur, learn);
 }
@@ -1760,7 +2064,7 @@ function modifiedMs(v) {
     return v.getTime();
   if (typeof v === "number" && Number.isFinite(v))
     return v;
-  return schema3.tryParseTwDate(v)?.getTime() ?? 0;
+  return schema4.tryParseTwDate(v)?.getTime() ?? 0;
 }
 function getActiveStudy(wiki) {
   if (!wiki || typeof wiki.getTiddler !== "function")
@@ -1783,6 +2087,7 @@ function getActiveStudy(wiki) {
 function endSession(wiki) {
   if (!wiki || typeof wiki.deleteTiddler !== "function")
     return 0;
+  undo.clearUndo();
   settleFocusAnchor(wiki);
   let n = 0;
   if (wiki.getTiddler(SESSION_TIDDLER)) {
@@ -1806,11 +2111,12 @@ function endSession(wiki) {
 function startFinalDrill(wiki, now = new Date()) {
   if (!wiki)
     return null;
-  const queue = sched3.getFinalDrillQueue(wiki, now);
+  const queue = drill.getFinalDrillQueue(wiki, now);
   if (!queue || !queue.length)
     return null;
   setSession(wiki, { list: queue, mode: "final-drill", currentIndex: "0" });
   enterCard(wiki, queue[0], now);
+  undo.clearUndo();
   return { list: queue, mode: "final-drill" };
 }
 function startCramSession(wiki, filterOrList, now = new Date()) {
@@ -1826,6 +2132,7 @@ function startCramSession(wiki, filterOrList, now = new Date()) {
     return null;
   setSession(wiki, { list, mode: "cram", currentIndex: "0" });
   enterCard(wiki, list[0], now);
+  undo.clearUndo();
   return { list, mode: "cram" };
 }
 function prepareCardFold(wiki, title) {
@@ -1836,7 +2143,7 @@ function prepareCardFold(wiki, title) {
     return;
   let text = "hide";
   for (const d of deckMod2.listDecks(wiki)) {
-    if (!ns4.isFilterSafeTitle(d))
+    if (!ns6.isFilterSafeTitle(d))
       continue;
     const unfoldFilter = String(wiki.getTiddler(d)?.fields?.card_unfold || "").trim();
     if (!unfoldFilter)
@@ -1846,15 +2153,15 @@ function prepareCardFold(wiki, title) {
       break;
     }
   }
-  wiki.addTiddler({ title: ns4.FOLDED_STATE_PREFIX + title, text });
+  wiki.addTiddler({ title: ns6.FOLDED_STATE_PREFIX + title, text });
 }
 function readFocusAnchor(wiki) {
   if (!wiki || typeof wiki.getTiddler !== "function")
     return null;
-  const fields = wiki.getTiddler(ns4.CARD_OPEN_AT_TITLE)?.fields;
+  const fields = wiki.getTiddler(ns6.CARD_OPEN_AT_TITLE)?.fields;
   if (!fields)
     return null;
-  const at = schema3.tryParseTwDate(fields.text);
+  const at = schema4.tryParseTwDate(fields.text);
   if (!at)
     return null;
   return { card: String(fields.card || ""), at };
@@ -1876,7 +2183,7 @@ function settleFocusAnchor(wiki, now = new Date()) {
   if (!wiki || typeof wiki.deleteTiddler !== "function")
     return 0;
   const anchor = readFocusAnchor(wiki);
-  wiki.deleteTiddler(ns4.CARD_OPEN_AT_TITLE);
+  wiki.deleteTiddler(ns6.CARD_OPEN_AT_TITLE);
   if (!anchor)
     return 0;
   return recordFocus(wiki, anchor.card, anchor.at, now);
@@ -1893,35 +2200,36 @@ function touchFocusAnchor(wiki, title, now = new Date()) {
     return;
   if (wiki.getTiddler?.(title)?.fields?.["tidme.kind"] !== "item")
     return;
-  wiki.addTiddler({ title: ns4.CARD_OPEN_AT_TITLE, text: schema3.twDateString(now), card: title });
+  wiki.addTiddler({ title: ns6.CARD_OPEN_AT_TITLE, text: schema4.twDateString(now), card: title });
 }
 function consumeFocusAnchor(wiki, title, now = new Date()) {
   const anchor = readFocusAnchor(wiki);
   if (!anchor) {
     if (wiki && typeof wiki.deleteTiddler === "function")
-      wiki.deleteTiddler(ns4.CARD_OPEN_AT_TITLE);
+      wiki.deleteTiddler(ns6.CARD_OPEN_AT_TITLE);
     return 0;
   }
   if (anchor.card && anchor.card !== title) {
     settleFocusAnchor(wiki, now);
     return 0;
   }
-  wiki.deleteTiddler(ns4.CARD_OPEN_AT_TITLE);
+  wiki.deleteTiddler(ns6.CARD_OPEN_AT_TITLE);
   return recordFocus(wiki, anchor.card || String(title || ""), anchor.at, now);
 }
 function enterCard(wiki, title, now = new Date()) {
   prepareCardFold(wiki, title);
   touchFocusAnchor(wiki, title, now);
 }
-var sched3, deckMod2, ns4, schema3, statsMod, config, DECK_STUDY_SUFFIX, TEMP_PREFIX, SESSION_TIDDLER;
+var sched3, deckMod2, ns6, schema4, statsMod, undo, drill, DECK_STUDY_SUFFIX, TEMP_PREFIX, SESSION_TIDDLER;
 var init_session = __esm({
   "src/tidme/core/session.ts"() {
     sched3 = (init_scheduler(), __toCommonJS(scheduler_exports));
     deckMod2 = (init_deck(), __toCommonJS(deck_exports));
-    ns4 = (init_ns(), __toCommonJS(ns_exports));
-    schema3 = (init_schema(), __toCommonJS(schema_exports));
+    ns6 = (init_ns(), __toCommonJS(ns_exports));
+    schema4 = (init_schema(), __toCommonJS(schema_exports));
     statsMod = (init_stats(), __toCommonJS(stats_exports));
-    config = (init_config(), __toCommonJS(config_exports));
+    undo = (init_undo(), __toCommonJS(undo_exports));
+    drill = (init_drill(), __toCommonJS(drill_exports));
     DECK_STUDY_SUFFIX = "/study";
     TEMP_PREFIX = "$:/temp/tidme/";
     SESSION_TIDDLER = "$:/state/tidme/learning-session";
@@ -2134,17 +2442,17 @@ function partitionBlocks(blocks, maxChars) {
 }
 function buildTree(blocks) {
   const roots = [];
-  const stack = [{ level: 0, children: roots }];
+  const stack2 = [{ level: 0, children: roots }];
   let current = null;
   const preamble = [];
   for (const b of blocks) {
     if (b.isHeading) {
-      while (stack.length > 1 && stack[stack.length - 1].level >= b.level)
-        stack.pop();
-      const parent = stack[stack.length - 1];
+      while (stack2.length > 1 && stack2[stack2.length - 1].level >= b.level)
+        stack2.pop();
+      const parent = stack2[stack2.length - 1];
       const node = { level: b.level, text: b.text, blocks: [], children: [] };
       parent.children.push(node);
-      stack.push({ level: b.level, children: node.children });
+      stack2.push({ level: b.level, children: node.children });
       current = node;
     } else {
       (current ? current.blocks : preamble).push(b);
@@ -2976,13 +3284,13 @@ init_scheduler();
 init_schema();
 
 // src/tidme/core/card-factory.ts
-var schema4 = (init_schema(), __toCommonJS(schema_exports));
+var schema5 = (init_schema(), __toCommonJS(schema_exports));
 var paths = (init_paths(), __toCommonJS(paths_exports));
 var session = (init_session(), __toCommonJS(session_exports));
 var sched4 = (init_scheduler(), __toCommonJS(scheduler_exports));
-var ns5 = (init_ns(), __toCommonJS(ns_exports));
+var ns7 = (init_ns(), __toCommonJS(ns_exports));
 var titleMod = (init_title(), __toCommonJS(title_exports));
-var escapeHtml2 = schema4.escapeHtml;
+var escapeHtml2 = schema5.escapeHtml;
 function buildDocPageFields(opts) {
   const base = {
     title: opts.title,
@@ -3007,7 +3315,7 @@ function buildSectionCardFields(opts) {
   const base = {
     title: opts.title,
     type: "text/vnd.tiddlywiki",
-    ...schema4.initialFsrsFields(new Date()),
+    ...schema5.initialFsrsFields(new Date()),
     "tidme.kind": "topic",
     "tidme.subkind": "section",
     "tidme.doc": opts.docId,

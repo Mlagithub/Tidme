@@ -4,8 +4,12 @@ scheduler.ts — 调度体系（对标 SuperMemo 优先级）
 - 优先级：tidme.priority 0–100（0 最高）；normalizePriority 归一化
 - 批量操作：postpone / advance / ignore / suspend / resume / forget（返回字段补丁）
 - autoPostpone：按优先级顺延低优先级逾期卡（保留 top N 高优先级）
+- 在队/可调度判定（isInQueue / isDueNow / isQueueable / isDueNowFor）
+- 每日边界与额度：学习日上下文（learningDayContext）、每日配额记账（read/record/rollbackDailyQuota）、
+  今日剩余额度单点（resolveDailyLimits）、间隔模糊（applyFuzz）、兄弟卡搁置、日末操练队列
 
-所有函数纯字段操作（无 $tw 依赖、不查 wiki），返回 { title, fields } 补丁由调用方写入。
+纯字段函数（排序/补丁/判定）无 wiki 依赖，便于直测；学习日与配额一族要读配置 tiddler，
+经惰性 require 取 core/config（见 configMod 注释：顶层反向 require 会循环初始化）。
 按 docId 的 wiki 查询（阅读队列快照/分节文档页集合/本书 item 过滤器）在 core/doc-ops。
 */
 
@@ -133,56 +137,121 @@ function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86400000);
 }
 
+/** 模糊分段（与 Anki FUZZ_RANGES 同值同序）：[起始天, 终止天, 系数]。
+ *  终止为 Infinity 表示"20 天以上按 interval − 20 线性增长"（Anki 用 f32::MAX）。 */
+const FUZZ_RANGES: ReadonlyArray<readonly [number, number, number]> = [
+  [2.5, 7, 0.15],
+  [7, 20, 0.1],
+  [20, Infinity, 0.05],
+];
+
+/**
+ * 模糊半径（Anki states/fuzz.rs `fuzz_delta`）：
+ * `1 + Σ factor × max(0, min(interval, end) − start)`；interval < 2.5 天不抖。
+ * 注意：Anki 对 20 天以上**不设半径上限**（区间项为 interval − 20 线性增长）；
+ * 文档里"90 天上限"指的是 Anki load balancer 的 90 天视野，不是抖动半径。
+ */
+export function fuzzDelta(interval: number): number {
+  if (!(interval >= 2.5)) return 0;
+  return FUZZ_RANGES.reduce((delta, [start, end, factor]) => delta + factor * Math.max(0, Math.min(interval, end) - start), 1);
+}
+
+/** 未约束的抖动上下界（Anki `fuzz_bounds`）：[round(i−δ), round(i+δ)] */
+export function fuzzBounds(interval: number): { lower: number; upper: number } {
+  const delta = fuzzDelta(interval);
+  return { lower: Math.round(interval - delta), upper: Math.round(interval + delta) };
+}
+
+/**
+ * 约束后的抖动上下界（Anki `constrained_fuzz_bounds`）：
+ * interval 先夹到 [minimum, maximum]，上下界再夹一次；当上下界相等且 >2 且未顶到上限时
+ * 放开 1 天，保证至少有两档可选（均匀分布不塌缩到单值）。
+ */
+export function constrainedFuzzBounds(
+  interval: number,
+  minimum: number,
+  maximum: number,
+): { lower: number; upper: number } {
+  const lo = Math.min(minimum, maximum);
+  const clamped = Math.min(Math.max(interval, lo), maximum);
+  const bounds = fuzzBounds(clamped);
+  let lower = Math.min(Math.max(bounds.lower, lo), maximum);
+  let upper = Math.min(Math.max(bounds.upper, lo), maximum);
+  if (upper === lower && upper > 2 && upper < maximum) upper = lower + 1;
+  return { lower, upper };
+}
+
+/**
+ * 抖动下界保护（Anki `minimum_review_fuzz_interval`）：及格复习的间隔不应因抖动缩回。
+ * - 新间隔（四舍五入）比旧间隔大 → 下界 = 旧间隔 + 1（保证"确实前进了"）；
+ * - 新间隔没长大但旧间隔落在抖动上界内 → 下界 = 旧间隔（不许抖到更短）；
+ * - 新间隔收缩（FSRS 参数变化/难度调整）→ 下界 = 0，允许自由抖动。
+ */
+export function minimumReviewFuzzInterval(
+  interval: number,
+  previousInterval: number,
+  maximumInterval: number,
+): number {
+  const rounded = Math.round(interval);
+  const { upper } = constrainedFuzzBounds(interval, 1, maximumInterval);
+  if (rounded > previousInterval) return previousInterval + 1;
+  if (previousInterval <= upper) return previousInterval;
+  return 0;
+}
+
+/**
+ * 施加抖动（Anki `with_review_fuzz`）：factor ∈ [0,1) 时在约束区间内均匀取整数；
+ * factor = null（调用方判定不抖）时取 round(interval) 并夹到 [minimum, maximum]。
+ */
+export function withReviewFuzz(
+  fuzzFactor: number | null,
+  interval: number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (fuzzFactor === null) {
+    return Math.min(Math.max(Math.round(interval), minimum), maximum);
+  }
+  const { lower, upper } = constrainedFuzzBounds(interval, minimum, maximum);
+  return Math.floor(lower + fuzzFactor * (1 + upper - lower));
+}
+
 export interface FuzzRange {
   minDelta: number;
   maxDelta: number;
 }
 
-/**
- * 间隔模糊（Fuzz）区间计算：对标 Anki states/fuzz.rs 分段对称抖动规则。
- * - interval < 2.5 天：不加抖动（避免破坏 1 天复习或短期学习步）；
- * - 2.5 ~ 7 天：delta = 1 + 0.15 * (interval - 2.5)；
- * - 7 ~ 20 天：累加 0.10 * (interval - 7)；
- * - 20 天以上：累加 0.05 * (interval - 20)，上限 90 天。
- */
-export function calculateFuzzRange(interval: number): FuzzRange {
-  if (interval < 2.5) return { minDelta: 0, maxDelta: 0 };
-  let delta = 1;
-  if (interval < 7) {
-    delta += 0.15 * (interval - 2.5);
-  } else if (interval < 20) {
-    delta += 0.15 * (7 - 2.5) + 0.10 * (interval - 7);
-  } else {
-    delta += 0.15 * (7 - 2.5) + 0.10 * (20 - 7) + 0.05 * (interval - 20);
-  }
-  const intDelta = Math.min(90, Math.max(1, Math.round(delta)));
-  return { minDelta: -intDelta, maxDelta: intDelta };
+/** 抖动区间（向外暴露对称半径；等价于 Anki 的 constrained_fuzz_bounds，仅换表述）。
+ *  prevInterval / maxInterval 缺省时只按 1..DECK_PARAM_DEFAULTS.maximumInterval 约束。 */
+export function calculateFuzzRange(interval: number, opts: { prevInterval?: number; maxInterval?: number } = {}): FuzzRange {
+  const maximum = opts.maxInterval && opts.maxInterval > 0 ? Math.floor(opts.maxInterval) : DECK_PARAM_DEFAULTS.maximumInterval;
+  const minimum = opts.prevInterval && opts.prevInterval > 0 ? minimumReviewFuzzInterval(interval, Math.floor(opts.prevInterval), maximum) : 1;
+  const { lower, upper } = constrainedFuzzBounds(interval, minimum, maximum);
+  return { minDelta: lower - Math.round(interval), maxDelta: upper - Math.round(interval) };
 }
 
 export interface FuzzOptions {
+  /** 上次间隔（天）：用于 minimum_review_fuzz_interval 下界保护 */
   prevInterval?: number;
+  /** 牌组最大间隔（天）：抖动结果不越过它 */
   maxInterval?: number;
+  /** 随机数注入（默认 Math.random，便于测试确定性断言） */
   randomFn?: () => number;
 }
 
 /**
- * 应用间隔模糊抖动：返回加入对称抖动后的整数天数。
- * 约束：及格时不短于前次间隔（SM 准则）；不低于 1 天；不超过 maxInterval。
+ * 应用间隔模糊：返回抖动后的整数天数。
+ * 语义与 Anki 一致（fuzz_delta → minimum_review_fuzz_interval → with_review_fuzz）：
+ * 2.5 天以下不抖；抖动区间受前次间隔与 maximum_interval 双重约束。
  */
 export function applyFuzz(scheduledDays: number, opts: FuzzOptions = {}): number {
-  if (scheduledDays < 2.5) return Math.round(scheduledDays);
-  const { minDelta, maxDelta } = calculateFuzzRange(scheduledDays);
-  if (minDelta === 0 && maxDelta === 0) return Math.round(scheduledDays);
-  const rnd = typeof opts.randomFn === 'function' ? opts.randomFn() : Math.random();
-  const range = maxDelta - minDelta + 1;
-  const fuzz = minDelta + Math.floor(rnd * range);
-  let fuzzed = scheduledDays + fuzz;
-  const lowerBound = opts.prevInterval && opts.prevInterval > 0 ? Math.min(scheduledDays, opts.prevInterval) : 1;
-  fuzzed = Math.max(lowerBound, fuzzed);
-  if (opts.maxInterval && opts.maxInterval > 0) {
-    fuzzed = Math.min(opts.maxInterval, fuzzed);
-  }
-  return Math.round(fuzzed);
+  const maxInterval = opts.maxInterval && opts.maxInterval > 0 ? Math.floor(opts.maxInterval) : DECK_PARAM_DEFAULTS.maximumInterval;
+  if (!(scheduledDays >= 2.5)) return withReviewFuzz(null, scheduledDays, 1, maxInterval);
+  const minimum = opts.prevInterval && opts.prevInterval > 0
+    ? minimumReviewFuzzInterval(scheduledDays, Math.floor(opts.prevInterval), maxInterval)
+    : 1;
+  const factor = typeof opts.randomFn === 'function' ? opts.randomFn() : Math.random();
+  return withReviewFuzz(factor, scheduledDays, minimum, maxInterval);
 }
 
 export interface CardLike extends CardLikeBase {}
@@ -242,6 +311,28 @@ export function forgetCard(): Record<string, any> {
   };
 }
 
+/** 取消当日搁置（Anki 的 Unbury）：清 tidme.buried → 当日即可再次调度。返回补丁。 */
+export function unburyCard(): Record<string, any> {
+  return { [ns.BURIED_FIELD]: undefined };
+}
+
+/**
+ * 难点卡重置（SM 对 leech 的根治手段 reformulate 的入口）：清 leech 标记 + 遗忘回新卡。
+ *
+ * 必须一并清**三态出队标记，尤其 tidme.ignored**：默认 `leech_action` 是 `action/exclude`
+ * （写 tidme.ignored），只清 tidme.leech/suspended 的话，重置后卡依旧被 card_exclude 挡在
+ * 所有队列之外——用户按了"重置难点"却看不到任何变化（曾如此）。
+ */
+export function resetLeechCard(): Record<string, any> {
+  return {
+    'tidme.leech': undefined,
+    'tidme.ignored': undefined,
+    'tidme.suspended': undefined,
+    ...unburyCard(),
+    ...forgetCard(),
+  };
+}
+
 /** 出队判定（done 或 ignored）：已读/完成与忽略都移出所属队列，可经 restoreCard 恢复。
  *  命名说明：这不是"已读"语义——ignored 的节从未被读，只是不再等待处理；
  *  进度类口径（阅读进度等）把两者合并计为"不再待处理"。
@@ -275,13 +366,37 @@ export function restoreCard(): Record<string, any> {
   return { 'tidme.done': undefined, 'tidme.ignored': undefined, 'tidme.suspended': undefined };
 }
 
+/** FSRS state 归一化：数字（fsrs JSON 写回的就是数字）/字符串/缺失 → '0'|'1'|'2'|'3'。
+ *  唯一产地：比较处直接写 `=== '1'` 会与数字 state 静默失配（提前学习放行/新卡判定曾如此）。 */
+export function stateOf(fields: Record<string, any> | null | undefined): string {
+  const raw = fields ? fields.state : undefined;
+  const s = raw === undefined || raw === null ? '' : String(raw).trim();
+  return s === '1' || s === '2' || s === '3' ? s : '0';
+}
+
+/** 当日搁置判定（Bury Siblings）：tidme.buried == 当前学习日 → 今日不可调度（次日自动解埋） */
+export function isBuriedToday(fields: Record<string, any> | null | undefined, learningDay: string): boolean {
+  const buried = fields ? fields[ns.BURIED_FIELD] : undefined;
+  return buried !== undefined && buried !== null && String(buried) === learningDay;
+}
+
+/** 在队且未被当日搁置：**不判 due** 的最小可进入判定。
+ *  cram（预演未到期内容）与 final drill（日末重练）用它推进；正常复习流用 isDueNow。 */
+export function isQueueable(fields: Record<string, any> | null | undefined, learningDay: string): boolean {
+  return isInQueue(fields) && !isBuriedToday(fields, learningDay);
+}
+
 /**
- * 当前是否可调度：在队（未完成/未忽略/未搁置）且 due ≤ now（或符合提前学习放行限制）。
+ * 当前是否可调度：在队（未完成/未忽略/未搁置、非当日搁置）且 due ≤ now（或符合提前学习放行限制）。
  * 尊重评分/顺延写出的未来排期——"下一张/继续阅读"导航用此跳过未来到期的卡，不提前重放。
  * 无 due 的卡（Pending 语义）视为可读；**无法解析的 due 视为不可调度**（脏数据不伪装成"立即到期"）。
+ *
+ * 纯谓词：不读 wiki/配置。wiki 感知的调用点一律用 isDueNowFor（换天时刻与提前学习窗口
+ * 由 learningDayContext 单点解析），不要各自拼这些参数。
  * @param fields 卡片字段集
  * @param now 当前基准时刻
  * @param learnAheadMinutes 提前学习放行上限（分钟，默认 0 = 严格不提前；>0 时放行窗口内的学习步卡片）
+ * @param rolloverHour 换天时刻（小时，仅影响当日搁置判定）
  */
 export function isDueNow(
   fields: Record<string, any> | null | undefined,
@@ -289,14 +404,7 @@ export function isDueNow(
   learnAheadMinutes = 0,
   rolloverHour = 4,
 ): boolean {
-  if (!isInQueue(fields)) return false;
-
-  // 兄弟卡当日搁置判定（tidme.buried 等于当前学习日则不可调度，次日自动解埋）
-  const buriedDay = fields![ns.BURIED_FIELD];
-  if (buriedDay) {
-    const currentDay = schema.learningDayOf(now, rolloverHour);
-    if (buriedDay === currentDay) return false;
-  }
+  if (!isQueueable(fields, schema.learningDayOf(now, rolloverHour))) return false;
 
   const due = fields!.due;
   if (due === undefined || due === null || String(due) === '') return true;
@@ -308,10 +416,59 @@ export function isDueNow(
   if (dueMs <= nowMs) return true;
 
   // 提前学习放行（Learn Ahead Limit）：仅对会内学习步卡片（state 1/3）生效
-  if (learnAheadMinutes > 0 && (fields!.state === '1' || fields!.state === '3')) {
+  const state = stateOf(fields);
+  if (learnAheadMinutes > 0 && (state === '1' || state === '3')) {
     return dueMs <= nowMs + learnAheadMinutes * 60000;
   }
   return false;
+}
+
+/**
+ * 配置读取的惰性入口。core/config 在模块顶层 require 本模块（AUTOPOSTPONE_OPTS_DEFAULTS /
+ * DECK_PARAM_DEFAULTS 的单一产地），顶层反向 require 会构成循环初始化——config 顶层将读到
+ * 半成品 exports（默认值变 undefined）。故此处惰性取用，调用时两模块均已初始化完毕。
+ */
+function configMod(): any {
+  return require('$:/plugins/keepone/tidme/core/config.js');
+}
+
+/** 换天时刻（小时）：唯一实现 = config.readRolloverHour。
+ *  本模块不再自读配置 tiddler——曾用 `Number(text) || 4` 把合法的 0 点换天吞成 4 点。 */
+export function resolveRolloverHour(wiki: any): number {
+  return configMod().readRolloverHour(wiki);
+}
+
+export interface LearningDayContext {
+  now: Date;
+  /** 换天时刻（小时 0–23） */
+  rolloverHour: number;
+  /** 当前学习日（YYYYMMDD 本地） */
+  learningDay: string;
+  /** 提前学习放行窗口（分钟） */
+  learnAheadMinutes: number;
+}
+
+/** 学习日上下文唯一产地：换天时刻与提前学习窗口一律经此读取。
+ *  历史上 isDueNow 用默认 4 点、写入口用配置值，导致非默认换天时刻下"当日搁置"同日失效。 */
+export function learningDayContext(wiki: any, now = new Date()): LearningDayContext {
+  const config = configMod();
+  const rolloverHour = config.readRolloverHour(wiki);
+  return {
+    now,
+    rolloverHour,
+    learningDay: schema.learningDayOf(now, rolloverHour),
+    learnAheadMinutes: config.readLearnAheadMinutes(wiki),
+  };
+}
+
+/** 生产入口（wiki 感知）：按配置解析学习日上下文后再判定 */
+export function isDueNowFor(
+  wiki: any,
+  fields: Record<string, any> | null | undefined,
+  now = new Date(),
+): boolean {
+  const ctx = learningDayContext(wiki, now);
+  return isDueNow(fields, ctx.now, ctx.learnAheadMinutes, ctx.rolloverHour);
 }
 
 export interface DailyQuotaState {
@@ -320,12 +477,23 @@ export interface DailyQuotaState {
   reviewCount: number;
 }
 
-/** 读今日配额消耗状态（跨天自动重置） */
-export function readDailyQuota(wiki: any, now = new Date(), rolloverHour?: number): DailyQuotaState {
-  const h = rolloverHour !== undefined
-    ? rolloverHour
-    : (wiki?.getTiddlerText ? Number(wiki.getTiddlerText(ns.ROLLOVER_HOUR_TITLE)) || 4 : 4);
-  const currentDay = schema.learningDayOf(now, h);
+/** 配额记账类别：new = 引入新卡（state 0 → 非 0）；review = 复习卡（state 2）；
+ *  learn = 会内学习步（state 1/3）——**不计入任何每日上限**（对标 Anki：会内学习不受每日上限约束）。 */
+export type QuotaKind = 'new' | 'review' | 'learn';
+
+function writeDailyQuota(wiki: any, state: DailyQuotaState): void {
+  if (wiki && typeof wiki.addTiddler === 'function') {
+    wiki.addTiddler({
+      title: ns.DAILY_QUOTA_STATE_TITLE,
+      type: 'application/json',
+      text: JSON.stringify(state),
+    });
+  }
+}
+
+/** 读今日配额消耗状态（跨天自动重置；换天时刻经 config 单点解析） */
+export function readDailyQuota(wiki: any, now = new Date()): DailyQuotaState {
+  const currentDay = schema.learningDayOf(now, resolveRolloverHour(wiki));
   const fallback: DailyQuotaState = { learningDay: currentDay, newCount: 0, reviewCount: 0 };
   if (!wiki || typeof wiki.getTiddler !== 'function') return fallback;
   const raw = wiki.getTiddlerText?.(ns.DAILY_QUOTA_STATE_TITLE, '');
@@ -339,58 +507,108 @@ export function readDailyQuota(wiki: any, now = new Date(), rolloverHour?: numbe
         reviewCount: Math.max(0, Math.floor(Number(data.reviewCount) || 0)),
       };
     }
-  } catch {}
+  } catch {
+    // 坏 JSON 视为"今日尚未记账"（下一次评分会整体重写）；不抛错以免阻断评分
+  }
   return fallback;
 }
 
-/** 记入今日配额消耗（评分成功后调用） */
-export function recordDailyQuota(wiki: any, isNew: boolean, now = new Date(), rolloverHour?: number): DailyQuotaState {
-  const current = readDailyQuota(wiki, now, rolloverHour);
+/** 记入今日配额消耗（评分成功后调用）。learn（会内学习步）不记账，只回读当前状态。 */
+export function recordDailyQuota(wiki: any, kind: QuotaKind, now = new Date()): DailyQuotaState {
+  const current = readDailyQuota(wiki, now);
   const updated: DailyQuotaState = {
     learningDay: current.learningDay,
-    newCount: current.newCount + (isNew ? 1 : 0),
-    reviewCount: current.reviewCount + (isNew ? 0 : 1),
+    newCount: current.newCount + (kind === 'new' ? 1 : 0),
+    reviewCount: current.reviewCount + (kind === 'review' ? 1 : 0),
   };
-  if (wiki && typeof wiki.addTiddler === 'function') {
-    wiki.addTiddler({
-      title: ns.DAILY_QUOTA_STATE_TITLE,
-      type: 'application/json',
-      text: JSON.stringify(updated),
-    });
-  }
+  if (kind !== 'learn') writeDailyQuota(wiki, updated);
   return updated;
 }
 
 /** 回滚今日配额消耗（Undo 评分时调用） */
-export function rollbackDailyQuota(wiki: any, isNew: boolean, now = new Date(), rolloverHour?: number): DailyQuotaState {
-  const current = readDailyQuota(wiki, now, rolloverHour);
+export function rollbackDailyQuota(wiki: any, kind: QuotaKind, now = new Date()): DailyQuotaState {
+  const current = readDailyQuota(wiki, now);
   const updated: DailyQuotaState = {
     learningDay: current.learningDay,
-    newCount: Math.max(0, current.newCount - (isNew ? 1 : 0)),
-    reviewCount: Math.max(0, current.reviewCount - (isNew ? 0 : 1)),
+    newCount: Math.max(0, current.newCount - (kind === 'new' ? 1 : 0)),
+    reviewCount: Math.max(0, current.reviewCount - (kind === 'review' ? 1 : 0)),
   };
-  if (wiki && typeof wiki.addTiddler === 'function') {
-    wiki.addTiddler({
-      title: ns.DAILY_QUOTA_STATE_TITLE,
-      type: 'application/json',
-      text: JSON.stringify(updated),
-    });
-  }
+  if (kind !== 'learn') writeDailyQuota(wiki, updated);
   return updated;
+}
+
+export interface DailyLimits {
+  learningDay: string;
+  rolloverHour: number;
+  /** 今日已引入新卡数（state 0 出卡）/ 已复习卡数（state 2） */
+  newCount: number;
+  reviewCount: number;
+  /** 今日剩余可放行的复习卡数；null = 不限 */
+  reviewLimit: number | null;
+  /** 今日剩余可放行的新卡数（已按 Anki 语义受剩余复习额度封顶）；null = 不限 */
+  newLimit: number | null;
+}
+
+/**
+ * 今日剩余额度唯一产地（全局学习队列 / 今日面板 / 任何"今天还能做多少"共用）。
+ *
+ * 语义对标 Anki rslib/src/decks/limits.rs（RemainingLimits::new_for_normal_deck_v3）：
+ * - 剩余复习 = 复习上限 − 今日已复习；
+ * - 开启"新卡受复习上限压制"（默认）时，剩余复习还要再扣掉今日已引入的新卡，
+ *   且新卡剩余 = min(新卡上限 − 今日已引入, 剩余复习)——新卡消耗复习预算，
+ *   复习额度见底时新卡一并归零。不是"整段压制/放开"的开关，更不是"额度用尽反而放行"。
+ * - 上限配置 0 = 不限（设置面板语义），在**此处**翻译为 null；传给 deck-engine 的
+ *   number 语义是"今日还可放行多少张"（0 = 一张不放）。
+ */
+export function resolveDailyLimits(wiki: any, now = new Date()): DailyLimits {
+  const config = configMod();
+  const quota = readDailyQuota(wiki, now);
+  const newCap = config.readNewPerDay(wiki);
+  const reviewCap = config.readReviewsPerDay(wiki);
+  const suppress = config.readLimitsSuppressNew(wiki);
+
+  let reviewLimit: number | null = reviewCap > 0 ? Math.max(0, reviewCap - quota.reviewCount) : null;
+  let newLimit: number | null = newCap > 0 ? Math.max(0, newCap - quota.newCount) : null;
+  if (suppress && reviewLimit !== null) {
+    const budget = Math.max(0, reviewLimit - quota.newCount);
+    reviewLimit = budget;
+    newLimit = newLimit === null ? budget : Math.min(newLimit, budget);
+  }
+  return {
+    learningDay: quota.learningDay,
+    rolloverHour: resolveRolloverHour(wiki),
+    newCount: quota.newCount,
+    reviewCount: quota.reviewCount,
+    reviewLimit,
+    newLimit,
+  };
 }
 
 // ---------- 同源卡分散与兄弟卡搁置（Bury Siblings） ----------
 
-/** 查找指定卡片的所有兄弟卡（同一 tidme.parent，且 title 不同的在队 item 卡） */
+/** 查找指定卡片的可搁置兄弟卡（同一 tidme.parent、在队、title 不同的 item 卡）。
+ *
+ * 排除两类：
+ * - **会内学习步卡（state 1/3）永不搁置**：Anki 明确不埋时间敏感的会内学习卡
+ *   （interday learning 埋卡是独立开关且默认关）；把它们藏到次日会丢掉重学步。
+ * - 父卡 title 含过滤器元字符（`[`/`]`/`{`/`}`，TW 无法转义）时直接返回空：
+ *   宁可这一轮不分散，也不能靠"删字符"改写成另一个父卡——那会把无关卡误埋
+ *   （唯一判据 = ns.isFilterSafeTitle，勿自写净化）。 */
 export function findSiblings(wiki: any, cardTitle: string): string[] {
   if (!wiki || typeof wiki.filterTiddlers !== 'function' || !cardTitle) return [];
   const f = wiki.getTiddler(cardTitle)?.fields;
   const parent = f?.['tidme.parent'];
-  if (!parent) return [];
+  if (!parent || !ns.isFilterSafeTitle(parent)) return [];
   const raw = wiki.filterTiddlers(
-    `[all[shadows+tiddlers]tidme.parent[${parent.replace(/[\[\]]/g, '')}]!is[draft]tidme.kind[item]]`,
+    `[all[shadows+tiddlers]tidme.parent[${parent}]!is[draft]tidme.kind[item]]`,
   );
-  return raw.filter((t: string) => t !== cardTitle && isInQueue(wiki.getTiddler(t)?.fields));
+  return raw.filter((t: string) => {
+    if (t === cardTitle) return false;
+    const sf = wiki.getTiddler(t)?.fields;
+    if (!isInQueue(sf)) return false;
+    const state = stateOf(sf);
+    return state !== '1' && state !== '3';
+  });
 }
 
 /** 搁置兄弟卡（Bury siblings）：将传入卡列表打上 tidme.buried = <learningDay> */
@@ -415,107 +633,22 @@ export function unburyCards(wiki: any, titles?: string[]): number {
   for (const t of targetTitles) {
     const f = wiki.getTiddler(t)?.fields;
     if (f && f[ns.BURIED_FIELD]) {
-      const copy = { ...f };
-      delete copy[ns.BURIED_FIELD];
-      wiki.addTiddler(copy);
+      wiki.addTiddler({ ...f, ...unburyCard() });
       count++;
     }
   }
   return count;
 }
 
-// ---------- 日末操练队列（Final Drill） ----------
-
-export interface FinalDrillEntry {
-  title: string;
-  addedAt: string;
-  failCount: number;
-}
-
-export const FINAL_DRILL_MAX_AGE_DAYS = 3;
-
-/** 读取日末操练队列（自动清理 >3 天超期或已被删除的卡片） */
-export function getFinalDrillQueue(wiki: any, now = new Date(), maxAgeDays = FINAL_DRILL_MAX_AGE_DAYS): string[] {
-  if (!wiki || typeof wiki.getTiddlerData !== 'function') return [];
-  const data = wiki.getTiddlerData(ns.FINAL_DRILL_STATE_TITLE);
-  const list: FinalDrillEntry[] = Array.isArray(data?.entries) ? data.entries : [];
-  if (!list.length) return [];
-
-  const nowMs = now.getTime();
-  const maxAgeMs = maxAgeDays * 86400000;
-  const validEntries: FinalDrillEntry[] = [];
-  let changed = false;
-
-  for (const item of list) {
-    const t = item.title;
-    if (!t || !wiki.getTiddler(t)) {
-      changed = true;
-      continue;
-    }
-    const addedTime = schema.tryParseTwDate(item.addedAt)?.getTime() || 0;
-    if (nowMs - addedTime > maxAgeMs) {
-      changed = true;
-      continue;
-    }
-    validEntries.push(item);
-  }
-
-  if (changed || validEntries.length !== list.length) {
-    wiki.addTiddler({
-      title: ns.FINAL_DRILL_STATE_TITLE,
-      type: 'application/json',
-      text: JSON.stringify({ entries: validEntries }),
-    });
-  }
-
-  return validEntries.map((e) => e.title);
-}
-
-/** 记录一张卡到日末操练队列（评 Again 时触发） */
-export function recordFinalDrill(wiki: any, title: string, now = new Date()): void {
-  if (!wiki || typeof wiki.addTiddler !== 'function' || !title) return;
-  getFinalDrillQueue(wiki, now);
-  const data = wiki.getTiddlerData?.(ns.FINAL_DRILL_STATE_TITLE);
-  const entries: FinalDrillEntry[] = Array.isArray(data?.entries) ? [...data.entries] : [];
-
-  const existing = entries.find((e) => e.title === title);
-  if (existing) {
-    existing.failCount = (existing.failCount || 1) + 1;
-    existing.addedAt = schema.twDateString(now);
-  } else {
-    entries.push({
-      title,
-      addedAt: schema.twDateString(now),
-      failCount: 1,
-    });
-  }
-  wiki.addTiddler({
-    title: ns.FINAL_DRILL_STATE_TITLE,
-    type: 'application/json',
-    text: JSON.stringify({ entries }),
-  });
-}
-
-/** 从日末操练队列移除一张卡（评及格达标时触发） */
-export function removeFinalDrill(wiki: any, title: string): boolean {
-  if (!wiki || typeof wiki.getTiddlerData !== 'function' || !title) return false;
-  const data = wiki.getTiddlerData(ns.FINAL_DRILL_STATE_TITLE);
-  const entries: FinalDrillEntry[] = Array.isArray(data?.entries) ? data.entries : [];
-  const filtered = entries.filter((e) => e.title !== title);
-  if (filtered.length === entries.length) return false;
-
-  wiki.addTiddler({
-    title: ns.FINAL_DRILL_STATE_TITLE,
-    type: 'application/json',
-    text: JSON.stringify({ entries: filtered }),
-  });
-  return true;
-}
+// ---------- 日末操练队列（Final Drill）----------
+// 已独立为 core/drill（队列读写与调度判定分离）：本模块不再承载"队列状态存储"，
+// 需要的调用方直接 require('$:/plugins/keepone/tidme/core/drill.js')。
 
 /**
  * 序列推进（阅读流"下一张"统一决策）：
  * 在有序 title 序列中，从 cur 之后找第一张"当前可学"的卡；cur 为 null 时从序列头找。
- * 可学判定由调用方注入（通常是 isDueNow(fields) —— 已含出队/未来排期过滤），
+ * 可学判定由调用方注入（正常流用 isDueNowFor(wiki, fields) —— 已含出队/当日搁置/未来排期过滤；
+ * cram 与 final-drill 用 isQueueable(fields, learningDay)，不判 due），
  * 使 section-bar / 阅读列表 / 文档页 / 复习帧等所有"下一张"入口共享同一调度算法。
  * 找不到返回 null。
  */

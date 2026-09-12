@@ -17,7 +17,7 @@ test.before(() => {
 });
 
 test.beforeEach(() => {
-  reset({ alsoSystem: ['$:/Deck/', ns.DAILY_QUOTA_STATE_TITLE, ns.UNDO_STATE_TITLE] });
+  reset({ alsoSystem: ['$:/Deck/', ns.DAILY_QUOTA_STATE_TITLE] });
   if (grade.clearUndoStack) grade.clearUndoStack();
 });
 
@@ -83,8 +83,8 @@ test('undoLastGrade: 评分后撤销，恢复字段、日志、会话和配额',
   // 检查 undo 深度
   assert.equal(grade.getUndoStackDepth(), 1);
 
-  // 执行撤销 Undo
-  const undoRes = grade.undoLastGrade(wiki);
+  // 执行撤销 Undo（now 可注入：撤销的"同学习日"守卫按它判定）
+  const undoRes = grade.undoLastGrade(wiki, now);
   assert.equal(undoRes.ok, true);
   assert.equal(undoRes.title, cardTitle);
 
@@ -126,13 +126,13 @@ test('undoLastGrade: 支持多级连续撤销', () => {
   assert.equal(grade.getUndoStackDepth(), 2);
 
   // 先撤销卡 B
-  const undoB = grade.undoLastGrade(wiki);
+  const undoB = grade.undoLastGrade(wiki, t2);
   assert.equal(undoB.ok, true);
   assert.equal(undoB.title, '卡B');
   assert.equal(grade.getUndoStackDepth(), 1);
 
   // 再撤销卡 A
-  const undoA = grade.undoLastGrade(wiki);
+  const undoA = grade.undoLastGrade(wiki, t1);
   assert.equal(undoA.ok, true);
   assert.equal(undoA.title, '卡A');
   assert.equal(grade.getUndoStackDepth(), 0);

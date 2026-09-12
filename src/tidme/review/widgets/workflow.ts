@@ -60,22 +60,17 @@ function startGlobalLearning(wiki: any, widget: any): void {
   const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
   const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
   const opts = config.readQueueOptions(wiki);
-  const quota = sched.readDailyQuota(wiki);
-  const newCap = config.readNewPerDay(wiki);
-  const reviewCap = config.readReviewsPerDay(wiki);
-  const suppress = config.readLimitsSuppressNew(wiki);
-
-  const newLimit = newCap > 0 ? Math.max(0, newCap - quota.newCount) : undefined;
-  const reviewLimit = reviewCap > 0 ? Math.max(0, reviewCap - quota.reviewCount) : undefined;
+  // 今日剩余额度唯一产地 = core/scheduler.resolveDailyLimits（压制已在那一层算进 newLimit）
+  const limits = sched.resolveDailyLimits(wiki);
 
   const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), {
     mode: opts.mode,
     topics: opts.topics,
     itemRatio: opts.itemRatio,
     topicRatio: opts.topicRatio,
-    newLimit,
-    reviewLimit,
-    suppressNewOnOverdue: suppress,
+    newLimit: limits.newLimit,
+    reviewLimit: limits.reviewLimit,
+    learningDay: limits.learningDay,
   });
 
   if (!queue || queue.length === 0) {

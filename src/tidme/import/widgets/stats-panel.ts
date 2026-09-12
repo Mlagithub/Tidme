@@ -15,6 +15,7 @@ const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
+const config = require('$:/plugins/keepone/tidme/core/config.js');
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 function lingo(wiki: any, key: string, fallback: string): string {
@@ -67,6 +68,9 @@ function makeStatsPanel(): WidgetCtor {
           }
         }
         const ret = stats.retentionFromLogs(entries);
+        // 真实保留率（Anki true retention 口径）：只统计成熟卡（间隔 ≥ 21 天）的复习。
+        // 旧的 1 − Again 占比会把新卡/学习步一锅算，系统性低估记忆表现（见 doc/concept-gaps.md 错位 2）。
+        const trueRet = stats.trueRetentionFromLogs(entries);
         const buckets = stats.priorityBuckets(cardLikes('[tidme.kind[item]]'));
         const rt = stats.getReadTimeStats ? stats.getReadTimeStats(wiki) : { totalSeconds: 0, todaySeconds: 0, docSeconds: {} };
         const fmtDur = stats.formatDuration ? stats.formatDuration : (s: number) => `${s}s`;
@@ -79,7 +83,12 @@ function makeStatsPanel(): WidgetCtor {
           {
             label: lingo(wiki, 'stats.today.reviewed', 'Reviews'),
             value: String(ret.reviews),
-            sub: ret.reviews ? `${lingo(wiki, 'stats.retention', 'Retention')} ${Math.round(ret.retention * 100)}%` : '',
+            // 成熟卡真实保留率优先展示（有成熟复习时）；无则回落到总口径并标注
+            sub: trueRet.matureReviews > 0
+              ? `${lingo(wiki, 'stats.trueretention', 'True retention (mature)')} ${Math.round(trueRet.trueRetention * 100)}% · ${lingo(wiki, 'stats.retention', 'Retention')} ${
+                Math.round(ret.retention * 100)
+              }%`
+              : `${lingo(wiki, 'stats.retention', 'Retention')} ${Math.round(ret.retention * 100)}%`,
           },
           { label: lingo(wiki, 'stats.todayread', 'Today Read'), value: fmtDur(rt.todaySeconds), sub: `${lingo(wiki, 'stats.total', 'Total')} ${fmtDur(rt.totalSeconds)}` },
         ]);
@@ -161,6 +170,33 @@ function makeStatsPanel(): WidgetCtor {
         docTableWrap.classList.add('tm-scroll');
         mainCol.appendChild(cardDoc);
 
+        // 2.5) 未来到期负荷（Anki Future Due 的简化版）：按学习日分桶的未来 14 天到期量。
+        // 逾期卡并入第 0 天（不重复计）；新卡未排期不入桶。看得到未来负载才能提前顺延/限额干预。
+        const futureDays = 14;
+        const future = stats.futureDueSchedule(
+          cardLikes('[tidme.kind[item]]'),
+          futureDays,
+          new Date(),
+          config.readRolloverHour(wiki),
+        );
+        const cardFuture = el(doc, 'div', 'tm-dashboard-card');
+        cardFuture.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.futuredue', 'Future Due (14 days)')));
+        const futureBox = el(doc, 'div', 'tm-stat-funnel');
+        const futureMax = Math.max(1, ...future.map((d: any) => d.dueCount));
+        for (const d of future) {
+          const row = el(doc, 'div', 'tm-stat-funnel-row');
+          row.appendChild(el(doc, 'span', 'tm-stat-funnel-label', d.dateString.slice(4, 6) + '-' + d.dateString.slice(6, 8)));
+          const bar = el(doc, 'span', 'tm-stat-funnel-bar');
+          const fill = el(doc, 'span', 'tm-stat-funnel-fill');
+          fill.style.width = `${Math.round((d.dueCount / futureMax) * 100)}%`;
+          bar.appendChild(fill);
+          row.appendChild(bar);
+          row.appendChild(el(doc, 'span', 'tm-stat-funnel-count', String(d.dueCount)));
+          futureBox.appendChild(row);
+        }
+        cardFuture.appendChild(futureBox);
+        sideCol.appendChild(cardFuture);
+
         // 3) 漏斗
         const cardFunnel = el(doc, 'div', 'tm-dashboard-card');
         cardFunnel.appendChild(el(doc, 'div', 'tm-dashboard-card-title', lingo(wiki, 'stats.funnel', 'Learning Funnel')));
@@ -192,6 +228,17 @@ function makeStatsPanel(): WidgetCtor {
         retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-learn', `${ret.reviews} ${lingo(wiki, 'stats.reviews', 'Reviews')}`));
         if (ret.reviews) {
           retBox.appendChild(el(doc, 'span', 'tm-badge tm-badge-due', `${lingo(wiki, 'stats.retention', 'Retention')}: ${Math.round(ret.retention * 100)}%`));
+        }
+        // 真实保留率（成熟卡）：与总口径并列，避免用被新卡拉低的数字去调 request_retention
+        if (trueRet.matureReviews > 0) {
+          retBox.appendChild(
+            el(
+              doc,
+              'span',
+              'tm-badge tm-badge-new',
+              `${lingo(wiki, 'stats.trueretention', 'True retention (mature)')}: ${Math.round(trueRet.trueRetention * 100)}% (${trueRet.matureReviews})`,
+            ),
+          );
         }
         cardRet.appendChild(retBox);
         sideCol.appendChild(cardRet);

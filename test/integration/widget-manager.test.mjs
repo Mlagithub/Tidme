@@ -131,6 +131,57 @@ test('card-manager: 批量选择交互与全选', () => {
   assert.ok(text.includes('已选'), '已选信息应在工具条展示');
 });
 
+test('card-manager: 工具条含 Unbury 与 Reset Leech（重置必须能真正回到队列）', () => {
+  const nsMod = mod('core/ns.js');
+  // 典型 leech 现场：默认 leech_action=exclude 已把它写出队，且当日被搁置
+  const title = '手动散卡甲';
+  addLooseCard();
+  wiki.addTiddler({
+    ...wiki.getTiddler(title).fields,
+    lapses: '9',
+    'tidme.leech': 'yes',
+    'tidme.ignored': 'yes',
+    [nsMod.BURIED_FIELD]: '20261231',
+  });
+
+  const root = renderWidget(wiki, cardManager, 'card-manager');
+  const text = collectText(root);
+  assert.ok(text.includes('取消搁置'), '应有 Unbury 入口');
+  assert.ok(text.includes('重置难点'), '应有 Reset Leech 入口');
+
+  // 重置补丁落到该卡后必须回队（这是"重置"的意义，也是曾经失效的地方）
+  const patch = sched.resetLeechCard();
+  const updated = { ...wiki.getTiddler(title).fields };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) delete updated[k];
+    else updated[k] = v;
+  }
+  wiki.addTiddler(updated);
+  assert.equal(sched.isInQueue(wiki.getTiddler(title).fields), true, '重置后回到队列');
+});
+
+test('card-manager: Leech 视图按牌组 leech_threshold 判定（不再写死默认 8）', () => {
+  const card = '阈值卡';
+  wiki.addTiddler({
+    title: card,
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
+    state: '0',
+    due: '20261231000000000',
+    reps: '0',
+    lapses: '4',
+    stability: '0',
+    difficulty: '0',
+  });
+  // 把默认牌组的阈值改成 4：lapses=4 的卡应出现在 Leech 视图
+  const deck = '$:/Deck/default';
+  wiki.addTiddler({ ...wiki.getTiddler(deck).fields, leech_threshold: '4' });
+  const root = renderWidget(wiki, cardManager, 'card-manager');
+  const leechBtn = collectButtons(root).find((b) => collectText(b).startsWith('难点'));
+  assert.ok(leechBtn, '应有难点视图按钮');
+  assert.ok(collectText(leechBtn).includes('(1)'), `难点视图计数按牌组阈值（实际 ${collectText(leechBtn)}）`);
+});
+
 test('card-manager: doneFields/resumePatch 都是补丁，合并写库可逆恢复', () => {
   const fields = { title: '节', 'tidme.kind': 'topic', state: '0' };
   const done = cardManager.doneFields();

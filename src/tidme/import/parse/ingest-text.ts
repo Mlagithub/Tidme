@@ -1,5 +1,5 @@
 /*
-ingest-text.ts — 文本摄取：Markdown / Wikitext / HTML / TXT → 统一 Block 流
+ingest-text.ts — 文本摄取：Markdown / Wikitext / HTML / PDF / TXT → 统一 Block 流
 
 复用 chunker：把文本转成合成 Block 流，再走统一的大纲树切分。
 - Markdown：ATX/setext 标题、围栏代码（原子块）、表格（原子块）、引用、列表、水平线

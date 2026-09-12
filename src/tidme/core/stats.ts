@@ -17,7 +17,6 @@ const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const nsMod = require('$:/plugins/keepone/tidme/core/ns.js');
 const isCardOutOfQueue = sched.isCardOutOfQueue;
 const isInQueue = sched.isInQueue;
-const todayKey = schema.todayKey;
 
 import type { CardLike } from './schema.ts';
 export type { CardLike };
@@ -165,16 +164,16 @@ export function futureDueSchedule(
   now = new Date(),
   rolloverHour = 4,
 ): FutureDueDay[] {
-  const currentDayStr = schema.learningDayOf(now, rolloverHour);
-  const currentDayTime = schema.parseTwDate(currentDayStr + '000000000').getTime();
+  // 学习日之间的天数推算一律走纯日历函数（schema.addLearningDays / learningDayDiff）：
+  // 曾用 parseTwDate(<本地学习日串>) 拿"当日零点"，那是把本地日当 UTC 时刻
+  // ——UTC 负偏移时区整体错一天（分桶 index 对、日期标签错）。
+  const currentDay = schema.learningDayOf(now, rolloverHour);
 
   const schedule: FutureDueDay[] = [];
   for (let i = 0; i < days; i++) {
-    const dayDate = new Date(currentDayTime + i * 86400000);
-    const dateString = schema.learningDayOf(dayDate, 0);
     schedule.push({
       dayIndex: i,
-      dateString,
+      dateString: schema.addLearningDays(currentDay, i),
       dueCount: 0,
       cumulativeDue: 0,
     });
@@ -192,10 +191,7 @@ export function futureDueSchedule(
     const parsed = schema.tryParseTwDate(dueStr);
     if (!parsed) continue;
 
-    const cardDayStr = schema.learningDayOf(parsed, rolloverHour);
-    const cardDayTime = schema.parseTwDate(cardDayStr + '000000000').getTime();
-    const dayDiff = Math.floor((cardDayTime - currentDayTime) / 86400000);
-
+    const dayDiff = schema.learningDayDiff(currentDay, schema.learningDayOf(parsed, rolloverHour));
     if (dayDiff <= 0) {
       schedule[0].dueCount++;
     } else if (dayDiff < days) {
@@ -283,9 +279,16 @@ export function getReadTimeStats(wiki: any): ReadTimeStats {
   }
   const data = readStatsRaw(wiki);
   const totalSeconds = Number(data.totalSeconds) || 0;
-  const todaySeconds = Number(data.days?.[todayKey()]) || 0;
+  const todaySeconds = Number(data.days?.[readTimeDayKey(wiki)]) || 0;
   const docSeconds = (typeof data.docs === 'object' && data.docs) ? { ...data.docs } : {};
   return { totalSeconds, todaySeconds, docSeconds };
+}
+
+/** 阅读时长的"日"桶键 = 学习日（与复习计数/每日额度同一换天口径）。
+ *  曾用 schema.todayKey（UTC 绝对日）：UTC 正偏移时区里与复习数各按不同日历切天，
+ *  "今日反馈条"上两个数字会在夜间时段互相矛盾。 */
+function readTimeDayKey(wiki: any): string {
+  return sched.learningDayContext(wiki).learningDay;
 }
 
 export function recordReadTime(wiki: any, docId: string, seconds: number) {
@@ -295,9 +298,10 @@ export function recordReadTime(wiki: any, docId: string, seconds: number) {
   if (!data.days) data.days = {};
 
   const sec = Math.max(1, Math.round(seconds));
+  const day = readTimeDayKey(wiki);
 
   data.totalSeconds = (Number(data.totalSeconds) || 0) + sec;
-  data.days[todayKey()] = (Number(data.days[todayKey()]) || 0) + sec;
+  data.days[day] = (Number(data.days[day]) || 0) + sec;
   if (docId) {
     data.docs[docId] = (Number(data.docs[docId]) || 0) + sec;
   }
@@ -323,4 +327,78 @@ export function priorityBuckets(cards: CardLike[]): { high: number; medium: numb
     b[sched.priorityBucket(raw)]++;
   }
   return b;
+}
+
+// ---------- 「今天」口径的聚合（widget 只渲染，算数在 core） ----------
+
+/** 今日已复习卡数：遍历全部牌组日志单文件，按**学习日**计数。
+ *  日志键是绝对时刻（UTC 17 位串），故须逐键换算学习日——不能按 UTC 日前缀截断。
+ *  与 DAILY_QUOTA_STATE 的口径差异（有意，勿合并）：这里回答"今天复习了多少张"（含会内学习步），
+ *  配额账本只记"消耗了每日上限的评分"（引入新卡/复习卡），两者本就不同数。 */
+export function reviewCountToday(wiki: any): number {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return 0;
+  const ctx = sched.learningDayContext(wiki);
+  let n = 0;
+  for (const lt of wiki.filterTiddlers(`[prefix[${nsMod.DECK_PREFIX}]]`)) {
+    if (!nsMod.isDeckLogTitle(lt)) continue;
+    const data = wiki.getTiddlerData(lt);
+    if (data && typeof data === 'object') {
+      for (const k of Object.keys(data)) {
+        const d = schema.tryParseTwDate(k);
+        if (d) {
+          if (schema.learningDayOf(d, ctx.rolloverHour) === ctx.learningDay) n += 1;
+        } else if (String(k).startsWith(ctx.learningDay)) {
+          n += 1;
+        }
+      }
+    }
+  }
+  return n;
+}
+
+export interface TodayWorkload {
+  /** 会内学习步卡（不受每日上限约束） */
+  learn: number;
+  /** 今日还可放行的复习卡数（已受剩余额度截断） */
+  due: number;
+  /** 今日还可放行的新卡数（已受剩余额度截断） */
+  newly: number;
+  /** 实际待学量 = learn + due + newly（与「开始学习」拉起的队列同口径） */
+  todayToStudy: number;
+  /** 卡库全量池（未截断，仅作参考显示） */
+  totalDue: number;
+  totalNew: number;
+  totalPool: number;
+  toRead: number;
+}
+
+/**
+ * 「今天」页的待学负荷：**与「开始学习」实际拉起的队列同口径**。
+ * 额度（scheduler.resolveDailyLimits）、截断（deck-engine.clippedCount）、
+ * 当日搁置排除（ns.buriedExcludeFilter）三者都与队列构建共用同一实现，
+ * 展示侧不再自算一套 min/压制算术（曾因两份算式而长期偏离真实队列）。
+ */
+export function todayWorkload(wiki: any): TodayWorkload {
+  // 惰性取队列组合与 deck 常量：stats 是纯聚合模块，不必在加载期就拉进队列组合图
+  const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
+  const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
+  const limits = sched.resolveDailyLimits(wiki);
+  const f = deckEngine.composeDeckFilters(deckMod.DEFAULT_DECK);
+  const bury = nsMod.buriedExcludeFilter(limits.learningDay);
+  const count = (filter: string) => wiki.filterTiddlers(bury ? `${filter} ${bury}` : filter).length;
+  const learn = count(f.learn);
+  const totalDue = count(f.due);
+  const totalNew = count(f.newly);
+  const due = deckEngine.clippedCount(totalDue, limits.reviewLimit);
+  const newly = deckEngine.clippedCount(totalNew, limits.newLimit);
+  return {
+    learn,
+    due,
+    newly,
+    todayToStudy: learn + due + newly,
+    totalDue,
+    totalNew,
+    totalPool: learn + totalDue + totalNew,
+    toRead: count(nsMod.TOPIC_QUEUE_FILTER),
+  };
 }

@@ -8,6 +8,7 @@ deck-logs.test.mjs — 复习日志（按文件布局）测试（node:test）
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bootPlugin } from '../helpers/tw-boot.mjs';
+import { learningDayInstant, twDate } from '../helpers/tw-date.mjs';
 
 const { wiki, mod } = bootPlugin({ prefix: 'tidme-logs-' });
 const ns = mod('core/ns.js');
@@ -15,7 +16,8 @@ const schemaMod = mod('core/schema.js');
 const config = mod('core/config.js');
 const deckMod = mod('core/deck.js');
 const schedMod = mod('core/server/scheduler');
-const todayMod = mod('review/widgets/today.js');
+const statsMod = mod('core/stats.js');
+const sched = mod('core/scheduler.js');
 
 const DAY = (n) => {
   const d = new Date(Date.now() - n * 86400000);
@@ -61,14 +63,23 @@ test('deck: 删除牌组时复习日志随之清理', () => {
   assert.equal(wiki.getTiddler(ns.deckLogTitle(deckTitle)), undefined, '日志已随牌组删除');
 });
 
-test('today: 今日复习计数 —— 单文件按日期前缀统计', () => {
+test('today: 今日复习计数 —— 单文件按当前学习日统计（非 UTC 日）', () => {
   const deck = '$:/Deck/计数书';
   wiki.addTiddler({ title: deck, tags: ['$:/tags/TidmeDeck'] });
-  const key = schemaMod.todayKey();
+  // 今日复习数的口径是**学习日**（本地换天时刻），不是 UTC 日：
+  // 故键取"当前学习日内"的真实时刻（twDate = UTC 17 位串），而不是 todayKey 拼出来的假时刻。
+  const ctx = sched.learningDayContext(wiki);
+  const inDay = learningDayInstant(ctx.learningDay, ctx.rolloverHour);
+  const other = schemaMod.learningDayOf(new Date(inDay.getTime() - 3 * 86400000), ctx.rolloverHour);
+  const key = twDate(inDay);
   wiki.addTiddler({
     title: ns.deckLogTitle(deck),
     type: 'application/json',
-    text: JSON.stringify({ [`${key}093015123`]: { rating: 3 }, [`${key}100001000`]: { rating: 2 }, '20260101090000000': { rating: 1 } }),
+    text: JSON.stringify({
+      [key]: { rating: 3 },
+      [twDate(new Date(inDay.getTime() + 60000))]: { rating: 2 },
+      [twDate(learningDayInstant(other, ctx.rolloverHour))]: { rating: 1 },
+    }),
   });
-  assert.equal(todayMod.todayReviewCount(wiki), 2, '只计今天的条目');
+  assert.equal(statsMod.reviewCountToday(wiki), 2, '只计当前学习日的条目');
 });

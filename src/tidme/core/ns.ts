@@ -159,14 +159,26 @@ export const REVIEWS_PER_DAY_TITLE = CONFIG_TITLE_PREFIX + 'ReviewsPerDay';
 export const LIMITS_SUPPRESS_NEW_TITLE = CONFIG_TITLE_PREFIX + 'LimitsSuppressNew';
 /** 提前学习上限（分钟，默认 20，对标 Anki learn ahead limit） */
 export const LEARN_AHEAD_TITLE = CONFIG_TITLE_PREFIX + 'LearnAhead';
-/** 每日配额消耗状态 tiddler */
+/** 每日配额消耗状态 tiddler。
+ *  放 `$:/state/` 而非 `$:/temp/`：每日额度**必须跨页面刷新存活**，否则刷新一次额度就重置、
+ *  上限形同虚设（`$:/temp/` 语义上是瞬态）。同理见 core/drill 的 FINAL_DRILL_STATE_TITLE。 */
 export const DAILY_QUOTA_STATE_TITLE = '$:/state/tidme/daily-quota';
-/** 撤销状态 tiddler */
-export const UNDO_STATE_TITLE = '$:/state/tidme/undo-state';
 /** 兄弟卡自动分散搁置（默认 true，评分后同源兄弟卡搁置至次日） */
 export const BURY_SIBLINGS_TITLE = CONFIG_TITLE_PREFIX + 'BurySiblings';
 /** 兄弟卡搁置字段（值为 learningDay 串，等于当前学习日则不可调度，次日自动解埋） */
 export const BURIED_FIELD = 'tidme.buried';
+
+/** 当日搁置排除过滤器片段（`-<field>[<day>]`）：给"当日不可调度"提供**过滤器侧唯一表述**。
+ *
+ *  搁置必须同时在两处生效，否则同一天重建队列就会让被搁置的兄弟卡复活：
+ *  - 过滤器侧（本节）：deck 队列组合（core/deck-engine）与 deck 页模板（review/filters/deckfilter）；
+ *  - JS 侧（core/scheduler.isBuriedToday / isQueueable）——同一判据（字段 + 学习日串）的 JS 表述。
+ *  day 只可能是 8 位数字，插值安全。 */
+export function buriedExcludeFilter(learningDay: string): string {
+  const day = String(learningDay || '').trim();
+  if (!/^\d{8}$/.test(day)) return '';
+  return `-[${BURIED_FIELD}[${day}]]`;
+}
 /** 日末操练（Final Drill）状态 tiddler */
 export const FINAL_DRILL_STATE_TITLE = '$:/state/tidme/final-drill';
 /** PDF 与 OCR 配置（JSON） */

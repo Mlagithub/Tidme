@@ -204,6 +204,6 @@ export function globalReadingTarget(wiki: any): string {
     }
   }
   const queue = sched.sortTopicQueue(docQueue.collectTopicQueue(wiki));
-  const readable = queue.find((c: any) => sched.isDueNow(c.fields));
+  const readable = queue.find((c: any) => sched.isDueNowFor(wiki, c.fields));
   return (readable || queue[0])?.title || ns.PAGE_READING_LIST;
 }

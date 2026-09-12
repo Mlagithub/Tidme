@@ -166,10 +166,10 @@ function makeReadingList(): any {
         }
         sum.appendChild(meta);
 
-        // 继续阅读跳到第一张"当前可读"卡（scheduler.isDueNow，与 section-bar/doc-resume 一致）；
+        // 继续阅读跳到第一张"当前可读"卡（scheduler.isDueNowFor，与 section-bar/doc-resume 一致）；
         // 全部未来排期时退回第一张（允许显式打开）
         const actions = el(doc, 'div', 'tm-rl-doc-actions');
-        const targetCard = docOps.docReadingTarget(wiki, g.doc) || (g.cards.find((c) => sched.isDueNow(c.fields)) || g.cards[0])?.title;
+        const targetCard = docOps.docReadingTarget(wiki, g.doc) || (g.cards.find((c) => sched.isDueNowFor(wiki, c.fields)) || g.cards[0])?.title;
         const cont = el(doc, 'button', 'tm-btn tm-rl-resume-btn', lingo(wiki, 'read.resume', '▶ Continue Reading'));
         cont.title = lingo(wiki, 'rl.resumetip', 'Start from read point or first pending section');
         cont.addEventListener('click', (e: Event) => {

@@ -50,9 +50,13 @@ export function twDateString(d: Date): string {
 }
 
 /**
- * 学习日键（YYYYMMDD 本地学习日）。
+ * 学习日键（YYYYMMDD 本地学习日）——"今天"的唯一产地。
  * 对标 Anki 默认凌晨 4:00 本地换天（可配置 0–23 点）：
  * 将时刻减去换天偏移量后取本地自然日，确保夜间（如 01:00）复习仍计入同一学习日。
+ *
+ * 本函数之后的**天数推算一律走纯日历函数**（addLearningDays / learningDayDiff），
+ * 不要用 `parseTwDate(<本地学习日串>)` 再格式化——那是把本地日当成 UTC 时刻，
+ * 在 UTC 负偏移时区会整体错一天（futureDueSchedule 曾如此）。
  * @param now 待判定时刻，默认当前
  * @param rolloverHour 换天时刻（0–23 小时，默认 4）
  */
@@ -63,7 +67,27 @@ export function learningDayOf(now: Date = new Date(), rolloverHour = 4): string 
   return `${effective.getFullYear()}${p(effective.getMonth() + 1)}${p(effective.getDate())}`;
 }
 
-/** 日期键（UTC，YYYYMMDD）：日志修剪与跨端绝对日期比较（日期归本模块唯一产地）。
+/** 学习日串（YYYYMMDD）→ UTC 零点毫秒（纯日历换算，与运行时时区无关）。
+ *  仅用于学习日之间的天数差/加减——不要拿它当"该学习日开始时刻"去和真实时刻比大小。 */
+function learningDayMs(day: string): number {
+  return Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)));
+}
+
+/** 学习日串加减天数（纯日历，跨月/跨年/闰年由 Date.UTC 归一化） */
+export function addLearningDays(day: string, days: number): string {
+  const d = new Date(learningDayMs(day) + Math.round(days) * 86400000);
+  const p = (n: number, l = 2) => String(n).padStart(l, '0');
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`;
+}
+
+/** 两个学习日串相差的天数（to - from，可为负；纯日历，无时区参与） */
+export function learningDayDiff(from: string, to: string): number {
+  return Math.round((learningDayMs(to) - learningDayMs(from)) / 86400000);
+}
+
+/** UTC 绝对日期键（YYYYMMDD）：**仅用于日志修剪与绝对日比较**。
+ *  它不表示"今天"——"今天"是学习日（learningDayOf，受换天时刻影响）。
+ *  二者在 UTC 正偏移时区的 nightly 时段会落在不同日期上，切勿混用。
  *  @param now 默认当前时刻；传偏移时刻可算"保留截止日"（见 server/scheduler 日志修剪） */
 export function todayKey(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10).replace(/-/g, '');

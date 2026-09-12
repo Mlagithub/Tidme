@@ -98,6 +98,12 @@ today.breakdown.new: New
 today.breakdown.learn: Learning
 today.breakdown.total: Total Vault
 studymode.learning: Learning
+studymode.undo: Undo
+studymode.undo.tip: Undo the last rating: restore card fields, review log, quota and session
+studymode.drill: Final Drill
+studymode.drill.tip: Cards rated below Good today — drill until each reaches Good
+today.drill: Final Drill
+today.drill.tip: Clear today's below-Good cards (SuperMemo final drill)
 studymode.finishandnext: Done, Next ›
 studymode.finishandnext.tip: Save reading progress and continue review
 studymode.end: End Study
@@ -159,6 +165,13 @@ manager.inqueue: In Queue
 manager.read: Read
 manager.suspended: Suspended
 manager.overdue: Overdue
+manager.leech: Leech
+manager.resetleech: Reset Leech
+manager.unbury: Unbury
+manager.cram: Cram Selected
+manager.cram.tip: Practice selected cards without writing FSRS state or review logs
+manager.cram.empty: No cards in the selection can be practiced
+manager.noselection: Select cards first
 manager.bydoc: By Document
 manager.bydeck: By Deck
 manager.flatlist: List
@@ -444,6 +457,8 @@ stats.today.reviewed: Today Reviewed
 stats.today.focustime: Focus Time
 stats.total.cards: Cards in Queue
 stats.retention: Retention Rate
+stats.trueretention: True retention (mature)
+stats.futuredue: Future Due (14 days)
 stats.forecast: Due Forecast
 stats.decks: Decks
 stats.docs: Documents
@@ -482,6 +497,20 @@ manager.unassigned: Unassigned
 manager.unassigned.tip: Cards not assigned to any custom deck
 manager.selected: selected
 rl.sectionsleft: sections left
+settings.limits.title: Daily Limits & Learning Day
+settings.limits.subtitle: New/review caps, rollover hour, learn ahead, burying
+settings.limits.new: New Cards per Day
+settings.limits.new.desc: Introduced new cards per learning day; 0 = unlimited (default 20)
+settings.limits.reviews: Reviews per Day
+settings.limits.reviews.desc: Due reviews per learning day; 0 = unlimited (default 200)
+settings.limits.suppress: Reviews Suppress New Cards
+settings.limits.suppress.desc: New cards consume the review budget: when the review cap is used up, new cards stop
+settings.limits.rollover: Learning Day Starts At (Hour)
+settings.limits.rollover.desc: Local hour when the learning day rolls over (Anki default 4). Daily counts reset at this hour
+settings.limits.learnAhead: Learn Ahead Limit (Minutes)
+settings.limits.learnAhead.desc: Show in-session learning cards up to N minutes early when the queue is empty; 0 = wait strictly
+settings.limits.bury: Bury Siblings
+settings.limits.bury.desc: After grading a card, hide its same-source siblings until the next learning day (cards in learning steps are never buried)
 settings.memory.title: Memory Parameters
 settings.memory.subtitle: Default Deck FSRS
 settings.memory.retention: Target Retention

@@ -86,6 +86,34 @@ test('settings: 设置页渲染 —— 三分区与关键控件；页面挂载 w
   assert.ok(!text.includes('立即顺延'), '高频操作（立即顺延）保留在牌组页，不集中到设置页');
 });
 
+test('settings: 每日上限与学习日分区（六项配置都有 UI，不再是只能手改 tiddler）', () => {
+  const config = mod('core/config.js');
+  reset({ alsoSystem: [ns.NEW_PER_DAY_TITLE, ns.REVIEWS_PER_DAY_TITLE, ns.LIMITS_SUPPRESS_NEW_TITLE, ns.ROLLOVER_HOUR_TITLE, ns.LEARN_AHEAD_TITLE, ns.BURY_SIBLINGS_TITLE] });
+  const { root } = renderSettings();
+  const text = collectText(root);
+  for (const key of ['每日上限与学习日', '每日新卡上限', '每日复习上限', '复习额度压制新卡', '学习日起始时刻', '提前学习上限', '兄弟卡搁置']) {
+    assert.ok(text.includes(key), `设置页包含：${key}`);
+  }
+  // 控件已在；读写往返仍需落在同一份配置（UI 与 core 不各写一套）
+  config.writeNewPerDay(wiki, 33);
+  config.writeReviewsPerDay(wiki, 321);
+  config.writeRolloverHour(wiki, 6);
+  config.writeLearnAheadMinutes(wiki, 7);
+  config.writeBurySiblings(wiki, false);
+  config.writeLimitsSuppressNew(wiki, false);
+  assert.equal(config.readNewPerDay(wiki), 33);
+  assert.equal(config.readReviewsPerDay(wiki), 321);
+  assert.equal(config.readRolloverHour(wiki), 6);
+  assert.equal(config.readLearnAheadMinutes(wiki), 7);
+  assert.equal(config.readBurySiblings(wiki), false);
+  assert.equal(config.readLimitsSuppressNew(wiki), false);
+  // 写入的设置必须真的影响调度额度（不是装饰性开关）
+  const sched = mod('core/scheduler.js');
+  const limits = sched.resolveDailyLimits(wiki);
+  assert.equal(limits.newLimit, 33);
+  assert.equal(limits.reviewLimit, 321, '压制关闭时复习额度不再扣新卡数');
+});
+
 test('settings: 自动顺延开关迁移到设置页（queue-ops 只保留手动触发）', () => {
   const queueOps = mod('manager/widgets/queue-ops.js');
   const { root } = renderWidgetBase(wiki, queueOps, 'queue-ops');

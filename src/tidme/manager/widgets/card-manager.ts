@@ -25,6 +25,7 @@ const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
@@ -61,6 +62,8 @@ interface DeckInfo {
   caption: string;
   strict: Set<string>;
   loose: Set<string>;
+  /** 牌组配置的 leech 阈值（渲染期判定同源：deck.leech_threshold 字段，缺省 = core 默认） */
+  leechThreshold: number;
 }
 
 /** 管理器状态（原 render 闭包的 16 个可变量收进一处；render 时重建，选中集跨重建保持） */
@@ -124,7 +127,10 @@ function crumbOf(c: Card): string {
   return String(c.fields['tidme.breadcrumb'] || c.title);
 }
 
-function inView(f: Record<string, any>, v: View): boolean {
+/** 视图判定。
+ *  leech 视图的阈值按卡所属牌组的 leech_threshold（多牌组取最小），
+ *  与 repeat.tid 渲染期触发判定同源——曾写死 core 默认值 8，牌组改过阈值后视图与触发脱节。 */
+function inView(st: CMState, f: Record<string, any>, v: View, title = ''): boolean {
   const suspended = f['tidme.suspended'] === 'yes';
   const done = sched.isCardOutOfQueue(f);
   if (v === 'inqueue') return !done && !suspended;
@@ -133,8 +139,9 @@ function inView(f: Record<string, any>, v: View): boolean {
   if (v === 'overdue') return String(f.state || '0') === '2' && schema.parseTwDate(f.due).getTime() < Date.now();
   if (v === 'leech') {
     const lapses = Number(f.lapses || 0);
+    // 触发期落库的标记（repeat.tid 达阈值时写 tidme.leech）+ lapses 兜底（历史卡/阈值调低后）
     const hasLeechMark = f['tidme.leech'] === 'yes' || (Array.isArray(f.tags) && f.tags.includes('leech'));
-    return hasLeechMark || lapses >= sched.DECK_PARAM_DEFAULTS.leechThreshold;
+    return hasLeechMark || lapses >= leechThresholdOfCard(st, title);
   }
   return true;
 }
@@ -206,8 +213,24 @@ function collectAll(ctx: Ctx) {
       caption: display.captionText(wiki, f.caption || deck.split('/').pop() || deck, ctx.widget),
       strict,
       loose,
+      leechThreshold: leechThresholdOfFields(f),
     };
   });
+}
+
+/** 牌组 leech 阈值：deck.leech_threshold 字段 → core 默认（与 repeat.tid 渲染期判定同源） */
+function leechThresholdOfFields(fields: Record<string, any>): number {
+  const raw = Number(fields && fields.leech_threshold);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : sched.DECK_PARAM_DEFAULTS.leechThreshold;
+}
+
+/** 卡片的有效 leech 阈值 = 命中牌组中最小的那个（多牌组命中时取"最容易触发"的口径） */
+function leechThresholdOfCard(st: CMState, title: string): number {
+  let min = sched.DECK_PARAM_DEFAULTS.leechThreshold;
+  for (const d of st.deckInfos) {
+    if (d.loose.has(title)) min = Math.min(min, d.leechThreshold);
+  }
+  return min;
 }
 
 // ---------- 选中状态与反馈 ----------
@@ -836,7 +859,7 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   for (const v of VIEWS) {
     const count = v.id === 'all'
       ? st.allCards.length
-      : st.allCards.filter((c) => inView(c.fields, v.id)).length;
+      : st.allCards.filter((c) => inView(st, c.fields, v.id, c.title)).length;
     const label = lingoMod.lingo(wiki, v.key, v.label);
     const b = el(doc, 'button', 'tm-btn' + (st.view === v.id ? ' tm-btn--active' : ''), `${label}(${count})`);
     b.addEventListener('click', () => {
@@ -881,13 +904,32 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.done', 'Done'), () => doneFields()));
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.suspend', 'Suspend'), () => sched.suspendCard()));
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.restore', 'Restore'), () => resumePatch()));
-  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.resetleech', 'Reset Leech'), () => ({
-    'tidme.leech': undefined,
-    'tidme.suspended': undefined,
-    lapses: '0',
-    ...sched.forgetCard(),
-  })));
+  // 取消失效搁置（Anki 牌组概览的 Unbury）：清 tidme.buried，卡当日即可再次调度。
+  // 没有这个入口时，被搁置的卡只能等到次日自动解埋，或靠撤销评分间接触发。
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.unbury', 'Unbury'), () => sched.unburyCard()));
+  // 重新表述（SM 对 leech 的根治手段）：补丁唯一产地 = core/scheduler.resetLeechCard
+  // （内含"必须同时清 tidme.ignored"的理由，勿在此重写一份）。
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.resetleech', 'Reset Leech'), () => sched.resetLeechCard()));
   row.appendChild(stateGroup);
+
+  // 突击复习（cram）：选中卡只操练不写调度/日志（core/session.startCramSession + grade 的 cram 分支）。
+  // 考前一小时过一遍错题、不想污染 FSRS 间隔时用。
+  const cramBtn = el(doc, 'button', 'tm-btn', lingoMod.lingo(wiki, 'manager.cram', 'Cram Selected'));
+  cramBtn.title = lingoMod.lingo(wiki, 'manager.cram.tip', 'Practice selected cards without writing FSRS state or review logs');
+  cramBtn.addEventListener('click', () => {
+    const titles = [...st.selected];
+    if (!titles.length) {
+      toast(ctx, lingoMod.lingo(wiki, 'manager.noselection', 'Select cards first'), 'err');
+      return;
+    }
+    const started = sessionMod.startCramSession(wiki, titles);
+    if (!started) {
+      toast(ctx, lingoMod.lingo(wiki, 'manager.cram.empty', 'No practiceable cards in selection'), 'err');
+      return;
+    }
+    navigateTo(ctx.widget, started.list[0]);
+  });
+  row.appendChild(cramBtn);
 
   const dangerGroup = el(doc, 'span', 'tm-cm-bar-group', '');
   dangerGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.delete', 'Delete'), () => ({} as Record<string, any>), true));
@@ -918,7 +960,7 @@ function render(ctx: Ctx) {
   st.renderedCardTitles = [];
   st.groupCbUpdaters = [];
   st.cardCbUpdaters = [];
-  st.visibleCards = st.allCards.filter((c) => inView(c.fields, st.view) && matches(st, c));
+  st.visibleCards = st.allCards.filter((c) => inView(st, c.fields, st.view, c.title) && matches(st, c));
 
   wrap.appendChild(buildToolbar(ctx));
 

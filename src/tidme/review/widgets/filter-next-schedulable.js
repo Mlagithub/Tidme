@@ -25,7 +25,8 @@ startstudy.tid 内联的"从头取第一张非出队卡"实现——后者会把
     var cur = operator.operand || null;
     var next = sched.nextSchedulable(items, cur, function(t) {
       var f = options.wiki.getTiddler(t);
-      return f ? sched.isDueNow(f.fields) : false;
+      // isDueNowFor：换天时刻/提前学习窗口由 core 单点解析（与 session.advanceSession 同口径）
+      return f ? sched.isDueNowFor(options.wiki, f.fields) : false;
     });
     return next ? [next] : [];
   };

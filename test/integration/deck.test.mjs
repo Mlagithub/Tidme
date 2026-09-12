@@ -103,7 +103,7 @@ test('deck: 手写 deck title 含过滤器不安全字符时不产出假卡（�
   assert.ok(!out.some((t) => String(t).includes('Filter error')), '空过滤器不产生假结果');
 });
 
-test('deck: newPerDay 产出合法 limit 过滤器且正确截断新卡队列（防 Filter error 回归）', () => {
+test('deck: 每日上限不再拼进 order_new（唯一实现 = core/scheduler.resolveDailyLimits + deck-engine）', () => {
   const deckEngine = mod('core/deck-engine.js');
   mkItem('限额新卡A');
   mkItem('限额新卡B');
@@ -111,12 +111,13 @@ test('deck: newPerDay 产出合法 limit 过滤器且正确截断新卡队列（
   const fields = deckMod.configToFields(wiki, {
     name: '限额牌组',
     card: '[tidme.kind[item]]',
+    // 遗留字段：即便调用方仍传，也不再产出过滤器片段（每日上限不在过滤器里表达）
     newPerDay: 2,
   });
-  assert.ok(fields.order_new.includes('+[limit[2]]'), 'order_new 包含合法 run 级 limit');
+  assert.ok(!String(fields.order_new).includes('limit['), 'order_new 不含 limit 片段（杜绝旧的 Filter error 伪卡）');
   const dTitle = deckMod.createDeck(wiki, { name: '限额牌组', card: '[tidme.kind[item]]', newPerDay: 2 });
   const f = deckEngine.composeDeckFilters(dTitle, wiki.getTiddler(dTitle).fields);
   const newly = [...wiki.filterTiddlers(f.newly)];
   assert.ok(!newly.some((t) => String(t).includes('Filter error')), '无 Filter error');
-  assert.equal(newly.length, 2, '正确截断为 2 张新卡');
+  assert.equal(newly.length, 3, '过滤层不截断；截断由 resolveDailyLimits 的剩余额度负责');
 });

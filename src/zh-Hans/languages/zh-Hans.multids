@@ -98,6 +98,12 @@ today.breakdown.new: 新卡
 today.breakdown.learn: 学习中
 today.breakdown.total: 卡库总量
 studymode.learning: 学习中
+studymode.undo: 撤销
+studymode.undo.tip: 撤销上一次评分：恢复卡片字段、复习日志、每日额度与会话
+studymode.drill: 日末操练
+studymode.drill.tip: 今日评档低于 Good 的卡片——操练到每张都达到 Good
+today.drill: 日末操练
+today.drill.tip: 清账今日所有未达 Good 的卡片（对标 SuperMemo final drill）
 studymode.finishandnext: 读完，继续复习 ›
 studymode.finishandnext.tip: 保存阅读进度并继续复习后续卡片；读完的材料按 A-Factor 顺延，到期自动回归队列
 studymode.end: 结束学习
@@ -161,6 +167,11 @@ manager.suspended: 搁置
 manager.overdue: 逾期
 manager.leech: 难点
 manager.resetleech: 重置难点
+manager.unbury: 取消搁置
+manager.cram: 突击复习选中卡
+manager.cram.tip: 只操练选中卡，不写 FSRS 状态与复习日志（考前突击用）
+manager.cram.empty: 选中卡中没有可操练的卡
+manager.noselection: 请先选中卡片
 manager.bydoc: 按文档
 manager.bydeck: 按牌组
 manager.flatlist: 列表
@@ -446,6 +457,8 @@ stats.today.reviewed: 今日复习
 stats.today.focustime: 专注时间
 stats.total.cards: 在队卡片
 stats.retention: 保留率
+stats.trueretention: 真实保留率（成熟卡）
+stats.futuredue: 未来到期负荷（14 天）
 stats.forecast: 到期预测
 stats.decks: 牌组
 stats.docs: 文档
@@ -484,6 +497,20 @@ manager.unassigned: 未入组
 manager.unassigned.tip: 未分配到任何用户自定义牌组的卡片
 manager.selected: 已选
 rl.sectionsleft: 张待读
+settings.limits.title: 每日上限与学习日
+settings.limits.subtitle: 新卡/复习上限、换天时刻、提前学习、兄弟卡搁置
+settings.limits.new: 每日新卡上限
+settings.limits.new.desc: 每个学习日引入的新卡数；0 = 不限（默认 20）
+settings.limits.reviews: 每日复习上限
+settings.limits.reviews.desc: 每个学习日的到期复习数；0 = 不限（默认 200）
+settings.limits.suppress: 复习额度压制新卡
+settings.limits.suppress.desc: 新卡消耗复习预算：复习额度用尽时新卡一并停止
+settings.limits.rollover: 学习日起始时刻（小时）
+settings.limits.rollover.desc: 本地换天时刻（对标 Anki 默认 4 点）；每日计数在此时刻重置
+settings.limits.learnAhead: 提前学习上限（分钟）
+settings.limits.learnAhead.desc: 队列空时提前放行会内学习卡的上限；0 = 严格等待
+settings.limits.bury: 兄弟卡搁置
+settings.limits.bury.desc: 评分后把同源兄弟卡藏到次日（会内学习步卡永不搁置）
 settings.memory.title: 记忆参数
 settings.memory.subtitle: 默认牌组 FSRS
 settings.memory.retention: 目标记忆率

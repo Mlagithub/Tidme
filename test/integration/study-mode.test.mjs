@@ -142,6 +142,76 @@ test('模式条: 结束学习 → endSession 清场 + 派发导航/通知（事�
   assert.ok(types.includes('tm-notify'), '派发结束通知');
 });
 
+test('模式条: 有可撤销评分时显示「撤销」，点击回滚并回到该卡', () => {
+  const gradeMod = mod('core/grade.js');
+  const configMod = mod('core/config.js');
+  setupActive();
+  // 一张新卡跑真实评分写路径，撤销栈里就该有一条
+  wiki.addTiddler({
+    title: '卡甲',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
+    state: '0',
+    due: '20260101000000000',
+    reps: '0',
+    lapses: '0',
+    stability: '0',
+    difficulty: '0',
+    elapsed_days: '0',
+    scheduled_days: '0',
+    'tidme.priority': '50',
+  });
+  const now = new Date();
+  gradeMod.gradeCard(wiki, { title: '卡甲', rating: 'Good', now });
+  assert.equal(gradeMod.getUndoStackDepth(), 1);
+  assert.notEqual(String(wiki.getTiddler('卡甲').fields.state), '0', '评分已写回（新卡 Good → 学习步）');
+
+  const { w, holder } = renderBar('卡乙');
+  w.refresh({ '$:/state/tidme/learning-session': { modified: true } });
+  assert.ok(barText(holder).includes('撤销'), `模式条应出现撤销入口（实际 ${barText(holder)}）`);
+  clickBarButton(holder, '撤销');
+
+  assert.equal(wiki.getTiddler('卡甲').fields.state, '0', '撤销恢复评分前字段');
+  assert.equal(gradeMod.getUndoStackDepth(), 0, '栈已弹出');
+  const nav = w.events.filter((e) => e.type === 'tm-navigate').pop();
+  assert.equal(nav?.navigateTo, '卡甲', '撤销后导航回被撤销的卡');
+  assert.equal(configMod.readRolloverHour(wiki), 4, '配置读取未受影响（冒烟）');
+});
+
+test('模式条: 无评分可撤销时不显示「撤销」', () => {
+  const gradeMod = mod('core/grade.js');
+  gradeMod.clearUndoStack();
+  setupActive();
+  const { w, holder } = renderBar('卡乙');
+  w.refresh({ '$:/state/tidme/learning-session': { modified: true } });
+  assert.ok(!barText(holder).includes('撤销'), '空栈不显示撤销入口');
+});
+
+test('模式条: 结束学习清空撤销栈（会话边界），隔天不再回写旧会话', () => {
+  const gradeMod = mod('core/grade.js');
+  setupActive();
+  wiki.addTiddler({
+    title: '卡甲',
+    'tidme.kind': 'item',
+    state: '0',
+    due: '20260101000000000',
+    reps: '0',
+    lapses: '0',
+    stability: '0',
+    difficulty: '0',
+    elapsed_days: '0',
+    scheduled_days: '0',
+    'tidme.priority': '50',
+  });
+  gradeMod.gradeCard(wiki, { title: '卡甲', rating: 'Good', now: new Date() });
+  assert.equal(gradeMod.getUndoStackDepth(), 1);
+
+  session.endSession(wiki);
+  assert.equal(gradeMod.getUndoStackDepth(), 0, '结束学习 = 撤销栈边界');
+  const res = gradeMod.undoLastGrade(wiki);
+  assert.equal(res.ok, false, '会话结束后无可撤销（不会复活旧会话）');
+});
+
 test('模式条: 阅读材料显示「读完，继续复习 ›」，点击推进到后续 item 卡片', () => {
   // 推进统一走 advanceSession（isDueNow）：后续卡须为实体且当前可学，幽灵标题会被跳过
   wiki.addTiddler({ title: '卡甲', 'tidme.kind': 'item', state: '2', due: '20260101000000000' });

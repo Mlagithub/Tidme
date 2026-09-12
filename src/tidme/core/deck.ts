@@ -37,8 +37,6 @@ export interface DeckConfig {
   cardExclude?: string;
   cardUnfold?: string;
   order?: 'due-new' | 'new-due' | 'random';
-  /** 每次会话进入的新卡上限（落地到 order_new 过滤尾部 limit[N]；0/缺省 = 不限） */
-  newPerDay?: number;
   /** FSRS 权重 JSON 对象（缺省 = default deck 的 p） */
   p?: Record<string, unknown> | string;
   leechThreshold?: number;
@@ -127,11 +125,9 @@ export function configToFields(wiki: any, cfg: DeckConfig): Record<string, any> 
   set('order', cfg.order, 'due-new');
   if (cfg.leechThreshold !== undefined) fields.leech_threshold = String(cfg.leechThreshold);
   if (cfg.p !== undefined) fields.p = typeof cfg.p === 'string' ? cfg.p : JSON.stringify(cfg.p);
-  // 每日新卡上限 → order_new 尾部 +[limit[N]]（不设则保持模板）
-  if (cfg.newPerDay !== undefined && Number(cfg.newPerDay) > 0) {
-    const base = String(fields.order_new || '[sortan[title]]').trim();
-    if (!/limit\[\d+\]/.test(base)) fields.order_new = `${base} +[limit[${Math.floor(Number(cfg.newPerDay))}]]`;
-  }
+  // 注意：牌组字段层**不再**拼任何"每日新卡上限"片段。每日上限（新卡/复习、跨天计数、
+  // 复习超额压制）唯一实现在 core/scheduler.resolveDailyLimits + deck-engine.applyQueueLimits；
+  // 过滤器里截断无法表达跨天计数，且历史上拼错语序会把新卡队列整体变成一条 Filter error 伪卡。
   // subset 标记（兼容 fsrs4tw 的 tidme.subset-doc 清理过滤器）
   if (cfg.kind === 'subset' && cfg.sourceDoc) fields['tidme.subset-doc'] = cfg.sourceDoc;
   return fields;

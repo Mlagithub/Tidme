@@ -17,7 +17,7 @@ test.before(() => {
 });
 
 test.beforeEach(() => {
-  reset({ alsoSystem: ['$:/Deck/', ns.DAILY_QUOTA_STATE_TITLE, ns.UNDO_STATE_TITLE] });
+  reset({ alsoSystem: ['$:/Deck/', ns.DAILY_QUOTA_STATE_TITLE] });
   if (grade.clearUndoStack) grade.clearUndoStack();
 });
 
@@ -91,8 +91,33 @@ test('Cram 模式: Again 会重新排入队尾重复练习', () => {
   session.startCramSession(wiki, ['错题1', '错题2'], now);
 
   // 错题1评 Again
-  grade.gradeCard(wiki, { title: '错题1', rating: 'Again', now });
+  const res = grade.gradeCard(wiki, { title: '错题1', rating: 'Again', now });
 
   const sAfterAgain = session.getSession(wiki);
   assert.deepEqual([...sAfterAgain.list], ['错题2', '错题1'], 'Again 挪到队尾继续练');
+  // 突击会话的卡并未到期，推进必须不判 due（否则第一张之后即自报完成）
+  assert.equal(res.next, '错题2', '推进到队内下一张（不判 due）');
+  assert.equal(res.finished, false, '队内仍有卡 → 未完成');
+});
+
+test('Cram 模式: 会话可连续推进到底（未到期卡不判 due）', () => {
+  mkCard('突击A');
+  mkCard('突击B');
+  mkCard('突击C');
+  const now = new Date('2026-09-11T10:00:00Z');
+
+  session.startCramSession(wiki, ['突击A', '突击B', '突击C'], now);
+
+  const r1 = grade.gradeCard(wiki, { title: '突击A', rating: 'Good', now });
+  assert.equal(r1.next, '突击B');
+  assert.equal(r1.finished, false);
+
+  const r2 = grade.gradeCard(wiki, { title: '突击B', rating: 'Good', now });
+  assert.equal(r2.next, '突击C');
+  assert.equal(r2.finished, false);
+
+  const r3 = grade.gradeCard(wiki, { title: '突击C', rating: 'Good', now });
+  assert.equal(r3.next, null);
+  assert.equal(r3.finished, true, '最后一张评完才算完成');
+  assert.equal(session.getSession(wiki), null, '会话随队列耗尽关闭');
 });

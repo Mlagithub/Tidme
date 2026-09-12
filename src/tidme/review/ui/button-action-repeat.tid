@@ -24,6 +24,13 @@ code-body: yes
             filter="[<card>jsonget[lapses]compare:number:gteq<leech_threshold>]"
             variable="ignore"
         >
+            <!-- 触发期打标（对应 Anki 达阈值时给 note 打 leech 标签）：判定留在渲染期
+                 （动作树必须在渲染期决定是否挂载），但标记要落库——否则管理器「Leech 复查」
+                 视图只能靠 lapses 猜，重置动作也无从清理。 -->
+            <$action-setfield
+                $tiddler=<<studyTiddler>>
+                tidme.leech="yes"
+            />
             <<leech_action>>
             <$action-sendmessage
                 $message="tm-notify"

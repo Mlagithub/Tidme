@@ -17,7 +17,8 @@ const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
 const statsMod = require('$:/plugins/keepone/tidme/core/stats.js');
-const config = require('$:/plugins/keepone/tidme/core/config.js');
+const undo = require('$:/plugins/keepone/tidme/core/undo.js');
+const drill = require('$:/plugins/keepone/tidme/core/drill.js');
 
 /** 牌组学习会话列表的 title 后缀（<deck>/study，fsrs4tw 契约） */
 export const DECK_STUDY_SUFFIX = '/study';
@@ -78,7 +79,13 @@ export function removeFromSessionMany(wiki: any, titles: Iterable<string>): bool
 }
 
 /** 会话内推进：从当前卡之后找下一张"当前可学"的卡（cur 为 null/不在会话时从头找）。
- * canLearn 缺省 = scheduler.isDueNow（含提前学习放行限制）。
+ *
+ * canLearn 缺省按会话模式取：
+ * - 正常复习/阅读流（global-*、items-only、无 mode）→ scheduler.isDueNowFor（含提前学习放行）；
+ * - cram（突击预演）与 final-drill（日末重练）→ scheduler.isQueueable：**不判 due**，只排除
+ *   出队与当日搁置——这两类会话本身就是"练还没到期的卡"，用到期判定推进会让会话在
+ *   第一张之后就自报 finished（历史缺陷）。
+ *
  * 注意：cur 之后找（不回选 cur 之前的滞留卡）——这是与旧 startstudy"从头找"的
  * 语义统一点（曾导致未处理卡被反复拉回的 1:1 死循环）。
  */
@@ -89,14 +96,16 @@ export function advanceSession(
 ): string | null {
   const s = getSession(wiki);
   if (!s) return null;
-  const learnAhead = config && typeof config.readLearnAheadMinutes === 'function'
-    ? config.readLearnAheadMinutes(wiki)
-    : 20;
+  const ctx = sched.learningDayContext(wiki);
+  const freeMode = s.mode === 'cram' || s.mode === 'final-drill';
   const learn = canLearn
     ? canLearn
     : (t: string) => {
       const f = wiki.getTiddler(t);
-      return f ? sched.isDueNow(f.fields, new Date(), learnAhead) : false;
+      if (!f) return false;
+      return freeMode
+        ? sched.isQueueable(f.fields, ctx.learningDay)
+        : sched.isDueNow(f.fields, ctx.now, ctx.learnAheadMinutes, ctx.rolloverHour);
     };
   return sched.nextSchedulable(s.list, cur, learn);
 }
@@ -150,6 +159,8 @@ export function getActiveStudy(wiki: any): ActiveStudy | null {
  */
 export function endSession(wiki: any): number {
   if (!wiki || typeof wiki.deleteTiddler !== 'function') return 0;
+  // 会话结束 = 撤销栈的生命周期边界：撤销依赖"当前会话"，会话关闭后回写旧列表只会复活它
+  undo.clearUndo();
   // 先结算专注锚点再清场：最后一张卡未评分就结束学习时，那段时长不该跟着 $:/temp 一起消失
   settleFocusAnchor(wiki);
   let n = 0;
@@ -179,11 +190,12 @@ export function endSession(wiki: any): number {
  */
 export function startFinalDrill(wiki: any, now = new Date()): { list: string[]; mode: string } | null {
   if (!wiki) return null;
-  const queue = sched.getFinalDrillQueue(wiki, now);
+  const queue = drill.getFinalDrillQueue(wiki, now);
   if (!queue || !queue.length) return null;
 
   setSession(wiki, { list: queue, mode: 'final-drill', currentIndex: '0' });
   enterCard(wiki, queue[0], now);
+  undo.clearUndo(); // 新会话边界：清掉上一场的撤销栈（避免撤销把上一场会话写回）
   return { list: queue, mode: 'final-drill' };
 }
 
@@ -204,6 +216,7 @@ export function startCramSession(wiki: any, filterOrList: string | string[], now
 
   setSession(wiki, { list, mode: 'cram', currentIndex: '0' });
   enterCard(wiki, list[0], now);
+  undo.clearUndo(); // 新会话边界：清掉上一场的撤销栈
   return { list, mode: 'cram' };
 }
 

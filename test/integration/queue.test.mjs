@@ -412,14 +412,27 @@ test('deck 过滤器组合: 队列各段 subfilter 包裹后并集齐全（回�
   assert.deepEqual(outOld, ['T2-new'], '旧裸拼接形态只产出新卡段（缺陷对照）');
 });
 
-test('composeGlobalLearningQueue: 自动过滤包含过滤器元字符或系统条目的伪标题', () => {
-  const evaluate = (filter) => {
-    if (filter.includes('state_learn')) return ['[subfilter{$:/Deck/default!!card}] +[sort[due]]', '合法学习卡'];
-    if (filter.includes('state_due')) return ['$:/config/broken-card', '合法到期卡'];
-    return ['普通新卡'];
-  };
-  const q = deckEngine.composeGlobalLearningQueue(evaluate);
-  assert.ok(!q.includes('[subfilter{$:/Deck/default!!card}] +[sort[due]]'), '包含 []{} 的伪标题被拦截');
-  assert.ok(!q.includes('$:/config/broken-card'), '$:/ 开头的系统伪标题被拦截');
-  assert.deepEqual([...q], ['合法学习卡', '合法到期卡', '普通新卡']);
+test('composeGlobalLearningQueue: 坏 deck 字段产出的 Filter error 伪标题被拦截且出声告警（真实 TW 求值）', () => {
+  // 真实现场：默认牌组的 order_new 写成 run 外 limit（`[sortan[title]]limit[2]`），TW 会把
+  // "Filter error: Missing [ in filter expression" 当结果项返回 → 伪卡混进学习队列。
+  // 这里不用假 evaluate（那是在测 mock），而是让真实 TW 求值暴露伪标题。
+  const deck = '$:/Deck/default';
+  const orig = wiki.getTiddler(deck)?.fields || {};
+  wiki.addTiddler({ ...orig, order_new: '[sortan[title]]limit[2]' }); // 故意写坏（覆盖 shadow 默认牌组）
+  for (const t of ['坏字段卡A', '坏字段卡B']) {
+    wiki.addTiddler({ title: t, 'tidme.kind': 'item', state: '0', due: twDate(new Date(Date.now() - 3600000)) });
+  }
+
+  const raw = wiki.filterTiddlers(deckEngine.composeDeckFilters(deck, wiki.getTiddler(deck).fields).newly);
+  assert.ok([...raw].some((t) => String(t).includes('Filter error')), '真实 TW 下坏字段确实产出伪标题（缺陷现场）');
+
+  const discarded = [];
+  const q = deckEngine.composeGlobalLearningQueue((f) => [...wiki.filterTiddlers(f)], {
+    onDiscard: (title, reason) => discarded.push([title, reason]),
+  });
+  assert.ok(!q.some((t) => String(t).includes('Filter error')), '伪标题不进队列');
+  assert.ok(
+    discarded.some(([t, reason]) => String(t).includes('Filter error') && reason === 'unsafe'),
+    '拦截必须出声（不再静默掩盖过滤器缺陷）',
+  );
 });

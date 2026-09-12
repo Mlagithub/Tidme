@@ -10,6 +10,7 @@ const schema = mod('core/schema.js');
 const config = mod('core/config.js');
 const ns = mod('core/ns.js');
 const todayMod = mod('review/widgets/today.js');
+const stats = mod('core/stats.js');
 
 test('learningDayOf: 基础日期计算与补零', () => {
   const d = new Date(2026, 4, 9, 12, 0, 0); // 2026-05-09 12:00
@@ -45,12 +46,11 @@ test('config: readRolloverHour 默认值与边界限制', () => {
   assert.equal(config.readRolloverHour(wiki), 23, '超范围 clamp 到 23');
 });
 
-test('today: todayReviewCount 支持按学习日统计', () => {
+test('today: reviewCountToday 支持按学习日统计（实现已下沉 core/stats）', () => {
   const deck = '$:/Deck/学习日测试书';
   wiki.addTiddler({ title: deck, tags: ['$:/tags/TidmeDeck'] });
   // 注入现在时刻
   const now = new Date();
-  const currentDay = schema.learningDayOf(now, 4);
   const keyNow = schema.twDateString(now);
 
   wiki.addTiddler({
@@ -62,5 +62,5 @@ test('today: todayReviewCount 支持按学习日统计', () => {
     }),
   });
 
-  assert.equal(todayMod.todayReviewCount(wiki), 1, '当前学习日的记录被准确计入');
+  assert.equal(stats.reviewCountToday(wiki), 1, '当前学习日的记录被准确计入');
 });

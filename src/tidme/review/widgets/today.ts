@@ -15,14 +15,11 @@ const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
-const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
-const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
 const workflow = require('$:/plugins/keepone/tidme/review/widgets/workflow.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
-const schema = require('$:/plugins/keepone/tidme/core/schema.js');
-const config = require('$:/plugins/keepone/tidme/core/config.js');
-const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
+const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
+const drill = require('$:/plugins/keepone/tidme/core/drill.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 function lingo(wiki: any, key: string, fallback: string): string {
   return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
@@ -35,73 +32,6 @@ const navigateTo = dom.navigateTo;
 const bindWidgetRefresh = primitives.bindWidgetRefresh;
 
 type WidgetCtor = { new(parseTreeNode: any, options: any): any };
-
-/** 今日复习卡数：遍历全部牌组日志单文件，按今天的学习日计数（日期键唯一产地 = core/schema） */
-function todayReviewCount(wiki: any): number {
-  const rollover = config && typeof config.readRolloverHour === 'function' ? config.readRolloverHour(wiki) : 4;
-  const currentDay = schema.learningDayOf(new Date(), rollover);
-  let n = 0;
-  for (const lt of wiki.filterTiddlers(`[prefix[${ns.DECK_PREFIX}]]`)) {
-    if (!ns.isDeckLogTitle(lt)) continue;
-    const data = wiki.getTiddlerData(lt);
-    if (data && typeof data === 'object') {
-      for (const k of Object.keys(data)) {
-        const d = schema.tryParseTwDate(k);
-        if (d) {
-          if (schema.learningDayOf(d, rollover) === currentDay) n += 1;
-        } else if (String(k).startsWith(currentDay)) {
-          n += 1;
-        }
-      }
-    }
-  }
-  return n;
-}
-
-interface TodayWorkload {
-  learn: number;
-  due: number;
-  newly: number;
-  todayToStudy: number;
-  totalDue: number;
-  totalNew: number;
-  totalPool: number;
-  toRead: number;
-}
-
-/** 待学数（全局学习队列受今日配额截断后的实际待学量 + 卡库全量池）与待读数（topic 在队） */
-function todayCounts(wiki: any): TodayWorkload {
-  const f = deckEngine.composeDeckFilters(deckMod.DEFAULT_DECK);
-  const count = (filter: string) => wiki.filterTiddlers(filter).length;
-  const totalLearn = count(f.learn);
-  const totalDue = count(f.due);
-  const totalNew = count(f.newly);
-  const toRead = count(ns.TOPIC_QUEUE_FILTER);
-
-  const quota = sched && typeof sched.readDailyQuota === 'function' ? sched.readDailyQuota(wiki) : { newCount: 0, reviewCount: 0 };
-  const newCap = config && typeof config.readNewPerDay === 'function' ? config.readNewPerDay(wiki) : 20;
-  const reviewCap = config && typeof config.readReviewsPerDay === 'function' ? config.readReviewsPerDay(wiki) : 200;
-  const suppress = config && typeof config.readLimitsSuppressNew === 'function' ? config.readLimitsSuppressNew(wiki) : true;
-
-  const remainingNewQuota = newCap > 0 ? Math.max(0, newCap - quota.newCount) : totalNew;
-  const remainingReviewQuota = reviewCap > 0 ? Math.max(0, reviewCap - quota.reviewCount) : totalDue;
-
-  const actualDue = Math.min(totalDue, remainingReviewQuota);
-  const isOverdueSuppressed = suppress && (reviewCap > 0 && totalDue >= remainingReviewQuota);
-  const actualNew = isOverdueSuppressed ? 0 : Math.min(totalNew, remainingNewQuota);
-  const todayToStudy = totalLearn + actualDue + actualNew;
-
-  return {
-    learn: totalLearn,
-    due: actualDue,
-    newly: actualNew,
-    todayToStudy,
-    totalDue,
-    totalNew,
-    totalPool: totalLearn + totalDue + totalNew,
-    toRead,
-  };
-}
 
 // ---------- today-hero：双 CTA + 今日反馈条 ----------
 
@@ -125,7 +55,8 @@ function makeTodayHero(): WidgetCtor {
       const doc = this.document;
       const wiki = this.wiki;
       container.textContent = '';
-      const c = todayCounts(wiki);
+      // 算数与口径全在 core/stats（todayWorkload）；widget 只渲染
+      const c = stats.todayWorkload(wiki);
       const toStudy = c.todayToStudy;
 
       // 双主 CTA
@@ -168,11 +99,29 @@ function makeTodayHero(): WidgetCtor {
           () => navigateTo(this, readTarget),
         ),
       );
+
+      // 日末操练（SuperMemo final drill）：当天评档 < Good 的卡进队列，操练到每张 ≥ Good 才清账。
+      // 队列由 core/scheduler 维护（评分时入队/达标出队），此处只提供入口，无卡时不占位。
+      const drillCount = drill.getFinalDrillQueue(wiki).length;
+      if (drillCount > 0) {
+        const drillBtn = mkCta(
+          'tm-today-cta--drill',
+          'study',
+          lingo(wiki, 'today.drill', 'Final Drill'),
+          `${drillCount} ${lingo(wiki, 'today.cardstostudy', 'cards to study today')}`,
+          () => {
+            const started = sessionMod.startFinalDrill(wiki);
+            if (started) navigateTo(this, started.list[0]);
+          },
+        );
+        drillBtn.title = lingo(wiki, 'today.drill.tip', "Clear today's below-Good cards (SuperMemo final drill)");
+        grid.appendChild(drillBtn);
+      }
       container.appendChild(grid);
 
       // 今日反馈条
       const rt = stats.getReadTimeStats(wiki);
-      const reviewed = todayReviewCount(wiki);
+      const reviewed = stats.reviewCountToday(wiki);
       // 专注时长如实回显记录值：记录侧已有「快刷保底 1 秒 / 超上限整段丢弃」口径
       // （core/session 的锚点结算），此处不再为 0 秒补假时间
       const revTpl = lingo(wiki, 'today.reviewedsummary', '${count} cards reviewed today');
@@ -293,5 +242,5 @@ function makeTodayRecent(): WidgetCtor {
 
 exports['tidme-today-hero'] = makeTodayHero();
 exports['tidme-today-recent'] = makeTodayRecent();
-exports.todayReviewCount = todayReviewCount; // 供测试/复用
-exports.todayCounts = todayCounts;
+// 不再向测试暴露内部计数函数：算数与口径都在 core/stats（todayWorkload / reviewCountToday），
+// 测试直接打 core；widget 保持"只渲染"。

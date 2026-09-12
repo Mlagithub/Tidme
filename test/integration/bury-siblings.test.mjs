@@ -19,7 +19,7 @@ test.before(() => {
 });
 
 test.beforeEach(() => {
-  reset({ alsoSystem: ['$:/Deck/', ns.DAILY_QUOTA_STATE_TITLE, ns.UNDO_STATE_TITLE, ns.BURY_SIBLINGS_TITLE] });
+  reset({ alsoSystem: ['$:/Deck/', ns.DAILY_QUOTA_STATE_TITLE, ns.BURY_SIBLINGS_TITLE] });
   if (grade.clearUndoStack) grade.clearUndoStack();
 });
 
@@ -53,6 +53,24 @@ test('findSiblings: 准确定位同一父源的在队卡片', () => {
 
   const s1 = sched.findSiblings(wiki, '卡1');
   assert.deepEqual([...s1], ['卡2'], '仅包含同源且在队的其它卡');
+});
+
+test('findSiblings: 会内学习步卡（state 1/3）永不搁置（Anki：不埋时间敏感的会内卡）', () => {
+  mkCard('源卡', '笔记L');
+  mkCard('学习步兄弟', '笔记L', { state: '1' });
+  mkCard('重学兄弟', '笔记L', { state: 3 });
+  mkCard('复习兄弟', '笔记L', { state: '2' });
+
+  const s = sched.findSiblings(wiki, '源卡');
+  assert.deepEqual([...s], ['复习兄弟'], '学习步/重学步兄弟不参与搁置');
+});
+
+test('findSiblings: 父卡 title 含过滤器元字符时不下手（宁可这一轮不分散，也不误埋）', () => {
+  mkCard('卡X', '笔记[B');
+  mkCard('卡Y', '笔记[B');
+  mkCard('卡Z', '笔记B'); // 若把 `[` 删掉会误判成同源
+
+  assert.deepEqual([...sched.findSiblings(wiki, '卡X')], [], '不安全父卡 → 空（不自写净化）');
 });
 
 test('gradeCard: 评分后自动搁置兄弟卡至次日，并在会话中剔除', () => {
@@ -92,6 +110,23 @@ test('gradeCard: 评分后自动搁置兄弟卡至次日，并在会话中剔除
   assert.equal(sched.isDueNow(card2After, tomorrow), true, '次日换天后自动恢复可调度');
 });
 
+test('composeGlobalLearningQueue: 重建队列不会让当日搁置的兄弟卡复活（搁置必须全链路生效）', () => {
+  const deckEngine = mod('core/deck-engine.js');
+  const now = new Date();
+  mkCard('搁置新卡', '源Q', { state: '0', due: twDate(new Date(now.getTime() - 1000)) });
+  mkCard('正常新卡', '源R', { state: '0', due: twDate(new Date(now.getTime() - 1000)) });
+
+  const ctx = sched.learningDayContext(wiki, now);
+  wiki.addTiddler({ ...wiki.getTiddler('搁置新卡').fields, [ns.BURIED_FIELD]: ctx.learningDay });
+
+  const noDay = deckEngine.composeGlobalLearningQueue((f) => [...wiki.filterTiddlers(f)]);
+  assert.ok(noDay.includes('搁置新卡'), '未传学习日 = 不做搁置排除（保持既有调用方语义）');
+
+  const withDay = deckEngine.composeGlobalLearningQueue((f) => [...wiki.filterTiddlers(f)], { learningDay: ctx.learningDay });
+  assert.ok(!withDay.includes('搁置新卡'), '当日搁置卡被排除（同一天重建队列不复活）');
+  assert.ok(withDay.includes('正常新卡'), '其它卡不受影响');
+});
+
 test('undoLastGrade: 撤销评分时同步恢复被搁置的兄弟卡', () => {
   mkCard('卡A', '源1');
   mkCard('卡B', '源1');
@@ -102,8 +137,8 @@ test('undoLastGrade: 撤销评分时同步恢复被搁置的兄弟卡', () => {
   grade.gradeCard(wiki, { title: '卡A', rating: 'Good', now });
   assert.equal(Boolean(wiki.getTiddler('卡B').fields[ns.BURIED_FIELD]), true);
 
-  // 撤销评分
-  const undoRes = grade.undoLastGrade(wiki);
+  // 撤销评分（now 注入：撤销的"同学习日"守卫按它判定）
+  const undoRes = grade.undoLastGrade(wiki, now);
   assert.equal(undoRes.ok, true);
 
   // 验证卡B的搁置标记已解除

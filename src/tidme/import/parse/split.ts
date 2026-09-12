@@ -1,7 +1,7 @@
 /*
 split.ts — 通用切分器
 
-对任意 markdown / wikitext / HTML / TXT 文本执行：
+对任意 markdown / wikitext / HTML / PDF / TXT 文本执行：
   格式识别 → Block 流 → 大纲树切分 → 确定性 ID → tiddler 落库（含自动 deck）
 产物即标准 TW 导入格式；节卡带 kind=topic（阅读材料）。
 
@@ -204,7 +204,7 @@ export async function emitTiddlers(
 }
 
 /**
- * 通用切分：任意 markdown / wikitext / HTML / TXT 文本 → 文档页 + Section 卡 + 自动 deck。
+ * 通用切分：任意 markdown / wikitext / HTML / PDF / TXT 文本 → 文档页 + Section 卡 + 自动 deck。
  * 同一输入（title + text 不变）重切分产物确定（ID 稳定）。
  */
 export async function runSplit(input: SplitInput): Promise<SplitResult> {
