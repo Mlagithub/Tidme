@@ -5,18 +5,26 @@ widgets/pdf-reader.ts — PDF 阅读器（tidme-pdf-reader）
 分节书籍携带）/ tidme.doc。
 - 二进制缺失/为空（服务端 0 字节 .pdf 等）→ 状态条提供「重新绑定 PDF」原位恢复，
   选原始文件覆写二进制条目，续读点/进度全保留
-- pdf.js CDN 按需加载；canvas 渲染当前页 + 文本层（选中文字 → 既有 Alt+X/Z/Q 制卡
+- pdf.js CDN 按需加载；canvas 渲染 + 文本层（选中文字 → 既有 Alt+X/Z/Q 制卡
   链路直接复用：文本层容器带 data-tiddler-title 指向当前卡/文档页）
-- 界面仿桌面阅读器：深色工具栏（翻页/缩放/框选/OCR/全屏）+ 灰色工作区 + 居中纸页，
-  缩放默认「适合页面」，档位步进与自适应见 pdf-zoom.ts
+- 界面仿桌面阅读器：深色工具栏（翻页/缩放/视图/框选/OCR/全屏）+ 灰色工作区 + 居中纸页；
+  缩放菜单仿 Firefox pdf.js（自动缩放/实际大小/适合页面/适合页宽 + 50%–400% 档位，见 pdf-zoom.ts）；
+  视图菜单仿桌面阅读器视图面板：单页/双页/书籍布局 × 页面/垂直/水平/平铺/无限滚动
+  （单元切分与 fit 折算见 pdf-view.ts）
+- 渲染：工作区内每个单元（单页或双页对）一个 tm-pdf-spread，页盒（canvas+文本层）全量建占位，
+  懒渲染——页面滚动模式只渲染当前单元；连续滚动模式经 IntersectionObserver 进入视口才渲染、
+  离开即释放（无 IO 环境退化为当前单元 ±1 主动渲染）
 - 翻页/页码跳转/续读点：打开时优先恢复续读点绝对页码（不切分，阅读连续跨节）；
   $:/state/tidme-pdf/page/<docId> 有两个写入方：「回原文」一次性页码交接（消费即清理）与
-  本阅读器每次翻页的持久保存；加载期消费时才删除（经实有页数校验）
-- 框选图片制卡：拖拽矩形 → 裁剪 PNG → buildQA 图片问答卡（openCardModal 填答案）
+  本阅读器每次翻页的持久保存；加载期消费时才删除（经实有页数校验）。
+  页码/续读点一律记录单元首页；连续滚动模式下当前单元跟随滚动位置
+- 视图偏好（布局/滚动/缩放）持久化在 $:/state/tidme-pdf/view（全局共享，跨文档记忆）
+- 框选图片制卡：拖拽矩形 → 裁剪 PNG → buildQA 图片问答卡（openCardModal 填答案），逐页盒生效
 - OCR 本页：扫描页（无文本层）→ 页面 PNG → LLM-OCR（设置页启用）→ Markdown 文本，
   结果持久化到 <文档页>/ocr-p<页>（清理阅读材料时级联删除），显示在页下方可选区
 */
 
+import * as pdfView from './pdf-view';
 import * as zoomMod from './pdf-zoom';
 
 declare function require(module: string): any;
@@ -45,6 +53,30 @@ const el = dom.el;
 /** 工具栏全屏图标（内联 SVG，字体无关） */
 const FS_SVG =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/** 工具栏视图菜单按钮图标（仿桌面阅读器视图面板入口） */
+const VIEW_SVG =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 5.5h7M4.5 8h7M4.5 10.5h7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+
+/** 视图菜单项图标（内联 SVG，14px 线性风格；与截图菜单逐项对应） */
+const VIEW_ICONS: Record<string, string> = {
+  single: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7.5" y="4" width="9" height="16" rx="1"/></svg>',
+  dual:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4" width="7.5" height="16" rx="1"/><rect x="13" y="4" width="7.5" height="16" rx="1"/></svg>',
+  book:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 6.2C10.2 4.9 7.5 4.2 4 4.2v13.6c3.5 0 6.2.7 8 2 1.8-1.3 4.5-2 8-2V4.2c-3.5 0-6.2.7-8 2z"/><path d="M12 6.2v13.4"/></svg>',
+  pageScroll: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="3.5" width="8" height="17" rx="1"/><path d="M10.5 12h3"/></svg>',
+  vertical:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="4.5" rx="1"/><rect x="9" y="9.8" width="6" height="4.5" rx="1"/><rect x="9" y="16.5" width="6" height="4.5" rx="1"/></svg>',
+  horizontal:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="9" width="4.5" height="6" rx="1"/><rect x="9.8" y="9" width="4.5" height="6" rx="1"/><rect x="16.5" y="9" width="4.5" height="6" rx="1"/></svg>',
+  wrapped:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>',
+  infinite:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6.2 15.5C4.4 15.5 3 14 3 12s1.4-3.5 3.2-3.5c3.6 0 8 7 11.6 7 1.8 0 3.2-1.5 3.2-3.5s-1.4-3.5-3.2-3.5c-3.6 0-8 7-11.6 7z"/></svg>',
+  bookmode:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 6.2C10.2 4.9 7.5 4.2 4 4.2v13.6c3.5 0 6.2.7 8 2 1.8-1.3 4.5-2 8-2V4.2c-3.5 0-6.2.7-8 2z"/><path d="M12 6.2v13.4"/><path d="M8 4.5v5l1.6-1.2L11.2 9.5V4.9"/></svg>',
+};
 
 const resolvePdfContext = pdfOps.resolvePdfContext;
 
@@ -93,16 +125,21 @@ function makeReader(): any {
   class PdfReaderWidget extends Widget {
     _root: any = null;
     _viewer: any = null;
-    _pageBox: any = null;
-    _canvas: any = null;
-    _textLayer: any = null;
-    _selRect: any = null;
+    _flow: any = null;
+    /** 页码 → 页盒（sheet/canvas/layer/rect + 渲染状态） */
+    _sheets = new Map<number, any>();
+    /** 页码 → scale1 原始尺寸（占位盒纵横比与 fit 计算基准） */
+    _pageSizes = new Map<number, { w: number; h: number }>();
     _hint: any = null;
     _status: any = null;
     _ocrBox: any = null;
     _pageInput: any = null;
     _total: any = null;
     _zoomSel: any = null;
+    _viewBtn: any = null;
+    _menuAnchor: any = null;
+    _menuEl: any = null;
+    _menuCloser: (() => void) | null = null;
     _selBtn: any = null;
     _fsBtn: any = null;
     _pdf: any = null;
@@ -113,6 +150,8 @@ function makeReader(): any {
     _loadSeq: number = 0;
     /** destroy 置位：销毁后防抖定时器不再落库 */
     _destroyed: boolean = false;
+    /** 是否已计入模块级挂载数（refreshSelf 重建防重复计数） */
+    _counted: boolean = false;
     _selMode: boolean = false;
     _selStart: { x: number; y: number } | null = null;
     _pdfTitle: string = '';
@@ -121,11 +160,26 @@ function makeReader(): any {
     _reattachBtn: any = null;
     _ocrBusy = false;
     _mode: zoomMod.ZoomMode = 'fit-page';
+    /** 布局 × 滚动（视图菜单两项；持久化 $:/state/tidme-pdf/view） */
+    _layout: pdfView.PdfLayout = 'single';
+    _scroll: pdfView.PdfScroll = 'page';
+    /** 连续滚动懒渲染观察者（页面滚动模式不建） */
+    _io: any = null;
+    /** 程序滚动时间锁：scrollToUnit 引发的 scroll 事件不回写页码 */
+    _scrollLockUntil = 0;
+    _scrollTimer: any = null;
+    /** 页面滚动模式滚轮翻单元的状态：像素累计 / 上次手势时刻 / 冷却窗（抑制惯性连翻） */
+    _wheelAcc = 0;
+    _wheelLastAt = 0;
+    _wheelCooldownUntil = 0;
     _effScale = 0;
     _resizeTimer: any = null;
     _resizeObs: any = null;
     _ocrEnabled = false;
     _onFsChange: () => void = () => {};
+    _onDocPointerDown: (e: any) => void = () => {};
+    _onDocKeydown: (e: KeyboardEvent) => void = () => {};
+    _onViewerWheel: (e: WheelEvent) => void = () => {};
     _savePageTimer: any = null;
     _startTime: number = 0;
 
@@ -155,6 +209,11 @@ function makeReader(): any {
       this._pdfTitle = ctx.pdfTitle;
       this._docPageTitle = ctx.docPageTitle;
       const range = parsePdf.parsePagesField(String(f['tidme.pages'] || ''));
+      // 视图偏好（布局/滚动/缩放）全局记忆，跨文档恢复上次阅读方式
+      const viewState = pdfView.parseViewState(wiki.getTiddlerText(ns.PDF_VIEW_STATE_TITLE, ''));
+      this._layout = viewState.layout;
+      this._scroll = viewState.scroll;
+      this._mode = viewState.zoom;
       this._page = this._resolveInitialPage(range, 0);
       this._numPages = 0;
       this._ocrEnabled = config.readOcrConfig(wiki).enable === true;
@@ -162,7 +221,7 @@ function makeReader(): any {
       const root = el(doc, 'div', 'tm-pdf');
       this._root = root;
 
-      // ── 工具栏：左=翻页，中=缩放，右=框选/OCR/全屏 ──
+      // ── 工具栏：左=翻页，中=缩放，右=视图/框选/OCR/全屏 ──
       const bar = el(doc, 'div', 'tm-pdf-bar');
       const gNav = el(doc, 'div', 'tm-pdf-bar-group');
       const firstBtn = el(doc, 'button', 'tm-pdf-ico', '«');
@@ -182,7 +241,8 @@ function makeReader(): any {
       lastBtn.title = lingoMod.lingo(wiki, 'pdf.lastpage', 'Last Page');
       for (const n of [firstBtn, prevBtn, this._pageInput, this._total, nextBtn, lastBtn]) gNav.appendChild(n);
 
-      const gZoom = el(doc, 'div', 'tm-pdf-bar-group tm-pdf-bar-center');
+      // 缩放组（仿 Firefox pdf.js：− + 与模式/档位下拉相邻）
+      const gZoom = el(doc, 'div', 'tm-pdf-bar-group');
       const zoomOutBtn = el(doc, 'button', 'tm-pdf-ico', '−');
       zoomOutBtn.title = lingoMod.lingo(wiki, 'read.zoom.out', 'Zoom Out');
       this._zoomSel = doc.createElement('select');
@@ -190,9 +250,10 @@ function makeReader(): any {
       this._zoomSel.setAttribute('aria-label', lingoMod.lingo(wiki, 'read.zoom', 'Zoom'));
       for (
         const opt of [
+          { value: 'auto', label: lingoMod.lingo(wiki, 'read.zoom.auto', 'Automatic Zoom') },
+          { value: 'actual', label: lingoMod.lingo(wiki, 'read.zoom.actual', 'Actual Size') },
           { value: 'fit-page', label: lingoMod.lingo(wiki, 'read.zoom.fitpage', 'Fit Page') },
           { value: 'fit-width', label: lingoMod.lingo(wiki, 'read.zoom.fitwidth', 'Fit Width') },
-          { value: 'actual', label: lingoMod.lingo(wiki, 'read.zoom.actual', 'Actual Size') },
           ...zoomMod.ladderOptions(),
         ]
       ) {
@@ -201,13 +262,20 @@ function makeReader(): any {
         o.textContent = opt.label;
         this._zoomSel.appendChild(o);
       }
-      this._zoomSel.value = 'fit-page';
+      this._zoomSel.value = String(this._mode);
       const zoomInBtn = el(doc, 'button', 'tm-pdf-ico', '+');
       zoomInBtn.title = lingoMod.lingo(wiki, 'read.zoom.in', 'Zoom In');
       // 与桌面阅读器一致：− + 相邻，其后为缩放模式下拉
       for (const n of [zoomOutBtn, zoomInBtn, this._zoomSel]) gZoom.appendChild(n);
 
       const gTools = el(doc, 'div', 'tm-pdf-bar-group');
+      // 视图菜单（布局 × 滚动方式），按钮锚点供弹出菜单定位
+      const viewAnchor = el(doc, 'span', 'tm-pdf-menu-anchor');
+      this._viewBtn = el(doc, 'button', 'tm-pdf-ico', '');
+      this._viewBtn.innerHTML = VIEW_SVG;
+      this._viewBtn.title = lingoMod.lingo(wiki, 'pdf.view', 'View');
+      viewAnchor.appendChild(this._viewBtn);
+      gTools.appendChild(viewAnchor);
       this._selBtn = el(doc, 'button', 'tm-pdf-ico', lingoMod.lingo(wiki, 'pdf.select', 'Select'));
       this._selBtn.title = lingoMod.lingo(wiki, 'pdf.select.tip', 'Select image area to create Image QA card');
       if (this._ocrEnabled) {
@@ -221,8 +289,13 @@ function makeReader(): any {
       this._fsBtn.title = lingoMod.lingo(wiki, 'pdf.fullscreen', 'Fullscreen');
       for (const n of [this._selBtn, this._fsBtn]) gTools.appendChild(n);
 
+      // 弹性 spacer 把缩放组钉在正中、工具组钉在最右（学习模式「读完继续」再其右）
+      const spacerL = el(doc, 'span', 'tm-pdf-bar-spacer');
+      const spacerR = el(doc, 'span', 'tm-pdf-bar-spacer');
       bar.appendChild(gNav);
+      bar.appendChild(spacerL);
       bar.appendChild(gZoom);
+      bar.appendChild(spacerR);
       bar.appendChild(gTools);
 
       const activeStudy = sessionMod.getActiveStudy(wiki);
@@ -260,22 +333,14 @@ function makeReader(): any {
 
       root.appendChild(bar);
 
-      // ── 工作区：灰底滚动区 + 居中纸页（canvas/文本层/框选矩形）+ 悬浮提示 ──
+      // ── 工作区：灰底滚动区 + 单元流（tm-pdf-spread × 页盒）+ 悬浮提示 ──
       const body = el(doc, 'div', 'tm-pdf-body');
 
       this._viewer = el(doc, 'div', 'tm-pdf-viewer');
       this._viewer.setAttribute('tabindex', '0');
-      this._pageBox = el(doc, 'div', 'tm-pdf-sheet');
-      this._pageBox.style.display = 'none';
-      this._canvas = doc.createElement('canvas');
-      this._canvas.className = 'tm-pdf-canvas';
-      this._textLayer = el(doc, 'div', 'tm-pdf-textlayer', '');
-      this._textLayer.setAttribute('data-tiddler-title', t);
-      this._selRect = el(doc, 'div', 'tm-pdf-rect', '');
-      this._pageBox.appendChild(this._canvas);
-      this._pageBox.appendChild(this._textLayer);
-      this._pageBox.appendChild(this._selRect);
-      this._viewer.appendChild(this._pageBox);
+      this._viewer.setAttribute('data-scroll', this._scroll);
+      this._flow = el(doc, 'div', 'tm-pdf-flow');
+      this._viewer.appendChild(this._flow);
 
       this._hint = el(doc, 'div', 'tm-pdf-hint', '');
       this._status = el(doc, 'div', 'tm-pdf-status', lingo(this.wiki, 'pdf/loading-pdfjs', 'Loading pdf.js...'));
@@ -292,22 +357,60 @@ function makeReader(): any {
       // ── 事件 ──
       firstBtn.addEventListener('click', () => this._setPage(1));
       lastBtn.addEventListener('click', () => this._setPage(this._numPages));
-      prevBtn.addEventListener('click', () => this._setPage(this._page - 1));
-      nextBtn.addEventListener('click', () => this._setPage(this._page + 1));
+      prevBtn.addEventListener('click', () => this._stepUnit(-1));
+      nextBtn.addEventListener('click', () => this._stepUnit(1));
       this._pageInput.addEventListener('change', () => this._setPage(Number(this._pageInput.value) || 1));
       zoomOutBtn.addEventListener('click', () => this._zoomStep(-1));
       zoomInBtn.addEventListener('click', () => this._zoomStep(1));
       this._zoomSel.addEventListener('change', () => this._onZoomSelect());
+      this._viewBtn.addEventListener('click', () => this._toggleViewMenu(viewAnchor));
       this._fsBtn.addEventListener('click', () => this._toggleFullscreen());
-      this._wireRectSelect(this._selBtn, this._viewer, this._selRect, t);
-      this._viewer.addEventListener('keydown', (e: KeyboardEvent) => this._onKeydown(e));
+      this._wireRectSelect(this._selBtn, this._viewer, t);
+      this._viewer.addEventListener('scroll', () => this._onViewerScroll());
+      // 滚轮：页面滚动模式翻单元（阈值累计 + 冷却抑制触摸板惯性）；水平滚动模式纵向滚轮
+      // 转横向；连续滚动族（垂直/无限/平铺）原生滚动即支持。页面滚动下放大超视口时
+      // 仍走原生滚动看页内细节，到边不再翻页。
+      this._onViewerWheel = (e: WheelEvent) => {
+        if (!this._viewer) return;
+        const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY; // 行模式（Firefox）换算像素
+        if (this._scroll === 'page') {
+          if (!dy) return;
+          if (this._viewer.scrollHeight - this._viewer.clientHeight > 2) return; // 有纵向溢出：原生滚动
+          e.preventDefault();
+          this._wheelFlip(dy);
+          return;
+        }
+        if (this._scroll === 'horizontal') {
+          if (!dy || e.deltaX) return; // deltaX 与 shift+滚轮浏览器原生已横向，不重复处理
+          e.preventDefault();
+          this._viewer.scrollLeft += dy;
+        }
+      };
+      this._viewer.addEventListener('wheel', this._onViewerWheel, { passive: false } as any);
+      // 翻页/缩放快捷键全局生效（桌面阅读器习惯，免聚焦）；编辑控件聚焦时让路
+      this._onDocKeydown = (e: KeyboardEvent) => {
+        const target = (e && e.target) as any;
+        const tag = String(target?.tagName || '').toUpperCase();
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+        this._onKeydown(e);
+      };
+      this._onDocPointerDown = (e: any) => {
+        if (!this._menuCloser) return;
+        const target = e && e.target;
+        if (target && this._menuAnchor && typeof this._menuAnchor.contains === 'function' && this._menuAnchor.contains(target)) return;
+        this._closeMenu();
+      };
+      if (typeof doc.addEventListener === 'function') {
+        doc.addEventListener('pointerdown', this._onDocPointerDown);
+        doc.addEventListener('keydown', this._onDocKeydown);
+      }
 
       // 全屏切换后视口尺寸变化 → fit 重算（destroy 时随 widget 一并注销）
-      this._onFsChange = () => void this._renderPage();
+      this._onFsChange = () => this._relayout();
       if (typeof doc.addEventListener === 'function') {
         doc.addEventListener('fullscreenchange', this._onFsChange);
       }
-      // 容器尺寸变化 → fit 模式防抖重渲染
+      // 容器尺寸变化 → fit 模式防抖重排
       if (typeof ResizeObserver !== 'undefined') {
         this._resizeObs = new ResizeObserver(() => this._onResize());
         this._resizeObs.observe(this._viewer);
@@ -315,6 +418,11 @@ function makeReader(): any {
 
       parent.insertBefore(root, nextSibling);
       this.domNodes.push(root);
+      // 挂载计数（refreshSelf 重建时先经 _cleanup 减回，保持平衡）
+      if (!this._counted) {
+        this._counted = true;
+        mountedReaders++;
+      }
 
       void this._loadPdf(range);
     }
@@ -402,10 +510,52 @@ function makeReader(): any {
           }
         }
         const start = this._resolveInitialPage(r, this._numPages);
+        // 当前单元各页先取原始尺寸，首帧即真实纵横比（其余页后台补全）
+        for (const p of pdfView.unitOf(start, this._layout, this._scroll, this._numPages)) {
+          try {
+            const s = await pdfjsMod.pageSize(pdf, p);
+            if (seq !== this._loadSeq) return;
+            this._pageSizes.set(p, { w: Number(s.width) || 612, h: Number(s.height) || 792 });
+          } catch (_) {}
+        }
+        this._rebuildFlow();
         this._setPage(start, false);
+        void this._ensurePageSizes();
       } catch (e: any) {
         if (seq === this._loadSeq) {
           this._status.textContent = lingoMod.lingo(wiki, 'pdf.load.failed', 'Failed to load: ') + String(e?.message || e);
+        }
+      }
+    }
+
+    /** 后台补全全部页面的原始尺寸（分批并发，每批后重排占位盒） */
+    async _ensurePageSizes() {
+      const pdf = this._pdf;
+      const n = this._numPages;
+      const seq = this._loadSeq;
+      if (!pdf || !n) return;
+      const BATCH = 16;
+      for (let p = 1; p <= n; p += BATCH) {
+        const tasks: Promise<void>[] = [];
+        for (let q = p; q <= Math.min(p + BATCH - 1, n); q++) {
+          if (this._pageSizes.has(q)) continue;
+          tasks.push(
+            Promise.resolve(pdfjsMod.pageSize(pdf, q)).then(
+              (s: any) => {
+                this._pageSizes.set(q, { w: Number(s.width) || 612, h: Number(s.height) || 792 });
+              },
+              () => {
+                this._pageSizes.set(q, { w: 612, h: 792 });
+              },
+            ),
+          );
+        }
+        await Promise.all(tasks);
+        if (this._destroyed || seq !== this._loadSeq) return;
+        if (tasks.length) {
+          this._applySizes();
+          if (this._scroll === 'page') void this._renderCurrent();
+          else this._renderSweep();
         }
       }
     }
@@ -484,6 +634,27 @@ function makeReader(): any {
         clearTimeout(this._savePageTimer);
         this._savePageTimer = null;
       }
+      if (this._scrollTimer) {
+        clearTimeout(this._scrollTimer);
+        this._scrollTimer = null;
+      }
+      if (this._io) {
+        this._io.disconnect();
+        this._io = null;
+      }
+      this._closeMenu();
+      if (this._onDocPointerDown && this.document && typeof this.document.removeEventListener === 'function') {
+        this.document.removeEventListener('pointerdown', this._onDocPointerDown);
+        this._onDocPointerDown = () => {};
+      }
+      if (this._onDocKeydown && this.document && typeof this.document.removeEventListener === 'function') {
+        this.document.removeEventListener('keydown', this._onDocKeydown);
+        this._onDocKeydown = () => {};
+      }
+      if (this._counted) {
+        this._counted = false;
+        mountedReaders = Math.max(0, mountedReaders - 1);
+      }
       if (this._resizeObs) {
         this._resizeObs.disconnect();
         this._resizeObs = null;
@@ -498,6 +669,8 @@ function makeReader(): any {
       }
       this._renderSeq++;
       this._loadSeq++; // 在途 _loadPdf 全部作废（其完成后会自销毁拿到的文档）
+      for (const box of this._sheets.values()) this._unrenderSheet(box);
+      this._sheets.clear();
       if (this._pdf && typeof this._pdf.destroy === 'function') {
         try {
           this._pdf.destroy();
@@ -517,40 +690,63 @@ function makeReader(): any {
       super.destroy?.();
     }
 
-    // ---------- 翻页与渲染 ----------
+    // ---------- 翻页与导航（单元口径：页码/续读点记录单元首页） ----------
 
     _setPage(n: number, save = true) {
       this._flushReadTime();
       const max = this._numPages > 0 ? this._numPages : Infinity;
       this._page = Math.min(Math.max(1, Math.floor(n) || 1), max || 1);
       this._pageInput.value = String(this._page);
-      if (save && this._docId) {
-        this.wiki.addTiddler({ title: ns.pdfPageStateTitle(this._docId), text: String(this._page) });
-        // 防抖持久化续读点与全局续读点（章节跨越自动感知）
-        if (this._savePageTimer) clearTimeout(this._savePageTimer);
-        this._savePageTimer = setTimeout(() => {
-          this._savePageTimer = null;
-          if (this._destroyed) return; // widget 已销毁：续读点落库无意义
-          const curT = this.getVariable('currentTiddler') || '';
-          const matchedSection = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(this.wiki, this._docId, this._page) : null;
-          const targetCard = matchedSection || curT || this._docPageTitle;
-          if (targetCard) {
-            docOps.saveReadPoint(this.wiki, this._docId, { t: targetCard, s: docOps.formatPagePosition(this._page) });
-            docOps.saveGlobalReadPoint(this.wiki, targetCard);
-          }
-        }, 300);
-      }
+      if (save) this._persistPage();
+      this._goCurrent();
+    }
 
-      void this._renderPage();
+    /** 上一/下一单元（单页布局等价于逐页翻页） */
+    _stepUnit(dir: 1 | -1) {
+      this._setPage(pdfView.unitStep(this._page, this._layout, this._scroll, dir, this._numPages));
+    }
+
+    /** 页面滚动模式滚轮翻单元：纵向像素累计过阈值翻一单元；翻后进入冷却窗，
+     *  窗内增量丢弃（触摸板惯性不再连翻）；距上次滚轮过久则重新累计 */
+    _wheelFlip(deltaY: number) {
+      const now = Date.now();
+      if (now < this._wheelCooldownUntil) return;
+      if (now - this._wheelLastAt > 600) this._wheelAcc = 0;
+      this._wheelLastAt = now;
+      this._wheelAcc += deltaY;
+      if (Math.abs(this._wheelAcc) >= 100) {
+        const dir: 1 | -1 = this._wheelAcc > 0 ? 1 : -1;
+        this._wheelAcc = 0;
+        this._wheelCooldownUntil = now + 250;
+        this._stepUnit(dir);
+      }
+    }
+
+    _persistPage() {
+      if (!this._docId) return;
+      this.wiki.addTiddler({ title: ns.pdfPageStateTitle(this._docId), text: String(this._page) });
+      // 防抖持久化续读点与全局续读点（章节跨越自动感知）
+      if (this._savePageTimer) clearTimeout(this._savePageTimer);
+      this._savePageTimer = setTimeout(() => {
+        this._savePageTimer = null;
+        if (this._destroyed) return; // widget 已销毁：续读点落库无意义
+        const curT = this.getVariable('currentTiddler') || '';
+        const matchedSection = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(this.wiki, this._docId, this._page) : null;
+        const targetCard = matchedSection || curT || this._docPageTitle;
+        if (targetCard) {
+          docOps.saveReadPoint(this.wiki, this._docId, { t: targetCard, s: docOps.formatPagePosition(this._page) });
+          docOps.saveGlobalReadPoint(this.wiki, targetCard);
+        }
+      }, 300);
     }
 
     _onKeydown(e: KeyboardEvent) {
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
-        this._setPage(this._page - 1);
+        this._stepUnit(-1);
       } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
         e.preventDefault();
-        this._setPage(this._page + 1);
+        this._stepUnit(1);
       } else if (e.key === '+' || e.key === '=') {
         e.preventDefault();
         this._zoomStep(1);
@@ -560,65 +756,302 @@ function makeReader(): any {
       }
     }
 
+    /** 当前定位落到 this._page：页面滚动 = 渲染当前单元；连续滚动 = 滚动到当前单元 */
+    _goCurrent() {
+      if (!this._pdf) return;
+      if (this._scroll === 'page') {
+        void this._renderCurrent();
+        return;
+      }
+      this._syncOcrBox();
+      this._updateUnitVisibility();
+      this._scrollToUnit(this._page);
+      this._renderSweep();
+    }
+
     _onResize() {
       if (!this._pdf || typeof this._mode === 'number') return;
       if (this._resizeTimer) clearTimeout(this._resizeTimer);
       this._resizeTimer = setTimeout(() => {
         this._resizeTimer = null;
-        void this._renderPage();
+        this._relayout();
       }, 180);
     }
 
-    async _renderPage() {
+    // ---------- 单元流构建与懒渲染 ----------
+
+    /** 重建单元流：全部页盒占位（按当前布局配对成单元）+ 尺寸 + 懒渲染观察 */
+    _rebuildFlow() {
+      if (!this._flow) return;
+      this._closeMenu();
+      for (const box of this._sheets.values()) this._unrenderSheet(box);
+      this._sheets.clear();
+      this._flow.textContent = '';
+      if (this._io) {
+        this._io.disconnect();
+        this._io = null;
+      }
       if (!this._pdf) return;
-      const seq = ++this._renderSeq;
-      this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.rendering', 'Rendering...');
-      try {
-        const dpr = Math.min(Number((typeof window !== 'undefined' && (window as any).devicePixelRatio) || 1) || 1, 2);
-        const size = await pdfjsMod.pageSize(this._pdf, this._page);
-        if (seq !== this._renderSeq) return;
-        const scale = this._computeZoom(size.width, size.height);
-        this._effScale = scale;
-        this._syncZoomSelect();
-        const viewport = await pdfjsMod.renderPageToCanvas(this._pdf, this._page, this._canvas, { cssScale: scale, dpr });
-        if (seq !== this._renderSeq) return;
-        // 纸页盒与文本层跟随 CSS 尺寸（画布像素 = CSS × dpr）
-        const cssW = this._canvas.width / dpr;
-        const cssH = this._canvas.height / dpr;
-        this._pageBox.style.width = `${cssW}px`;
-        this._pageBox.style.height = `${cssH}px`;
-        this._pageBox.style.display = 'block';
-        this._textLayer.style.width = `${cssW}px`;
-        this._textLayer.style.height = `${cssH}px`;
-        if (seq !== this._renderSeq) return;
-        await this._fillTextLayer(viewport, dpr, seq);
-        if (seq !== this._renderSeq) return;
-        this._status.textContent = '';
-      } catch (e: any) {
-        this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.render.failed', 'Render failed: ') + String(e?.message || e);
+      const doc = this.document;
+      const n = this._numPages;
+      const count = pdfView.unitCount(n, this._layout, this._scroll);
+      for (let ui = 0; ui < count; ui++) {
+        const spread = el(doc, 'div', 'tm-pdf-spread');
+        spread.setAttribute('data-unit', String(ui));
+        const start = pdfView.unitStartByIndex(ui, this._layout, this._scroll, n);
+        for (const p of pdfView.unitOf(start, this._layout, this._scroll, n)) {
+          const box = this._makeSheet(doc, p);
+          this._sheets.set(p, box);
+          spread.appendChild(box.sheet);
+        }
+        this._flow.appendChild(spread);
+      }
+      this._applySizes();
+      // 懒渲染：连续滚动模式经 IntersectionObserver 进入视口附近才渲染、离开即释放；
+      // 页面滚动模式只渲染当前单元（无需观察者）。无 IO 环境（无头测试/旧内核）退化为
+      // 当前单元 ±1 主动渲染（见 _updateUnitVisibility）
+      if (typeof IntersectionObserver !== 'undefined' && this._scroll !== 'page') {
+        this._io = new IntersectionObserver(
+          (entries: any[]) => {
+            for (const en of entries || []) {
+              const page = Number(en.target?.getAttribute?.('data-page'));
+              const box = this._sheets.get(page);
+              if (!box) continue;
+              box.want = !!en.isIntersecting;
+              if (box.want) void this._renderSheet(box, false);
+              else this._unrenderSheet(box);
+            }
+          },
+          { root: this._viewer, rootMargin: '600px' },
+        );
+        for (const box of this._sheets.values()) this._io.observe(box.sheet);
+      }
+      this._updateUnitVisibility();
+    }
+
+    _makeSheet(doc: any, page: number) {
+      const sheet = el(doc, 'div', 'tm-pdf-sheet');
+      sheet.setAttribute('data-page', String(page));
+      sheet.setAttribute('data-pending', '1');
+      const canvas = doc.createElement('canvas');
+      canvas.className = 'tm-pdf-canvas';
+      const layer = el(doc, 'div', 'tm-pdf-textlayer', '');
+      layer.setAttribute('data-tiddler-title', this.getVariable('currentTiddler') || '');
+      const rect = el(doc, 'div', 'tm-pdf-rect', '');
+      sheet.appendChild(canvas);
+      sheet.appendChild(layer);
+      sheet.appendChild(rect);
+      return { page, sheet, canvas, layer, rect, seq: 0, want: false, renderedKey: '' };
+    }
+
+    /** scale 统一重算并应用到全部页盒（fit 依赖容器与布局，一次算好全视图共用） */
+    _applySizes() {
+      if (!this._pdf || !this._flow) return;
+      const gutter = 48;
+      const vw = Math.max(200, (Number(this._viewer.clientWidth) || 0) - gutter);
+      const vh = Math.max(200, (Number(this._viewer.clientHeight) || 0) - gutter);
+      const s1 = this._pageSizeAt1(this._page);
+      const scale = pdfView.resolveViewScale(this._mode, s1.w, s1.h, vw, vh, this._layout, this._scroll);
+      this._effScale = scale;
+      this._syncZoomSelect();
+      for (const box of this._sheets.values()) {
+        const size = this._pageSizeAt1(box.page);
+        const w = Math.max(1, Math.round(size.w * scale));
+        const h = Math.max(1, Math.round(size.h * scale));
+        box.sheet.style.width = `${w}px`;
+        box.sheet.style.height = `${h}px`;
+        box.layer.style.width = `${w}px`;
+        box.layer.style.height = `${h}px`;
       }
     }
 
-    _computeZoom(pw: number, ph: number): number {
-      const gutter = 48;
-      const cw = Math.max(200, (Number(this._viewer.clientWidth) || 0) - gutter);
-      const ch = Math.max(200, (Number(this._viewer.clientHeight) || 0) - gutter);
-      return zoomMod.resolveScale(this._mode, pw, ph, cw, ch);
+    _pageSizeAt1(page: number): { w: number; h: number } {
+      return this._pageSizes.get(page) || { w: 612, h: 792 };
     }
 
-    // ---------- 缩放 ----------
+    /** 单元显示与渲染意愿：页面滚动只显示/渲染当前单元；无 IO 的连续滚动渲染当前 ±1 单元 */
+    _updateUnitVisibility() {
+      if (!this._flow) return;
+      const curIdx = pdfView.unitIndexOf(this._page, this._layout, this._scroll, this._numPages);
+      const spreads = this._flow.children || [];
+      for (const spread of spreads) {
+        const idx = Number(spread.getAttribute?.('data-unit'));
+        const on = this._scroll !== 'page' || idx === curIdx;
+        spread.style.display = on ? '' : 'none';
+      }
+      if (this._scroll === 'page') {
+        const pages = new Set(pdfView.unitOf(this._page, this._layout, this._scroll, this._numPages));
+        for (const box of this._sheets.values()) {
+          box.want = pages.has(box.page);
+          if (!box.want) this._unrenderSheet(box);
+        }
+      } else if (!this._io) {
+        for (const spread of spreads) {
+          const idx = Number(spread.getAttribute?.('data-unit'));
+          const near = Math.abs(idx - curIdx) <= 1;
+          for (const sheetEl of spread.childNodes || []) {
+            const box = this._sheets.get(Number(sheetEl.getAttribute?.('data-page')));
+            if (box) box.want = near;
+          }
+        }
+      }
+    }
+
+    /** 按渲染意愿清扫：want 的（重）渲染，不 want 的释放（renderedKey 防重复渲染） */
+    _renderSweep() {
+      for (const box of this._sheets.values()) {
+        if (box.want) void this._renderSheet(box, false);
+        else this._unrenderSheet(box);
+      }
+    }
+
+    /** 页面滚动模式：渲染当前单元（状态条跟随首/末完成；双页时逐盒串行） */
+    async _renderCurrent() {
+      if (!this._pdf) return;
+      const seq = ++this._renderSeq;
+      this._syncOcrBox();
+      this._updateUnitVisibility();
+      this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.rendering', 'Rendering...');
+      try {
+        for (const p of pdfView.unitOf(this._page, this._layout, this._scroll, this._numPages)) {
+          const box = this._sheets.get(p);
+          if (!box) continue;
+          await this._renderSheet(box, true);
+          if (seq !== this._renderSeq) return;
+        }
+        if (seq === this._renderSeq) this._status.textContent = '';
+      } catch (e: any) {
+        if (seq === this._renderSeq) {
+          this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.render.failed', 'Render failed: ') + String(e?.message || e);
+        }
+      }
+    }
+
+    /** 渲染单个页盒（canvas + 文本层）；box.seq 使过期渲染自弃 */
+    async _renderSheet(box: any, report: boolean) {
+      if (!this._pdf || !box) return;
+      const dpr = Math.min(Number((typeof window !== 'undefined' && (window as any).devicePixelRatio) || 1) || 1, 2);
+      const scale = this._effScale || 1;
+      const key = `${box.page}:${scale}:${dpr}`;
+      if (box.renderedKey === key && Number(box.canvas.width) > 1) return;
+      const seq = ++box.seq;
+      box.renderedKey = '';
+      box.sheet.setAttribute('data-pending', '1');
+      try {
+        const viewport = await pdfjsMod.renderPageToCanvas(this._pdf, box.page, box.canvas, { cssScale: scale, dpr });
+        if (seq !== box.seq || !box.want) return;
+        box.renderedKey = key;
+        box.sheet.removeAttribute('data-pending');
+        await this._fillSheetText(box, viewport, dpr, seq);
+      } catch (e: any) {
+        // 后台预渲染失败静默（占位盒保留），仅当前单元渲染失败上报状态条
+        if (report && seq === box.seq) {
+          this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.render.failed', 'Render failed: ') + String(e?.message || e);
+        }
+      }
+    }
+
+    _unrenderSheet(box: any) {
+      if (!box) return;
+      box.seq++;
+      box.want = false;
+      box.renderedKey = '';
+      box.sheet.setAttribute('data-pending', '1');
+      try {
+        box.canvas.width = 0;
+        box.canvas.height = 0;
+      } catch (_) {}
+      box.layer.textContent = '';
+    }
+
+    /** 缩放/视口变化后的统一重排：重算 scale → 失效渲染缓存 → 按意愿清扫 */
+    _relayout() {
+      if (!this._pdf) return;
+      this._applySizes();
+      for (const box of this._sheets.values()) box.renderedKey = '';
+      if (this._scroll === 'page') void this._renderCurrent();
+      else this._renderSweep();
+    }
+
+    // ---------- 连续滚动：滚动位置 ↔ 当前单元 ----------
+
+    _onViewerScroll() {
+      if (this._scroll === 'page' || !this._pdf || this._destroyed) return;
+      if (Date.now() < this._scrollLockUntil) return;
+      if (this._scrollTimer) return; // 已有待处理防抖，合并后续滚动
+      this._scrollTimer = setTimeout(() => {
+        this._scrollTimer = null;
+        if (this._destroyed || !this._pdf || this._scroll === 'page') return;
+        const p = this._nearestUnitPage();
+        if (p !== this._page) {
+          this._page = p;
+          this._pageInput.value = String(p);
+          this._persistPage();
+          this._syncOcrBox();
+        }
+      }, 150);
+    }
+
+    /** 视口中心最近的单元首页（水平按横向距离，平铺按平面距离，其余按纵向距离） */
+    _nearestUnitPage(): number {
+      const viewer = this._viewer;
+      const vw = Number(viewer.clientWidth) || 0;
+      const vh = Number(viewer.clientHeight) || 0;
+      const cx = (Number(viewer.scrollLeft) || 0) + vw / 2;
+      const cy = (Number(viewer.scrollTop) || 0) + vh / 2;
+      let best = 0;
+      let bestDist = Infinity;
+      for (const box of this._sheets.values()) {
+        const top = Number(box.sheet.offsetTop) || 0;
+        const left = Number(box.sheet.offsetLeft) || 0;
+        const w = Number(box.sheet.offsetWidth) || parseFloat(box.sheet.style.width) || 0;
+        const h = Number(box.sheet.offsetHeight) || parseFloat(box.sheet.style.height) || 0;
+        const d = this._scroll === 'horizontal'
+          ? Math.abs(left + w / 2 - cx)
+          : this._scroll === 'wrapped'
+          ? Math.hypot(left + w / 2 - cx, top + h / 2 - cy)
+          : Math.abs(top + h / 2 - cy);
+        if (Number.isFinite(d) && d < bestDist) {
+          bestDist = d;
+          best = box.page;
+        }
+      }
+      return best || this._page;
+    }
+
+    _scrollToUnit(page: number) {
+      const start = pdfView.unitStart(page, this._layout, this._scroll, this._numPages);
+      const box = this._sheets.get(start);
+      if (!box || !this._viewer) return;
+      this._scrollLockUntil = Date.now() + 500;
+      const vw = Number(this._viewer.clientWidth) || 0;
+      const vh = Number(this._viewer.clientHeight) || 0;
+      const sw = Number(box.sheet.offsetWidth) || parseFloat(box.sheet.style.width) || 0;
+      const sh = Number(box.sheet.offsetHeight) || parseFloat(box.sheet.style.height) || 0;
+      if (this._scroll !== 'horizontal') {
+        const top = Number(box.sheet.offsetTop) || 0;
+        this._viewer.scrollTop = Math.max(0, top - (vh - sh) / 2);
+      }
+      if (this._scroll === 'horizontal' || this._scroll === 'wrapped') {
+        const left = Number(box.sheet.offsetLeft) || 0;
+        this._viewer.scrollLeft = Math.max(0, left - (vw - sw) / 2);
+      }
+    }
+
+    // ---------- 缩放（模式/档位见 pdf-zoom.ts，视图折算见 pdf-view.ts） ----------
 
     _zoomStep(dir: 1 | -1) {
       const base = typeof this._mode === 'number' ? this._mode : this._effScale || 1;
       this._mode = zoomMod.stepLadder(base, dir);
-      this._syncZoomSelect();
-      void this._renderPage();
+      this._persistViewState();
+      this._relayout();
     }
 
     _onZoomSelect() {
       const v = String(this._zoomSel.value || 'fit-page');
-      this._mode = v === 'fit-page' || v === 'fit-width' || v === 'actual' ? v : Number(v) || 'fit-page';
-      void this._renderPage();
+      this._mode = v === 'auto' || v === 'fit-page' || v === 'fit-width' || v === 'actual' ? v : Number(v) || 'fit-page';
+      this._persistViewState();
+      this._relayout();
     }
 
     /** 数字档渲染后回写下拉（clamp 端点可能不在档位列表，找不到则保持原显示） */
@@ -632,6 +1065,101 @@ function makeReader(): any {
       }
     }
 
+    _persistViewState() {
+      if (!this.wiki) return;
+      this.wiki.addTiddler({ title: ns.PDF_VIEW_STATE_TITLE, text: pdfView.viewStateText(this._layout, this._scroll, this._mode) });
+    }
+
+    // ---------- 视图菜单（布局 × 滚动方式） ----------
+
+    _toggleViewMenu(anchor: any) {
+      if (this._menuCloser) {
+        this._closeMenu();
+        return;
+      }
+      this._openMenu(anchor, this._buildViewItems());
+    }
+
+    _buildViewItems(): any[] {
+      const L = (k: string, fb: string) => lingoMod.lingo(this.wiki, k, fb);
+      return [
+        {
+          label: L('pdf.layout.single', 'Single Page View'),
+          icon: VIEW_ICONS.single,
+          on: this._layout === 'single' && this._scroll !== 'infinite',
+          click: () => this._setView('single'),
+        },
+        { label: L('pdf.layout.dual', 'Two Page View'), icon: VIEW_ICONS.dual, on: this._layout === 'dual' && this._scroll !== 'infinite', click: () => this._setView('dual') },
+        { label: L('pdf.layout.book', 'Book View'), icon: VIEW_ICONS.book, on: this._layout === 'book' && this._scroll !== 'infinite', click: () => this._setView('book') },
+        { label: L('pdf.scroll.page', 'Page Scrolling'), icon: VIEW_ICONS.pageScroll, on: this._scroll === 'page', click: () => this._setView(undefined, 'page') },
+        { label: L('pdf.scroll.vertical', 'Vertical Scrolling'), icon: VIEW_ICONS.vertical, on: this._scroll === 'vertical', click: () => this._setView(undefined, 'vertical') },
+        {
+          label: L('pdf.scroll.horizontal', 'Horizontal Scrolling'),
+          icon: VIEW_ICONS.horizontal,
+          on: this._scroll === 'horizontal',
+          click: () => this._setView(undefined, 'horizontal'),
+        },
+        { label: L('pdf.scroll.wrapped', 'Wrapped Scrolling'), icon: VIEW_ICONS.wrapped, on: this._scroll === 'wrapped', click: () => this._setView(undefined, 'wrapped') },
+        { label: L('pdf.scroll.infinite', 'Infinite Scroll'), icon: VIEW_ICONS.infinite, on: this._scroll === 'infinite', click: () => this._setView(undefined, 'infinite') },
+        {
+          label: L('pdf.view.bookmode', 'Book Mode'),
+          icon: VIEW_ICONS.bookmode,
+          on: this._layout === 'book' && this._scroll === 'page',
+          click: () => this._setView('book', 'page'),
+        },
+      ];
+    }
+
+    /** 在锚点按钮下方弹出深色菜单（截图样式：当前项高亮）；同一时刻至多一个 */
+    _openMenu(anchor: any, items: any[]) {
+      this._closeMenu();
+      const doc = this.document;
+      const menu = el(doc, 'div', 'tm-pdf-menu');
+      for (const it of items) {
+        if (it.sep) {
+          menu.appendChild(el(doc, 'div', 'tm-pdf-menu-sep'));
+          continue;
+        }
+        const b = el(doc, 'button', 'tm-pdf-menu-item' + (it.on ? ' tm-pdf-menu-item--on' : ''));
+        if (it.icon) {
+          const ico = el(doc, 'span', 'tm-pdf-menu-ico');
+          ico.innerHTML = it.icon;
+          b.appendChild(ico);
+        }
+        b.appendChild(el(doc, 'span', 'tm-pdf-menu-label', it.label));
+        b.addEventListener('click', () => {
+          this._closeMenu();
+          it.click();
+        });
+        menu.appendChild(b);
+      }
+      anchor.appendChild(menu);
+      this._menuAnchor = anchor;
+      this._menuEl = menu;
+      this._menuCloser = () => {
+        if (menu.parentNode) menu.parentNode.removeChild(menu);
+        this._menuAnchor = null;
+        this._menuEl = null;
+      };
+    }
+
+    _closeMenu() {
+      if (this._menuCloser) {
+        const close = this._menuCloser;
+        this._menuCloser = null;
+        close();
+      }
+    }
+
+    _setView(layout?: pdfView.PdfLayout, scroll?: pdfView.PdfScroll) {
+      if (layout) this._layout = layout;
+      if (scroll) this._scroll = scroll;
+      this._persistViewState();
+      if (this._viewer) this._viewer.setAttribute('data-scroll', this._scroll);
+      this._rebuildFlow();
+      this._goCurrent();
+    }
+
     _toggleFullscreen() {
       const d = this.document as any;
       try {
@@ -642,31 +1170,25 @@ function makeReader(): any {
 
     // ---------- 文本层 / OCR ----------
 
-    async _fillTextLayer(viewport: any, dpr: number, seq?: number) {
+    /** 单个页盒的透明文本层（当前单元的页同步扫描页提示） */
+    async _fillSheetText(box: any, viewport: any, dpr: number, seq: number) {
       const doc = this.document;
       const t = this.getVariable('currentTiddler') || '';
-      const layer = this._textLayer;
+      const items = await pdfjsMod.pageTextItems(this._pdf, box.page);
+      if (seq !== box.seq || !box.want) return;
+      const layer = box.layer;
       layer.textContent = '';
       layer.setAttribute('data-tiddler-title', t);
-      this._hint.textContent = '';
-      // OCR 转写优先（扫描页）：转写文本显示在纸页下方的可选区
-      const ocrTitle = parsePdf.ocrTiddlerTitle(this._docPageTitle, this._page);
-      const ocrText = this.wiki.getTiddlerText(ocrTitle, '');
-      this._ocrBox.textContent = '';
-      this._ocrBox.setAttribute('data-tiddler-title', t);
-      if (ocrText) {
-        this._ocrBox.textContent = ocrText;
-        return;
-      }
-      const items = await pdfjsMod.pageTextItems(this._pdf, this._page);
-      // 快速翻页时旧页文本项可能比新页渲染后返回：二次校验，防旧页 span 污染新页文本层
-      if (seq !== undefined && seq !== this._renderSeq) return;
+      const isCurrent = pdfView.unitOf(this._page, this._layout, this._scroll, this._numPages).includes(box.page);
       if (parsePdf.isScannedPageText(items.map((it: any) => it.str).join(' '))) {
-        this._hint.textContent = this._ocrEnabled
-          ? lingo(this.wiki, 'pdf/scanned-hint-ocr', 'Scanned page (no text layer) — Click "OCR" in toolbar to recognize text')
-          : lingo(this.wiki, 'pdf/scanned-hint-settings', 'Scanned page (no text layer) — Enable OCR in Settings > PDF & OCR to recognize text');
+        if (isCurrent) {
+          this._hint.textContent = this._ocrEnabled
+            ? lingo(this.wiki, 'pdf/scanned-hint-ocr', 'Scanned page (no text layer) — Click "OCR" in toolbar to recognize text')
+            : lingo(this.wiki, 'pdf/scanned-hint-settings', 'Scanned page (no text layer) — Enable OCR in Settings > PDF & OCR to recognize text');
+        }
         return;
       }
+      if (isCurrent) this._hint.textContent = '';
       for (const it of items) {
         if (!it.str) continue;
         const st = pdfjsMod.itemStyle(viewport, it);
@@ -679,6 +1201,16 @@ function makeReader(): any {
         span.style.color = 'transparent';
         layer.appendChild(span);
       }
+    }
+
+    /** OCR 转写区跟随当前页（扫描页转写显示在纸页下方可选区） */
+    _syncOcrBox() {
+      if (!this._ocrBox) return;
+      this._ocrBox.setAttribute('data-tiddler-title', this.getVariable('currentTiddler') || '');
+      const ocrText = this._docPageTitle
+        ? this.wiki.getTiddlerText(parsePdf.ocrTiddlerTitle(this._docPageTitle, this._page), '')
+        : '';
+      this._ocrBox.textContent = ocrText || '';
     }
 
     /** OCR 本页：页面 PNG → LLM 视觉模型转写 Markdown → 持久化 <文档页>/ocr-p<页> */
@@ -710,7 +1242,7 @@ function makeReader(): any {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const text = parsePdf.parseOcrResponse(await res.json());
         if (!text) throw new Error(lingo(this.wiki, 'pdf/ocr-empty', 'OCR recognition result is empty'));
-        // 识别期间翻页也照常按原页落库；仅停在原页时刷新文本层
+        // 识别期间翻页也照常按原页落库；仅停在原页时刷新转写区
         this.wiki.addTiddler({
           title: parsePdf.ocrTiddlerTitle(this._docPageTitle, pageNum),
           text,
@@ -718,7 +1250,7 @@ function makeReader(): any {
         });
         if (this._page === pageNum) {
           this._status.textContent = lingo(this.wiki, 'pdf/ocr-done', 'OCR completed');
-          await this._renderPage();
+          this._syncOcrBox();
         } else {
           this._status.textContent = `${lingo(this.wiki, 'pdf/ocr-done', 'OCR completed')} (${lingo(this.wiki, 'pdf/page-prefix', 'p.')} ${pageNum})`;
         }
@@ -730,16 +1262,18 @@ function makeReader(): any {
       }
     }
 
-    // ---------- 框选图片制卡 ----------
+    // ---------- 框选图片制卡（逐页盒：拖拽发生在哪个页盒就裁哪个 canvas） ----------
 
-    _wireRectSelect(selBtn: any, viewer: any, selRect: any, sectionTitle: string) {
-      const setRect = (x: number, y: number, w: number, h: number) => {
-        selRect.style.left = `${x}px`;
-        selRect.style.top = `${y}px`;
-        selRect.style.width = `${w}px`;
-        selRect.style.height = `${h}px`;
-        selRect.style.display = w > 2 && h > 2 ? 'block' : 'none';
-      };
+    _closestSheet(target: any): any {
+      let n = target;
+      while (n) {
+        if (typeof n.getAttribute === 'function' && n.getAttribute('data-page')) return n;
+        n = n.parentNode;
+      }
+      return null;
+    }
+
+    _wireRectSelect(selBtn: any, viewer: any, sectionTitle: string) {
       selBtn.addEventListener('click', () => {
         this._selMode = !this._selMode;
         selBtn.classList.toggle('tm-pdf-ico--on', this._selMode);
@@ -751,12 +1285,25 @@ function makeReader(): any {
       viewer.addEventListener('mousedown', (e: MouseEvent) => {
         if (!this._selMode || e.button !== 0) return;
         const doc = this.document || document;
-        const cr = this._canvas.getBoundingClientRect();
+        const sheetEl = this._closestSheet(e.target);
+        const page = Number(sheetEl?.getAttribute?.('data-page')) || 0;
+        const box = page ? this._sheets.get(page) : null;
+        if (!box) return;
+        const selRect = box.rect;
+        const canvas = box.canvas;
+        const setRect = (x: number, y: number, w: number, h: number) => {
+          selRect.style.left = `${x}px`;
+          selRect.style.top = `${y}px`;
+          selRect.style.width = `${w}px`;
+          selRect.style.height = `${h}px`;
+          selRect.style.display = w > 2 && h > 2 ? 'block' : 'none';
+        };
+        const cr = canvas.getBoundingClientRect();
         this._selStart = { x: e.clientX - cr.left, y: e.clientY - cr.top };
         setRect(this._selStart.x, this._selStart.y, 0, 0);
         const move = (ev: MouseEvent) => {
           if (!this._selStart) return;
-          const currentCr = this._canvas.getBoundingClientRect();
+          const currentCr = canvas.getBoundingClientRect();
           const x2 = ev.clientX - currentCr.left;
           const y2 = ev.clientY - currentCr.top;
           setRect(Math.min(this._selStart.x, x2), Math.min(this._selStart.y, y2), Math.abs(x2 - this._selStart.x), Math.abs(y2 - this._selStart.y));
@@ -764,44 +1311,44 @@ function makeReader(): any {
         const up = (ev: MouseEvent) => {
           doc.removeEventListener('mousemove', move);
           doc.removeEventListener('mouseup', up);
-          const currentCr = this._canvas.getBoundingClientRect();
+          const currentCr = canvas.getBoundingClientRect();
           const x2 = ev.clientX - currentCr.left;
           const y2 = ev.clientY - currentCr.top;
-          const x = Math.min(this._selStart.x, x2);
-          const y = Math.min(this._selStart.y, y2);
-          const w = Math.abs(x2 - this._selStart.x);
-          const h = Math.abs(y2 - this._selStart.y);
+          const x = Math.min(this._selStart!.x, x2);
+          const y = Math.min(this._selStart!.y, y2);
+          const w = Math.abs(x2 - this._selStart!.x);
+          const h = Math.abs(y2 - this._selStart!.y);
           this._selStart = null;
           setRect(0, 0, 0, 0);
           if (w < 12 || h < 12) return; // 误触
-          this._createImageCard(sectionTitle, x, y, w, h);
+          this._createImageCard(sectionTitle, page, x, y, w, h, canvas);
         };
         doc.addEventListener('mousemove', move);
         doc.addEventListener('mouseup', up);
       });
     }
 
-    _createImageCard(sectionTitle: string, x: number, y: number, w: number, h: number) {
-      const scale = this._canvas.width / (this._canvas.clientWidth || this._canvas.width);
+    _createImageCard(sectionTitle: string, page: number, x: number, y: number, w: number, h: number, canvas: any) {
+      const scale = canvas.width / (canvas.clientWidth || canvas.width);
       const crop = this.document.createElement('canvas');
       crop.width = Math.round(w * scale);
       crop.height = Math.round(h * scale);
-      crop.getContext('2d').drawImage(this._canvas, x * scale, y * scale, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      crop.getContext('2d').drawImage(canvas, x * scale, y * scale, crop.width, crop.height, 0, 0, crop.width, crop.height);
       const dataUrl = crop.toDataURL('image/png');
 
       // 弹出即时制卡弹窗：显示截图预览，直接录入答案与可选简短标题
       cardModal.openCardModal(this.document, {
         type: 'image-qa',
         imageUrl: dataUrl,
-        page: this._page,
+        page,
         onSave: (res: any) => {
           const answer = (res.answerOrCloze || '').trim();
           const label = (res.label || '').trim();
-          const matchedSection = docOps.sectionOfDocByPage && this._docId ? docOps.sectionOfDocByPage(this.wiki, this._docId, this._page) : null;
+          const matchedSection = docOps.sectionOfDocByPage && this._docId ? docOps.sectionOfDocByPage(this.wiki, this._docId, page) : null;
           const targetSection = matchedSection || sectionTitle || this.getVariable('currentTiddler') || this._docPageTitle;
           const defaultPending = lingo(this.wiki, 'pdf/pending-answer', '(Answer pending)');
           const qa = cardFactory.buildImageQA
-            ? cardFactory.buildImageQA(this.wiki, targetSection, { dataUrl, answer, label, page: this._page })
+            ? cardFactory.buildImageQA(this.wiki, targetSection, { dataUrl, answer, label, page })
             : cardFactory.buildQA(this.wiki, targetSection, `<img src="${dataUrl}" style="max-width:100%">`, answer || defaultPending);
           cardFactory.commitCard(this.wiki, qa);
           this._status.textContent = lingo(this.wiki, 'pdf/image-card-created', 'Image Q&A card created');
@@ -820,3 +1367,15 @@ function makeReader(): any {
 exports['tidme-pdf-reader'] = makeReader();
 exports.resolvePdfContext = resolvePdfContext;
 exports.loadPdfBytesWithWait = loadPdfBytesWithWait;
+exports.isPdfReaderMounted = isPdfReaderMounted;
+
+// ---------- 全局方向键归属协调 ----------
+// section.ts 的全局 ←/→ 快捷键（阅读条栏跨卡导航）在本函数返回 true 时让路，
+// 方向键交给挂载中的 PDF 阅读器翻页（桌面阅读器习惯）。
+// 注意：本模块的对外导出统一走 exports.*（与文件内 ESM import 混用 export 语句
+// 会改变 esbuild 的模块格式判定，导致上方 exports.* 导出全部丢失）。
+let mountedReaders = 0;
+
+function isPdfReaderMounted(): boolean {
+  return mountedReaders > 0;
+}

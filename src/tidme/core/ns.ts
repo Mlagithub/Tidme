@@ -117,6 +117,9 @@ export const CARD_OPEN_AT_TITLE = '$:/temp/tidme/card-open-at';
 /** PDF 临时跳转页码 state tiddler 前缀（<prefix><docId>，跨 widget 一次性交接，消费即清理） */
 export const PDF_PAGE_STATE_PREFIX = '$:/state/tidme-pdf/page/';
 
+/** PDF 阅读器全局视图状态（布局×滚动×缩放，JSON {l,s,z}，read/widgets/pdf-view.ts 定义编解码） */
+export const PDF_VIEW_STATE_TITLE = '$:/state/tidme-pdf/view';
+
 /** 自动顺延任务的上次运行记录：server/scheduler.js 写（{at, overdue, postponed, kept}），
  *  queue-ops 读给用户看——顺延会悄悄改到期日，用户需要知道"什么时候被顺延过、顺延了多少张"。
  *  $:/temp 前缀使其随会话清场带走（只是运行记录，不是持久统计）。 */

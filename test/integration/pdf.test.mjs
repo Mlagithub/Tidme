@@ -36,13 +36,14 @@ async function injectPdfJs() {
   mod('import/widgets/pdfjs.js').setPdfJsLib(nodeRequire('pdfjs-dist/legacy/build/pdf.js'));
 }
 
-/** 最小合法 PDF（1.4）：两页，用于阅读器主路径 */
-function buildMinimalPdfBytes() {
+/** 最小合法 PDF（1.4）：N 页（默认 2），用于阅读器主路径 */
+function buildMinimalPdfBytes(pages = 2) {
   const objs = [];
+  const kids = [];
+  for (let i = 0; i < pages; i++) kids.push(`${3 + i} 0 R`);
   objs[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-  objs[2] = '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>';
-  objs[3] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>';
-  objs[4] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>';
+  objs[2] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages} >>`;
+  for (let i = 0; i < pages; i++) objs[3 + i] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>';
   let body = '%PDF-1.4\n';
   const offsets = [];
   for (let i = 1; i < objs.length; i++) {
@@ -50,9 +51,9 @@ function buildMinimalPdfBytes() {
     body += `${i} 0 obj\n${objs[i]}\nendobj\n`;
   }
   const xrefPos = body.length;
-  let xref = 'xref\n0 5\n0000000000 65535 f \n';
-  for (let i = 1; i < 5; i++) xref += String(offsets[i] ?? 0).padStart(10, '0') + ' 00000 n \n';
-  const trailer = `trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+  let xref = `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objs.length; i++) xref += String(offsets[i] ?? 0).padStart(10, '0') + ' 00000 n \n';
+  const trailer = `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
   return new TextEncoder().encode(body + xref + trailer);
 }
 
@@ -68,6 +69,17 @@ async function waitFor(pred, timeoutMs = 3000) {
     await new Promise((r) => setTimeout(r, 20));
   }
   return false;
+}
+
+/** 在 fake DOM 树中按 className 精确查找元素（fake 不提供 querySelector） */
+function findByClass(node, cls) {
+  if (!node) return null;
+  if (String(node.className || '') === cls) return node;
+  for (const c of node.childNodes || []) {
+    const f = findByClass(c, cls);
+    if (f) return f;
+  }
+  return null;
 }
 
 test('parse/pdf: 扫描页判定与 pages 字段解析（存量分节书籍兼容）', () => {
@@ -244,13 +256,146 @@ test('pdf-reader: 工具栏结构 —— 缩放/翻页/全屏齐备（无目录�
   const { root } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: 'Tidme/Docs/裸工具栏书' } });
   const text = collectText(root);
   const buttons = collectButtons(root);
-  assert.ok(text.includes('适合页面') && text.includes('适合宽度') && text.includes('实际大小'), '缩放下拉三模式（仿桌面阅读器）');
+  assert.ok(text.includes('自动缩放') && text.includes('适合页面') && text.includes('适合页宽') && text.includes('实际大小'), '缩放下拉（仿 Firefox pdf.js）');
+  assert.ok(buttons.some((b) => b.title === '视图'), '视图菜单入口（布局×滚动）');
   assert.ok(buttons.some((b) => b.title === '第一页') && buttons.some((b) => b.title === '最后一页'), '首末页按钮');
   assert.ok(buttons.some((b) => b.title === '框选图片制卡：在页面上拖拽矩形生成图片问答卡'), '框选制卡入口');
   assert.ok(buttons.some((b) => b.title === '全屏阅读'), '全屏入口');
   assert.ok(!buttons.some((b) => String(b.textContent || '') === '☰'), '无目录按钮（PDF 不切分，无节卡可列）');
   assert.ok(!buttons.some((b) => String(b.className || '').includes('tm-pdf-toc-item')), '无目录项');
   assert.ok(!buttons.some((b) => b.title.startsWith('扫描页识别')), 'OCR 未启用 → 无 OCR 按钮');
+});
+
+test('pdf-reader: 缩放菜单仿 Firefox —— 四模式 + 50%–400% 八档可切换并记忆', async () => {
+  wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
+  await injectPdfJs();
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '缩放菜单书', dataB64: btoaBytes(buildMinimalPdfBytes(2)) });
+  const { root, w } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: r.docTitle },
+  });
+  await waitFor(() => collectText(root).includes('/ 2'));
+  const sel = findByClass(root, 'tm-pdf-zoom');
+  assert.ok(sel, '缩放下拉存在');
+  const values = sel.childNodes.map((o) => o.value);
+  assert.deepEqual(values.slice(0, 4), ['auto', 'actual', 'fit-page', 'fit-width'], '四模式顺序与 Firefox 缩放菜单一致');
+  assert.deepEqual(values.slice(4), ['0.5', '0.75', '1', '1.25', '1.5', '2', '3', '4'], '百分比档 50%–400%');
+
+  sel.value = 'auto';
+  sel.dispatchEvent({ type: 'change' });
+  assert.equal(w._mode, 'auto', '自动缩放档生效');
+  sel.value = '1.5';
+  sel.dispatchEvent({ type: 'change' });
+  assert.equal(w._mode, 1.5, '百分比档生效');
+  assert.equal(JSON.parse(wiki.getTiddlerText(ns.PDF_VIEW_STATE_TITLE, '{}')).z, 1.5, '缩放模式持久化到视图状态');
+
+  w.destroy?.();
+  wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
+});
+
+test('pdf-reader: 视图菜单 —— 布局×滚动选择、双页单元切分与全局恢复', async () => {
+  wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
+  await injectPdfJs();
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '视图菜单书', dataB64: btoaBytes(buildMinimalPdfBytes(4)) });
+  const { root, w } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: r.docTitle },
+  });
+  await waitFor(() => collectText(root).includes('/ 4'));
+  const viewBtn = collectButtons(root).find((b) => b.title === '视图');
+  assert.ok(viewBtn, '工具栏有视图菜单按钮');
+
+  const menuItem = (label) => collectButtons(root).find((b) => String(b.className || '').includes('tm-pdf-menu-item') && collectText(b).includes(label));
+
+  viewBtn.dispatchEvent({ type: 'click' });
+  for (const label of ['单页视图', '双页视图', '书籍视图', '页面滚动', '垂直滚动', '水平滚动', '平铺滚动', '无限滚动', '书本模式']) {
+    assert.ok(menuItem(label), `菜单项「${label}」存在`);
+  }
+
+  // 选择双页视图 → 单元成对 + 偏好落库
+  menuItem('双页视图').dispatchEvent({ type: 'click' });
+  assert.equal(w._layout, 'dual', '布局切到双页');
+  assert.equal(JSON.parse(wiki.getTiddlerText(ns.PDF_VIEW_STATE_TITLE, '{}')).l, 'dual', '布局持久化');
+  assert.ok(!menuItem('双页视图'), '选择后菜单关闭');
+  const flow = findByClass(root, 'tm-pdf-flow');
+  assert.equal(flow.children.length, 2, '4 页双页布局 → 2 个双页单元');
+
+  // 双页翻单元：下一单元首页 p3，页码 state 记单元首页
+  const nextBtn = collectButtons(root).find((b) => b.title === '下一页');
+  nextBtn.dispatchEvent({ type: 'click' });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '3', '双页翻单元记录单元首页 p3');
+
+  // 切垂直滚动（连续滚动模式）
+  viewBtn.dispatchEvent({ type: 'click' });
+  menuItem('垂直滚动').dispatchEvent({ type: 'click' });
+  assert.equal(w._scroll, 'vertical', '滚动方式切到垂直');
+  assert.equal(JSON.parse(wiki.getTiddlerText(ns.PDF_VIEW_STATE_TITLE, '{}')).s, 'vertical', '滚动方式持久化');
+  assert.equal(findByClass(root, 'tm-pdf-viewer').getAttribute('data-scroll'), 'vertical', 'viewer 标注滚动方式（样式变体挂点）');
+
+  // 重开恢复：全局视图记忆跨 widget 实例生效
+  w.destroy?.();
+  const { root: root2, w: w2 } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: r.docTitle },
+  });
+  await waitFor(() => collectText(root2).includes('/ 4'));
+  assert.equal(w2._layout, 'dual', '重开恢复双页布局');
+  assert.equal(w2._scroll, 'vertical', '重开恢复垂直滚动');
+  assert.equal(findByClass(root2, 'tm-pdf-flow').children.length, 2, '恢复后单元流保持双页切分');
+  w2.destroy?.();
+  wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
+});
+
+test('pdf-reader: 键盘全局翻页（编辑控件让路）与水平滚动滚轮转横向', async () => {
+  wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
+  await injectPdfJs();
+  const r = await pdfOps.createPdfDoc(wiki, { docTitle: '快捷键书', dataB64: btoaBytes(buildMinimalPdfBytes(5)) });
+  const { root, w } = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', {
+    variables: { currentTiddler: r.docTitle },
+  });
+  await waitFor(() => collectText(root).includes('/ 5'));
+  assert.equal(mod('read/widgets/pdf-reader.js').isPdfReaderMounted(), true, '阅读器挂载时导出方向键归属判定为真');
+
+  // 全局键盘翻页：免聚焦，ArrowRight 翻下一单元（单页布局 = 下一页）
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '2', '全局 ArrowRight 翻页');
+
+  // 编辑控件聚焦时快捷键让路
+  const typing = fakeDocument.createElement('input');
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', target: typing, preventDefault: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '2', 'input 聚焦时不劫持按键');
+
+  // 水平滚动模式：纵向滚轮转横向 scrollLeft；deltaX 交原生不重复处理
+  const viewBtn = collectButtons(root).find((b) => b.title === '视图');
+  viewBtn.dispatchEvent({ type: 'click' });
+  const menuItem = (label) => collectButtons(root).find((b) => String(b.className || '').includes('tm-pdf-menu-item') && collectText(b).includes(label));
+  menuItem('水平滚动').dispatchEvent({ type: 'click' });
+  assert.equal(w._scroll, 'horizontal');
+  const viewer = findByClass(root, 'tm-pdf-viewer');
+  viewer.scrollLeft = 0;
+  viewer.dispatchEvent({ type: 'wheel', deltaY: 120, preventDefault: () => {} });
+  assert.equal(viewer.scrollLeft, 120, '纵向滚轮转横向滚动');
+  viewer.scrollLeft = 0;
+  viewer.dispatchEvent({ type: 'wheel', deltaX: 100, deltaY: 0, preventDefault: () => {} });
+  assert.equal(viewer.scrollLeft, 0, 'deltaX 原生已横向，不重复叠加');
+
+  // 页面滚动模式：滚轮翻单元（阈值累计过 100 翻页；冷却窗抑制惯性；当前页此前为 2）
+  viewBtn.dispatchEvent({ type: 'click' });
+  menuItem('页面滚动').dispatchEvent({ type: 'click' });
+  assert.equal(w._scroll, 'page');
+  viewer.dispatchEvent({ type: 'wheel', deltaY: 150, preventDefault: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '3', '页面滚动滚轮下翻一单元');
+  viewer.dispatchEvent({ type: 'wheel', deltaY: 150, preventDefault: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '3', '冷却窗内惯性滚轮不再翻页');
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  viewer.dispatchEvent({ type: 'wheel', deltaY: 60, preventDefault: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '3', '未过阈值不翻页');
+  viewer.dispatchEvent({ type: 'wheel', deltaY: 60, preventDefault: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '4', '两次增量累计过阈值翻页');
+
+  // destroy 后全局键盘监听注销：不再写入页码 state
+  w.destroy?.();
+  const before = wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), '');
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), before, 'destroy 后快捷键失效');
+  wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
 });
 
 test('pdf-reader: 节卡缺少 tidme.asset 时通过 docId 回退解析，且学习会话中显示推进按钮', async () => {

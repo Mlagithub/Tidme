@@ -430,18 +430,34 @@ if (typeof document !== 'undefined') {
     if (dir === 'prev') bar?._navPrev?.();
     else bar?._navNext?.();
   };
+  // PDF 阅读器挂载判定（惰性 require 避免加载顺序耦合）：阅读器打开时方向键归阅读器翻页
+  let pdfReaderMountedFn: any = undefined;
+  const pdfReaderMounted = (): boolean => {
+    if (pdfReaderMountedFn === undefined) {
+      try {
+        pdfReaderMountedFn = require('$:/plugins/keepone/tidme/read/widgets/pdf-reader.js').isPdfReaderMounted;
+      } catch {
+        pdfReaderMountedFn = null;
+      }
+    }
+    return typeof pdfReaderMountedFn === 'function' ? !!pdfReaderMountedFn() : false;
+  };
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     const tag = String((e.target as any)?.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || (e.target as any)?.isContentEditable) return;
     for (const key of Object.keys(KEYMAP)) {
-      if (KEYMAP[key](e)) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (key === 'arrowleft' || key === 'arrowright') fireNav(key === 'arrowleft' ? 'prev' : 'next');
-        else ACTIONS[key]();
-        return;
+      if (!KEYMAP[key](e)) continue;
+      if (key === 'arrowleft' || key === 'arrowright') {
+        // PDF 阅读器挂载时方向键不吞：交给阅读器全局翻页（桌面阅读器习惯）
+        if (pdfReaderMounted()) return;
+        fireNav(key === 'arrowleft' ? 'prev' : 'next');
+      } else {
+        ACTIONS[key]();
       }
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return;
     }
   }, true);
 

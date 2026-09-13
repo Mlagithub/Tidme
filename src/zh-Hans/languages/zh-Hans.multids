@@ -569,9 +569,21 @@ settings.ocr.enable.desc: 扫描版 PDF 页面转图片并调用多模态大模�
 settings.ocr.model: OCR 模型名称
 settings.ocr.baseurl: OCR 接口地址 (Base URL)
 settings.ocr.apikey: OCR 密钥 (API Key)
+read.zoom.auto: 自动缩放
 read.zoom.fitpage: 适合页面
-read.zoom.fitwidth: 适合宽度
+read.zoom.fitwidth: 适合页宽
 read.zoom.actual: 实际大小
+pdf.view: 视图
+pdf.view.tip: 视图模式（页面布局与滚动方式）
+pdf.layout.single: 单页视图
+pdf.layout.dual: 双页视图
+pdf.layout.book: 书籍视图
+pdf.scroll.page: 页面滚动
+pdf.scroll.vertical: 垂直滚动
+pdf.scroll.horizontal: 水平滚动
+pdf.scroll.wrapped: 平铺滚动
+pdf.scroll.infinite: 无限滚动
+pdf.view.bookmode: 书本模式
 pdf.firstpage: 第一页
 pdf.lastpage: 最后一页
 pdf.boxselect: 框选图片制卡：在页面上拖拽矩形生成图片问答卡

@@ -569,9 +569,21 @@ settings.ocr.enable.desc: Transcribe scanned PDF pages with multimodal vision mo
 settings.ocr.model: OCR Model Name
 settings.ocr.baseurl: OCR Base URL
 settings.ocr.apikey: OCR API Key
+read.zoom.auto: Automatic Zoom
 read.zoom.fitpage: Fit Page
 read.zoom.fitwidth: Fit Width
 read.zoom.actual: Actual Size
+pdf.view: View
+pdf.view.tip: View mode (layout & scrolling)
+pdf.layout.single: Single Page View
+pdf.layout.dual: Two Page View
+pdf.layout.book: Book View
+pdf.scroll.page: Page Scrolling
+pdf.scroll.vertical: Vertical Scrolling
+pdf.scroll.horizontal: Horizontal Scrolling
+pdf.scroll.wrapped: Wrapped Scrolling
+pdf.scroll.infinite: Infinite Scroll
+pdf.view.bookmode: Book Mode
 pdf.firstpage: First Page
 pdf.lastpage: Last Page
 pdf.boxselect: Box select: drag rectangle on page to create image QA card
