@@ -91,6 +91,43 @@ function listAvailableTags(wiki: any): string[] {
   }
 }
 
+/** Linear 风格标签模糊匹配：贪心子序列；连续命中/首字符/词首加分（作排序权重）。
+ *  返回命中下标（供 <mark> 高亮）与得分，无匹配返回 null；空查询返回空命中（全量列出）。 */
+function fuzzyMatchTag(query: string, text: string): { indices: number[]; score: number } | null {
+  const q = String(query || '').toLowerCase();
+  const t = String(text || '').toLowerCase();
+  if (!q) return { indices: [], score: 0 };
+  const indices: number[] = [];
+  let score = 0;
+  let streak = 0;
+  let prev = -2;
+  let ti = 0;
+  for (let qi = 0; qi < q.length; qi++) {
+    let found = -1;
+    while (ti < t.length) {
+      if (t[ti] === q[qi]) {
+        found = ti;
+        ti++;
+        break;
+      }
+      ti++;
+    }
+    if (found < 0) return null;
+    indices.push(found);
+    if (found === prev + 1) {
+      streak += 1;
+      score += 2 + streak;
+    } else {
+      streak = 0;
+      score += 1;
+    }
+    if (found === 0) score += 3;
+    else if (t[found - 1] === ' ' || t[found - 1] === '-' || t[found - 1] === '_') score += 2;
+    prev = found;
+  }
+  return { indices, score };
+}
+
 /** 打开全局独立制卡模态弹窗 */
 function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = {}) {
   const existing = doc.querySelector('.tm-omni-creator-overlay');
@@ -169,36 +206,59 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   fieldTitle.appendChild(titleInput);
   modal.appendChild(fieldTitle);
 
-  // 3.5 标签输入与下拉选择（可选）
+  // 3.5 标签输入（Linear 风格 combobox）：单输入框模糊过滤已有标签 + 最近使用分区 +
+  // 键盘闭环（↑↓ 导航 / Enter·Tab 选中 / 退格删末位 pill / Esc 先关列表再关弹窗）+
+  // 无精确匹配时「创建新标签」行；连续点选不关闭列表；输入中的逗号批量添加保留旧行为。
   const fieldTags = el(doc, 'div', 'tm-card-modal-field tm-omni-tags-field');
   const tagsLabel = el(doc, 'label', '', `${l('creator.field.tags', 'Tags')} (${l('optional', 'Optional')}):`);
   fieldTags.appendChild(tagsLabel);
 
   const selectedTags: string[] = opts.defaultTags ? [...opts.defaultTags] : [];
-  const pillsContainer = el(doc, 'div', 'tm-omni-tag-pills');
-  fieldTags.appendChild(pillsContainer);
-
-  const tagRow = el(doc, 'div', 'tm-omni-tag-row');
-  const tagInput = el(doc, 'input', 'tm-card-modal-input tm-omni-tag-input') as HTMLInputElement;
-  tagInput.placeholder = l('creator.field.tags.placeholder', 'Type tag and press Enter, or choose from dropdown...');
-
-  const tagSelect = el(doc, 'select', 'tm-card-modal-input tm-omni-tag-select') as HTMLSelectElement;
-  const defaultTagOpt = el(doc, 'option', '', `+ ${l('creator.tags.select', 'Choose existing tag...')}`) as HTMLOptionElement;
-  defaultTagOpt.value = '';
-  tagSelect.appendChild(defaultTagOpt);
-
   const availableTags = listAvailableTags(wiki);
-  for (const t of availableTags) {
-    const opt = el(doc, 'option', '', t) as HTMLOptionElement;
-    opt.value = t;
-    tagSelect.appendChild(opt);
-  }
+  const tagSet = new Set<string>(availableTags);
+  const countCache = new Map<string, number>();
+  const tagCount = (tag: string): number => {
+    const cached = countCache.get(tag);
+    if (cached !== undefined) return cached;
+    let n = 0;
+    try {
+      // 跨 realm 数组只取长度，无需展开（AGENTS 陷阱注记）
+      n = wiki.getTiddlersWithTag ? [...wiki.getTiddlersWithTag(tag)].length : 0;
+    } catch {
+      n = 0;
+    }
+    countCache.set(tag, n);
+    return n;
+  };
 
-  tagRow.appendChild(tagInput);
-  tagRow.appendChild(tagSelect);
-  fieldTags.appendChild(tagRow);
-  modal.appendChild(fieldTags);
+  // 最近使用标签（组件私有 $:/state）：提交带标签的卡片时前插，去重封顶 10 个
+  const RECENT_TAGS_TITLE = '$:/state/tidme/omni/recent-tags';
+  const readRecentTags = (): string[] => {
+    try {
+      const arr = JSON.parse(String(wiki.getTiddlerText(RECENT_TAGS_TITLE, '') || '[]'));
+      if (!Array.isArray(arr)) return [];
+      return arr.filter((t: unknown) => typeof t === 'string' && t.trim()).map((t: string) => t.trim()).slice(0, 10);
+    } catch {
+      return [];
+    }
+  };
+  const pushRecentTags = (tags: string[]) => {
+    if (!tags.length) return;
+    const merged = [...tags, ...readRecentTags().filter((t) => !tags.includes(t))].slice(0, 10);
+    wiki.addTiddler({ title: RECENT_TAGS_TITLE, text: JSON.stringify(merged) });
+  };
 
+  const normalizeTag = (raw: string): string => {
+    let clean = raw.trim();
+    if (clean.startsWith('[[') && clean.endsWith(']]')) clean = clean.slice(2, -2).trim();
+    return clean;
+  };
+  const splitTagInput = (raw: string): string[] =>
+    (raw.includes(',') || raw.includes('，') ? raw.split(/[,，]+/) : [raw])
+      .map(normalizeTag)
+      .filter((s) => !!s);
+
+  const pillsContainer = el(doc, 'span', 'tm-omni-tag-pills');
   const renderTagPills = () => {
     pillsContainer.textContent = '';
     for (const tag of selectedTags) {
@@ -233,41 +293,231 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   };
 
   const addTagFromInput = () => {
-    const raw = String(tagInput.value || '').trim();
-    if (!raw) return;
-    const parts = raw.includes(',') || raw.includes('，')
-      ? raw.split(/[,，]+/)
-      : [raw];
-    for (const part of parts) {
-      let clean = part.trim();
-      if (clean.startsWith('[[') && clean.endsWith(']]')) {
-        clean = clean.slice(2, -2).trim();
-      }
-      if (clean) addTag(clean);
-    }
+    for (const part of splitTagInput(String(tagInput.value || ''))) addTag(part);
     tagInput.value = '';
   };
 
+  // combobox DOM：内联 chips 输入框 + 下方建议弹出层
+  const combobox = el(doc, 'div', 'tm-omni-combobox');
+  combobox.setAttribute('aria-expanded', 'false');
+  const tagbox = el(doc, 'div', 'tm-omni-tagbox');
+  const tagInput = el(doc, 'input', 'tm-omni-tag-input') as HTMLInputElement;
+  tagInput.type = 'text';
+  tagInput.placeholder = l('creator.field.tags.placeholder', 'Search or create tags...');
+  tagInput.setAttribute('autocomplete', 'off');
+  const popup = el(doc, 'div', 'tm-omni-tag-popup');
+  popup.setAttribute('role', 'listbox');
+  tagbox.appendChild(pillsContainer);
+  tagbox.appendChild(tagInput);
+  combobox.appendChild(tagbox);
+  combobox.appendChild(popup);
+  fieldTags.appendChild(combobox);
+  modal.appendChild(fieldTags);
+
+  type TagRow = { tag: string; indices: number[]; kind: 'recent' | 'all' | 'create' };
+  let popupOpen = false;
+  let activeIdx = 0;
+  let rows: TagRow[] = [];
+
+  const buildRows = (query: string): TagRow[] => {
+    const q = query.trim();
+    const out: TagRow[] = [];
+    if (!q) {
+      const seen = new Set<string>();
+      for (const t of readRecentTags()) {
+        if ((tagSet.has(t) || selectedTags.includes(t)) && !seen.has(t) && out.length < 5) {
+          seen.add(t);
+          out.push({ tag: t, indices: [], kind: 'recent' });
+        }
+      }
+      for (const t of availableTags) {
+        if (!seen.has(t)) {
+          seen.add(t);
+          out.push({ tag: t, indices: [], kind: 'all' });
+        }
+      }
+      return out;
+    }
+    const hits: { tag: string; indices: number[]; score: number }[] = [];
+    for (const t of availableTags) {
+      const m = fuzzyMatchTag(q, t);
+      if (m) hits.push({ tag: t, indices: m.indices, score: m.score });
+    }
+    hits.sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag));
+    for (const h of hits.slice(0, 20)) out.push({ tag: h.tag, indices: h.indices, kind: 'all' });
+    const parts = splitTagInput(q);
+    if (parts.length === 1 && !tagSet.has(parts[0])) {
+      out.push({ tag: parts[0], indices: [], kind: 'create' });
+    }
+    return out;
+  };
+
+  const activateRow = (row: TagRow) => {
+    if (row.kind === 'create') addTag(row.tag);
+    else if (selectedTags.includes(row.tag)) removeTag(row.tag);
+    else addTag(row.tag);
+    tagInput.value = '';
+    activeIdx = 0;
+    renderTagPills();
+    renderPopup(); // 列表保持打开：连续点选免重开（GitHub/Linear 式）
+  };
+
+  const wireOption = (btn: any, row: TagRow, idx: number) => {
+    btn.addEventListener('mousedown', (e: MouseEvent) => e.preventDefault()); // 输入框不失焦，点选后列表保持
+    btn.addEventListener('mouseenter', () => {
+      if (activeIdx !== idx) {
+        activeIdx = idx;
+        renderPopup();
+      }
+    });
+    btn.addEventListener('click', () => {
+      activateRow(row);
+      tagInput.focus();
+    });
+  };
+
+  const renderPopup = () => {
+    rows = buildRows(tagInput.value || '');
+    if (activeIdx >= rows.length) activeIdx = Math.max(0, rows.length - 1);
+    popup.textContent = '';
+    const queryEmpty = !String(tagInput.value || '').trim();
+    let lastKind = '';
+    rows.forEach((row, idx) => {
+      if (queryEmpty && row.kind !== 'create' && row.kind !== lastKind) {
+        popup.appendChild(
+          el(doc, 'div', 'tm-omni-tag-section', row.kind === 'recent' ? l('creator.tags.recent', 'Recent') : l('creator.tags.all', 'All tags')),
+        );
+        lastKind = row.kind;
+      }
+      const isActive = idx === activeIdx;
+      if (row.kind === 'create') {
+        const btn = el(doc, 'button', 'tm-omni-tag-option tm-omni-tag-option--create' + (isActive ? ' tm-omni-tag-option--active' : ''));
+        btn.type = 'button';
+        btn.setAttribute('role', 'option');
+        btn.appendChild(el(doc, 'span', '', `＋ ${l('creator.tags.create', 'Create new tag')} `));
+        btn.appendChild(el(doc, 'b', 'tm-omni-tag-opt-name', `「${row.tag}」`));
+        wireOption(btn, row, idx);
+        popup.appendChild(btn);
+        return;
+      }
+      const isSelected = selectedTags.includes(row.tag);
+      const btn = el(
+        doc,
+        'button',
+        'tm-omni-tag-option' + (isActive ? ' tm-omni-tag-option--active' : '') + (isSelected ? ' tm-omni-tag-option--selected' : ''),
+      );
+      btn.type = 'button';
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      const name = el(doc, 'span', 'tm-omni-tag-opt-name');
+      const hit = new Set(row.indices);
+      for (let i = 0; i < row.tag.length; i++) {
+        if (hit.has(i)) name.appendChild(el(doc, 'mark', 'tm-omni-tag-mark', row.tag[i]));
+        else name.appendChild(doc.createTextNode(row.tag[i]));
+      }
+      btn.appendChild(name);
+      btn.appendChild(el(doc, 'span', 'tm-omni-tag-count', String(tagCount(row.tag))));
+      if (isSelected) btn.appendChild(el(doc, 'span', 'tm-omni-tag-check', '✓'));
+      wireOption(btn, row, idx);
+      popup.appendChild(btn);
+    });
+    if (!rows.length) {
+      popup.appendChild(el(doc, 'div', 'tm-omni-tag-empty', l('creator.tags.empty', 'No matching tags')));
+    }
+  };
+
+  const setOpen = (open: boolean) => {
+    popupOpen = open;
+    combobox.classList.toggle('tm-omni-combobox--open', open);
+    combobox.setAttribute('aria-expanded', open ? 'true' : 'false');
+    popup.style.display = open ? '' : 'none';
+    if (open) renderPopup();
+  };
+
+  const openPopup = () => {
+    if (!popupOpen) {
+      activeIdx = 0;
+      setOpen(true);
+    }
+  };
+
+  tagbox.addEventListener('click', () => {
+    openPopup();
+    tagInput.focus();
+  });
+  tagInput.addEventListener('focus', openPopup);
+  tagInput.addEventListener('input', () => {
+    activeIdx = 0;
+    setOpen(true);
+  });
+
   tagInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!popupOpen) {
+        openPopup();
+        return;
+      }
+      if (!rows.length) return;
+      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      activeIdx = (activeIdx + dir + rows.length) % rows.length;
+      renderPopup();
+      return;
+    }
     if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
-      addTagFromInput();
+      const parts = splitTagInput(tagInput.value || '');
+      if (parts.length > 1) {
+        // 逗号批量添加（一次贴入多个标签）
+        for (const p of parts) addTag(p);
+        tagInput.value = '';
+        activeIdx = 0;
+        renderPopup();
+        return;
+      }
+      if (!popupOpen) {
+        openPopup();
+        return;
+      }
+      const row = rows[activeIdx];
+      if (row) activateRow(row);
+      return;
+    }
+    if (e.key === 'Tab' && popupOpen && rows.length) {
+      e.preventDefault();
+      e.stopPropagation();
+      const row = rows[activeIdx];
+      if (row) activateRow(row);
+      return;
+    }
+    if (e.key === 'Backspace' && !tagInput.value && selectedTags.length) {
+      e.preventDefault();
+      removeTag(selectedTags[selectedTags.length - 1]);
+      activeIdx = 0;
+      renderPopup();
+      return;
+    }
+    if (e.key === 'Escape' && popupOpen) {
+      // 先关列表；列表已关时放行给弹窗级 Esc 关闭
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      return;
     }
   });
 
-  tagInput.addEventListener('blur', () => {
-    addTagFromInput();
-  });
-
-  tagSelect.addEventListener('change', () => {
-    const val = String(tagSelect.value || '').trim();
-    if (val) {
-      addTag(val);
-      tagSelect.value = '';
-      tagInput.focus();
-    }
-  });
+  // 点击 combobox 外关闭建议列表（随弹窗关闭注销）
+  let onDocPointerDown: ((e: any) => void) | null = null;
+  if (typeof doc.addEventListener === 'function') {
+    onDocPointerDown = (e: any) => {
+      const t = e && e.target;
+      if (t && typeof combobox.contains === 'function' && combobox.contains(t)) return;
+      setOpen(false);
+    };
+    doc.addEventListener('pointerdown', onDocPointerDown);
+  }
 
   renderTagPills();
 
@@ -418,6 +668,10 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
 
   const close = () => {
     cleanupEditors();
+    if (onDocPointerDown && typeof doc.removeEventListener === 'function') {
+      doc.removeEventListener('pointerdown', onDocPointerDown);
+      onDocPointerDown = null;
+    }
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
   };
 
@@ -475,6 +729,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
 
     if (draft) {
       cardFactory.commitCard(wiki, draft);
+      if (cardTags && cardTags.length) pushRecentTags(cardTags); // 记录最近使用（combobox 置顶展示）
       dom.showToast(doc, doc.body, `${l('creator.toast.success', 'Card created:')} ${draft.caption || draft.title}`, 'ok', 2500);
       opts.onSuccess?.(draft);
 
@@ -483,7 +738,9 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
         titleInput.value = '';
         selectedTags.length = 0;
         tagInput.value = '';
+        activeIdx = 0;
         renderTagPills();
+        renderPopup();
         if (qEditor) qEditor.setText('');
         if (aEditor) aEditor.setText('');
         if (qInput) qInput.value = '';

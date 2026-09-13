@@ -334,6 +334,105 @@ test('omni-creator: 标签支持已有下拉与手动输入并正确写入卡片
   assert.ok(createdCard.tags.includes('默认标签'), '包含预置标签');
 });
 
+test('omni-creator: Linear 风格标签 combobox —— 模糊过滤/键盘选中/创建行/退格删 pill/Esc 语义', () => {
+  const omni = mod('ui/components/omni-creator.js');
+  wiki.addTiddler({ title: 'TagComboboxT1', tags: ['算法', '数据结构', '软件架构'] });
+
+  const doc = {
+    createElement: (t) => fakeDocument.createElement(t),
+    createTextNode: (s) => fakeDocument.createTextNode(s),
+    body: fakeDocument.createElement('body'),
+    querySelector: () => null,
+  };
+  omni.openOmniCardModal(doc, wiki, {});
+
+  const byClass = (node, cls, out = []) => {
+    if (!node) return out;
+    if (String(node.className || '').includes(cls)) out.push(node);
+    for (const c of node.childNodes || []) byClass(c, cls, out);
+    return out;
+  };
+  const combobox = byClass(doc.body, 'tm-omni-combobox')[0];
+  const input = byClass(combobox, 'tm-omni-tag-input')[0];
+  const popup = byClass(combobox, 'tm-omni-tag-popup')[0];
+  const key = (k) => input.dispatchEvent({ type: 'keydown', key: k, preventDefault: () => {}, stopPropagation: () => {} });
+
+  // 模糊过滤：“构” 命中「软件架构」；无精确匹配出现创建行
+  input.value = '构';
+  input.dispatchEvent({ type: 'input' });
+  const optText = byClass(popup, 'tm-omni-tag-option').map((o) => collectText(o));
+  assert.ok(optText.some((t) => t.includes('软件架构')), '模糊命中已有标签');
+  assert.ok(optText.some((t) => t.includes('创建新标签') && t.includes('构')), '无精确匹配出现创建行');
+
+  // Enter 选中活动行 → pill 生成，列表保持打开（连续点选）
+  key('Enter');
+  assert.ok(byClass(combobox, 'tm-omni-tag-pill').some((p) => collectText(p).includes('软件架构')), 'Enter 选中生成 pill');
+  assert.ok(byClass(popup, 'tm-omni-tag-option').length > 0, '选中后列表保持打开');
+
+  // 创建行 → Enter 创建新标签 pill
+  input.value = '全新标签';
+  input.dispatchEvent({ type: 'input' });
+  key('Enter');
+  assert.ok(byClass(combobox, 'tm-omni-tag-pill').some((p) => collectText(p).includes('全新标签')), '创建行生成新标签 pill');
+
+  // Backspace 空输入删除末位 pill
+  key('Backspace');
+  assert.ok(!byClass(combobox, 'tm-omni-tag-pill').some((p) => collectText(p).includes('全新标签')), '退格删除末位 pill');
+
+  // Esc 先关建议列表（弹窗保留）；弹窗级 Esc 再关弹窗
+  input.dispatchEvent({ type: 'input' });
+  key('Escape');
+  assert.ok(doc.body.childNodes.some((n) => String(n.className).includes('tm-omni-creator-overlay')), 'Esc 只关列表，弹窗保留');
+  const modal = byClass(doc.body, 'tm-omni-creator-modal')[0];
+  modal.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault: () => {} });
+  assert.ok(!doc.body.childNodes.some((n) => String(n.className).includes('tm-omni-creator-overlay')), '再按 Esc 关闭弹窗');
+});
+
+test('omni-creator: 提交带标签卡片写入最近使用，重开弹窗空查询置顶展示', () => {
+  const omni = mod('ui/components/omni-creator.js');
+  const byClass = (node, cls, out = []) => {
+    if (!node) return out;
+    if (String(node.className || '').includes(cls)) out.push(node);
+    for (const c of node.childNodes || []) byClass(c, cls, out);
+    return out;
+  };
+  const doc = {
+    createElement: (t) => fakeDocument.createElement(t),
+    body: fakeDocument.createElement('body'),
+    querySelector: () => null,
+  };
+  omni.openOmniCardModal(doc, wiki, {
+    defaultType: 'qa',
+    defaultQuestion: '最近使用测试问题',
+    defaultAnswer: 'A',
+    defaultTags: ['机器学习'],
+  });
+  const submitBtn = byClass(doc.body, 'tm-card-modal-submit')[0];
+  submitBtn.dispatchEvent({ type: 'click' });
+
+  // 最近使用 state 落库（组件私有 $:/state）
+  const recent = wiki.getTiddlerText('$:/state/tidme/omni/recent-tags', '');
+  assert.ok(recent.includes('机器学习'), '提交后写入最近使用');
+
+  // 重开弹窗：空查询首分区为「最近使用」，首行为该标签
+  const doc2 = {
+    createElement: (t) => fakeDocument.createElement(t),
+    createTextNode: (s) => fakeDocument.createTextNode(s),
+    body: fakeDocument.createElement('body'),
+    querySelector: () => null,
+  };
+  omni.openOmniCardModal(doc2, wiki, {});
+  const combobox2 = byClass(doc2.body, 'tm-omni-combobox')[0];
+  const input2 = byClass(combobox2, 'tm-omni-tag-input')[0];
+  input2.dispatchEvent({ type: 'focus' });
+  const popup2 = byClass(combobox2, 'tm-omni-tag-popup')[0];
+  const sections = byClass(popup2, 'tm-omni-tag-section').map((s) => collectText(s));
+  assert.equal(sections[0], '最近使用', '首分区为最近使用');
+  const firstOpt = byClass(popup2, 'tm-omni-tag-option')[0];
+  assert.ok(collectText(firstOpt).includes('机器学习'), '最近使用标签置顶展示');
+  assert.ok(!collectText(firstOpt).includes('✓'), '重开未预选时无勾选标记（勾选只反映当前选中态）');
+});
+
 test('omni-creator: <$tidme-card-creator/> widget 在 TW 真实解析并渲染为 DOM 节点', () => {
   const container = fakeDocument.createElement('div');
   const parser = wiki.parseText('text/vnd.tiddlywiki', '<$tidme-card-creator/>');

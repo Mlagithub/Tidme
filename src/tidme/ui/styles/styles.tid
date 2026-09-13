@@ -742,20 +742,121 @@ type: text/css
 	color: #ef4444 !important;
 	background: rgba(239, 68, 68, 0.1) !important;
 }
-.tm-omni-tag-row {
+/* Linear 风格标签 combobox：内联 chips 输入框 + 建议弹出层（模糊过滤/最近使用/创建行） */
+.tm-omni-combobox {
+	position: relative !important;
+}
+.tm-omni-tagbox {
 	display: flex !important;
-	gap: 8px !important;
+	flex-wrap: wrap !important;
+	gap: 6px !important;
 	align-items: center !important;
+	padding: 6px 8px !important;
+	border: 1px solid var(--tm-border-strong, #cbd5e1) !important;
+	border-radius: 8px !important;
+	background: var(--tm-surface, #ffffff) !important;
+	cursor: text !important;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.tm-omni-combobox--open .tm-omni-tagbox {
+	border-color: var(--tm-primary, #2563eb) !important;
+	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+}
+.tm-omni-tagbox .tm-omni-tag-pills {
+	flex: none !important;
 }
 .tm-omni-tag-input {
 	flex: 1 !important;
-}
-.tm-omni-tag-select {
-	width: auto !important;
 	min-width: 140px !important;
-	max-width: 220px !important;
-	flex-shrink: 0 !important;
+	border: none !important;
+	outline: none !important;
+	background: transparent !important;
+	padding: 2px 0 !important;
+	box-shadow: none !important;
+	font-family: inherit !important;
+}
+.tm-omni-tag-popup {
+	display: none;
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	right: 0;
+	z-index: 60;
+	max-height: 240px;
+	overflow: auto;
+	background: var(--tm-surface, #ffffff);
+	border: 1px solid var(--tm-border-strong, #cbd5e1);
+	border-radius: 8px;
+	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+	padding: 4px;
+}
+.tm-omni-combobox--open .tm-omni-tag-popup {
+	display: block !important;
+}
+.tm-omni-tag-section {
+	padding: 6px 8px 2px !important;
+	font-size: 0.72em !important;
+	font-weight: 600 !important;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--tm-text-3, #94a3b8) !important;
+	user-select: none !important;
+}
+.tm-omni-tag-option {
+	display: flex !important;
+	align-items: center !important;
+	gap: 8px !important;
+	width: 100% !important;
+	padding: 6px 8px !important;
+	border: none !important;
+	background: transparent !important;
+	border-radius: 6px !important;
 	cursor: pointer !important;
+	font-size: 0.9em !important;
+	color: var(--tm-text-1, #0f172a) !important;
+	text-align: left !important;
+	font-family: inherit !important;
+}
+.tm-omni-tag-option--active {
+	background: var(--tm-surface-2, #eef2ff) !important;
+}
+.tm-omni-tag-option--selected .tm-omni-tag-opt-name {
+	color: var(--tm-primary, #2563eb) !important;
+	font-weight: 600 !important;
+}
+.tm-omni-tag-opt-name {
+	flex: 1 !important;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.tm-omni-tag-mark {
+	background: rgba(250, 204, 21, 0.45) !important;
+	color: inherit !important;
+	border-radius: 2px !important;
+	padding: 0 1px !important;
+}
+.tm-omni-tag-count {
+	font-size: 0.78em !important;
+	color: var(--tm-text-3, #94a3b8) !important;
+	flex: none !important;
+}
+.tm-omni-tag-check {
+	color: var(--tm-primary, #2563eb) !important;
+	font-weight: 700 !important;
+	flex: none !important;
+}
+.tm-omni-tag-option--create {
+	color: var(--tm-primary, #2563eb) !important;
+	font-weight: 500 !important;
+	border-top: 1px solid var(--tm-border, #e2e8f0) !important;
+	margin-top: 4px !important;
+}
+.tm-omni-tag-empty {
+	padding: 10px 8px !important;
+	font-size: 0.85em !important;
+	color: var(--tm-text-3, #94a3b8) !important;
+	text-align: center !important;
 }
 .tm-omni-fields-container {
 	display: flex !important;
