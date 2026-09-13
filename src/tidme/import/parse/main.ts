@@ -10,7 +10,7 @@ main.ts — 导入解析入口（浏览器版）
 import { contentFingerprint, makeDocId } from '$:/plugins/keepone/tidme/core/ids';
 import { chunkBook } from './chunker';
 import type { ChunkOptions } from './chunker';
-import { anchorBoundaries, collectBlocks, extractNavTree, extractNcxTree, flattenNcx, makeBreadcrumbResolver, readEpubBytes } from './epub';
+import { anchorBoundaries, collectBlocks, flattenNcx, makeBreadcrumbResolver, readEpubBytes } from './epub';
 import { decodeBytes, sniffFormat } from './ingest-text';
 import { smartMergeParagraphs } from './smart-merge';
 import { emitTiddlers, runSplit } from './split';
@@ -40,30 +40,24 @@ export interface ImportOptions extends ChunkOptions {
   folderOccupied?: (baseFolder: string) => string | null;
 }
 
-/** EPUB 主流程 */
+/** EPUB 主流程（container/OPF/nav+NCX/URI 解析委托 foliate-js，见 epub.ts 分工声明） */
 async function importEpubBytes(bytes: Uint8Array, fileName: string, options: ImportOptions): Promise<ImportResult> {
   const book = await readEpubBytes(bytes);
-  // EPUB3 nav.xhtml 优先，NCX 兜底（epub3-only 无 NCX 的书籍走 nav）
-  let ncxTree: import('./epub').NcxNode[] = [];
-  try {
-    ncxTree = await extractNavTree(book);
-  } catch { /* 解析失败回退 NCX */ }
-  if (!ncxTree.length) ncxTree = await extractNcxTree(book);
-  const resolveCrumb = makeBreadcrumbResolver(ncxTree, book.spine);
-  const flatNav = flattenNcx(ncxTree);
+  // book.toc = foliate 合并 nav/NCX 的目录树（href 已解码为 zip 条目名，天然与 spine 对齐）
+  const resolveCrumb = makeBreadcrumbResolver(book.toc, book.spine);
+  const flatNav = flattenNcx(book.toc);
 
   const files = [];
   for (let i = 0; i < book.spine.length; i++) {
     const href = book.spine[i].href;
-    const file = book.zip.file(href);
-    if (!file) continue;
-    const raw = await file.async('string');
-    let doc: Document;
+    let doc: Document | null = null;
     try {
-      doc = new DOMParser().parseFromString(raw, 'text/xml');
+      doc = await book.loadDocumentAt(i);
     } catch (err: any) {
-      throw new Error(`解析 ${href} 失败: ${err.message}`);
+      // foliate 对 XML 错误是抛异常（不静默）：带着文件名向上抛，导入 UI 显示错误行
+      throw new Error(`解析 ${href} 失败: ${err?.message || err}`);
     }
+    if (!doc) continue;
     smartMergeParagraphs(doc);
     const blocks = collectBlocks(doc);
 

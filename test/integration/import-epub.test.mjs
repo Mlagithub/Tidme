@@ -80,3 +80,47 @@ test('SM 优先级：runImport/runSplit 透传 priority（导入时批量设优�
   assert.ok(scards.length >= 1, '应有节卡');
   for (const c of scards) assert.equal(c['tidme.priority'], '92', '文本切分优先级透传');
 });
+
+test('EPUB3 语义结构（body > section 包装）不再静默导入 0 节卡（progit 回归）', async () => {
+  // Asciidoctor/Pandoc 等生成器把每章包在 <section epub:type="chapter"> 里；
+  // 旧 collectBlocks 只对 BLOCK_TAGS 下钻，包装层子树从未被访问 → 全书 0 节卡且无警告
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip();
+  zip.file('mimetype', 'application/epub+zip');
+  zip.file(
+    'META-INF/container.xml',
+    `<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/package.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`,
+  );
+  zip.file(
+    'OEBPS/package.opf',
+    `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">test-section-wrap</dc:identifier><dc:title>包装回归书</dc:title><dc:language>zh</dc:language></metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine><itemref idref="nav"/><itemref idref="c1"/></spine>
+</package>`,
+  );
+  zip.file(
+    'OEBPS/nav.xhtml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="ch1.xhtml">第一章 包装</a></li></ol></nav></body></html>`,
+  );
+  zip.file(
+    'OEBPS/ch1.xhtml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>
+<section epub:type="chapter"><h1>第一章 包装</h1><p>${'正文内容。'.repeat(200)}</p><h2>第一节</h2><p>${'小节内容。'.repeat(300)}</p></section>
+</body></html>`,
+  );
+  const bytes = new Uint8Array(await zip.generateAsync({ type: 'uint8array' }));
+
+  const r = await importBundle.runImport(bytes, 'wrapped.epub', {});
+  const sections = sectionsOf(r);
+  assert.ok(sections.length >= 2, `section 包装的书应产出多节卡（实际 ${sections.length}）`);
+  const crumbs = sections.map((x) => String(x['tidme.breadcrumb'] || ''));
+  assert.ok(crumbs.some((t) => t.includes('第一章')), '章节标题被识别（nav/h1）');
+  assert.ok(crumbs.some((t) => t.includes('第一节')), '小节标题被识别（section 内 h2）');
+});

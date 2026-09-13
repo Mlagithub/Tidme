@@ -9,6 +9,8 @@ master 分支走 semantic-release。
 - `src/tidme/core` 领域核心（调度/会话/牌组/统计/命名空间），纯逻辑 + wiki 注入
 - `src/tidme/import/parse` 导入解析（EPUB/Markdown → tiddler，辅助功能）；`import/widgets` 导入 UI
 - `src/tidme/review` 复习流（filters/buttons/ViewTemplate）；`manager` 卡片管理 UI；`editor` CodeMirror 集成
+- EPUB 格式层（container/OPF/nav+NCX/URI 解析）委托 vendored foliate-js（`parse/vendor/foliate/`，
+  MIT，升级时整文件替换并保留文件头 EventTarget shim）；块收集/切分是本插件自己的内容层
 - `src/zh-Hans` 语言包（内置主项目管理，产出 `$__tidme_languages_zh-Hans.json`）
 - `test/` 分层测试（见下）；`tools/` 构建脚本；`bin/` 构建产物（**git 跟踪，改源码后重建并提交**）
 
