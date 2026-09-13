@@ -10,6 +10,12 @@ widgets/pdfjs.ts — pdf.js CDN 按需加载器与浏览器适配
 const PDFJS_VERSION = '3.11.174';
 const PDFJS_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`;
 const PDFJS_WORKER_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
+// 中文书常用 CID 键控字体 + 预定义 CMap 编码（GBK/UCS2 等）：pdf.js 解码这类文本必须
+// 加载外部 CMap 二进制数据，缺配时文本解码为空——页面只剩图片、文本层 0 项（页面空白）。
+// standard_fonts 供非嵌入字体回退（缺失时该字体文本渲染不出）。cdnjs 不分发这两类数据，
+// 走 jsdelivr 的 npm 包目录，与 pdf.js 本体同为 CDN 按需加载（离线时 CMap 回退行为同旧版）。
+const PDFJS_CMAP_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
+const PDFJS_STD_FONTS_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
 
 let libOverride: any = null;
 
@@ -49,10 +55,17 @@ export function ensurePdfJs(): Promise<any> {
 }
 
 /** 字节 → pdf.js 文档对象。传副本：pdf.js 可能转移底层 buffer（detach），
- *  调用方（导入流程的 base64 编码）需要保留可用数据。 */
+ *  调用方（导入流程的 base64 编码）需要保留可用数据。
+ *  cMapUrl/cMapPacked/standardFontDataUrl：CID 字体编码解码与非嵌入字体回退所必需
+ *  （中文书页面空白的根因，见上方 URL 常量注释）。 */
 export async function loadPdfBytes(bytes: Uint8Array): Promise<any> {
   const lib = await ensurePdfJs();
-  return lib.getDocument({ data: bytes.slice() }).promise;
+  return lib.getDocument({
+    data: bytes.slice(),
+    cMapUrl: PDFJS_CMAP_URL,
+    cMapPacked: true,
+    standardFontDataUrl: PDFJS_STD_FONTS_URL,
+  }).promise;
 }
 
 /** 页面原始尺寸（scale=1 视口，缩放 fit 计算的基准） */
