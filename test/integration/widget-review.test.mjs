@@ -238,7 +238,13 @@ NEXT: {{{ [subfilter<filter_queue>first[]] }}}
 </$let>`;
   wiki.addTiddler({ title: 'StartStudySim', text: sim });
   const out = wiki.renderTiddler('text/html', 'StartStudySim');
-  assert.ok(out.includes('按钮队列测试卡'), 'nextTiddler 在按钮上下文能解析出在队卡');
+  // 同源断言：模板 first[] 的结果必须等于 JS 侧同一过滤器串的第一张。
+  // 不能断言"等于本用例刚建的卡"——默认牌组收录全库在队 item，更早用例的遗留卡
+  // 也在队列里，order_new 的 sortan 用 localeCompare（locale 取环境默认），
+  // CJK 标题在 zh 与 en/root 收集下顺序相反（CI 曾因此挂）。
+  const queueCards = [...wiki.filterTiddlers(fromOp[0])];
+  assert.ok(queueCards.length > 0, '默认牌组队列非空');
+  assert.ok(out.includes(queueCards[0]), `nextTiddler 在按钮上下文能解析出在队卡（首卡=${queueCards[0]}）`);
 });
 
 test('workflow: 开始学习 startGlobalLearning 直达默认牌组第一张在队卡', () => {

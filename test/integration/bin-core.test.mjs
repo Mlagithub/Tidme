@@ -105,20 +105,29 @@ test('server: splitSectionText LLM 二次切片且 100% 保持字数完全相同
 test('server: llm-client 是唯一网络层（超时 + 有界重试），语义切分不再自带 http 实现', async () => {
   const llm = mod('core/server/llm-client');
   assert.equal(typeof llm.callLLM, 'function', 'llm-client 暴露 callLLM');
-  // 永不 resolve 的注入 httpFn → 超时后失败（不再挂住导入任务）
-  const t0 = Date.now();
-  await assert.rejects(
-    () => llm.callLLM({ apiKey: 'k', timeoutMs: 30, retries: 0 }, 'prompt', () => new Promise(() => {})),
-    /超时/,
-  );
-  assert.ok(Date.now() - t0 < 3000, '在超时窗口内失败');
-  // 有界重试：失败 2 次后成功（retries=1 → 共 2 次调用）
-  let calls = 0;
-  const flaky = async () => {
-    calls++;
-    if (calls === 1) throw new Error('boom');
-    return { status: 200, data: JSON.stringify({ choices: [{ message: { content: '[]' } }] }) };
-  };
-  assert.equal(await llm.callLLM({ apiKey: 'k', retries: 1 }, 'p', flaky), '[]', '重试后成功取回 content');
-  assert.equal(calls, 2, '默认 1 次重试（有界）');
+  // 保活：本模块的超时与重试退避定时器全部 unref（服务端语义：导入任务不阻止进程
+  // 退出）。测试进程里这两类定时器若成为唯一挂起物，事件循环会清空、Node 在断言
+  // 完成前退出、用例被标记 cancelled（CI Node 22 曾如此）——保活定时器覆盖**整个
+  // 用例体**（超时竞态与 300ms 重试退避都在其中），结束时统一清理。
+  const keepAlive = setInterval(() => {}, 1000);
+  try {
+    // 永不 resolve 的注入 httpFn → 超时后失败（不再挂住导入任务）
+    const t0 = Date.now();
+    await assert.rejects(
+      () => llm.callLLM({ apiKey: 'k', timeoutMs: 30, retries: 0 }, 'prompt', () => new Promise(() => {})),
+      /超时/,
+    );
+    assert.ok(Date.now() - t0 < 3000, '在超时窗口内失败');
+    // 有界重试：失败 2 次后成功（retries=1 → 共 2 次调用）
+    let calls = 0;
+    const flaky = async () => {
+      calls++;
+      if (calls === 1) throw new Error('boom');
+      return { status: 200, data: JSON.stringify({ choices: [{ message: { content: '[]' } }] }) };
+    };
+    assert.equal(await llm.callLLM({ apiKey: 'k', retries: 1 }, 'p', flaky), '[]', '重试后成功取回 content');
+    assert.equal(calls, 2, '默认 1 次重试（有界）');
+  } finally {
+    clearInterval(keepAlive);
+  }
 });
