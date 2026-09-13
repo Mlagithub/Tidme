@@ -156,6 +156,61 @@ test('card-manager: 渲染视图过滤/树/批量工具条', () => {
   assert.ok(text.includes('小节乙'), '应含节');
 });
 
+test('card-manager: 行标题 caption 优先（散卡/文档卡不再显示泛化 breadcrumb 尾段）', () => {
+  // 散卡：breadcrumb 恒为 "standalone"——旧行标题行行同文，无法辨识
+  wiki.addTiddler({
+    title: 'Tidme/Decks/standalone/版本控制是一种记录C',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'cloze',
+    'tidme.deck': 'standalone',
+    'tidme.breadcrumb': 'standalone',
+    caption: '版本控制是一种记录…以便将',
+    state: '0',
+    due: '20261231000000000',
+    reps: '0',
+    lapses: '0',
+    stability: '0',
+    difficulty: '0',
+  });
+  // 文档派生卡：breadcrumb 尾段恒为泛化后缀 "Q&A"
+  wiki.addTiddler({
+    title: 'Tidme/Decks/书甲/P1-问答卡',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
+    'tidme.doc': '书甲doc',
+    'tidme.breadcrumb': `书甲${' › '}节乙 › Q&A`,
+    caption: '什么是版本控制？',
+    state: '0',
+    due: '20261231000000000',
+    reps: '0',
+    lapses: '0',
+    stability: '0',
+    difficulty: '0',
+  });
+  // 无 caption 的老卡：回退标题末段（仍可辨识），不再落泛化尾段
+  wiki.addTiddler({
+    title: 'Tidme/Decks/standalone/老卡slug',
+    'tidme.kind': 'item',
+    'tidme.subkind': 'qa',
+    'tidme.deck': 'standalone',
+    'tidme.breadcrumb': 'standalone',
+    state: '0',
+    due: '20261231000000000',
+    reps: '0',
+    lapses: '0',
+    stability: '0',
+    difficulty: '0',
+  });
+
+  const root = renderWidget(wiki, cardManager, 'card-manager');
+  const links = collectElementsByClass(root, 'tm-cm-link').map((a) => a.textContent || '');
+  assert.ok(links.includes('版本控制是一种记录…以便将'), '散卡行标题显示 caption');
+  assert.ok(links.includes('什么是版本控制？'), '文档卡行标题显示 caption');
+  assert.ok(links.includes('老卡slug'), '无 caption 回退标题末段');
+  assert.ok(!links.includes('standalone'), '不再出现泛化 "standalone" 行标题');
+  assert.ok(!links.includes('Q&A'), '不再出现泛化 "Q&A" 行标题');
+});
+
 test('card-manager: 批量选择交互与全选', () => {
   const root = renderWidget(wiki, cardManager, 'card-manager');
   const groupCbs = collectElementsByClass(root, 'tm-cm-group-cb');

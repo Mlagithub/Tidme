@@ -133,6 +133,20 @@ function crumbOf(c: Card): string {
   return String(c.fields['tidme.breadcrumb'] || c.title);
 }
 
+/**
+ * 行标题（树/列表共用的辨识文本）：caption 优先——每张卡构建时都写 caption
+ * （问题面摘要/挖空内容/摘录预览），是最能区分卡片的文本；caption 缺失（老卡/手造）
+ * 回退标题末段（slug 本身带语义）。此前一律取 breadcrumb 尾段：散卡恒为 "standalone"、
+ * 文档派生卡恒为 "Q&A"/"Cloze"/"Extract"，行行同文无从辨识。
+ * breadcrumb 本身是层级结构键（分组/缩进/对齐匹配用），口径不变，仅改展示。
+ */
+function rowTitleOf(c: Card): string {
+  const cap = String(c.fields.caption || '').trim();
+  if (cap) return cap;
+  const t = String(c.title || '');
+  return t.slice(t.lastIndexOf('/') + 1) || t;
+}
+
 /** 视图判定。
  *  leech 视图的阈值按卡所属牌组的 leech_threshold（多牌组取最小），
  *  与 repeat.tid 渲染期触发判定同源——曾写死 core 默认值 8，牌组改过阈值后视图与触发脱节。 */
@@ -448,7 +462,7 @@ function buildRowBase(ctx: Ctx, c: Card, cb: HTMLInputElement): {
   // 混合分值（与"混合"排序同源 = scheduler.priorityMixedScore）；仅复习卡有意义，其余显示 '—'
   const reviewLike = String(c.fields.state || '0') === '2' || c.fields.due !== undefined;
   const mixed = el(doc, 'span', 'tm-cm-mixed', reviewLike ? String(Math.round(sched.priorityMixedScore(c.fields))) : '—');
-  const link = el(doc, 'a', 'tc-tiddlylink tm-cm-link', String(c.fields['tidme.breadcrumb'] || c.title).split(ns.CRUMB_SEP).pop() || c.title);
+  const link = el(doc, 'a', 'tc-tiddlylink tm-cm-link', rowTitleOf(c));
   link.href = '#';
   link.title = crumbOf(c);
   link.addEventListener('click', (e: Event) => {
