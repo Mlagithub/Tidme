@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/Mlagithub/Tidme/compare/v1.0.1...v1.1.0) (2026-09-13)
+
+
+### Features
+
+* 新建卡片时支持对标 Linear 的标签选择器 ([d18282d](https://github.com/Mlagithub/Tidme/commit/d18282d4cdae8ce944ae75173819000dd26b63c3))
+
 ## [1.0.1](https://github.com/Mlagithub/Tidme/compare/v1.0.0...v1.0.1) (2026-09-13)
 
 
