@@ -73,6 +73,15 @@ export function fakeElement(tag = 'div') {
       },
       toggle() {},
     },
+    // 真实 contains 语义：自身或后代返回 true（指针归属判定等依赖）
+    contains(node) {
+      let n = node;
+      while (n) {
+        if (n === this) return true;
+        n = n.parentNode;
+      }
+      return false;
+    },
     hasAttribute() {
       return false;
     },
@@ -84,8 +93,21 @@ export function fakeElement(tag = 'div') {
       return [];
     },
     setAttributeNS() {},
+    removeAttribute(k) {
+      delete this.attributes[k];
+    },
     getBoundingClientRect() {
       return { top: 0, left: 0 };
+    },
+    // textarea 编辑操作（编辑器插入挖空等）：拼接 value。
+    // 注意与真实 DOM 的差异：真实 'select' 保留模式会把选区设为插入段，这里固定折叠到
+    // 插入段末尾（生产 widget 插入后显式折叠选区，行为一致）；若未来测试依赖 'select'
+    // 保留语义，需先扩展此处而非在生产代码里迁就
+    setRangeText(replacement, start, end) {
+      const v = String(this.value || '');
+      this.value = v.slice(0, start) + replacement + v.slice(end);
+      this.selectionStart = start + String(replacement).length;
+      this.selectionEnd = start + String(replacement).length;
     },
     focus() {},
     scrollIntoView() {},

@@ -369,6 +369,7 @@ rl.resumetip: Start from read point or first pending section
 rl.nomaterialstodelete: No reading materials to delete.
 pdf/loading-pdfjs: Loading pdf.js...
 pdf/page-prefix: p.
+pdf/cmap-offline-hint: Text cannot be decoded (font CMap data needs network access) — pages may render as images only
 pdf/scanned-hint-ocr: Scanned page (no text layer) — Click "OCR" in toolbar to recognize text
 pdf/scanned-hint-settings: Scanned page (no text layer) — Enable OCR in Settings > PDF & OCR to recognize text
 pdf/ocr-no-key: OCR API key not configured (Settings > PDF & OCR)
@@ -573,6 +574,7 @@ settings.ocr.model: OCR Model Name
 settings.ocr.baseurl: OCR Base URL
 settings.ocr.apikey: OCR API Key
 read.zoom.auto: Automatic Zoom
+read.zoom.tip: Automatic Zoom fills width but never exceeds 100%; Fit Page also shrinks to fit page height
 read.zoom.fitpage: Fit Page
 read.zoom.fitwidth: Fit Width
 read.zoom.actual: Actual Size

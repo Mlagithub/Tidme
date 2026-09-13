@@ -369,6 +369,7 @@ rl.resumetip: 从续读点或第一张待读卡开始
 rl.nomaterialstodelete: 没有可删除的阅读材料（本书只剩摘录/知识卡，已全部保留）。
 pdf/loading-pdfjs: 正在加载 pdf.js…
 pdf/page-prefix: 第
+pdf/cmap-offline-hint: 文本无法解码（字体 CMap 数据需要联网获取）——页面可能仅以图片显示
 pdf/scanned-hint-ocr: 扫描页（无文本层）——点工具栏「OCR」识别文字
 pdf/scanned-hint-settings: 扫描页（无文本层）——设置页开启「PDF 与 OCR」后可识别文字
 pdf/ocr-no-key: OCR 未配置 API Key（设置 → PDF 与 OCR）
@@ -573,6 +574,7 @@ settings.ocr.model: OCR 模型名称
 settings.ocr.baseurl: OCR 接口地址 (Base URL)
 settings.ocr.apikey: OCR 密钥 (API Key)
 read.zoom.auto: 自动缩放
+read.zoom.tip: 「自动缩放」宽度铺满但不超过原始大小；「适合页面」还会缩小以适配页面高度
 read.zoom.fitpage: 适合页面
 read.zoom.fitwidth: 适合页宽
 read.zoom.actual: 实际大小

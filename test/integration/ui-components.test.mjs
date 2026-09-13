@@ -357,17 +357,26 @@ test('omni-creator: Linear 风格标签 combobox —— 模糊过滤/键盘选�
   const popup = byClass(combobox, 'tm-omni-tag-popup')[0];
   const key = (k) => input.dispatchEvent({ type: 'keydown', key: k, preventDefault: () => {}, stopPropagation: () => {} });
 
-  // 模糊过滤：“构” 命中「软件架构」；无精确匹配出现创建行
-  input.value = '构';
+  // 模糊过滤：“软件” 唯一命中「软件架构」（不用“构”：软件架构/数据结构同分，
+  // tie-break 之外的断言不得依赖平台相关的碰撞排序）；无精确匹配出现创建行
+  input.value = '软件';
   input.dispatchEvent({ type: 'input' });
   const optText = byClass(popup, 'tm-omni-tag-option').map((o) => collectText(o));
   assert.ok(optText.some((t) => t.includes('软件架构')), '模糊命中已有标签');
-  assert.ok(optText.some((t) => t.includes('创建新标签') && t.includes('构')), '无精确匹配出现创建行');
+  assert.ok(!optText.some((t) => t.includes('数据结构')), '不含无关标签');
 
   // Enter 选中活动行 → pill 生成，列表保持打开（连续点选）
   key('Enter');
   assert.ok(byClass(combobox, 'tm-omni-tag-pill').some((p) => collectText(p).includes('软件架构')), 'Enter 选中生成 pill');
   assert.ok(byClass(popup, 'tm-omni-tag-option').length > 0, '选中后列表保持打开');
+
+  // “构” 多标签命中 + 无精确匹配 → 创建行（不依赖同分命中的排列顺序）
+  input.value = '构';
+  input.dispatchEvent({ type: 'input' });
+  const multiText = byClass(popup, 'tm-omni-tag-option').map((o) => collectText(o));
+  assert.ok(multiText.some((t) => t.includes('软件架构')) && multiText.some((t) => t.includes('数据结构')), '多标签同时命中');
+  assert.ok(multiText.some((t) => t.includes('创建新标签') && t.includes('构')), '无精确匹配出现创建行');
+  input.value = '';
 
   // 创建行 → Enter 创建新标签 pill
   input.value = '全新标签';
@@ -431,6 +440,44 @@ test('omni-creator: 提交带标签卡片写入最近使用，重开弹窗空查
   const firstOpt = byClass(popup2, 'tm-omni-tag-option')[0];
   assert.ok(collectText(firstOpt).includes('机器学习'), '最近使用标签置顶展示');
   assert.ok(!collectText(firstOpt).includes('✓'), '重开未预选时无勾选标记（勾选只反映当前选中态）');
+});
+
+test('omni-creator: 挖空一次多挖 —— 插入自动编号 + 提交生成兄弟卡家族', () => {
+  const omni = mod('ui/components/omni-creator.js');
+  const byClass2 = (node, cls, out = []) => {
+    if (!node) return out;
+    if (String(node.className || '').includes(cls)) out.push(node);
+    for (const c of node.childNodes || []) byClass2(c, cls, out);
+    return out;
+  };
+  const doc = {
+    createElement: (t) => fakeDocument.createElement(t),
+    createTextNode: (s) => fakeDocument.createTextNode(s),
+    body: fakeDocument.createElement('body'),
+    querySelector: () => null,
+  };
+  omni.openOmniCardModal(doc, wiki, { defaultType: 'cloze' });
+
+  // 插入按钮自动编号：连续两次插入得到 c1、c2
+  const textarea = byClass2(doc.body, 'tm-omni-cloze-textarea')[0];
+  const insertBtn = byClass2(doc.body, 'tm-omni-btn-sm').find((b) => collectText(b).includes('插入挖空'));
+  assert.ok(insertBtn, '插入挖空按钮存在');
+  insertBtn.dispatchEvent({ type: 'click' });
+  insertBtn.dispatchEvent({ type: 'click' });
+  assert.ok(textarea.value.includes('"c1"') && textarea.value.includes('"c2"'), `插入自动编号 c1/c2（实际 ${textarea.value}）`);
+
+  // 提交：按挖空 id 拆成兄弟卡家族（笔记 + 两张卡）
+  textarea.value = '测试<<C "文本" "c1" "">>太长了<<C "个挖" "c2" "">>空支持吗？';
+  const submitBtn = byClass2(doc.body, 'tm-card-modal-submit')[0];
+  submitBtn.dispatchEvent({ type: 'click' });
+
+  const notes = wiki.filterTiddlers('[all[shadows+tiddlers]has[tidme.cloze-note]]');
+  const noteTitle = [...notes].pop();
+  assert.ok(noteTitle, '笔记 tiddler 落库');
+  const siblings = [...wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${noteTitle}]]`)];
+  assert.equal(siblings.length, 2, '两挖 → 两张兄弟卡');
+  const captions = siblings.map((t) => String(wiki.getTiddler(t).fields.caption));
+  assert.ok(captions.some((c) => c.includes('（c1）')) && captions.some((c) => c.includes('（c2）')), 'caption 标注空号');
 });
 
 test('omni-creator: <$tidme-card-creator/> widget 在 TW 真实解析并渲染为 DOM 节点', () => {

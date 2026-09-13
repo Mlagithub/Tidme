@@ -348,27 +348,27 @@ export interface StandaloneCardOptions {
 /** 独立制卡「散卡桶 / standalone」的内部标识（omni-creator 下拉 value 与此共用同一来源） */
 export const STANDALONE_DECK_TOKEN = '__standalone__';
 
-/** 全局独立卡片构建（无需依附特定阅读材料）。kind 由模板决定，归属于指定牌组或独立卡桶 */
-export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Record<string, any> {
-  const deck = (opts.deck || STANDALONE_DECK_TOKEN).trim();
-  const lower = deck.toLowerCase();
-  const isStandalone = !deck ||
-    deck === STANDALONE_DECK_TOKEN ||
+/** 散卡牌组目录解析（buildStandaloneCard / buildClozeFamily 共用）：别名归一 + 展示名 */
+function standaloneDeck(deck?: string): { deckDir: string; deckName: string } {
+  const d = (deck || STANDALONE_DECK_TOKEN).trim();
+  const lower = d.toLowerCase();
+  const isStandalone = !d ||
+    d === STANDALONE_DECK_TOKEN ||
     lower === 'standalone' ||
-    deck === '散卡' ||
-    deck === ns.NS_DECKS_STANDALONE ||
-    deck === ns.DECK_PREFIX + 'standalone' ||
-    deck === 'Tidme/Decks/散卡' ||
-    deck === ns.DECK_PREFIX + '散卡';
-  const deckDir = isStandalone ? ns.NS_DECKS_STANDALONE : `Tidme/Decks/${deck}`;
+    d === '散卡' ||
+    d === ns.NS_DECKS_STANDALONE ||
+    d === ns.DECK_PREFIX + 'standalone' ||
+    d === 'Tidme/Decks/散卡' ||
+    d === ns.DECK_PREFIX + '散卡';
+  const deckDir = isStandalone ? ns.NS_DECKS_STANDALONE : `Tidme/Decks/${d}`;
   // tidme.deck/breadcrumb 落展示名：独立卡桶不落内部哨兵 token
-  const deckName = isStandalone ? String(ns.NS_DECKS_STANDALONE).slice(String(ns.NS_DECKS).length) : deck;
+  const deckName = isStandalone ? String(ns.NS_DECKS_STANDALONE).slice(String(ns.NS_DECKS).length) : d;
+  return { deckDir, deckName };
+}
 
-  // 智能标题基座
-  let slug = '';
-  if (opts.title) {
-    slug = paths.slugify(opts.title);
-  }
+/** 散卡 slug 基座（buildStandaloneCard / buildClozeFamily 共用）：标题优先，缺省按类型取内容前 20 字 */
+function standaloneSlugOf(opts: StandaloneCardOptions): string {
+  let slug = opts.title ? paths.slugify(opts.title) : '';
   if (!slug) {
     if (opts.type === 'qa') {
       slug = paths.slugify(opts.question?.slice(0, 20) || '') || 'QA';
@@ -378,7 +378,14 @@ export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Rec
       slug = paths.slugify(opts.conceptContent?.slice(0, 20) || '') || 'Concept';
     }
   }
+  return slug;
+}
 
+/** 全局独立卡片构建（无需依附特定阅读材料）。kind 由模板决定，归属于指定牌组或独立卡桶 */
+export function buildStandaloneCard(wiki: any, opts: StandaloneCardOptions): Record<string, any> {
+  const { deckDir, deckName } = standaloneDeck(opts.deck);
+
+  const slug = standaloneSlugOf(opts);
   const baseTitle = paths.joinPath(deckDir, slug || 'Card');
   const title = titleMod.freeTitle(wiki, baseTitle, opts.pending);
 
@@ -442,6 +449,167 @@ export function commitCard(wiki: any, draft: Record<string, any> | null): boolea
   wiki.addTiddler(draft);
   session.prepareCardFold(wiki, draft.title);
   return true;
+}
+
+// ---------- 挖空家族（Anki 式一次多挖 → 多张兄弟卡） ----------
+
+/** 解析 <<C "text" "id" "show">> 宏的参数（wikitext 引号串，支持 \" 转义）。
+ *  约束：只识别引号参数形态——本仓库所有产宏入口（omni-creator 插入按钮 / 编辑器
+ *  「Cloze 成卡」/ 文档挖空流）都产引号参数；非引号形态（如 <<C 裸词>>）会静默漏解析、
+ *  多挖判定回落为单卡，行为保守可接受。 */
+function parseClozeMacros(content: string): Array<{ text: string; id: string; raw: string; start: number; end: number }> {
+  const out: Array<{ text: string; id: string; raw: string; start: number; end: number }> = [];
+  const re = /<<C\s+("(?:[^"\\]|\\.)*")(?:\s+("(?:[^"\\]|\\.)*"))?(?:\s+("(?:[^"\\]|\\.)*"))?\s*>>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(String(content || ''))) !== null) {
+    const unescape = (s?: string) => (s === undefined ? '' : s.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+    out.push({
+      text: unescape(m[1]),
+      id: m[2] ? unescape(m[2]) : 'default',
+      raw: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+    });
+  }
+  return out;
+}
+
+/** 按首次出现顺序解析挖空 id（去重）——多挖判据与兄弟卡编号的唯一产地 */
+export function parseClozeIds(content: string): string[] {
+  const ids: string[] = [];
+  for (const m of parseClozeMacros(content)) {
+    if (!ids.includes(m.id)) ids.push(m.id);
+  }
+  return ids;
+}
+
+/** 正文下一个可用挖空 id：已有 cN 取 max+1，否则 c1（编辑器/弹窗插入按钮自动编号） */
+export function nextClozeId(content: string): string {
+  let max = 0;
+  for (const id of parseClozeIds(content)) {
+    const m = /^c(\d+)$/.exec(id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `c${max + 1}`;
+}
+
+/** 挖空正文的纯文本视图（全部宏还原为挖空原文；还原 \" 转义） */
+export function clozePlainText(content: string): string {
+  let out = '';
+  let pos = 0;
+  for (const m of parseClozeMacros(String(content || ''))) {
+    out += String(content).slice(pos, m.start) + m.text;
+    pos = m.end;
+  }
+  out += String(content || '').slice(pos);
+  return out;
+}
+
+export interface ClozeFamilyOptions extends StandaloneCardOptions {
+  clozeContent?: string;
+}
+
+export interface ClozeFamily {
+  /** 笔记 tiddler（全挖空原文的家；无 tidme.kind → 不进队列/管理器卡片列表）。单挖时为 null */
+  note: Record<string, any> | null;
+  /** 兄弟卡草稿（每挖一张；单挖时长度 1，与 buildStandaloneCard 产物同形态） */
+  cards: Record<string, any>[];
+}
+
+/**
+ * 挖空家族构建（对标 Anki：一次多挖生成多张兄弟卡，每张只考一个空）：
+ * - 单挖 / 无宏 → 与 buildStandaloneCard 单卡完全同形态（零迁移成本）
+ * - 多挖 → 一张笔记 tiddler（title = 基名，持有完整原文）+ N 张兄弟卡：
+ *   · 兄弟卡 tidme.parent 统一指向笔记 → 挂进现有 findSiblings/buryCards 兄弟搁置调度
+ *     （评分一侧的 bury 由 core/grade 按 readBurySiblings 配置自动触发，无需新调度代码）
+ *   · 每张卡正文只保留自己的 <<C>>，其余挖空还原为纯文本（Anki：他空示文，本空作答）
+ *   · title = 基名 (cN)、caption = 纯文本预览 +（cN）——浏览器/管理器中可分辨兄弟
+ * @param pending 本批次已 build 但尚未落库的 title（连建制卡等窗口用，见 core/title） */
+export function buildClozeFamily(wiki: any, opts: ClozeFamilyOptions): ClozeFamily {
+  const ids = parseClozeIds(opts.clozeContent || '');
+  if (ids.length <= 1) {
+    return { note: null, cards: [buildStandaloneCard(wiki, { ...opts, type: 'cloze' })] };
+  }
+  const { deckDir, deckName } = standaloneDeck(opts.deck);
+  const slug = standaloneSlugOf(opts);
+  const content = String(opts.clozeContent || '');
+  const macros = parseClozeMacros(content);
+
+  const pending = new Set<string>(opts.pending ? [...opts.pending] : []);
+  const noteTitle = titleMod.freeTitle(wiki, paths.joinPath(deckDir, slug || 'Card'), pending);
+  pending.add(noteTitle);
+
+  const plain = clozePlainText(content);
+  const baseCaption = (opts.title ? opts.title : plain.slice(0, 40) || 'Cloze Card').trim();
+
+  const cards = ids.map((id) => {
+    // 本卡只保留自己的宏，其余挖空还原为纯文本
+    let text = '';
+    let pos = 0;
+    for (const m of macros) {
+      const seg = content.slice(pos, m.start);
+      text += seg + (m.id === id ? m.raw : m.text);
+      pos = m.end;
+    }
+    text += content.slice(pos);
+    const title = titleMod.freeTitle(wiki, paths.joinPath(deckDir, `${slug} (${id})`), pending);
+    pending.add(title);
+    return {
+      title,
+      type: 'text/vnd.tiddlywiki',
+      caption: `${baseCaption}（${id}）`,
+      text,
+      ...schema.initialFsrsFields(new Date()),
+      revision: '0',
+      'tidme.deck': deckName,
+      'tidme.kind': 'item',
+      'tidme.subkind': 'cloze',
+      'tidme.parent': noteTitle,
+      'tidme.breadcrumb': deckName,
+      'tidme.priority': String(sched.normalizePriority(opts.priority)),
+      ...(Array.isArray(opts.tags) && opts.tags.length ? { tags: opts.tags } : {}),
+    };
+  });
+
+  const note = {
+    title: noteTitle,
+    type: 'text/vnd.tiddlywiki',
+    text: content,
+    'tidme.deck': deckName,
+    'tidme.cloze-note': 'yes',
+  };
+  return { note, cards };
+}
+
+/** 挖空家族统一写库口：先整体校验全部兄弟卡字段契约（任一失败即抛错、不写任何
+ *  tiddler——避免"笔记 + 部分卡"的残缺家族），再笔记直写（无卡片字段不走断言）、
+ *  兄弟卡逐张走 commitCard。
+ *  @returns 已落库的兄弟卡 title 列表 */
+export function commitClozeFamily(wiki: any, family: ClozeFamily): string[] {
+  if (!family) return [];
+  for (const card of family.cards || []) schema.assertCardFields(card);
+  if (family.note && family.note.title) wiki.addTiddler(family.note);
+  const titles: string[] = [];
+  for (const card of family.cards || []) {
+    if (commitCard(wiki, card)) titles.push(card.title);
+  }
+  return titles;
+}
+
+/** 兄弟卡删除后的孤儿笔记清扫：同 parent 兄弟清零时连带删除 cloze-note 笔记
+ *  （Anki 语义：最后一张卡删除时笔记随之消失，不留孤儿）。
+ *  parent title 含过滤器元字符时跳过清扫——与 findSiblings 同政策：宁可孤儿不误删。 */
+export function sweepOrphanClozeNote(wiki: any, parentTitle: string): boolean {
+  if (!wiki || !parentTitle) return false;
+  const pf = wiki.getTiddler(parentTitle)?.fields;
+  if (!pf || pf['tidme.cloze-note'] !== 'yes') return false;
+  if (!ns.isFilterSafeTitle(parentTitle)) return false;
+  const rest = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${parentTitle}]]`);
+  if (rest && rest.length === 0) {
+    wiki.deleteTiddler(parentTitle);
+    return true;
+  }
+  return false;
 }
 
 // ---------- SM 'Delete processed text'：加工清理（制卡闭环的另一半） ----------

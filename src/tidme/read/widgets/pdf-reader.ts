@@ -17,7 +17,9 @@ widgets/pdf-reader.ts — PDF 阅读器（tidme-pdf-reader）
 - 翻页/页码跳转/续读点：打开时优先恢复续读点绝对页码（不切分，阅读连续跨节）；
   $:/state/tidme-pdf/page/<docId> 有两个写入方：「回原文」一次性页码交接（消费即清理）与
   本阅读器每次翻页的持久保存；加载期消费时才删除（经实有页数校验）。
-  页码/续读点一律记录单元首页；连续滚动模式下当前单元跟随滚动位置
+  页码/续读点以单元首页为基准（双页单元内跳转到成员页时原样持久化该页码，
+  恢复期经 unitStart 归一到单元首页——页码可指单元内任一页，导航后落首页）；
+  连续滚动模式下当前单元跟随滚动位置
 - 视图偏好（布局/滚动/缩放）持久化在 $:/state/tidme-pdf/view（全局共享，跨文档记忆）
 - 框选图片制卡：拖拽矩形 → 裁剪 PNG → buildQA 图片问答卡（openCardModal 填答案），逐页盒生效
 - OCR 本页：扫描页（无文本层）→ 页面 PNG → LLM-OCR（设置页启用）→ Markdown 文本，
@@ -80,6 +82,11 @@ const VIEW_ICONS: Record<string, string> = {
 
 const resolvePdfContext = pdfOps.resolvePdfContext;
 
+// ---------- 滚轮翻页手感（页面滚动模式） ----------
+const WHEEL_FLIP_THRESHOLD = 100; // 单次手势累计像素阈值（≈一个滚轮齿）
+const WHEEL_COOLDOWN_MS = 250; // 翻页后冷却窗：窗内增量丢弃（抑制触摸板惯性连翻）
+const WHEEL_GESTURE_GAP_MS = 600; // 距上次滚轮超过该间隔视为新手势，累计清零
+
 /** 获取 PDF 字节数组（支持 base64、服务端懒加载 _is_skinny 轮询等待、_canonical_uri fetch） */
 async function loadPdfBytesWithWait(
   wiki: any,
@@ -140,6 +147,9 @@ function makeReader(): any {
     _menuAnchor: any = null;
     _menuEl: any = null;
     _menuCloser: (() => void) | null = null;
+    /** 菜单键盘导航状态：可见项按钮缓存 + 活动下标 */
+    _menuBtns: any[] = [];
+    _menuActiveIdx = 0;
     _selBtn: any = null;
     _fsBtn: any = null;
     _pdf: any = null;
@@ -150,8 +160,6 @@ function makeReader(): any {
     _loadSeq: number = 0;
     /** destroy 置位：销毁后防抖定时器不再落库 */
     _destroyed: boolean = false;
-    /** 是否已计入模块级挂载数（refreshSelf 重建防重复计数） */
-    _counted: boolean = false;
     _selMode: boolean = false;
     _selStart: { x: number; y: number } | null = null;
     _pdfTitle: string = '';
@@ -178,8 +186,9 @@ function makeReader(): any {
     _ocrEnabled = false;
     _onFsChange: () => void = () => {};
     _onDocPointerDown: (e: any) => void = () => {};
-    _onDocKeydown: (e: KeyboardEvent) => void = () => {};
     _onViewerWheel: (e: WheelEvent) => void = () => {};
+    /** 视图偏好持久化防抖（缩放 ± 连按不逐键写库） */
+    _persistViewStateTimer: any = null;
     _savePageTimer: any = null;
     _startTime: number = 0;
 
@@ -248,6 +257,7 @@ function makeReader(): any {
       this._zoomSel = doc.createElement('select');
       this._zoomSel.className = 'tm-pdf-zoom';
       this._zoomSel.setAttribute('aria-label', lingoMod.lingo(wiki, 'read.zoom', 'Zoom'));
+      this._zoomSel.title = lingoMod.lingo(wiki, 'read.zoom.tip', 'Automatic Zoom caps at 100%; Fit Page also shrinks to fit page height');
       for (
         const opt of [
           { value: 'auto', label: lingoMod.lingo(wiki, 'read.zoom.auto', 'Automatic Zoom') },
@@ -369,7 +379,7 @@ function makeReader(): any {
       this._viewer.addEventListener('scroll', () => this._onViewerScroll());
       // 滚轮：页面滚动模式翻单元（阈值累计 + 冷却抑制触摸板惯性）；水平滚动模式纵向滚轮
       // 转横向；连续滚动族（垂直/无限/平铺）原生滚动即支持。页面滚动下放大超视口时
-      // 仍走原生滚动看页内细节，到边不再翻页。
+      // 仍走原生滚动看页内细节，到边不再翻页。元素级 wheel 监听默认非 passive，无需 options。
       this._onViewerWheel = (e: WheelEvent) => {
         if (!this._viewer) return;
         const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY; // 行模式（Firefox）换算像素
@@ -386,23 +396,24 @@ function makeReader(): any {
           this._viewer.scrollLeft += dy;
         }
       };
-      this._viewer.addEventListener('wheel', this._onViewerWheel, { passive: false } as any);
-      // 翻页/缩放快捷键全局生效（桌面阅读器习惯，免聚焦）；编辑控件聚焦时让路
-      this._onDocKeydown = (e: KeyboardEvent) => {
-        const target = (e && e.target) as any;
-        const tag = String(target?.tagName || '').toUpperCase();
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
-        this._onKeydown(e);
-      };
+      this._viewer.addEventListener('wheel', this._onViewerWheel);
+      // 键盘仲裁：document 级 keydown 全模块只绑一次（bindGlobalKeyboard），分发给
+      // activeReader —— 多实例不再双跳；本实例持有焦点归属（见 _onDocPointerDown）。
+      bindGlobalKeyboard(doc);
       this._onDocPointerDown = (e: any) => {
-        if (!this._menuCloser) return;
         const target = e && e.target;
+        const insideRoot = target && this._root && typeof this._root.contains === 'function' && this._root.contains(target);
+        if (insideRoot) {
+          activeReader = this; // 点击进入本阅读器 → 获得键盘归属
+        } else if (activeReader === this) {
+          activeReader = null; // 点击其它区域 → 释放归属（阅读条栏方向键恢复）
+        }
+        if (!this._menuCloser) return;
         if (target && this._menuAnchor && typeof this._menuAnchor.contains === 'function' && this._menuAnchor.contains(target)) return;
         this._closeMenu();
       };
       if (typeof doc.addEventListener === 'function') {
         doc.addEventListener('pointerdown', this._onDocPointerDown);
-        doc.addEventListener('keydown', this._onDocKeydown);
       }
 
       // 全屏切换后视口尺寸变化 → fit 重算（destroy 时随 widget 一并注销）
@@ -418,11 +429,8 @@ function makeReader(): any {
 
       parent.insertBefore(root, nextSibling);
       this.domNodes.push(root);
-      // 挂载计数（refreshSelf 重建时先经 _cleanup 减回，保持平衡）
-      if (!this._counted) {
-        this._counted = true;
-        mountedReaders++;
-      }
+      // 打开即持有键盘归属（最新打开/重建者获胜；点击归属转移见 _onDocPointerDown）
+      activeReader = this;
 
       void this._loadPdf(range);
     }
@@ -486,7 +494,8 @@ function makeReader(): any {
           this._wireReattach();
           return;
         }
-        const pdf = await pdfjsMod.loadPdfBytes(bytes);
+        // 阅读器路径：base64 解码产物用后即弃，免全量拷贝（大书省一次 28MB 级复制）
+        const pdf = await pdfjsMod.loadPdfBytes(bytes, { keepBytes: false });
         if (seq !== this._loadSeq) {
           // 过期加载：立即销毁新拿到的文档，避免 pdfjs 文档对象泄漏
           try {
@@ -553,9 +562,15 @@ function makeReader(): any {
         await Promise.all(tasks);
         if (this._destroyed || seq !== this._loadSeq) return;
         if (tasks.length) {
-          this._applySizes();
-          if (this._scroll === 'page') void this._renderCurrent();
-          else this._renderSweep();
+          // 增量：scale 由当前页尺寸决定（首批已就位），后续批次只补本批盒尺寸，
+          // 不再每批全量重排（大文档 O(n²/batch) 样式写）；新盒渲染仍由 want/IO 驱动
+          const batchPages = new Set<number>();
+          for (let q = p; q <= Math.min(p + BATCH - 1, n); q++) batchPages.add(q);
+          this._applySizes(batchPages);
+          for (const q of batchPages) {
+            const box = this._sheets.get(q);
+            if (box && box.want) void this._renderSheet(box, false);
+          }
         }
       }
     }
@@ -638,6 +653,10 @@ function makeReader(): any {
         clearTimeout(this._scrollTimer);
         this._scrollTimer = null;
       }
+      if (this._persistViewStateTimer) {
+        clearTimeout(this._persistViewStateTimer);
+        this._persistViewStateTimer = null;
+      }
       if (this._io) {
         this._io.disconnect();
         this._io = null;
@@ -647,14 +666,7 @@ function makeReader(): any {
         this.document.removeEventListener('pointerdown', this._onDocPointerDown);
         this._onDocPointerDown = () => {};
       }
-      if (this._onDocKeydown && this.document && typeof this.document.removeEventListener === 'function') {
-        this.document.removeEventListener('keydown', this._onDocKeydown);
-        this._onDocKeydown = () => {};
-      }
-      if (this._counted) {
-        this._counted = false;
-        mountedReaders = Math.max(0, mountedReaders - 1);
-      }
+      if (activeReader === this) activeReader = null; // 释放键盘归属（document 级绑定由 keyboardBinds 托管）
       if (this._resizeObs) {
         this._resizeObs.disconnect();
         this._resizeObs = null;
@@ -711,13 +723,13 @@ function makeReader(): any {
     _wheelFlip(deltaY: number) {
       const now = Date.now();
       if (now < this._wheelCooldownUntil) return;
-      if (now - this._wheelLastAt > 600) this._wheelAcc = 0;
+      if (now - this._wheelLastAt > WHEEL_GESTURE_GAP_MS) this._wheelAcc = 0;
       this._wheelLastAt = now;
       this._wheelAcc += deltaY;
-      if (Math.abs(this._wheelAcc) >= 100) {
+      if (Math.abs(this._wheelAcc) >= WHEEL_FLIP_THRESHOLD) {
         const dir: 1 | -1 = this._wheelAcc > 0 ? 1 : -1;
         this._wheelAcc = 0;
-        this._wheelCooldownUntil = now + 250;
+        this._wheelCooldownUntil = now + WHEEL_COOLDOWN_MS;
         this._stepUnit(dir);
       }
     }
@@ -741,6 +753,28 @@ function makeReader(): any {
     }
 
     _onKeydown(e: KeyboardEvent) {
+      // 视图菜单打开时：↑↓/Enter/空格/Esc 归菜单，其余键吞掉（菜单开着不在背后翻页缩放）
+      if (this._menuCloser) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          e.stopPropagation();
+          this._menuMove(e.key === 'ArrowDown' ? 1 : -1);
+          return;
+        }
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          this._menuActivate();
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          this._closeMenu();
+          return;
+        }
+        return;
+      }
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
         this._stepUnit(-1);
@@ -844,8 +878,9 @@ function makeReader(): any {
       return { page, sheet, canvas, layer, rect, seq: 0, want: false, renderedKey: '' };
     }
 
-    /** scale 统一重算并应用到全部页盒（fit 依赖容器与布局，一次算好全视图共用） */
-    _applySizes() {
+    /** scale 统一重算并应用到页盒（fit 依赖容器与布局，一次算好全视图共用）。
+     *  only 传页码集合时只更新这些盒（后台补尺寸分批增量应用，避免大文档全量重排）。 */
+    _applySizes(only?: Set<number>) {
       if (!this._pdf || !this._flow) return;
       const gutter = 48;
       const vw = Math.max(200, (Number(this._viewer.clientWidth) || 0) - gutter);
@@ -855,6 +890,7 @@ function makeReader(): any {
       this._effScale = scale;
       this._syncZoomSelect();
       for (const box of this._sheets.values()) {
+        if (only && !only.has(box.page)) continue;
         const size = this._pageSizeAt1(box.page);
         const w = Math.max(1, Math.round(size.w * scale));
         const h = Math.max(1, Math.round(size.h * scale));
@@ -942,9 +978,13 @@ function makeReader(): any {
         if (seq !== box.seq || !box.want) return;
         box.renderedKey = key;
         box.sheet.removeAttribute('data-pending');
+        box.sheet.removeAttribute('data-error');
         await this._fillSheetText(box, viewport, dpr, seq);
       } catch (e: any) {
-        // 后台预渲染失败静默（占位盒保留），仅当前单元渲染失败上报状态条
+        // 失败可见化：占位盒转错误态（红边），后台预渲染失败不再无差别静默——
+        // 用户能区分"未加载"与"渲染失败"；当前单元失败仍上报状态条
+        box.sheet.removeAttribute('data-pending');
+        box.sheet.setAttribute('data-error', '1');
         if (report && seq === box.seq) {
           this._status.textContent = lingoMod.lingo(this.wiki, 'pdf.render.failed', 'Render failed: ') + String(e?.message || e);
         }
@@ -957,6 +997,7 @@ function makeReader(): any {
       box.want = false;
       box.renderedKey = '';
       box.sheet.setAttribute('data-pending', '1');
+      box.sheet.removeAttribute('data-error');
       try {
         box.canvas.width = 0;
         box.canvas.height = 0;
@@ -993,6 +1034,16 @@ function makeReader(): any {
     }
 
     /** 视口中心最近的单元首页（水平按横向距离，平铺按平面距离，其余按纵向距离） */
+    /** 页盒几何测量：真实 DOM 读 offset*，无布局环境（fake DOM）回退 style 值 */
+    _sheetMetrics(el: any): { w: number; h: number; left: number; top: number } {
+      return {
+        w: Number(el.offsetWidth) || parseFloat(el.style.width) || 0,
+        h: Number(el.offsetHeight) || parseFloat(el.style.height) || 0,
+        left: Number(el.offsetLeft) || 0,
+        top: Number(el.offsetTop) || 0,
+      };
+    }
+
     _nearestUnitPage(): number {
       const viewer = this._viewer;
       const vw = Number(viewer.clientWidth) || 0;
@@ -1002,15 +1053,12 @@ function makeReader(): any {
       let best = 0;
       let bestDist = Infinity;
       for (const box of this._sheets.values()) {
-        const top = Number(box.sheet.offsetTop) || 0;
-        const left = Number(box.sheet.offsetLeft) || 0;
-        const w = Number(box.sheet.offsetWidth) || parseFloat(box.sheet.style.width) || 0;
-        const h = Number(box.sheet.offsetHeight) || parseFloat(box.sheet.style.height) || 0;
+        const m = this._sheetMetrics(box.sheet);
         const d = this._scroll === 'horizontal'
-          ? Math.abs(left + w / 2 - cx)
+          ? Math.abs(m.left + m.w / 2 - cx)
           : this._scroll === 'wrapped'
-          ? Math.hypot(left + w / 2 - cx, top + h / 2 - cy)
-          : Math.abs(top + h / 2 - cy);
+          ? Math.hypot(m.left + m.w / 2 - cx, m.top + m.h / 2 - cy)
+          : Math.abs(m.top + m.h / 2 - cy);
         if (Number.isFinite(d) && d < bestDist) {
           bestDist = d;
           best = box.page;
@@ -1026,15 +1074,12 @@ function makeReader(): any {
       this._scrollLockUntil = Date.now() + 500;
       const vw = Number(this._viewer.clientWidth) || 0;
       const vh = Number(this._viewer.clientHeight) || 0;
-      const sw = Number(box.sheet.offsetWidth) || parseFloat(box.sheet.style.width) || 0;
-      const sh = Number(box.sheet.offsetHeight) || parseFloat(box.sheet.style.height) || 0;
+      const m = this._sheetMetrics(box.sheet);
       if (this._scroll !== 'horizontal') {
-        const top = Number(box.sheet.offsetTop) || 0;
-        this._viewer.scrollTop = Math.max(0, top - (vh - sh) / 2);
+        this._viewer.scrollTop = Math.max(0, m.top - (vh - m.h) / 2);
       }
       if (this._scroll === 'horizontal' || this._scroll === 'wrapped') {
-        const left = Number(box.sheet.offsetLeft) || 0;
-        this._viewer.scrollLeft = Math.max(0, left - (vw - sw) / 2);
+        this._viewer.scrollLeft = Math.max(0, m.left - (vw - m.w) / 2);
       }
     }
 
@@ -1065,9 +1110,15 @@ function makeReader(): any {
       }
     }
 
+    /** 视图偏好防抖持久化：缩放 ± 连按不逐键写库（滚动回写同理有 150ms 防抖） */
     _persistViewState() {
       if (!this.wiki) return;
-      this.wiki.addTiddler({ title: ns.PDF_VIEW_STATE_TITLE, text: pdfView.viewStateText(this._layout, this._scroll, this._mode) });
+      if (this._persistViewStateTimer) clearTimeout(this._persistViewStateTimer);
+      this._persistViewStateTimer = setTimeout(() => {
+        this._persistViewStateTimer = null;
+        if (this._destroyed || !this.wiki) return;
+        this.wiki.addTiddler({ title: ns.PDF_VIEW_STATE_TITLE, text: pdfView.viewStateText(this._layout, this._scroll, this._mode) });
+      }, 200);
     }
 
     // ---------- 视图菜单（布局 × 滚动方式） ----------
@@ -1115,12 +1166,22 @@ function makeReader(): any {
       this._closeMenu();
       const doc = this.document;
       const menu = el(doc, 'div', 'tm-pdf-menu');
-      for (const it of items) {
+      menu.setAttribute('role', 'menu');
+      // 键盘导航状态：菜单项按钮缓存 + 活动下标（默认落在当前生效项上，Linear 式）
+      this._menuBtns = [];
+      this._menuActiveIdx = Math.max(
+        0,
+        items.findIndex((it) => it.on),
+      );
+      items.forEach((it, idx) => {
         if (it.sep) {
           menu.appendChild(el(doc, 'div', 'tm-pdf-menu-sep'));
-          continue;
+          return;
         }
         const b = el(doc, 'button', 'tm-pdf-menu-item' + (it.on ? ' tm-pdf-menu-item--on' : ''));
+        b.type = 'button';
+        b.setAttribute('role', 'menuitem');
+        if (idx === this._menuActiveIdx) b.classList.add('tm-pdf-menu-item--active');
         if (it.icon) {
           const ico = el(doc, 'span', 'tm-pdf-menu-ico');
           ico.innerHTML = it.icon;
@@ -1131,8 +1192,9 @@ function makeReader(): any {
           this._closeMenu();
           it.click();
         });
+        this._menuBtns.push(b);
         menu.appendChild(b);
-      }
+      });
       anchor.appendChild(menu);
       this._menuAnchor = anchor;
       this._menuEl = menu;
@@ -1140,7 +1202,21 @@ function makeReader(): any {
         if (menu.parentNode) menu.parentNode.removeChild(menu);
         this._menuAnchor = null;
         this._menuEl = null;
+        this._menuBtns = [];
       };
+    }
+
+    /** 菜单键盘导航：↑↓ 移动高亮，Enter/空格激活（不改列表内容，只切高亮类） */
+    _menuMove(dir: 1 | -1) {
+      const btns = this._menuBtns.filter(Boolean);
+      if (!btns.length) return;
+      this._menuActiveIdx = (this._menuActiveIdx + dir + btns.length) % btns.length;
+      btns.forEach((b, i) => b.classList.toggle('tm-pdf-menu-item--active', i === this._menuActiveIdx));
+    }
+
+    _menuActivate() {
+      const b = this._menuBtns[this._menuActiveIdx];
+      if (b) b.click();
     }
 
     _closeMenu() {
@@ -1180,6 +1256,18 @@ function makeReader(): any {
       layer.textContent = '';
       layer.setAttribute('data-tiddler-title', t);
       const isCurrent = pdfView.unitOf(this._page, this._layout, this._scroll, this._numPages).includes(box.page);
+      // CID 字体 CMap 数据拉取失败（离线/CDN 不可达）时文本解码为空：画布字形渲染不出，
+      // 文本层也近空——给一次性联网提示，不再与"修复前"不可区分地静默空白（每会话只提示一次）
+      if (items.length > 0 && !items.some((it: any) => it.str && it.str.trim()) && !pdfjsMod.isTextDecodeWarned()) {
+        pdfjsMod.markTextDecodeWarned();
+        if (isCurrent) {
+          this._hint.textContent = lingo(
+            this.wiki,
+            'pdf/cmap-offline-hint',
+            'Text cannot be decoded (font CMap data needs network access to cdn.jsdelivr.net) — pages may render as images only',
+          );
+        }
+      }
       if (parsePdf.isScannedPageText(items.map((it: any) => it.str).join(' '))) {
         if (isCurrent) {
           this._hint.textContent = this._ocrEnabled
@@ -1367,15 +1455,33 @@ function makeReader(): any {
 exports['tidme-pdf-reader'] = makeReader();
 exports.resolvePdfContext = resolvePdfContext;
 exports.loadPdfBytesWithWait = loadPdfBytesWithWait;
-exports.isPdfReaderMounted = isPdfReaderMounted;
+exports.isPdfReaderActive = isPdfReaderActive;
 
-// ---------- 全局方向键归属协调 ----------
-// section.ts 的全局 ←/→ 快捷键（阅读条栏跨卡导航）在本函数返回 true 时让路，
-// 方向键交给挂载中的 PDF 阅读器翻页（桌面阅读器习惯）。
+// ---------- 全局键盘仲裁：同一时刻只有「最近交互的阅读器」响应翻页键 ----------
+// - document 级 keydown 每个 doc 只绑一次（keyboardBinds），分发给 activeReader ——
+//   此前按实例各绑一份，故事河同时挂两个 PDF 时一次按键双跳、页码 state 互相覆盖。
+// - activeReader 归属：render / 在 root 内按下指针 时获得；点击 root 外、销毁 时失去。
+//   折叠的 tiddler 在被重新点击前不再抢占方向键（此前"挂载即拥有"会永久压制阅读条栏）。
+// - section.ts 的全局 ←/→ 快捷键（阅读条栏跨卡导航）在 isPdfReaderActive() 为真时让路。
 // 注意：本模块的对外导出统一走 exports.*（与文件内 ESM import 混用 export 语句
 // 会改变 esbuild 的模块格式判定，导致上方 exports.* 导出全部丢失）。
-let mountedReaders = 0;
+let activeReader: any = null;
+const keyboardBinds = new WeakMap<object, (e: KeyboardEvent) => void>();
 
-function isPdfReaderMounted(): boolean {
-  return mountedReaders > 0;
+function bindGlobalKeyboard(doc: Document): void {
+  if (keyboardBinds.has(doc)) return;
+  const handler = (e: KeyboardEvent) => {
+    if (!activeReader || activeReader._destroyed) return;
+    // 编辑控件聚焦时让路（与实例内 _onKeydown 同一口径）
+    const target = (e && e.target) as any;
+    const tag = String(target?.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+    activeReader._onKeydown(e);
+  };
+  keyboardBinds.set(doc, handler);
+  if (typeof doc.addEventListener === 'function') doc.addEventListener('keydown', handler);
+}
+
+function isPdfReaderActive(): boolean {
+  return !!activeReader && !activeReader._destroyed;
 }

@@ -430,14 +430,15 @@ if (typeof document !== 'undefined') {
     if (dir === 'prev') bar?._navPrev?.();
     else bar?._navNext?.();
   };
-  // PDF 阅读器挂载判定（惰性 require 避免加载顺序耦合）：阅读器打开时方向键归阅读器翻页
+  // PDF 阅读器键盘归属判定（惰性 require；失败不缓存——下次按键重试，避免一次
+  // 加载顺序异常把让路机制永久打掉）。阅读器活跃时方向键归阅读器翻页。
   let pdfReaderMountedFn: any = undefined;
   const pdfReaderMounted = (): boolean => {
     if (pdfReaderMountedFn === undefined) {
       try {
-        pdfReaderMountedFn = require('$:/plugins/keepone/tidme/read/widgets/pdf-reader.js').isPdfReaderMounted;
+        pdfReaderMountedFn = require('$:/plugins/keepone/tidme/read/widgets/pdf-reader.js').isPdfReaderActive;
       } catch {
-        pdfReaderMountedFn = null;
+        return false; // 不缓存失败：下次重试
       }
     }
     return typeof pdfReaderMountedFn === 'function' ? !!pdfReaderMountedFn() : false;

@@ -286,6 +286,7 @@ test('pdf-reader: 缩放菜单仿 Firefox —— 四模式 + 50%–400% 八档�
   sel.value = '1.5';
   sel.dispatchEvent({ type: 'change' });
   assert.equal(w._mode, 1.5, '百分比档生效');
+  await new Promise((resolve) => setTimeout(resolve, 320)); // 视图偏好持久化有 200ms 防抖（± 连按不逐键写库）
   assert.equal(JSON.parse(wiki.getTiddlerText(ns.PDF_VIEW_STATE_TITLE, '{}')).z, 1.5, '缩放模式持久化到视图状态');
 
   w.destroy?.();
@@ -310,9 +311,10 @@ test('pdf-reader: 视图菜单 —— 布局×滚动选择、双页单元切分�
     assert.ok(menuItem(label), `菜单项「${label}」存在`);
   }
 
-  // 选择双页视图 → 单元成对 + 偏好落库
+  // 选择双页视图 → 单元成对 + 偏好落库（持久化 200ms 防抖）
   menuItem('双页视图').dispatchEvent({ type: 'click' });
   assert.equal(w._layout, 'dual', '布局切到双页');
+  await new Promise((resolve) => setTimeout(resolve, 320));
   assert.equal(JSON.parse(wiki.getTiddlerText(ns.PDF_VIEW_STATE_TITLE, '{}')).l, 'dual', '布局持久化');
   assert.ok(!menuItem('双页视图'), '选择后菜单关闭');
   const flow = findByClass(root, 'tm-pdf-flow');
@@ -327,6 +329,7 @@ test('pdf-reader: 视图菜单 —— 布局×滚动选择、双页单元切分�
   viewBtn.dispatchEvent({ type: 'click' });
   menuItem('垂直滚动').dispatchEvent({ type: 'click' });
   assert.equal(w._scroll, 'vertical', '滚动方式切到垂直');
+  await new Promise((resolve) => setTimeout(resolve, 320)); // 持久化 200ms 防抖
   assert.equal(JSON.parse(wiki.getTiddlerText(ns.PDF_VIEW_STATE_TITLE, '{}')).s, 'vertical', '滚动方式持久化');
   assert.equal(findByClass(root, 'tm-pdf-viewer').getAttribute('data-scroll'), 'vertical', 'viewer 标注滚动方式（样式变体挂点）');
 
@@ -351,15 +354,15 @@ test('pdf-reader: 键盘全局翻页（编辑控件让路）与水平滚动滚�
     variables: { currentTiddler: r.docTitle },
   });
   await waitFor(() => collectText(root).includes('/ 5'));
-  assert.equal(mod('read/widgets/pdf-reader.js').isPdfReaderMounted(), true, '阅读器挂载时导出方向键归属判定为真');
+  assert.equal(mod('read/widgets/pdf-reader.js').isPdfReaderActive(), true, '阅读器打开即持有键盘归属（方向键让路判定为真）');
 
   // 全局键盘翻页：免聚焦，ArrowRight 翻下一单元（单页布局 = 下一页）
-  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {} });
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {}, stopPropagation: () => {} });
   assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '2', '全局 ArrowRight 翻页');
 
   // 编辑控件聚焦时快捷键让路
   const typing = fakeDocument.createElement('input');
-  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', target: typing, preventDefault: () => {} });
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', target: typing, preventDefault: () => {}, stopPropagation: () => {} });
   assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '2', 'input 聚焦时不劫持按键');
 
   // 水平滚动模式：纵向滚轮转横向 scrollLeft；deltaX 交原生不重复处理
@@ -390,11 +393,56 @@ test('pdf-reader: 键盘全局翻页（编辑控件让路）与水平滚动滚�
   viewer.dispatchEvent({ type: 'wheel', deltaY: 60, preventDefault: () => {} });
   assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), '4', '两次增量累计过阈值翻页');
 
-  // destroy 后全局键盘监听注销：不再写入页码 state
+  // destroy 后键盘归属释放：不再响应全局按键
   w.destroy?.();
   const before = wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), '');
-  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {} });
+  assert.equal(mod('read/widgets/pdf-reader.js').isPdfReaderActive(), false, 'destroy 后归属释放');
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {}, stopPropagation: () => {} });
   assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(r.docId), ''), before, 'destroy 后快捷键失效');
+  wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
+});
+
+test('pdf-reader: 键盘仲裁 —— 双实例不双跳，点击归属转移，视图菜单吞方向键', async () => {
+  wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
+  await injectPdfJs();
+  const rA = await pdfOps.createPdfDoc(wiki, { docTitle: '仲裁书甲', dataB64: btoaBytes(buildMinimalPdfBytes(4)) });
+  const rB = await pdfOps.createPdfDoc(wiki, { docTitle: '仲裁书乙', data64: undefined, dataB64: btoaBytes(buildMinimalPdfBytes(4)) });
+  const wa = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: rA.docTitle } });
+  const wb = renderWidgetBase(wiki, mod('read/widgets/pdf-reader.js'), 'tidme-pdf-reader', { variables: { currentTiddler: rB.docTitle } });
+  await waitFor(() => collectText(wa.root).includes('/ 4') && collectText(wb.root).includes('/ 4'));
+  // 初始定位 _setPage(start,false) 不写页码 state；先给甲造一个 p1 基准（模拟用户已翻动过）。
+  // 注意 wa/wb 的 render() 都会把归属设给自己（后渲染者乙获胜）——这正是要验证的语义
+  wa.w._setPage(1);
+  await waitFor(() => wiki.getTiddlerText(ns.pdfPageStateTitle(rA.docId), '') === '1');
+
+  // 后打开者持有归属：一次按键只动乙（甲保持 p1）
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {}, stopPropagation: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(rB.docId), ''), '2', '归属实例（乙）翻页');
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(rA.docId), ''), '1', '非归属实例（甲）保持 p1 —— 不再双跳');
+
+  // 点击甲 → 归属转移（直调 handler，pointerdown 时序无关）；按键后甲翻到 p2
+  wa.w._onDocPointerDown({ target: findByClass(wa.root, 'tm-pdf-viewer') });
+  assert.equal(mod('read/widgets/pdf-reader.js').isPdfReaderActive(), true, '点击甲后归属转移');
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {}, stopPropagation: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(rA.docId), ''), '2', '归属转移后按键翻甲');
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(rB.docId), ''), '2', '乙保持不动');
+  wb.w._onDocPointerDown({ target: findByClass(wb.root, 'tm-pdf-viewer') });
+  wb.w._onDocPointerDown({ target: fakeDocument.createElement('p') });
+  assert.equal(mod('read/widgets/pdf-reader.js').isPdfReaderActive(), false, '点击阅读器外 → 归属释放（section 方向键恢复）');
+
+  // 视图菜单打开时方向键归菜单（不在背后翻页）
+  wa.w._onDocPointerDown({ target: findByClass(wa.root, 'tm-pdf-viewer') }); // 归属还甲
+  const viewBtnA = collectButtons(wa.root).find((b) => b.title === '视图');
+  viewBtnA.dispatchEvent({ type: 'click' });
+  assert.ok(collectButtons(wa.root).some((b) => String(b.className || '').includes('tm-pdf-menu-item')), '视图菜单已打开');
+  const pageBefore = wiki.getTiddlerText(ns.pdfPageStateTitle(rA.docId), '');
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => {}, stopPropagation: () => {} });
+  assert.equal(wiki.getTiddlerText(ns.pdfPageStateTitle(rA.docId), ''), pageBefore, '菜单开着方向键不翻页');
+  fakeDocument.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault: () => {}, stopPropagation: () => {} });
+  assert.ok(!collectButtons(wa.root).some((b) => String(b.className || '').includes('tm-pdf-menu-item')), 'Esc 关闭菜单');
+
+  wa.w.destroy?.();
+  wb.w.destroy?.();
   wiki.deleteTiddler(ns.PDF_VIEW_STATE_TITLE);
 });
 

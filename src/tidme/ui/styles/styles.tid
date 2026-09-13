@@ -2809,6 +2809,8 @@ a.tm-today-read-name:hover { text-decoration: underline; color: var(--tm-primary
 }
 .tm-pdf-menu-item:hover { background: #3d3d3d; color: #ffffff; }
 .tm-pdf-menu-item--on, .tm-pdf-menu-item--on:hover { background: #454545; color: #ffffff; }
+/* 键盘导航活动项（↑↓ 移动；与"当前生效"高亮叠加） */
+.tm-pdf-menu-item--active { outline: 1px solid #6b9dff; outline-offset: -1px; }
 .tm-pdf-menu-ico { display: inline-flex; flex: none; }
 .tm-pdf-menu-ico svg { width: 14px; height: 14px; display: block; }
 .tm-pdf-menu-sep { height: 1px; margin: 4px 6px; background: #1c1c1c; }
@@ -2870,6 +2872,24 @@ a.tm-today-read-name:hover { text-decoration: underline; color: var(--tm-primary
 	flex: none;
 	background: #ffffff;
 	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+/* 占位（未渲染）：微光扫过动画，可区分"没滚到" */
+.tm-pdf-sheet[data-pending='1'] {
+	background: #f0f0f0 linear-gradient(110deg, #ececec 8%, #f7f7f7 18%, #ececec 33%);
+	background-size: 200% 100%;
+	animation: tm-pdf-pending 1.4s linear infinite;
+}
+@keyframes tm-pdf-pending {
+	to {
+		background-position-x: -200%;
+	}
+}
+/* 渲染失败：淡红底 + 红边，与占位可区分 */
+.tm-pdf-sheet[data-error='1'] {
+	background: #fff3f3 !important;
+	animation: none !important;
+	outline: 1px solid rgba(239, 68, 68, 0.5);
+	outline-offset: -1px;
 }
 .tm-pdf-canvas {
 	display: block;

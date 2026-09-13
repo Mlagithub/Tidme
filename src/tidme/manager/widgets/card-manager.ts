@@ -17,6 +17,7 @@ Done 语义：移出队列 = 置 tidme.done（kind 决定归属：item 出默认
 declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
+const cardFactory = require('$:/plugins/keepone/tidme/core/card-factory.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
@@ -432,6 +433,7 @@ function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
   del.addEventListener('click', () => {
     st.selected.delete(c.title);
     wiki.deleteTiddler(c.title);
+    cardFactory.sweepOrphanClozeNote(wiki, String(c.fields['tidme.parent'] || '')); // 挖空兄弟删净 → 连带删笔记
     render(ctx);
   });
   row.appendChild(del);
@@ -954,8 +956,10 @@ function batchButton(ctx: Ctx, label: string, apply: (f: Record<string, any>) =>
     for (const title of st.selected) {
       const t = wiki.getTiddler(title);
       if (!t) continue;
-      if (destructive) wiki.deleteTiddler(title);
-      else wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
+      if (destructive) {
+        wiki.deleteTiddler(title);
+        cardFactory.sweepOrphanClozeNote(wiki, String(t.fields['tidme.parent'] || '')); // 挖空兄弟删净 → 连带删笔记
+      } else wiki.addTiddler({ ...t.fields, ...apply(t.fields) });
       n++;
     }
     st.selected.clear();

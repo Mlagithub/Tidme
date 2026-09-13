@@ -17,6 +17,18 @@ const PDFJS_WORKER_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_
 const PDFJS_CMAP_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
 const PDFJS_STD_FONTS_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
 
+// 文本解码失败一次性提示状态（会话级）：CMap 拉取失败在 pdf.js 侧只吐 console 警告，
+// 阅读器据此给用户一条联网提示（详见 read/widgets/pdf-reader 的文本层检测）
+let textDecodeWarned = false;
+
+export function isTextDecodeWarned(): boolean {
+  return textDecodeWarned;
+}
+
+export function markTextDecodeWarned(): void {
+  textDecodeWarned = true;
+}
+
 let libOverride: any = null;
 
 /** 注入外部 pdf.js 库（测试用：Node 侧 pdfjs-dist legacy 与 CDN 构建同 API） */
@@ -54,14 +66,15 @@ export function ensurePdfJs(): Promise<any> {
   return libPromise;
 }
 
-/** 字节 → pdf.js 文档对象。传副本：pdf.js 可能转移底层 buffer（detach），
- *  调用方（导入流程的 base64 编码）需要保留可用数据。
+/** 字节 → pdf.js 文档对象。缺省传副本（pdf.js 可能转移底层 buffer / detach），
+ *  导入流程的 base64 编码需要保留原字节可用；阅读器路径字节用后即弃，传
+ *  { keepBytes: false } 免掉大文件的全量拷贝。
  *  cMapUrl/cMapPacked/standardFontDataUrl：CID 字体编码解码与非嵌入字体回退所必需
  *  （中文书页面空白的根因，见上方 URL 常量注释）。 */
-export async function loadPdfBytes(bytes: Uint8Array): Promise<any> {
+export async function loadPdfBytes(bytes: Uint8Array, opts: { keepBytes?: boolean } = {}): Promise<any> {
   const lib = await ensurePdfJs();
   return lib.getDocument({
-    data: bytes.slice(),
+    data: opts.keepBytes === false ? bytes : bytes.slice(),
     cMapUrl: PDFJS_CMAP_URL,
     cMapPacked: true,
     standardFontDataUrl: PDFJS_STD_FONTS_URL,

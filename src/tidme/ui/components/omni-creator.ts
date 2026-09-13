@@ -232,7 +232,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   };
 
   // 最近使用标签（组件私有 $:/state）：提交带标签的卡片时前插，去重封顶 10 个
-  const RECENT_TAGS_TITLE = '$:/state/tidme/omni/recent-tags';
+  const RECENT_TAGS_TITLE = nsMod.OMNI_RECENT_TAGS_TITLE;
   const readRecentTags = (): string[] => {
     try {
       const arr = JSON.parse(String(wiki.getTiddlerText(RECENT_TAGS_TITLE, '') || '[]'));
@@ -343,7 +343,9 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
       const m = fuzzyMatchTag(q, t);
       if (m) hits.push({ tag: t, indices: m.indices, score: m.score });
     }
-    hits.sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag));
+    // 同分 tie-break 用码点序而非 localeCompare：中文碰撞排序随平台 ICU 变化，
+    // 会让同一查询在 Windows/Linux 上给出不同建议顺序（曾致 CI 假失败）
+    hits.sort((a, b) => b.score - a.score || (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0));
     for (const h of hits.slice(0, 20)) out.push({ tag: h.tag, indices: h.indices, kind: 'all' });
     const parts = splitTagInput(q);
     if (parts.length === 1 && !tagSet.has(parts[0])) {
@@ -353,8 +355,12 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
   };
 
   const activateRow = (row: TagRow) => {
-    if (row.kind === 'create') addTag(row.tag);
-    else if (selectedTags.includes(row.tag)) removeTag(row.tag);
+    if (row.kind === 'create') {
+      addTag(row.tag);
+      // 新标签回填标签池：同一查询不再重复 offer「创建」，且列表可显示 ✓ 选中态
+      if (!tagSet.has(row.tag)) tagSet.add(row.tag);
+      if (!availableTags.includes(row.tag)) availableTags.push(row.tag);
+    } else if (selectedTags.includes(row.tag)) removeTag(row.tag);
     else addTag(row.tag);
     tagInput.value = '';
     activeIdx = 0;
@@ -364,16 +370,26 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
 
   const wireOption = (btn: any, row: TagRow, idx: number) => {
     btn.addEventListener('mousedown', (e: MouseEvent) => e.preventDefault()); // 输入框不失焦，点选后列表保持
-    btn.addEventListener('mouseenter', () => {
-      if (activeIdx !== idx) {
-        activeIdx = idx;
-        renderPopup();
-      }
-    });
+    // hover 只切高亮类（增量），不整棵重建弹层
+    btn.addEventListener('mouseenter', () => moveActive(idx));
     btn.addEventListener('click', () => {
       activateRow(row);
       tagInput.focus();
     });
+  };
+
+  /** 活动行迁移（增量）：只切换 --active 类与 aria，不重建弹层 */
+  const moveActive = (idx: number) => {
+    if (idx === activeIdx || idx < 0 || idx >= rows.length) return;
+    const btns = popup.querySelectorAll('.tm-omni-tag-option');
+    const prev = btns[activeIdx];
+    if (prev) prev.classList.remove('tm-omni-tag-option--active');
+    activeIdx = idx;
+    const next = btns[idx];
+    if (next) {
+      next.classList.add('tm-omni-tag-option--active');
+      popup.setAttribute('aria-activedescendant', next.id);
+    }
   };
 
   const renderPopup = () => {
@@ -382,6 +398,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
     popup.textContent = '';
     const queryEmpty = !String(tagInput.value || '').trim();
     let lastKind = '';
+    let optSeq = 0;
     rows.forEach((row, idx) => {
       if (queryEmpty && row.kind !== 'create' && row.kind !== lastKind) {
         popup.appendChild(
@@ -393,6 +410,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
       if (row.kind === 'create') {
         const btn = el(doc, 'button', 'tm-omni-tag-option tm-omni-tag-option--create' + (isActive ? ' tm-omni-tag-option--active' : ''));
         btn.type = 'button';
+        btn.id = `tm-omni-tag-opt-${++optSeq}`;
         btn.setAttribute('role', 'option');
         btn.appendChild(el(doc, 'span', '', `＋ ${l('creator.tags.create', 'Create new tag')} `));
         btn.appendChild(el(doc, 'b', 'tm-omni-tag-opt-name', `「${row.tag}」`));
@@ -407,6 +425,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
         'tm-omni-tag-option' + (isActive ? ' tm-omni-tag-option--active' : '') + (isSelected ? ' tm-omni-tag-option--selected' : ''),
       );
       btn.type = 'button';
+      btn.id = `tm-omni-tag-opt-${++optSeq}`;
       btn.setAttribute('role', 'option');
       btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
       const name = el(doc, 'span', 'tm-omni-tag-opt-name');
@@ -423,14 +442,18 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
     });
     if (!rows.length) {
       popup.appendChild(el(doc, 'div', 'tm-omni-tag-empty', l('creator.tags.empty', 'No matching tags')));
+    } else {
+      // aria：活动项跟随（fake DOM 无 querySelectorAll 时静默跳过）
+      const active = popup.querySelector && popup.querySelector('.tm-omni-tag-option--active');
+      if (active) popup.setAttribute('aria-activedescendant', active.id);
     }
   };
 
   const setOpen = (open: boolean) => {
     popupOpen = open;
+    // 显隐唯一机制 = --open class（styles.tid 单点控制）；不再叠加 inline style 双真相源
     combobox.classList.toggle('tm-omni-combobox--open', open);
     combobox.setAttribute('aria-expanded', open ? 'true' : 'false');
-    popup.style.display = open ? '' : 'none';
     if (open) renderPopup();
   };
 
@@ -639,9 +662,12 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
         if (!clozeInput) return;
         const start = clozeInput.selectionStart || 0;
         const end = clozeInput.selectionEnd || 0;
-        const sel = clozeInput.value.slice(start, end) || 'cloze text';
-        const replacement = `<<C "${sel}" "c1" "">>`;
+        const sel = (String(clozeInput.value || '').slice(start, end) || 'cloze text').replace(/"/g, '\\"');
+        // 自动编号：按正文已有挖空取下一个空 id（c1、c2…），一次多挖即成型
+        const replacement = `<<C "${sel}" "${cardFactory.nextClozeId(clozeInput.value || '')}" "">>`;
         clozeInput.setRangeText(replacement, start, end, 'select');
+        // setRangeText('select') 会选中所插入文本：不折叠选区，连续插入会整体替换上一个挖空
+        clozeInput.selectionStart = clozeInput.selectionEnd = start + replacement.length;
         clozeInput.focus();
       });
       clozeHead.appendChild(insertClozeBtn);
@@ -682,6 +708,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
     const cardTags = selectedTags.length ? [...selectedTags] : undefined;
 
     let draft: Record<string, any> | null = null;
+    let clozeFamily: { note: Record<string, any> | null; cards: Record<string, any>[] } | null = null;
 
     if (currentType === 'qa') {
       const q = String(qEditor ? qEditor.getText() : (qInput?.value || '')).trim();
@@ -705,13 +732,16 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
         focusEl(clozeInput);
         return;
       }
-      draft = cardFactory.buildStandaloneCard(wiki, {
+      // 一次多挖（Anki 式）：按挖空 id 拆成 N 张兄弟卡（共享笔记 → 挂现有兄弟搁置调度）
+      const family = cardFactory.buildClozeFamily(wiki, {
         type: 'cloze',
         title: userTitle,
         deck: selectedDeck,
         tags: cardTags,
         clozeContent: c,
       });
+      clozeFamily = family;
+      draft = family.cards[0] || null;
     } else {
       const content = String(conceptInput?.value || '').trim();
       if (!content) {
@@ -728,7 +758,8 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
     }
 
     if (draft) {
-      cardFactory.commitCard(wiki, draft);
+      if (clozeFamily) cardFactory.commitClozeFamily(wiki, clozeFamily);
+      else cardFactory.commitCard(wiki, draft);
       if (cardTags && cardTags.length) pushRecentTags(cardTags); // 记录最近使用（combobox 置顶展示）
       dom.showToast(doc, doc.body, `${l('creator.toast.success', 'Card created:')} ${draft.caption || draft.title}`, 'ok', 2500);
       opts.onSuccess?.(draft);
