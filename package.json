@@ -20,7 +20,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/keepone/Tidme.git"
+    "url": "https://github.com/Mlagithub/Tidme.git"
   },
   "keywords": [
     "tiddlywiki",
@@ -41,9 +41,9 @@
     "*.{ts,tsx,js,jsx,cjs,mjs,json,md}": "dprint fmt --allow-no-files"
   },
   "bugs": {
-    "url": "https://github.com/keepone/Tidme/issues"
+    "url": "https://github.com/Mlagithub/Tidme/issues"
   },
-  "homepage": "https://github.com/keepone/Tidme#readme",
+  "homepage": "https://github.com/Mlagithub/Tidme#readme",
   "dependencies": {
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.2",

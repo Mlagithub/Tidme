@@ -5,6 +5,10 @@ on:
     branches:
       - master
 
+permissions:
+  # semantic-release 需要：push release commit/tag、创建 GitHub Release 并上传 bin 产物
+  contents: write
+
 jobs:
   release:
     name: Release
