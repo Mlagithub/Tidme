@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/Mlagithub/Tidme/compare/v1.0.0...v1.0.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* pdf.js 解码部分字体文本时必须加载外部 CMap 二进制数据 ([6b16f6b](https://github.com/Mlagithub/Tidme/commit/6b16f6b5f64d199d9d597cd23d12249cd8d38e96))
+
 # 1.0.0 (2026-09-13)
 
 
