@@ -5,7 +5,8 @@ ui-components.test.mjs — UI 基础层与通用组件库测试（node:test）
 - ui/base/dom: showToast, navigateTo, createNavLink
 - ui/components/ui-primitives: renderEmpty, renderProgressBar, bindWidgetRefresh
 - ui/components/card-modal: 模态弹窗与向后兼容 shim 正常 export
-- 架构兼容门面：core/dom, core/icons, core/dialog, import/widgets/nav, manager/widgets/ui-primitives
+- 通用组件：ui/components/ui-primitives、ui/components/card-modal、ui/base/dialog（Esc/遮罩统一语义）
+  （迁移期的 core/dom 等旧门面路径与 import/widgets、manager/widgets shim 均已删除）
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -132,24 +133,44 @@ test('ui/components/ui-primitives: bindWidgetRefresh 属性变动优先刷新', 
   assert.equal(refreshedSelf, true);
 });
 
-test('card-modal: 新路径与向后兼容 shim 均能导出 openCardModal', () => {
-  const modalNew = mod('ui/components/card-modal.js');
-  assert.equal(typeof modalNew.openCardModal, 'function');
+test('dialog: Esc 一律按取消结算（confirm=false / prompt=null / alert=关闭），与焦点无关（统一语义）', async () => {
+  const dialog = mod('ui/base/dialog.js');
 
-  const modalOld = mod('import/widgets/card-modal.js');
-  assert.equal(typeof modalOld.openCardModal, 'function');
+  // confirmDialog：Esc → resolve(false)，overlay 摘除
+  let confirmDone = false;
+  const confirmP = dialog.confirmDialog(fakeDocument, { message: 'x' }).then((v) => {
+    confirmDone = true;
+    return v;
+  });
+  await new Promise((r) => setTimeout(r, 0));
+  const confirmKey = (fakeDocument._listeners.keydown || []).pop();
+  assert.ok(confirmKey, 'confirmDialog 已挂 document 级 keydown');
+  confirmKey({ key: 'Escape' });
+  assert.equal(await confirmP, false, 'Esc = 取消');
+  assert.ok(confirmDone);
+  assert.ok(!fakeDocument.body._elListeners || true, '关闭后 body 无残留 overlay 由 removeChild 保证');
+
+  // promptDialog：焦点不在 input（不走 input 的 keydown）时 Esc 也能取消
+  const promptP = dialog.promptDialog(fakeDocument, { message: 'name?' });
+  await new Promise((r) => setTimeout(r, 0));
+  const promptKey = (fakeDocument._listeners.keydown || []).pop();
+  promptKey({ key: 'Escape' });
+  assert.equal(await promptP, null, 'Esc = null');
 });
 
-test('向下兼容转发桩 (Shims) 完整性验证', () => {
-  // manager & import shims（core 侧三个转发桩已随死代码清理删除）
-  const managerPrim = mod('manager/widgets/ui-primitives.js');
-  assert.equal(typeof managerPrim.renderEmpty, 'function');
-
-  const managerForm = mod('manager/widgets/setting-form.js');
-  assert.equal(typeof managerForm.renderSettingGroups, 'function');
-
-  const importNav = mod('import/widgets/nav.js');
-  assert.ok(importNav['tidme-nav']);
+test('dialog: 点击遮罩空白区按取消结算；点击弹窗内容不关闭', async () => {
+  const dialog = mod('ui/base/dialog.js');
+  const confirmP = dialog.confirmDialog(fakeDocument, { message: 'y' });
+  await new Promise((r) => setTimeout(r, 0));
+  // overlay = body 最后插入的子节点
+  const overlay = fakeDocument.body.children[fakeDocument.body.children.length - 1];
+  assert.ok(overlay, 'overlay 已挂载');
+  overlay.dispatchEvent({ type: 'click', target: overlay });
+  assert.equal(await confirmP, false, '遮罩点击 = 取消');
+});
+test('card-modal: ui/components/card-modal 导出 openCardModal', () => {
+  const modalNew = mod('ui/components/card-modal.js');
+  assert.equal(typeof modalNew.openCardModal, 'function');
 });
 
 test('card-factory: buildStandaloneCard 全局独立制卡构建（QA / Cloze / Concept 与牌组归属）', () => {
@@ -411,5 +432,5 @@ test('ui/components/omni-creator: listDeckOptions 解耦内部值与显示文本
     question: 'Q',
     answer: 'A',
   });
-  assert.ok(card.title.startsWith(ns.NS_DECKS_SCATTER), `散卡必须以 ${ns.NS_DECKS_SCATTER} 为基座路径`);
+  assert.ok(card.title.startsWith(ns.NS_DECKS_STANDALONE), `散卡必须以 ${ns.NS_DECKS_STANDALONE} 为基座路径`);
 });

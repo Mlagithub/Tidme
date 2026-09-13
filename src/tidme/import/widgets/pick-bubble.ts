@@ -15,6 +15,7 @@ const selMod = require('$:/plugins/keepone/tidme/import/widgets/selection.js');
 const cardModal = require('$:/plugins/keepone/tidme/ui/components/card-modal.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const notify = dom.notify;
@@ -130,8 +131,10 @@ function bindGlobal(widget: any) {
       });
       bubble!.appendChild(b);
     };
-    mk('🧩 Cloze', () => openCloze(title!, selectedText, blockText));
-    mk('❓ Q&A', () => openQA(title!, selectedText));
+    // 按钮文案走语言包（与 section-bar 气泡同键）——此前写死英文+emoji 绕过 i18n
+    const wk = widget.wiki;
+    mk('🧩 ' + lingoMod.lingo(wk, 'cloze', 'Cloze'), () => openCloze(title!, selectedText, blockText));
+    mk('❓ ' + lingoMod.lingo(wk, 'qa', 'Q&A'), () => openQA(title!, selectedText));
     const scrollX = win.scrollX || win.pageXOffset || 0;
     const scrollY = win.scrollY || win.pageYOffset || 0;
     bubble.style.left = `${rect.left + rect.width / 2 + scrollX}px`;

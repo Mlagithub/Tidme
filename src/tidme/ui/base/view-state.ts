@@ -10,9 +10,10 @@ ui/base/view-state.ts — TW 视图状态读取（故事河）
 */
 
 declare function require(module: string): any;
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
-/** TW 故事河列表标题（当前打开的 tiddler 顺序） */
-export const STORY_LIST_TITLE = '$:/StoryList';
+/** TW 故事河列表标题（常量唯一产地 = core/ns，此为 UI 侧别名） */
+export const STORY_LIST_TITLE = ns.STORY_LIST_TITLE;
 
 /** 故事河里已打开的条目（按列表顺序；非数组/缺失 → 空） */
 export function storyTitles(wiki: any): string[] {

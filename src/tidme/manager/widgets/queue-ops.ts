@@ -61,14 +61,17 @@ function makeQueueOps(): WidgetCtor {
       );
       runAuto.addEventListener('click', () => {
         const cfg = config.readAutoPostpone(wiki);
-        const cards = wiki.filterTiddlers('[all[shadows+tiddlers]!is[draft]!has[tidme.done]!has[tidme.ignored]!has[tidme.suspended]has[due]]')
+        const cards = wiki.filterTiddlers(`[all[shadows+tiddlers]!is[draft]${ns.QUEUE_EXCLUDE}has[due]]`)
           .map((t: string) => ({ title: t, fields: wiki.getTiddler(t)?.fields || {} }));
         const result = sched.autoPostpone(cards, cfg);
         for (const p of result.patches) {
           const existing = wiki.getTiddler(p.title);
           if (existing) wiki.addTiddler({ ...existing.fields, ...p.fields });
         }
-        autoStatus.textContent = `✓ Overdue: ${result.stats.overdue} · Postponed: ${result.stats.postponed} · Retained: ${result.stats.kept}`;
+        autoStatus.textContent = lingoMod.lingo(wiki, 'manager.autopostpone.summary', '✓ Overdue: $(overdue)$ · Postponed: $(postponed)$ · Retained: $(kept)$')
+          .replace('$(overdue)$', String(result.stats.overdue)).replace('${overdue}$', String(result.stats.overdue))
+          .replace('$(postponed)$', String(result.stats.postponed)).replace('${postponed}$', String(result.stats.postponed))
+          .replace('$(kept)$', String(result.stats.kept)).replace('${kept}$', String(result.stats.kept));
         renderList();
       });
       autoRow.appendChild(runAuto);
@@ -108,7 +111,7 @@ function makeQueueOps(): WidgetCtor {
           const head = el(doc, 'div', 'tm-queue-card-head');
           const caption = captionText(wiki, wiki.getTiddler(deck)?.fields?.caption || deck.split('/').pop() || deck, this);
           head.appendChild(el(doc, 'strong', '', caption));
-          head.appendChild(el(doc, 'span', 'tm-queue-card-count', `${cards.length} cards`));
+          head.appendChild(el(doc, 'span', 'tm-queue-card-count', `${cards.length} ${lingoMod.lingo(wiki, 'manager.cards', 'cards')}`));
           head.title = deck;
           card.appendChild(head);
           const btns = el(doc, 'div', 'tm-queue-card-btns');
@@ -123,7 +126,7 @@ function makeQueueOps(): WidgetCtor {
                 n++;
               }
               renderList();
-              toast(`${label}: processed ${n} cards`, 'ok');
+              toast(`${label}: ${lingoMod.lingo(wiki, 'manager.processed', 'processed')} ${n} ${lingoMod.lingo(wiki, 'manager.cards', 'cards')}`, 'ok');
             });
             return b;
           };

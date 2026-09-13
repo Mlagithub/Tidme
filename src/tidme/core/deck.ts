@@ -16,10 +16,9 @@ declare function require(module: string): any;
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 
 export const DECK_TAG = ns.DECK_TAG;
-export const DEFAULT_DECK = ns.DECK_PREFIX + 'default';
+export const DEFAULT_DECK = ns.DEFAULT_DECK_TITLE;
 /** 系统独立卡牌组（shadow，固定入列 Today；成员 = standalone 目录下的在队 item） */
 export const STANDALONE_DECK = ns.DECK_PREFIX + 'standalone';
-export const SCATTER_DECK = STANDALONE_DECK; // 向后兼容别名
 /** 系统内置牌组：不可删除（shadow 被删会藏进已删除记录，列表静默消失直到重启） */
 export const SYSTEM_DECKS = [DEFAULT_DECK, STANDALONE_DECK, ns.DECK_PREFIX + '散卡'];
 

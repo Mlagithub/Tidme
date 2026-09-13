@@ -48,7 +48,7 @@ export function buildDocPageFields(opts: DocPageFieldsOptions): Record<string, a
   const base: Record<string, any> = {
     title: opts.title,
     type: 'text/vnd.tiddlywiki',
-    tags: ['tidme-doc'],
+    tags: [ns.DOC_TAG],
     'tidme.kind': 'topic',
     'tidme.doc': opts.docId,
     'tidme.docpage': opts.title,
@@ -462,8 +462,11 @@ function parseAnchorSnippet(raw: any): string {
  * 对应官方帮助：Delete processed text - delete all texts that have already been extracted or ignored。
  */
 export function processedSnippets(wiki: any, title: string): string[] {
-  if (!wiki || typeof wiki.filterTiddlers !== 'function') return [];
-  const childTitles = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title.replace(/\]/g, '')}]]`);
+  if (!wiki || typeof wiki.filterTiddlers !== 'function' || !title) return [];
+  // 父卡 title 含过滤器元字符时返回空（与 scheduler.findSiblings 同一政策：宁可不清，
+  // 也不能靠删字符把过滤器改写成另一个父卡、误删无关卡的 snippet）
+  if (!ns.isFilterSafeTitle(title)) return [];
+  const childTitles = wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${title}]]`);
   const out: string[] = [];
   for (const c of childTitles) {
     const f = wiki.getTiddler(c)?.fields;

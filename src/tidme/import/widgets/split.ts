@@ -137,7 +137,7 @@ function makePasteSplit(): WidgetCtor {
           status.textContent = lingo(wiki, 'split.emptycontent', 'Content is empty');
           return;
         }
-        const firstLine = text.split('\n')[0].replace(/^#+\s*/, '').replace(/^!\s*/, '').slice(0, 40) || '粘贴内容';
+        const firstLine = text.split('\n')[0].replace(/^#+\s*/, '').replace(/^!\s*/, '').slice(0, 40) || lingo(wiki, 'split.pasteplaceholder', 'Pasted content');
         btn.setAttribute('disabled', 'true');
         status.textContent = lingo(wiki, 'split.parsing', 'Parsing...');
         try {

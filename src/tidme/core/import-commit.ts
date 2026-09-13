@@ -76,7 +76,7 @@ export async function commitImportToWiki(wiki: any, opts: CommitImportOptions): 
   const alignDocTitle = finalDocTitle;
   const oldCards: { title: string; fields: Record<string, any> }[] = wiki
     .filterTiddlers(
-      `[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]${ns.NOT_DECK_FILTER}!tag[tidme-doc]!has[tidme.obsolete]!is[draft]]`,
+      `[tidme.doc[${docId}]tidme.kind[topic]!tidme.subkind[extract]${ns.NOT_DECK_FILTER}!tag[${ns.DOC_TAG}]!has[tidme.obsolete]!is[draft]]`,
     )
     .map((ot: string) => ({ title: ot, fields: wiki.getTiddler(ot)?.fields || {} }));
 

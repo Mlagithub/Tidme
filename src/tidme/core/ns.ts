@@ -39,13 +39,24 @@ export const NS_DECKS = 'Tidme/Decks/';
  * 与外部原始摄入缓冲区（[tag[tidme-inbox]]）及文档派生卡（tm-doc-derived）严格区分。
  */
 export const NS_DECKS_STANDALONE = NS_DECKS + 'standalone';
-export const NS_DECKS_SCATTER = NS_DECKS_STANDALONE; // 向后兼容别名
 
 /** 面包屑层级分隔符（tidme.breadcrumb / 显示层共用） */
 export const CRUMB_SEP = ' › ';
 
 /** fsrs4tw 牌组标题前缀（$:/Deck/<name>，学习循环运行时依赖） */
 export const DECK_PREFIX = '$:/Deck/';
+
+/** 默认牌组标题（兜底视图：全库测试卡）。deck.DEFAULT_DECK 与 deck-engine 共用本产地 */
+export const DEFAULT_DECK_TITLE = DECK_PREFIX + 'default';
+
+/** 阅读材料实体标签（文档页/节卡/摘录的宿主标记，card-factory 落库、各查询消费） */
+export const DOC_TAG = 'tidme-doc';
+
+/** 外部剪藏收件箱标签（外部浏览器扩展落库契约标签，split.ts 切分后移除） */
+export const INBOX_TAG = 'tidme-inbox';
+
+/** TW 故事河列表标题（当前打开条目的顺序）——界面状态，非领域数据 */
+export const STORY_LIST_TITLE = '$:/StoryList';
 
 /**
  * 出队三态排除尾段（done/ignored/suspended）——一切"在队"过滤器的公共后缀。
@@ -208,6 +219,7 @@ export const PAGE_SETTINGS = '$:/plugins/keepone/tidme/manager/ui/settings';
 
 export const NOTIFY_EXTRACT = '$:/plugins/keepone/tidme/import/ui/notify-extract';
 export const NOTIFY_CLOZE = '$:/plugins/keepone/tidme/import/ui/notify-cloze';
+export const NOTIFY_QA = '$:/plugins/keepone/tidme/import/ui/notify-qa';
 export const NOTIFY_READPOINT = '$:/plugins/keepone/tidme/import/ui/notify-readpoint';
 export const NOTIFY_SELECT_FIRST = '$:/plugins/keepone/tidme/import/ui/notify-select-first';
 export const NOTIFY_EXTRACT_NOTE = '$:/plugins/keepone/tidme/import/ui/notify-extract-note';

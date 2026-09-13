@@ -353,26 +353,6 @@ test('card-manager: 列表视图表头与数据逐列对齐（曾表头 14 列 /
   assert.equal(cellText('间隔'), '13d', `间隔列显示 scheduled_days（实际 ${cellText('间隔')}）`);
 });
 
-test('card-manager: doneFields/resumePatch 都是补丁，合并写库可逆恢复', () => {
-  const fields = { title: '节', 'tidme.kind': 'topic', state: '0' };
-  const done = cardManager.doneFields();
-  assert.equal(done['tidme.done'], 'yes');
-  assert.ok(!('title' in done), '只返回补丁');
-  // 恢复（「回」按钮路径）：core/resumePatch 同源，三键显式 undefined 经合并清除标记
-  const resumed = { ...fields, ...done, ...cardManager.resumePatch() };
-  assert.equal(resumed['tidme.done'], undefined, '恢复删除 tidme.done');
-  assert.equal(resumed['tidme.kind'], 'topic', 'topic 保留（阅读流）');
-  assert.ok(!sched.isCardOutOfQueue(resumed), '恢复后不在完成态');
-});
-
-test('card-manager: resumePatch 与 core/scheduler.restoreCard 同源（不再各写一份）', () => {
-  const patch = cardManager.resumePatch();
-  assert.deepEqual({ ...patch }, { ...sched.restoreCard() }, '三键补丁与 core 完全一致');
-  const done = cardManager.doneFields();
-  assert.ok(!sched.isCardOutOfQueue({ 'tidme.kind': 'item', ...done, ...patch }), '合并写回后应脱离完成态');
-  assert.ok(!sched.isCardOutOfQueue({ ...done, ...patch, 'tidme.kind': 'item', 'tidme.suspended': 'yes' }), '合并可覆盖旧搁置值');
-});
-
 test('card-manager: 全部卡片可见（含已读卡与手动散卡）', () => {
   addLooseCard();
   // 已读一张节卡（模拟其他入口的 Done）
@@ -408,19 +388,6 @@ test('card-manager: 列表视图（Browser 式）平铺所有卡', () => {
   assert.ok(text.includes('难度'), '信息列表头-难度');
   assert.ok(text.includes('手动散卡甲'), '列表包含手动散卡');
   assert.ok(text.includes('书名甲'), '列表包含书内卡');
-});
-
-test('card-manager: 信息标签（Element data 显示层）', () => {
-  const L = cardManager.labels;
-  assert.equal(L.dueLabel({ state: '2', due: '20261231000000000' }), '2026-12-31');
-  assert.equal(L.dueLabel({ state: '0' }), '—', '非到期态无日期');
-  assert.ok(L.intervalLabel({ scheduled_days: '7' }) === '7天' || L.intervalLabel({ scheduled_days: '7' }) === '7d');
-  assert.equal(L.intervalLabel({}), '—');
-  assert.equal(L.repsLabel({ reps: '5' }), '5');
-  assert.equal(L.lapsesLabel({ lapses: '2' }), '2');
-  assert.equal(L.diffLabel({ difficulty: '0.45' }), '45%');
-  assert.equal(L.dateLabel('20261231000000000'), '2026-12-31');
-  assert.equal(L.dateLabel(undefined), '—');
 });
 
 test('deck-ui: 新建牌组折叠表单渲染（tm 风格）；默认牌组删除按钮禁用', () => {

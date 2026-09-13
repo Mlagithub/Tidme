@@ -60,6 +60,6 @@ export async function importPdfFile(
   const r = await pdfOps.createPdfDoc(wiki, { docTitle, dataB64, pagesTotal: numPages });
   onProgress?.({ phase: 'store', percent: PHASE_PERCENT.store[1] });
 
-  widget?.dispatchEvent?.({ type: 'tm-navigate', navigateTo: r.docTitle });
+  // 注意：导航由调用方 widget 派发（此前这里与 import.ts 各派发一次，双导航）
   return { docTitle: r.docTitle, pages: numPages };
 }

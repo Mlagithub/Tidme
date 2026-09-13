@@ -16,7 +16,7 @@ master 分支走 semantic-release。
 
 ```bash
 node tools/build-plugins.cjs   # 构建 bin/（插件 JSON + parse.cjs）；改 src 后必须先跑
-npm test                       # 全部测试（node --test，305+ 用例 ~6s）
+npm test                       # 全部测试（node --test，484 用例 ~12s）
 npm run test:coverage          # 同上 + 覆盖率
 npm run dev                    # tiddlywiki-plugin-dev 开发模式
 ```
@@ -27,7 +27,8 @@ Node ≥22（类型剥离直跑 .ts）；本机 node 由 fnm 管理。CI = build
 
 1. 分层：wikitext 模板只渲染 → widgets 只做 DOM 组装与事件广播 → core 是唯一逻辑实现，无 DOM
 2. **core 内跨模块引用一律显式 `require("$:/plugins/keepone/tidme/core/<x>.js")`，禁用 ES import**
-   （esbuild 会把 ES import 内联复制成多份实现；`editor/*` 是刻意例外，作为 section.ts 私有实现内联）
+   （esbuild 会把 ES import 内联复制成多份实现；`editor/codemirror-editor.ts` 是重依赖，
+   已配置 .meta 作为独立 `$:/` 模块，消费方必须显式 require，绝不可 ES import）
 3. core 函数首参注入 `wiki`；`$tw` 全局只允许出现在 startup 薄壳（core/server/*）
 4. 同一概念全库只有一份实现；过滤器组合统一走 core/deck-engine，调度统一走 core/scheduler
 5. 导入解析叫 **parse**，不要叫 pipeline（易与渐进学习流程混淆）
@@ -35,7 +36,7 @@ Node ≥22（类型剥离直跑 .ts）；本机 node 由 fnm 管理。CI = build
 ## 测试约定
 
 - 分层：`unit/` 直测 TS 源码；`integration/` boot 真实 TW + bin 产物；`e2e/` 真实 TiddlyWeb / 学习流
-- 用例基线**只增不减**（当前 305+；随过时兼容/迁移代码清理而删除的用例除外）；五条黄金法则：AAA / 一测一概念 / 命名即文档 / 谨慎 Mock / 测试独立
+- 用例基线**只增不减**（当前 484+；随过时兼容/迁移代码清理而删除的用例除外）；五条黄金法则：AAA / 一测一概念 / 命名即文档 / 谨慎 Mock / 测试独立
 - 永不 mock `$tw`/wiki（boot 真实 TW）；setup 一律走 `test/helpers/`（bootPlugin/fake-dom/tw-date 等），禁止手写第二份
 - 已知陷阱：
   - TW 经 vm 沙箱 boot，`filterTiddlers` 返回跨 realm 数组 → 断言前先 `[...out]` 展开，对象逐字段比

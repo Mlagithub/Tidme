@@ -29,13 +29,13 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
-function lingo(wiki: any, key: string, fallback: string): string {
-  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
-}
+// 文案查询唯一实现 = core/lingo（require 结果恒真值，无死防御分支）
+const lingo = lingoMod.lingo;
 
 const READPOINT_PREFIX = docOps.READPOINT_PREFIX;
 
-import { TidmeLiveEditor } from '../../editor/codemirror-editor';
+// CodeMirror 是重依赖（~300KB）：独立 $:/ 模块 + 显式 require，避免 esbuild 把整包内联进每个消费者
+const { TidmeLiveEditor } = require('$:/plugins/keepone/tidme/editor/codemirror-editor.js');
 import { cleanContaminatedHtmlToWikiText } from '../../editor/wikitext-parser';
 
 /**
@@ -54,14 +54,12 @@ const active: {
   body: any;
   sectionBar: any;
   docId: string;
-  navActions: { prev: (() => void) | null; next: (() => void) | null; title: string } | null;
   pendingCards: Set<string>;
 } = {
   dispatch: null,
   body: null,
   sectionBar: null,
   docId: '',
-  navActions: null,
   pendingCards: new Set<string>(),
 };
 
@@ -132,10 +130,11 @@ function currentDocId(win: any): string | null {
   return active.docId || null;
 }
 
-function notify(kind: 'extract' | 'cloze' | 'readpoint' | 'select-first' | 'done' | 'later' | 'extract-note') {
+function notify(kind: 'extract' | 'cloze' | 'qa' | 'readpoint' | 'select-first' | 'done' | 'later' | 'extract-note') {
   const map = {
     extract: ns.NOTIFY_EXTRACT,
     cloze: ns.NOTIFY_CLOZE,
+    qa: ns.NOTIFY_QA,
     readpoint: ns.NOTIFY_READPOINT,
     'select-first': ns.NOTIFY_SELECT_FIRST,
     'extract-note': ns.NOTIFY_EXTRACT_NOTE,
@@ -284,7 +283,7 @@ function refreshAnchorsAfterCard(): void {
 
 /** 制卡公共收尾：落库 → 按选区记续读点（SM 对齐：extract/cloze 自动设续读点）→
  *  清选区 → 刷新锚点高亮 → 通知。draft 为空返回 false（由调用方决定提示语）。 */
-function commitCardAndReadPoint(win: any, tt: string, draft: Record<string, any> | null, selected: string, kind: 'extract' | 'cloze'): boolean {
+function commitCardAndReadPoint(win: any, tt: string, draft: Record<string, any> | null, selected: string, kind: 'extract' | 'cloze' | 'qa'): boolean {
   if (!draft) return false;
   commitCard(activeWiki(), draft);
   active.pendingCards.delete(String(draft.title || ''));
@@ -338,6 +337,9 @@ function actionCloze(win: any) {
   openCardModal(win.document || document, 'cloze', String(fields.caption || ''), (res) => {
     fields.caption = res.answerOrCloze;
     commitCardAndReadPoint(win, tt, fields, selected, 'cloze');
+  }, () => {
+    // 弹窗取消（未落库）：释放占位 title，否则同一段文字再挖空会拿到递增序号的漂移 title
+    active.pendingCards.delete(String(fields.title || ''));
   });
 }
 
@@ -354,8 +356,8 @@ function actionQA(win: any) {
   }
   openCardModal(win.document || document, 'qa', selected, (res) => {
     const fields = buildQA(activeWiki(), tt, res.question, res.answerOrCloze);
-    // 历史口径：QA 完成沿用 "cloze" 通知（notify map 无 qa 项）
-    commitCardAndReadPoint(win, tt, fields, selected, 'cloze');
+    // QA 卡用自己的通知（notify-qa）——此前沿用 cloze 文案「挖空卡已创建」，提示错误
+    commitCardAndReadPoint(win, tt, fields, selected, 'qa');
   });
 }
 
@@ -418,13 +420,15 @@ if (typeof document !== 'undefined') {
     'shift+ctrl+f7': () => actionClearReadPoint(document.defaultView || globalThis),
   };
   const fireNav = (dir: 'prev' | 'next') => {
-    const barTitle = active.sectionBar?._title;
+    const bar = active.sectionBar;
+    const barTitle = bar?._title;
     if (!barTitle) return;
     // 仅当该卡仍在故事（页面打开）时响应，避免陈旧导航
     const inStory = activeWiki().filterTiddlers('[list[$:/StoryList]]').indexOf(barTitle) !== -1;
     if (!inStory) return;
-    if (dir === 'prev') active.navActions?.prev?.();
-    else active.navActions?.next?.();
+    // 与 ◀/▶ 按钮同一处理器（build 期绑定到实例；cloze/qa 卡与未建导航的卡为 null = 不响应）
+    if (dir === 'prev') bar?._navPrev?.();
+    else bar?._navNext?.();
   };
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     const tag = String((e.target as any)?.tagName || '').toLowerCase();
@@ -459,8 +463,9 @@ function makeSectionBar(): WidgetCtor {
     _flushReadTime: () => void = () => {};
     _showStats: boolean = false;
     _isReadingMode: boolean = false; // 默认沉浸式 Word 实时可编辑模式
-    _saveTimer: any = null;
-    _dirtyText: string | null = null;
+    /** ◀/▶ 推进处理器（build 期绑定，全局 ←/→ 快捷键与按钮共用；不可导航的卡为 null） */
+    _navPrev: (() => void) | null = null;
+    _navNext: (() => void) | null = null;
     _flushSave() {
       active.body?._flushSave?.();
     }
@@ -505,15 +510,26 @@ function makeSectionBar(): WidgetCtor {
       parent.insertBefore(root, nextSibling);
       this.domNodes.push(root);
 
-      // 制卡按钮置灰（B：未在本文档选中文字时禁用摘录/挖空）——监听选区变化实时更新
+      // 制卡按钮置灰（B：未在本文档选中文字时禁用摘录/挖空）——监听选区变化实时更新。
+      // document 级监听器带自解绑：卡片关闭（root 脱离 DOM）后首次事件即移除全部三个监听，
+      // 闭包随后可回收——此前每实例永久绑定且闭包持有已销毁 widget，开过 N 张卡泄漏 N×3 个
       if (!this._selBound) {
         this._selBound = true;
         const win = (doc as any).defaultView || globalThis;
         const d = doc || win?.document;
         if (d && typeof d.addEventListener === 'function') {
-          d.addEventListener('selectionchange', () => this._syncPick_());
-          d.addEventListener('mouseup', () => this._syncPick_());
-          d.addEventListener('keyup', () => this._syncPick_());
+          const sync = () => {
+            if (root && !root.isConnected) {
+              d.removeEventListener('selectionchange', sync);
+              d.removeEventListener('mouseup', sync);
+              d.removeEventListener('keyup', sync);
+              return;
+            }
+            this._syncPick_();
+          };
+          d.addEventListener('selectionchange', sync);
+          d.addEventListener('mouseup', sync);
+          d.addEventListener('keyup', sync);
         }
         this._syncPick_();
       }
@@ -608,6 +624,9 @@ function makeSectionBar(): WidgetCtor {
       const fields = t.fields;
       const root = this._root;
       root.textContent = '';
+      // 本轮 build 尚未绑定导航（cloze/qa 分支提前 return 时保持 null，快捷键不响应）
+      this._navPrev = null;
+      this._navNext = null;
 
       const mkBtn = (label: string, variant: string, tip: string, disabled = false, onClick?: () => void, icon?: string) => {
         const b = el(doc, 'button', variant ? `tm-sec-btn tm-sec-btn--${variant}` : 'tm-sec-btn', label);
@@ -658,7 +677,10 @@ function makeSectionBar(): WidgetCtor {
         }
         return sched.nextSchedulable(topicsOfDoc(wiki, docId), title, learnable);
       };
-      /** 出队后离开当前卡：移出会话 + 关闭 +（有下一张时）记录续读点并跳转 */
+      /**
+       * 出队后离开当前卡：移出会话 + 关闭 +（有下一张时）记录续读点并跳转。
+       * ◀ / ▶ / 已读 / 稍后 / 忽略 的推进全部经此（此前另有一份 gotoNextDoc 拷贝，已删）。
+       */
       const leaveTo = (nxt: string | null) => {
         removeTitleFromSession(title);
         this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
@@ -667,20 +689,6 @@ function makeSectionBar(): WidgetCtor {
           saveReadPoint(wiki, docId, { t: nxt, s: docOps.readPointPositionOf(wiki, nxt) });
           this.dispatchEvent({ type: 'tm-navigate', navigateTo: nxt });
         }
-      };
-      /** ▶ 下一节：走统一调度引擎 getScheduledNext（学习会话优先 → 本文档回退）。
-       * 开始学习发起的交错会话中，▶ 会推进到会话下一卡（可能是知识卡），
-       * 避免用户一直困在阅读材料里；无会话时则在同一文档内跳下一可读节。 */
-      const gotoNextDoc = () => {
-        const nxt = getScheduledNext();
-        if (!nxt) return;
-        // ▶ 会话中 = 明确"跳过本卡"：移出会话，避免滞留卡被复习流"下一张"
-        // （从会话头找）反复拉回 → 摘录↔词卡 1:1 死循环。
-        removeTitleFromSession(title);
-        sessionMod.enterCard(wiki, nxt);
-        saveReadPoint(wiki, docId, { t: nxt, s: docOps.readPointPositionOf(wiki, nxt) });
-        this.dispatchEvent({ type: 'tm-close-tiddler', param: title, tiddlerTitle: title });
-        this.dispatchEvent({ type: 'tm-navigate', navigateTo: nxt });
       };
 
       // 1. 测试卡 (Item：挖空卡 / 问答卡)
@@ -829,6 +837,11 @@ function makeSectionBar(): WidgetCtor {
         );
       }
 
+      // 导航目标绑定到实例：全局 ←/→ 快捷键（fireNav）与 ◀/▶ 按钮共用同一处理器，
+      // 保证键盘与按钮行为永远一致（此前快捷键经 active.navActions 注入，但全库无写入方，已死）
+      this._navPrev = () => leaveTo(prev);
+      this._navNext = () => leaveTo(schedNext);
+
       // 导航 ◀ / ▶
       btnRow.appendChild(
         mkBtn(
@@ -836,7 +849,7 @@ function makeSectionBar(): WidgetCtor {
           'prev',
           prev ? `${lingo(wiki, 'read/prev.tip', 'Previous section (Alt+Left):')} ${prev}` : lingo(wiki, 'read/noprev', 'No previous section'),
           !prev,
-          () => leaveTo(prev),
+          this._navPrev,
         ),
       );
       btnRow.appendChild(
@@ -845,7 +858,7 @@ function makeSectionBar(): WidgetCtor {
           'next',
           schedNext ? `${lingo(wiki, 'read/next.tip', 'Next scheduled section (Alt+Right):')} ${schedNext}` : lingo(wiki, 'read/nonext', 'No next section'),
           !schedNext,
-          () => leaveTo(schedNext),
+          this._navNext,
         ),
       );
 
@@ -913,6 +926,9 @@ function makeSectionBar(): WidgetCtor {
         btnRow.appendChild(mkBtn(lingo(wiki, 'read.ignore', 'Ignore'), 'ignore', lingo(wiki, 'read/ignore.tip', 'Mark as ignored: remove from reading queue'), false, () => {
           this._flushSave();
           this._flushReadTime?.();
+          // 忽略必须落库（sched.ignoreCard 写 tidme.ignored，可经 restoreCard 恢复）——
+          // 此前只导航不写库，卡仍留在队列，与 tooltip「移出阅读队列」语义矛盾
+          wiki.addTiddler({ ...fields, ...sched.ignoreCard() });
           leaveTo(getScheduledNext());
           notify('done');
         }));
@@ -1078,7 +1094,9 @@ function makeSectionBar(): WidgetCtor {
     }
 
     refresh(changedTiddlers: Record<string, any>) {
-      if (active.body?._isSelfSaving) {
+      // 仅同一张卡的 body 正在自保存时跳过重建——此前全局标志让任何一张卡的自保存
+      // 吞掉所有条栏的刷新（别的卡的续读点变化也不更新）
+      if (active.body?._isSelfSaving && active.body?._title === this._title) {
         return false;
       }
       // 即时刷新：本文档任何卡 / 本卡 / 续读点 变化 → 重建条栏（信息与按钮保持最新）
@@ -1447,7 +1465,20 @@ function makeSectionBody(): WidgetCtor {
         parent: editorContainer,
         initialText: initialWikiText,
         onInput: (newText: string) => {
-          if (newText === initialWikiText) return;
+          if (newText === initialWikiText) {
+            // 改回原文 = 视为无修改：必须清掉脏文本与待存的防抖定时器——
+            // 此前直接 return，_dirtyText 仍是上一版输入，1.2s 后把旧内容写库
+            this._dirtyText = null;
+            if (this._saveTimer) {
+              clearTimeout(this._saveTimer);
+              this._saveTimer = null;
+            }
+            if (active.sectionBar && active.sectionBar._saveIndicatorEl) {
+              active.sectionBar._saveIndicatorEl.textContent = '✓ ' + lingo(activeWiki(), 'read/autosaved', 'Auto-saved');
+              active.sectionBar._saveIndicatorEl.className = 'tm-save-indicator tm-save-indicator--saved';
+            }
+            return;
+          }
           this._dirtyText = newText;
           if (active.sectionBar && active.sectionBar._saveIndicatorEl) {
             active.sectionBar._saveIndicatorEl.textContent = '💾 ' + lingo(activeWiki(), 'read/saving', 'Saving...');

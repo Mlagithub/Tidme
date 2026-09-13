@@ -28,12 +28,12 @@ export function docFolderOwner(wiki: any, baseFolder: string): string | null {
 /** 按 docId 查真实文档页 title（folder 含 ~docId 后缀时亦准确）；找不到返回 "" */
 export function docPageOfDoc(wiki: any, docId: string): string {
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return '';
-  return wiki.filterTiddlers(`[tag[tidme-doc]tidme.doc[${docId}]]`)[0] || '';
+  return wiki.filterTiddlers(`[tag[${ns.DOC_TAG}]tidme.doc[${docId}]]`)[0] || '';
 }
 
 /** 文档页判定：带 tidme-doc 标签 */
 export function isDocPage(f: Record<string, any> | null | undefined): boolean {
-  return !!f && Array.isArray(f.tags) && f.tags.includes('tidme-doc');
+  return !!f && Array.isArray(f.tags) && f.tags.includes(ns.DOC_TAG);
 }
 
 /**

@@ -38,8 +38,9 @@ commitCard），不改写编辑器文本。
     var finish = function(draft) {
       if (!draft) return;
       factory.commitCard(wiki, draft, editWidget);
-      // 通知统一走 dom.notify（widget 事件派发 tm-notify），不直触 $tw 全局
-      dom.notify(editWidget, ns.NOTIFY_CLOZE);
+      // 通知统一走 dom.notify（widget 事件派发 tm-notify），不直触 $tw 全局；
+      // QA 卡发自己的 notify-qa——此前共用 notify-cloze，创建问答卡提示「挖空卡已创建」
+      dom.notify(editWidget, kind === 'qa' ? ns.NOTIFY_QA : ns.NOTIFY_CLOZE);
     };
 
     if (kind === 'qa') {

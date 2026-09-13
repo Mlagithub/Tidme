@@ -19,9 +19,8 @@ const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const paths = require('$:/plugins/keepone/tidme/core/paths.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
-function lingo(wiki: any, key: string, fallback: string): string {
-  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
-}
+// 文案查询唯一实现 = core/lingo（require 结果恒真值，无死防御分支）
+const lingo = lingoMod.lingo;
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
@@ -193,11 +192,15 @@ function makeReadingList(): any {
           if (
             await dialog.confirmDialog(doc, {
               title: lingo(wiki, 'read/clean.materials', 'Clean Reading Materials'),
-              message: `删除《${docLabel}》的阅读材料？
-
-将删除文档页与全部普通节卡（含大纲手动插入的新节）。
-已提取的知识（摘录/挖空/问答/手动卡）会保留，不受影响。
-此操作不可恢复。`,
+              // 弹窗文案走语言包（$(doc)$ 占位与词典风格一致，双 replace 兜底两种写法）
+              message: lingo(wiki, 'manager.readinglist.deleteconfirm', 'Delete reading materials of 《$(doc)$》?')
+                .replace('$(doc)$', docLabel).replace('${doc}', docLabel) +
+                '\n\n' +
+                lingo(
+                  wiki,
+                  'manager.readinglist.deleteconfirm.detail',
+                  'The doc page and all normal section cards (including manually inserted ones) will be deleted. Extracted knowledge (extracts / clozes / Q&A / manual cards) is kept. This cannot be undone.',
+                ),
               confirmLabel: lingo(wiki, 'read/delete', 'Delete'),
               danger: true,
             })

@@ -10,15 +10,11 @@ widgets/workflow.ts — $:/Decks 工作流中心：开始学习按钮
 declare function require(module: string): any;
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
-const deckMod = require('$:/plugins/keepone/tidme/core/deck.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
-const config = require('$:/plugins/keepone/tidme/core/config.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
-
-const DEFAULT_DECK = deckMod.DEFAULT_DECK;
 
 // 共享 DOM 工具（实现收敛于 core/dom）
 const el = dom.el;
@@ -51,48 +47,19 @@ function makeWorkflow(): any {
 }
 
 /**
- * 全局 SuperMemo 动态交错学习流启动器：
- * 1. 组合到期 Item 与 Priority 排序 Topic 生成动态交错队列
- * 2. 写入全局学习会话 $:/state/tidme/learning-session
- * 3. 导航到首张学习卡（或在无到期任务时发射庆祝粒子）
+ * 全局学习流启动（widget 侧）：队列组合、会话与 <deck>/study 镜像写入全部收口在
+ * core/session.startGlobalLearningSession（会话唯一读写口）；本函数只保留表现层
+ * ——无到期任务的三连庆祝与导航到首卡。
  */
 function startGlobalLearning(wiki: any, widget: any): void {
-  const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
-  const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
-  const opts = config.readQueueOptions(wiki);
-  // 今日剩余额度唯一产地 = core/scheduler.resolveDailyLimits（压制已在那一层算进 newLimit）
-  const limits = sched.resolveDailyLimits(wiki);
-
-  const queue = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), {
-    mode: opts.mode,
-    topics: opts.topics,
-    itemRatio: opts.itemRatio,
-    topicRatio: opts.topicRatio,
-    newLimit: limits.newLimit,
-    reviewLimit: limits.reviewLimit,
-    learningDay: limits.learningDay,
-  });
-
-  if (!queue || queue.length === 0) {
+  const first = sessionMod.startGlobalLearningSession(wiki);
+  if (!first) {
     widget.dispatchEvent({ type: 'tm-confetti-launch' });
     widget.dispatchEvent({ type: 'tm-confetti-launch', originY: 0.6, spread: 70, delay: 300 });
     widget.dispatchEvent({ type: 'tm-confetti-launch', originY: 0.55, spread: 30, delay: 600 });
     widget.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_CONGRATULATION });
     return;
   }
-
-  const first = queue[0];
-  sessionMod.setSession(wiki, {
-    list: queue,
-    currentIndex: '0',
-    mode: opts.mode === 'strict' ? 'global-strict' : opts.topics ? 'global-interleaved' : 'items-only',
-  });
-
-  // <deck>/study 会话列表（fsrs4tw 契约后缀见 core/session）
-  wiki.addTiddler({ title: DEFAULT_DECK + sessionMod.DECK_STUDY_SUFFIX, list: queue });
-  // 首卡：折叠态 + 专注计时锚点统一走 core/session.enterCard（item → hide/show，按所属 deck card_unfold）
-  sessionMod.enterCard(wiki, first);
-
   widget.dispatchEvent({ type: 'tm-navigate', navigateTo: first });
 }
 

@@ -35,7 +35,7 @@ export function deckLoad(cards: CardLike[], now = new Date()): DeckLoad {
   for (const c of cards) {
     const f = c.fields;
     if (!isInQueue(f)) continue; // 出队三态统一判定（done/ignored/suspended）
-    const state = String(f.state || '0');
+    const state = sched.stateOf(f); // state 归一化唯一产地（数字/字符串/缺失 → '0'|'1'|'2'|'3'）
     if (state === '1' || state === '3') load.learn++;
     else if (state === '2') {
       // 到期 = 已排期复习且 due ≤ now；未来排期不算"到期"（注释与实现对齐）
@@ -251,7 +251,7 @@ function reviewCardValues(cards: CardLike[], field: string): number[] {
   for (const c of cards) {
     const f = c?.fields;
     if (!f || !isInQueue(f)) continue;
-    if (String(f.state ?? '') !== '2') continue;
+    if (sched.stateOf(f) !== '2') continue;
     const v = Number(f[field]);
     if (Number.isFinite(v) && v >= 0) out.push(v);
   }
@@ -307,7 +307,7 @@ export function forecastSummary(cards: CardLike[], days = 30, now = new Date(), 
     const f = c?.fields;
     if (!f || !isInQueue(f)) continue;
     if (f['tidme.kind'] !== 'item') continue;
-    if (String(f.state ?? '') !== '2') continue;
+    if (sched.stateOf(f) !== '2') continue;
     const ivl = Number(f.scheduled_days);
     if (Number.isFinite(ivl) && ivl > 0) burden += 1 / ivl;
   }
@@ -437,7 +437,7 @@ export function futureDueSchedule(
     const f = c.fields;
     if (!isInQueue(f)) continue;
     if (f['tidme.kind'] !== 'item') continue;
-    const state = String(f.state || '0');
+    const state = sched.stateOf(f);
     if (state === '0') continue; // 新卡尚未排期
 
     const dueStr = f.due;
@@ -479,7 +479,7 @@ export function funnelCounts(items: CardLike[]): Funnel {
   for (const c of items) {
     const kind = String(c.fields['tidme.kind'] || '');
     const sub = String(c.fields['tidme.subkind'] || '');
-    if (Array.isArray(c.fields.tags) && c.fields.tags.includes('tidme-doc')) f.docs++;
+    if (Array.isArray(c.fields.tags) && c.fields.tags.includes(nsMod.DOC_TAG)) f.docs++;
     else if (kind === 'topic') {
       if (sub === 'extract') f.extracts++;
       else if (sub === 'concept') f.concepts++;

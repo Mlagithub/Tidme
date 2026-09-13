@@ -17,7 +17,6 @@ Done 语义：移出队列 = 置 tidme.done（kind 决定归属：item 出默认
 declare function require(module: string): any;
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
-const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const icons = require('$:/plugins/keepone/tidme/ui/base/icons.js');
@@ -88,6 +87,8 @@ interface CMState {
   allCards: Card[];
   deckInfos: DeckInfo[];
   visibleCards: Card[];
+  /** title → 全部后代卡（collectAll 时预建；勾选联动 O(1) 取代每卡全库爬链） */
+  descendants: Map<string, Card[]>;
   groupCbUpdaters: (() => void)[];
   cardCbUpdaters: (() => void)[];
   bulkCb: HTMLInputElement | null;
@@ -107,7 +108,7 @@ interface Ctx {
   st: CMState;
 }
 
-// 共享 DOM/徽章/标签工具（实现收敛于 core/dom、core/display）
+// 共享 DOM/徽章/标签工具（实现收敛于 ui/base/dom、core/display）
 const el = dom.el;
 const badgeOf = display.badgeOf;
 const kindMark = display.kindMark;
@@ -122,17 +123,10 @@ const dateLabel = display.dateLabel;
 
 /** 卡片收集：带 tidme.kind 的 tiddler（topic/item）。卡片一律带 kind——制卡工厂
  *  （core/card-factory）与文档页构建处保证。排除文档汇总页（文档页宿主不是可管理卡片）。 */
-const CARD_FILTER = '[all[shadows+tiddlers]!is[draft]has[tidme.kind]!tag[tidme-doc]]';
+const CARD_FILTER = `[all[shadows+tiddlers]!is[draft]has[tidme.kind]!tag[${ns.DOC_TAG}]]`;
 
-/** Done：字段补丁（core scheduler 实现，与批量恢复同族——一律返回补丁，调用方展开写库） */
-function doneFields(): Record<string, any> {
-  return sched.doneCard();
-}
-/** 恢复：直接用 core 的补丁（三键显式 undefined = TW addTiddler 删除字段语义） */
-function resumePatch(): Record<string, any> {
-  return sched.restoreCard();
-}
-
+// Done/恢复一律直接用 core/scheduler 的补丁（doneCard/restoreCard），不再经本地包装
+// ——此前的一行包装仅为测试开口（同义反复的"同源"测试随清理删除）
 // ---------- 纯查询 ----------
 
 function crumbOf(c: Card): string {
@@ -154,10 +148,10 @@ function inView(st: CMState, f: Record<string, any>, v: View, title = ''): boole
     return queryMod.matchCardQuery(f, title, OVERDUE_QUERY, { now: new Date(), rolloverHour: st.rolloverHour });
   }
   if (v === 'leech') {
-    const lapses = Number(f.lapses || 0);
-    // 触发期落库的标记（repeat.tid 达阈值时写 tidme.leech）+ lapses 兜底（历史卡/阈值调低后）
-    const hasLeechMark = f['tidme.leech'] === 'yes' || (Array.isArray(f.tags) && f.tags.includes('leech'));
-    return hasLeechMark || lapses >= leechThresholdOfCard(st, title);
+    // leech 判定唯一产地 = core/card-query.isLeechCard（is:leech 搜索与视图同一口径）：
+    // 触发期落库的标记（repeat.tid 达阈值时写 tidme.leech）+ leech 标签 + lapses 兜底
+    // （历史卡/阈值调低后）；阈值按卡所属牌组 leech_threshold（多牌组取最小）
+    return queryMod.isLeechCard(f, leechThresholdOfCard(st, title));
   }
   return true;
 }
@@ -170,6 +164,7 @@ function matches(st: CMState, c: Card): boolean {
   return queryMod.matchCardQuery(c.fields, c.title, query, {
     now: new Date(),
     rolloverHour: st.rolloverHour,
+    leechThreshold: leechThresholdOfCard(st, c.title),
     deckNamesOf: (title: string) => decksOf(st, { title, fields: {} } as Card).map((d) => d.caption),
   });
 }
@@ -182,18 +177,63 @@ function anyStrict(st: CMState, c: Card): boolean {
   return st.deckInfos.some((d) => d.strict.has(c.title));
 }
 
-function isDescendantOf(wiki: any, child: Card, parent: Card): boolean {
-  if (child.title === parent.title) return false;
-  const parentCrumb = crumbOf(parent);
-  const childCrumb = crumbOf(child);
-  if (childCrumb.startsWith(parentCrumb + ns.CRUMB_SEP)) return true;
-  let p = String(child.fields['tidme.parent'] || '');
-  while (p) {
-    if (p === parent.title) return true;
-    const pt = wiki.getTiddler(p);
-    p = pt ? String(pt.fields['tidme.parent'] || '') : '';
+/**
+ * 后代关系索引（collectAll 时一次构建，替代勾选联动里对每张卡的全库爬链——
+ * 此前 updateCardCb / 勾选处理器各做 O(N) 次 isDescendantOf，每次又沿 parent 链爬，
+ * 大库点击一次复选框即 O(N²·d) 卡顿）。
+ * 判定口径与原 isDescendantOf 完全一致：child ≠ parent 且
+ * ① child 的面包屑以 parent 面包屑 + 分隔符为前缀，或
+ * ② child 沿 tidme.parent 链可达 parent。
+ */
+function buildDescendantsIndex(wiki: any, st: CMState): void {
+  // crumb → 卡（面包屑前缀祖先按完整段匹配）
+  const crumbIndex = new Map<string, Card[]>();
+  for (const c of st.allCards) {
+    const crumb = crumbOf(c);
+    const list = crumbIndex.get(crumb);
+    if (list) list.push(c);
+    else crumbIndex.set(crumb, [c]);
   }
-  return false;
+  const sep = ns.CRUMB_SEP;
+  const ancestors = new Map<string, Set<string>>();
+  for (const c of st.allCards) {
+    const set = new Set<string>();
+    const childCrumb = crumbOf(c);
+    // ① 面包屑前缀祖先：childCrumb 的每个「分隔符边界前缀段」在索引中的卡
+    let pos = 0;
+    for (;;) {
+      const at = childCrumb.indexOf(sep, pos);
+      if (at === -1) break;
+      const segment = childCrumb.slice(0, at);
+      const parents = crumbIndex.get(segment);
+      if (parents) {
+        for (const p of parents) {
+          if (p.title !== c.title) set.add(p.title);
+        }
+      }
+      pos = at + sep.length;
+    }
+    // ② tidme.parent 链祖先（链上节点可能不在 allCards——按 title 记，查询时天然不命中）
+    let p = String(c.fields['tidme.parent'] || '');
+    while (p) {
+      set.add(p);
+      const pt = wiki.getTiddler(p);
+      p = pt ? String(pt.fields['tidme.parent'] || '') : '';
+    }
+    ancestors.set(c.title, set);
+  }
+  // 反转成 title → 后代卡
+  const desc = new Map<string, Card[]>();
+  for (const c of st.allCards) {
+    const set = ancestors.get(c.title);
+    if (!set) continue;
+    for (const a of set) {
+      const list = desc.get(a);
+      if (list) list.push(c);
+      else desc.set(a, [c]);
+    }
+  }
+  st.descendants = desc;
 }
 
 function docNameOf(c: Card, wiki?: any): string {
@@ -224,6 +264,7 @@ function collectAll(ctx: Ctx) {
   // 单条 run 即可：卡片一律带 tidme.kind（含 topic 节卡与 item 测试卡），文档页已排除
   st.allCards = wiki.filterTiddlers(CARD_FILTER)
     .map((title: string) => ({ title, fields: wiki.getTiddler(title)?.fields || {} }));
+  buildDescendantsIndex(wiki, st);
   // card/card_exclude 各求值一次：strict = loose − exclude（省去 strict 内部对 card 的二次求值）
   st.deckInfos = deckMod.listDecks(wiki).map((deck: string) => {
     const f = wiki.getTiddler(deck)?.fields || {};
@@ -258,8 +299,22 @@ function leechThresholdOfCard(st: CMState, title: string): number {
 
 // ---------- 选中状态与反馈 ----------
 
-function toast(ctx: Ctx, msg: string, kind: '' | 'ok' | 'err' = '') {
+function toast(ctx: Ctx, msg: string, kind: '' | 'ok' | 'err' | 'warn' = '') {
   showToast(ctx.doc, ctx.wrap, msg, kind);
+}
+
+/**
+ * 「已选中」标签唯一构造器：选中总数 = 批量操作的实际作用域（跨视图/组织累计），
+ * 可见数 = 当前视图行数。当可见中的选中数恰好等于总数时按 familiar 的 X/Y 同框，
+ * 否则拆开展示——此前恒写 selected.size/visibleCount，切视图后会出现 12/10 的误导数字。
+ */
+function selectionLabelText(wiki: any, st: CMState): string {
+  const prefix = lingoMod.lingo(wiki, 'manager.selected', 'Selected');
+  const selectedVisibleCount = st.visibleCards.filter((c) => st.selected.has(c.title)).length;
+  if (selectedVisibleCount === st.selected.size) {
+    return `${prefix} ${st.selected.size}/${st.visibleCards.length}`;
+  }
+  return `${prefix} ${st.selected.size} · ${selectedVisibleCount}/${st.visibleCards.length}`;
 }
 
 function updateSelectionUI(ctx: Ctx) {
@@ -271,8 +326,7 @@ function updateSelectionUI(ctx: Ctx) {
     st.bulkCb.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleCount;
   }
   if (st.selLabel) {
-    const prefix = lingoMod.lingo(ctx.wiki, 'manager.selected', 'Selected');
-    st.selLabel.textContent = `${prefix} ${st.selected.size}/${visibleCount}`;
+    st.selLabel.textContent = selectionLabelText(ctx.wiki, st);
   }
   for (const u of st.groupCbUpdaters) u();
   for (const u of st.cardCbUpdaters) u();
@@ -346,7 +400,7 @@ function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
     const readBtn = el(doc, 'button', 'tm-cm-op', lingoMod.lingo(wiki, 'manager.action.read', 'Read'));
     readBtn.title = lingoMod.lingo(wiki, 'manager.action.read.tip', 'Remove from queue (Mark as read)');
     readBtn.addEventListener('click', () => {
-      wiki.addTiddler({ ...c.fields, ...doneFields() });
+      wiki.addTiddler({ ...c.fields, ...sched.doneCard() });
       render(ctx);
     });
     row.appendChild(readBtn);
@@ -354,7 +408,7 @@ function appendOps(ctx: Ctx, row: HTMLElement, c: Card) {
     const resumeBtn = el(doc, 'button', 'tm-cm-op', lingoMod.lingo(wiki, 'manager.action.back', 'Back'));
     resumeBtn.title = lingoMod.lingo(wiki, 'manager.action.back.tip', 'Restore to learning queue');
     resumeBtn.addEventListener('click', () => {
-      wiki.addTiddler({ ...c.fields, ...resumePatch() });
+      wiki.addTiddler({ ...c.fields, ...sched.restoreCard() });
       render(ctx);
     });
     row.appendChild(resumeBtn);
@@ -403,7 +457,7 @@ function buildRowBase(ctx: Ctx, c: Card, cb: HTMLInputElement): {
   });
 
   const updateCardCb = () => {
-    const children = st.allCards.filter((child) => isDescendantOf(ctx.wiki, child, c));
+    const children = st.descendants.get(c.title) || [];
     if (children.length > 0) {
       const selChildrenCount = children.filter((child) => st.selected.has(child.title)).length;
       const selfSel = st.selected.has(c.title);
@@ -422,11 +476,9 @@ function buildRowBase(ctx: Ctx, c: Card, cb: HTMLInputElement): {
     } else {
       if (cb.checked) st.selected.add(c.title);
       else st.selected.delete(c.title);
-      for (const child of st.allCards) {
-        if (isDescendantOf(ctx.wiki, child, c)) {
-          if (cb.checked) st.selected.add(child.title);
-          else st.selected.delete(child.title);
-        }
+      for (const child of st.descendants.get(c.title) || []) {
+        if (cb.checked) st.selected.add(child.title);
+        else st.selected.delete(child.title);
       }
     }
     st.lastCheckedCardTitle = c.title;
@@ -698,11 +750,23 @@ function editForm(ctx: Ctx, c: Card): HTMLElement {
   const save = el(doc, 'button', 'tm-btn tm-btn--primary', `✔ ${lingoMod.lingo(wiki, 'save', 'Save')}`);
   save.addEventListener('click', () => {
     const patch: Record<string, any> = {};
-    const m = String(dueInput.value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const dueRaw = String(dueInput.value || '').trim();
+    const m = dueRaw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dueRaw !== '' && !m) {
+      // 非法日期：拒绝保存并提示——此前静默丢弃该字段却照常报"已保存"
+      toast(ctx, `⚠ ${lingoMod.lingo(wiki, 'manager.params.baddue', 'Due date must be YYYY-MM-DD')}`, 'warn');
+      dueInput.focus();
+      return;
+    }
     // 17 位 UTC 编码（YYYYMMDD + 9 位 0），与 schema.twDateString 兼容
     if (m) patch.due = `${m[1]}${m[2]}${m[3]}000000000`;
     const priVal = String(priInput.value || '').trim();
-    if (priVal !== '' && Number.isFinite(Number(priVal))) {
+    if (priVal !== '' && !Number.isFinite(Number(priVal))) {
+      toast(ctx, `⚠ ${lingoMod.lingo(wiki, 'manager.params.badpri', 'Priority must be a number 0-100')}`, 'warn');
+      priInput.focus();
+      return;
+    }
+    if (priVal !== '') {
       patch['tidme.priority'] = String(Math.max(0, Math.min(100, Math.round(Number(priVal)))));
     }
     patch['tidme.comment'] = String(commentInput.value || '');
@@ -893,11 +957,9 @@ function autoPostponeButton(ctx: Ctx): HTMLElement {
   const b = icons.iconButton(doc, 'tm-cm-btn', 'zap', lingoMod.lingo(wiki, 'manager.autopostpone', 'Auto Postpone'));
   b.title = lingoMod.lingo(wiki, 'manager.autopostpone.tip', 'Automatically postpone low-priority overdue cards (preserving high-priority ones)');
   b.addEventListener('click', () => {
-    let cfg: any = {};
-    try {
-      cfg = JSON.parse(wiki.getTiddlerText(sched.AUTOPOSTPONE_CONFIG_TITLE, '{}') || '{}');
-    } catch { /* 默认配置 */ }
-    const res = sched.autoPostpone(st.visibleCards, cfg);
+    // 配置读取唯一收口 = core/config.readAutoPostpone（默认值合并 + 数值 clamp）——
+    // 此前裸 JSON.parse，字段损坏/越界时与队列页读到不同口径
+    const res = sched.autoPostpone(st.visibleCards, config.readAutoPostpone(wiki));
     if (res.patches.length === 0) {
       toast(ctx, lingoMod.lingo(wiki, 'manager.autopostpone.none', `No postponement needed (Overdue: ${res.stats.overdue}, Retained: Top ${res.stats.kept})`), 'ok');
       return;
@@ -1038,8 +1100,7 @@ function buildToolbar(ctx: Ctx): HTMLElement {
     updateSelectionUI(ctx);
   });
   bulkCbGroup.appendChild(st.bulkCb);
-  const selPrefix = lingoMod.lingo(wiki, 'manager.selected', 'Selected');
-  st.selLabel = el(doc, 'span', 'tm-cm-sel-info', `${selPrefix} ${st.selected.size}/${st.visibleCards.length}`);
+  st.selLabel = el(doc, 'span', 'tm-cm-sel-info', selectionLabelText(wiki, st));
   bulkCbGroup.appendChild(st.selLabel);
   row.appendChild(bulkCbGroup);
 
@@ -1084,9 +1145,9 @@ function buildToolbar(ctx: Ctx): HTMLElement {
   row.appendChild(schedGroup);
 
   const stateGroup = el(doc, 'span', 'tm-cm-bar-group', '');
-  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.done', 'Done'), () => doneFields()));
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.done', 'Done'), () => sched.doneCard()));
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.suspend', 'Suspend'), () => sched.suspendCard()));
-  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.restore', 'Restore'), () => resumePatch()));
+  stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.restore', 'Restore'), () => sched.restoreCard()));
   // 取消失效搁置（Anki 牌组概览的 Unbury）：清 tidme.buried，卡当日即可再次调度。
   // 没有这个入口时，被搁置的卡只能等到次日自动解埋，或靠撤销评分间接触发。
   stateGroup.appendChild(batchButton(ctx, lingoMod.lingo(wiki, 'manager.unbury', 'Unbury'), () => sched.unburyCard()));
@@ -1215,6 +1276,7 @@ function makeCardManager(): WidgetCtor {
           allCards: [],
           deckInfos: [],
           visibleCards: [],
+          descendants: new Map<string, Card[]>(),
           groupCbUpdaters: [],
           cardCbUpdaters: [],
           bulkCb: null,
@@ -1242,6 +1304,3 @@ function makeCardManager(): WidgetCtor {
 
 exports['card-manager'] = makeCardManager();
 // 供测试/复用：Done 字段补丁、恢复合并补丁（三键 undefined = 删除）、信息标签
-exports.doneFields = doneFields;
-exports.resumePatch = resumePatch;
-exports.labels = { dueLabel, intervalLabel, repsLabel, lapsesLabel, diffLabel, dateLabel };

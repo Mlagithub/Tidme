@@ -1,7 +1,8 @@
 /**
  * codemirror-editor.ts — CodeMirror 6 Live Preview 编辑器包装类
  *
- * 负责实例化 CodeMirror 6 视图，管理文档状态更新、自动保存防抖及选区联动。
+ * 负责实例化 CodeMirror 6 视图与文本读写（onInput/onBlur/onSubmit 回调）；
+ * 防抖保存由调用方（section.ts）负责，本类不持有定时器。
  */
 
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -16,7 +17,6 @@ export interface CodeMirrorEditorOptions {
   onSubmit?: () => void;
   onInput?: (text: string) => void;
   onBlur?: (text: string) => void;
-  onSelectionChange?: (selectedText: string, range: { from: number; to: number }) => void;
 }
 
 // 定义 Tidme 主题样式，确保 CodeMirror 无缝融入 TiddlyWiki 页面
@@ -48,7 +48,6 @@ const tidmeLiveTheme = EditorView.theme({
 
 export class TidmeLiveEditor {
   view: EditorView;
-  private _saveTimer: any = null;
 
   constructor(options: CodeMirrorEditorOptions) {
     const submitKeymap = options.onSubmit
@@ -72,13 +71,6 @@ export class TidmeLiveEditor {
           const docText = update.state.doc.toString();
           if (options.onInput) {
             options.onInput(docText);
-          }
-        }
-        if (update.selectionSet || update.docChanged) {
-          const sel = update.state.selection.main;
-          if (!sel.empty && options.onSelectionChange) {
-            const selectedText = update.state.sliceDoc(sel.from, sel.to);
-            options.onSelectionChange(selectedText, { from: sel.from, to: sel.to });
           }
         }
       }),
@@ -120,9 +112,6 @@ export class TidmeLiveEditor {
   }
 
   public destroy() {
-    if (this._saveTimer) {
-      clearTimeout(this._saveTimer);
-    }
     this.view.destroy();
   }
 }

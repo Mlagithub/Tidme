@@ -112,6 +112,45 @@ export function advanceSession(
 
 // ---------- 学习模式（会话状态机单一写入口） ----------
 
+/**
+ * 启动全局学习会话（唯一写入口；workflow「开始学习」按钮等入口共用）：
+ * 1. 组合到期 Item 与 Priority 排序 Topic 生成动态交错队列（deck-engine 单一组合器，
+ *    每日额度/交错比/当日搁置排除都在那一层与「今日待学」显示同源）；
+ * 2. 写全局会话 $:/state/tidme/learning-session + <deck>/study 镜像（fsrs4tw 契约）；
+ * 3. 首卡折叠态 + 专注计时锚点统一 enterCard。
+ * 返回首张卡 title；队列为空返回 null（不写库，庆祝/提示由调用方决定）。
+ */
+export function startGlobalLearningSession(wiki: any): string | null {
+  if (!wiki || typeof wiki.filterTiddlers !== 'function') return null;
+  // 惰性取用（与 scheduler.configMod 同风格）：队列组合依赖图不进会话基础加载路径
+  const config = require('$:/plugins/keepone/tidme/core/config.js');
+  const deckEngine = require('$:/plugins/keepone/tidme/core/deck-engine.js');
+  const opts = config.readQueueOptions(wiki);
+  // 今日剩余额度唯一产地 = core/scheduler.resolveDailyLimits（压制已在那一层算进 newLimit）
+  const limits = sched.resolveDailyLimits(wiki);
+  const queue: string[] = deckEngine.composeGlobalLearningQueue((filter: string) => wiki.filterTiddlers(filter), {
+    mode: opts.mode,
+    topics: opts.topics,
+    itemRatio: opts.itemRatio,
+    topicRatio: opts.topicRatio,
+    newLimit: limits.newLimit,
+    reviewLimit: limits.reviewLimit,
+    learningDay: limits.learningDay,
+  });
+  if (!queue || !queue.length) return null;
+
+  const first = queue[0];
+  setSession(wiki, {
+    list: queue,
+    currentIndex: '0',
+    mode: opts.mode === 'strict' ? 'global-strict' : opts.topics ? 'global-interleaved' : 'items-only',
+  });
+  // <deck>/study 会话列表镜像（fsrs4tw 契约后缀）——此前散落在 workflow widget 手写
+  wiki.addTiddler({ title: deckMod.DEFAULT_DECK + DECK_STUDY_SUFFIX, list: queue });
+  enterCard(wiki, first);
+  return first;
+}
+
 export interface ActiveStudy {
   list: string[];
   /** global = 全局学习会话；deck = 单牌组会话（fsrs4tw startstudy 路径） */
@@ -121,8 +160,10 @@ export interface ActiveStudy {
 }
 
 /** tiddler 的 modified 字段 → 毫秒：TW 存的是 Date 对象（String(Date) 依赖各引擎对非 ISO 串的宽容解析），
- *  同时也兼容 17 位串与数字。无法解析 → 0（视为最旧，不参与"最近学习"竞争）。 */
-function modifiedMs(v: unknown): number {
+ *  同时也兼容 17 位串与数字。无法解析 → 0（视为最旧，不参与"最近学习"竞争）。
+ *  排序类消费方（如 today 最近阅读）一律用本函数，勿内联 new Date(<17位串>)——那是把
+ *  UTC 串交给引擎宽容解析，Invalid Date 时排序静默退化。 */
+export function modifiedMs(v: unknown): number {
   if (v instanceof Date) return v.getTime();
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   return schema.tryParseTwDate(v)?.getTime() ?? 0;

@@ -10,7 +10,8 @@ widgets/pdf-reader.ts — PDF 阅读器（tidme-pdf-reader）
 - 界面仿桌面阅读器：深色工具栏（翻页/缩放/框选/OCR/全屏）+ 灰色工作区 + 居中纸页，
   缩放默认「适合页面」，档位步进与自适应见 pdf-zoom.ts
 - 翻页/页码跳转/续读点：打开时优先恢复续读点绝对页码（不切分，阅读连续跨节）；
-  $:/state/tidme-pdf/page/<docId> 仅作「回原文」等一次性页码交接（消费即清理）
+  $:/state/tidme-pdf/page/<docId> 有两个写入方：「回原文」一次性页码交接（消费即清理）与
+  本阅读器每次翻页的持久保存；加载期消费时才删除（经实有页数校验）
 - 框选图片制卡：拖拽矩形 → 裁剪 PNG → buildQA 图片问答卡（openCardModal 填答案）
 - OCR 本页：扫描页（无文本层）→ 页面 PNG → LLM-OCR（设置页启用）→ Markdown 文本，
   结果持久化到 <文档页>/ocr-p<页>（清理阅读材料时级联删除），显示在页下方可选区
@@ -33,11 +34,11 @@ const parsePdf = require('$:/plugins/keepone/tidme/import/parse/pdf.js');
 const pdfjsMod = require('$:/plugins/keepone/tidme/import/widgets/pdfjs.js');
 const stats = require('$:/plugins/keepone/tidme/core/stats.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
+const studyMode = require('$:/plugins/keepone/tidme/review/widgets/study-mode.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
-function lingo(wiki: any, key: string, fallback: string): string {
-  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
-}
+// 文案查询唯一实现 = core/lingo（require 结果恒真值，无死防御分支）
+const lingo = lingoMod.lingo;
 
 const el = dom.el;
 
@@ -108,6 +109,10 @@ function makeReader(): any {
     _page: number = 1;
     _numPages: number = 0;
     _renderSeq: number = 0;
+    /** 加载序号：_loadPdf 无并发守卫时，旧加载后完成会用旧文档覆盖新文档 */
+    _loadSeq: number = 0;
+    /** destroy 置位：销毁后防抖定时器不再落库 */
+    _destroyed: boolean = false;
     _selMode: boolean = false;
     _selStart: { x: number; y: number } | null = null;
     _pdfTitle: string = '';
@@ -128,7 +133,8 @@ function makeReader(): any {
       if (this._startTime && this.wiki) {
         const elapsedSec = (Date.now() - this._startTime) / 1000;
         this._startTime = Date.now();
-        if (elapsedSec >= 1 && elapsedSec <= 7200) {
+        // 上限唯一产地 = stats.FOCUS_SEGMENT_MAX_SECONDS（session.recordFocus 同源）
+        if (elapsedSec >= 1 && elapsedSec <= stats.FOCUS_SEGMENT_MAX_SECONDS) {
           stats.recordReadTime(this.wiki, this._docId || '', elapsedSec);
         }
       }
@@ -242,9 +248,10 @@ function makeReader(): any {
             sessionMod.enterCard(wiki, nextCard);
             dom.navigateTo(this, nextCard);
           } else {
-            this.dispatchEvent({ type: 'tm-confetti-launch' });
-            dom.notify(this, ns.NOTIFY_CONGRATULATION);
-            dom.navigateTo(this, ns.PAGE_TODAY);
+            // 队尾收尾唯一出口 = study-mode.finishStudySession（庆祝 + endSession 清场 +
+            // 导航 + 结束通知 + 经模式条刷新关闭遗留复习卡）——此前本分支只庆祝导航
+            // 不结束会话，学习模式条残留激活
+            studyMode.finishStudySession(this);
           }
         });
         gStudy.appendChild(studyNextBtn);
@@ -329,14 +336,17 @@ function makeReader(): any {
           return rpPage;
         }
 
-        // 2. 若外部指定了有效页码（如「回原文」临时溯源），且落在本节区间内 → 采用该页并消费清理
+        // 2. 若外部指定了有效页码（如「回原文」临时溯源），且落在本节区间内 → 采用该页并消费清理。
+        //    消费必须发生在能对实有页数校验的加载期（numPages>0）：渲染期首次调用尚不知页数，
+        //    只预览不删——此前渲染期就删除状态 tiddler，加载期二次解析时页码已丢
         if (Number.isFinite(statePage) && statePage >= 1) {
           const inRange = !range.end || (statePage >= range.start && statePage <= range.end);
-          if (inRange) {
+          if (inRange && numPages > 0) {
             // 消费即清理，防止误劫持后续打开的其他节卡
             this.wiki.deleteTiddler(ns.pdfPageStateTitle(this._docId));
-            return numPages > 0 && statePage > numPages ? target : statePage;
+            return statePage > numPages ? target : statePage;
           }
+          if (inRange) return statePage;
         }
 
         // 3. 全书无区间（单文档页）回退
@@ -355,16 +365,34 @@ function makeReader(): any {
       const t = this.getVariable('currentTiddler') || '';
       const f = wiki.getTiddler(t)?.fields || {};
       const r = range || parsePdf.parsePagesField(String(f['tidme.pages'] || ''));
+      // 加载序号：refresh/重绑会再次触发 _loadPdf，旧加载后完成不得覆盖新文档
+      // （_renderSeq 只护页渲染，这里用独立序号护文档对象与页码初始化）
+      const seq = ++this._loadSeq;
       try {
         const bytes = await loadPdfBytesWithWait(wiki, this._pdfTitle, (msg) => {
           if (this._status) this._status.textContent = msg;
         });
+        if (seq !== this._loadSeq) return;
         if (!bytes || bytes.length === 0) {
           this._status.textContent = lingoMod.lingo(wiki, 'pdf.missing', `Missing PDF data (${this._pdfTitle || 'No associated PDF found'})`);
           this._wireReattach();
           return;
         }
-        this._pdf = await pdfjsMod.loadPdfBytes(bytes);
+        const pdf = await pdfjsMod.loadPdfBytes(bytes);
+        if (seq !== this._loadSeq) {
+          // 过期加载：立即销毁新拿到的文档，避免 pdfjs 文档对象泄漏
+          try {
+            pdf.destroy?.();
+          } catch (_) {}
+          return;
+        }
+        // 重载前销毁旧文档（此前只有 _cleanup 会销毁，每次重载泄漏一个 pdfjs 文档）
+        if (this._pdf && typeof this._pdf.destroy === 'function') {
+          try {
+            this._pdf.destroy();
+          } catch (_) {}
+        }
+        this._pdf = pdf;
         this._numPages = Number(this._pdf.numPages) || 0;
         this._total.textContent = ` / ${this._numPages}`;
         if (this._docPageTitle && this._numPages > 0) {
@@ -376,7 +404,9 @@ function makeReader(): any {
         const start = this._resolveInitialPage(r, this._numPages);
         this._setPage(start, false);
       } catch (e: any) {
-        this._status.textContent = lingoMod.lingo(wiki, 'pdf.load.failed', 'Failed to load: ') + String(e?.message || e);
+        if (seq === this._loadSeq) {
+          this._status.textContent = lingoMod.lingo(wiki, 'pdf.load.failed', 'Failed to load: ') + String(e?.message || e);
+        }
       }
     }
 
@@ -467,6 +497,7 @@ function makeReader(): any {
         this._onFsChange = () => {};
       }
       this._renderSeq++;
+      this._loadSeq++; // 在途 _loadPdf 全部作废（其完成后会自销毁拿到的文档）
       if (this._pdf && typeof this._pdf.destroy === 'function') {
         try {
           this._pdf.destroy();
@@ -481,6 +512,7 @@ function makeReader(): any {
     }
 
     destroy() {
+      this._destroyed = true;
       this._cleanup();
       super.destroy?.();
     }
@@ -498,6 +530,7 @@ function makeReader(): any {
         if (this._savePageTimer) clearTimeout(this._savePageTimer);
         this._savePageTimer = setTimeout(() => {
           this._savePageTimer = null;
+          if (this._destroyed) return; // widget 已销毁：续读点落库无意义
           const curT = this.getVariable('currentTiddler') || '';
           const matchedSection = docOps.sectionOfDocByPage ? docOps.sectionOfDocByPage(this.wiki, this._docId, this._page) : null;
           const targetCard = matchedSection || curT || this._docPageTitle;
@@ -558,7 +591,7 @@ function makeReader(): any {
         this._textLayer.style.width = `${cssW}px`;
         this._textLayer.style.height = `${cssH}px`;
         if (seq !== this._renderSeq) return;
-        await this._fillTextLayer(viewport, dpr);
+        await this._fillTextLayer(viewport, dpr, seq);
         if (seq !== this._renderSeq) return;
         this._status.textContent = '';
       } catch (e: any) {
@@ -609,7 +642,7 @@ function makeReader(): any {
 
     // ---------- 文本层 / OCR ----------
 
-    async _fillTextLayer(viewport: any, dpr: number) {
+    async _fillTextLayer(viewport: any, dpr: number, seq?: number) {
       const doc = this.document;
       const t = this.getVariable('currentTiddler') || '';
       const layer = this._textLayer;
@@ -626,6 +659,8 @@ function makeReader(): any {
         return;
       }
       const items = await pdfjsMod.pageTextItems(this._pdf, this._page);
+      // 快速翻页时旧页文本项可能比新页渲染后返回：二次校验，防旧页 span 污染新页文本层
+      if (seq !== undefined && seq !== this._renderSeq) return;
       if (parsePdf.isScannedPageText(items.map((it: any) => it.str).join(' '))) {
         this._hint.textContent = this._ocrEnabled
           ? lingo(this.wiki, 'pdf/scanned-hint-ocr', 'Scanned page (no text layer) — Click "OCR" in toolbar to recognize text')

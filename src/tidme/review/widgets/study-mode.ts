@@ -16,9 +16,8 @@ const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
-function lingo(wiki: any, key: string, fallback: string): string {
-  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
-}
+// 文案查询唯一实现 = core/lingo（require 结果恒真值，无死防御分支）
+const lingo = lingoMod.lingo;
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
@@ -41,6 +40,19 @@ function endStudy(widget: any) {
     navigateTo(widget, EXIT_TARGET);
     notify(widget, NOTIFY_ENDED);
   } catch { /* 无头环境忽略 */ }
+}
+
+/**
+ * 学习流收尾唯一出口（队列耗尽 / 读完最后一卡）：庆祝 → 结束会话。
+ * 此前 advanceStudy 与 pdf-reader「Done & Continue」队尾分支各写一份庆祝组合，
+ * 且 PDF 侧漏掉 endSession（会话残留激活、学习模式条不消失）——统一走这里。
+ */
+function finishStudySession(widget: any) {
+  try {
+    widget.dispatchEvent?.({ type: 'tm-confetti-launch' });
+    notify(widget, ns.NOTIFY_CONGRATULATION);
+  } catch { /* 无头环境忽略 */ }
+  endStudy(widget);
 }
 
 /**
@@ -122,9 +134,7 @@ function advanceStudy(widget: any) {
     session.enterCard(wiki, next);
     navigateTo(widget, next);
   } else {
-    widget.dispatchEvent?.({ type: 'tm-confetti-launch' });
-    notify(widget, ns.NOTIFY_CONGRATULATION);
-    endStudy(widget);
+    finishStudySession(widget);
   }
 }
 
@@ -213,7 +223,7 @@ function makeStudyModeBar(): WidgetCtor {
       if (!this._container) return false;
       let need = false;
       for (const title of Object.keys(changedTiddlers || {})) {
-        if (reactive.isSessionChange(title) || title === '$:/StoryList') {
+        if (reactive.isSessionChange(title) || title === viewState.STORY_LIST_TITLE) {
           need = true;
           break;
         }
@@ -230,3 +240,4 @@ function makeStudyModeBar(): WidgetCtor {
 
 exports['tidme-study-mode-bar'] = makeStudyModeBar();
 exports.endStudy = endStudy;
+exports.finishStudySession = finishStudySession;

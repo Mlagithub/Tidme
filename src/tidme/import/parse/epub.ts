@@ -1,7 +1,6 @@
 /*
 epub.ts — EPUB 解析（浏览器版）
 
-与 D:\work\tidme-import\src\parse\epub.js 同构：
 - jszip 以 TW library tiddler 引用（esbuild external，运行时 require）
 - DOMParser/XMLSerializer 用浏览器原生实现
 */

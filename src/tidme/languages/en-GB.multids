@@ -706,3 +706,19 @@ import.pdf.phase.store: Saving
 import.status: Import Status
 pdf.reattach.encoding: Encoding PDF
 workflow.hero.tip: Review all due and new knowledge cards (cloze / Q&A)
+ai.splitfailed.msg: Split text deviates too much from the original; blocked to protect source integrity.
+import.server.tip: Better for large files: parsing runs in the background on the server; requires a TiddlyWeb server
+manager.readinglist.deleteconfirm: Delete reading materials of 《$(doc)$》?
+manager.readinglist.deleteconfirm.detail: The doc page and all normal section cards (including manually inserted ones) will be deleted. Extracted knowledge (extracts / clozes / Q&A / manual cards) is kept. This cannot be undone.
+manager.deck.delete.subset.confirm: 《$(deck)$》 is a subset deck.\nDelete its member cards too?\n(OK = delete cards as well; Cancel = deck definition only)
+manager.deck.delete.subset.withcards: Delete subset deck and its member cards?
+manager.deck.delete.subset.defonly: Delete subset deck definition? (cards kept)
+manager.deck.delete.normal: Delete deck 「$(deck)$」's definition?\nMember cards are kept (cloze / Q&A cards remain in the global All Cards queue).
+manager.params.baddue: Due date must be in YYYY-MM-DD format
+manager.params.badpri: Priority must be a number between 0 and 100
+import.nodoc: Document page was removed from the outline; nothing to import.
+pdf.missing: Missing PDF data (no associated PDF file)
+manager.autopostpone.summary: ✓ Overdue: $(overdue)$ · Postponed: $(postponed)$ · Retained: $(kept)$
+manager.cards: cards
+manager.processed: processed
+qa: Q&A

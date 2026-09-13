@@ -26,14 +26,17 @@ export interface CardModalOptions {
   page?: number;
   wiki?: any;
   onSave: (res: CardModalResult) => void;
+  /** 取消/Esc 关闭（未提交）时回调：调用方用于释放占位资源（如 pendingCards 的 title） */
+  onCancel?: () => void;
 }
 
-/** 打开模态：type=qa / cloze / image-qa。onSave 后自动关闭。 */
+/** 打开模态：type=qa / cloze / image-qa。onSave 后自动关闭；取消/Esc 触发 onCancel。 */
 export function openCardModal(
   doc: Document,
   typeOrOpts: 'qa' | 'cloze' | 'image-qa' | CardModalOptions,
   initialAnswerOrCloze?: string,
   onSave?: (res: CardModalResult) => void,
+  onCancel?: () => void,
 ) {
   const isOpts = typeof typeOrOpts === 'object' && typeOrOpts !== null;
   const opts: CardModalOptions = isOpts
@@ -42,16 +45,16 @@ export function openCardModal(
       type: typeOrOpts as any,
       initialAnswerOrCloze: initialAnswerOrCloze || '',
       onSave: onSave || (() => {}),
+      onCancel,
     };
 
   const type = opts.type;
   const initial = opts.initialAnswerOrCloze || '';
   const saveCallback = opts.onSave;
+  const cancelCallback = opts.onCancel;
   const wiki = opts.wiki;
 
-  const l = (key: string, fallback: string) => {
-    return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
-  };
+  const l = (key: string, fallback: string) => lingoMod.lingo(wiki, key, fallback);
 
   const overlay = el(doc, 'div', 'tm-card-modal-overlay');
   const modal = el(doc, 'div', 'tm-card-modal');
@@ -138,8 +141,11 @@ export function openCardModal(
   const cancelBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-cancel', `${l('cancel', 'Cancel')} (Esc)`);
   const saveBtn = el(doc, 'button', 'tm-card-modal-btn tm-card-modal-submit', `${l('creator.submit', 'Create Card')} (Ctrl+Enter)`);
 
+  let submitted = false;
   const close = () => {
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    // 未提交的关闭（取消按钮/Esc）通知调用方释放占位资源
+    if (!submitted && cancelCallback) cancelCallback();
   };
 
   const submit = () => {
@@ -147,6 +153,7 @@ export function openCardModal(
       const a = String(input2?.value || '').trim();
       const lbl = String(labelInput?.value || '').trim();
       const safeImgUrl = opts.imageUrl ? String(opts.imageUrl).replace(/"/g, '&quot;') : '';
+      submitted = true;
       saveCallback({
         question: safeImgUrl ? `<img src="${safeImgUrl}" style="max-width:100%">` : '',
         answerOrCloze: a,
@@ -162,6 +169,7 @@ export function openCardModal(
         input1?.focus();
         return;
       }
+      submitted = true;
       saveCallback({ question: q, answerOrCloze: a });
       close();
     }

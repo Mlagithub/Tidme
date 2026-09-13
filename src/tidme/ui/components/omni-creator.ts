@@ -17,7 +17,8 @@ const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const nsMod = require('$:/plugins/keepone/tidme/core/ns.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
-import { TidmeLiveEditor } from '../../editor/codemirror-editor';
+// CodeMirror 是重依赖（~300KB）：独立 $:/ 模块 + 显式 require，避免 esbuild 把整包内联进每个消费者
+const { TidmeLiveEditor } = require('$:/plugins/keepone/tidme/editor/codemirror-editor.js');
 
 const el = dom.el;
 
@@ -60,9 +61,7 @@ function listDeckOptions(wiki: any): DeckOption[] {
   ];
   if (!wiki || typeof wiki.filterTiddlers !== 'function') return options;
   try {
-    const list = typeof deckMod.listDecks === 'function'
-      ? deckMod.listDecks(wiki)
-      : (typeof deckMod.allDecks === 'function' ? deckMod.allDecks(wiki) : []);
+    const list = deckMod.listDecks(wiki);
     const prefix = deckMod.DECK_PREFIX || '$:/Deck/';
     const seen = new Set<string>();
     for (const d of list) {
@@ -302,12 +301,15 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
     conceptInput = null;
   };
 
-  const focusEl = (target: HTMLElement | null) => {
-    if (!target) return;
+  // 聚焦微任务延迟：等新挂载节点完成布局，避免 focus 被本轮 render 吞掉。
+  // 接受 HTMLElement 或带 .focus() 的编辑器包装（TidmeLiveEditor）——
+  // 此前 renderFields 与 keep-open 提交各有一份内联拷贝，已收敛于此
+  const focusEl = (target: HTMLElement | { focus(): void } | null | undefined) => {
+    if (!target || typeof (target as any).focus !== 'function') return;
     if (typeof queueMicrotask === 'function') {
-      queueMicrotask(() => target.focus());
+      queueMicrotask(() => (target as any).focus());
     } else {
-      target.focus();
+      (target as any).focus();
     }
   };
 
@@ -375,15 +377,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
       fieldsContainer.appendChild(fQ);
       fieldsContainer.appendChild(fA);
 
-      if (qEditor) {
-        if (typeof queueMicrotask === 'function') {
-          queueMicrotask(() => qEditor?.focus());
-        } else {
-          qEditor.focus();
-        }
-      } else {
-        focusEl(qInput);
-      }
+      focusEl(qEditor || qInput);
     } else if (currentType === 'cloze') {
       // 挖空卡：Toolbar + Text
       const fC = el(doc, 'div', 'tm-card-modal-field');
@@ -497,15 +491,7 @@ function openOmniCardModal(doc: Document, wiki: any, opts: OmniCreatorOptions = 
         if (clozeInput) clozeInput.value = '';
         if (conceptInput) conceptInput.value = '';
         if (currentType === 'qa') {
-          if (qEditor) {
-            if (typeof queueMicrotask === 'function') {
-              queueMicrotask(() => qEditor?.focus());
-            } else {
-              qEditor.focus();
-            }
-          } else {
-            focusEl(qInput);
-          }
+          focusEl(qEditor || qInput);
         } else if (currentType === 'cloze') {
           focusEl(clozeInput);
         } else {

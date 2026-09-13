@@ -99,9 +99,14 @@ export function parseLineWikiText(lineText: string, lineFrom: number): SyntaxTok
   }
 
   // 5. 成对行内标记匹配器 helper
+  // openLen/closeLen：前后标记长度，缺省按 (全长-内容)/2 均分（仅适用于等长成对标记，
+  // 如 '' __ ~~ @@ == ^^ ,, ` **）；HTML 标签（<b>3 字符 / </b>4 字符）必须显式传入——
+  // 此前一律均分，<b>foo</b> 算出 3.5 的小数偏移、<b>ab</b> 漏藏 '<'
   const matchPairs = (
     regex: RegExp,
     type: SyntaxToken['type'],
+    openLen?: number,
+    closeLen?: number,
   ) => {
     let match: RegExpExecArray | null;
     regex.lastIndex = 0;
@@ -110,7 +115,8 @@ export function parseLineWikiText(lineText: string, lineFrom: number): SyntaxTok
       const innerText = match[1];
       const startPos = lineFrom + match.index;
       const endPos = startPos + fullStr.length;
-      const markStartLen = (fullStr.length - innerText.length) / 2;
+      const markStartLen = openLen ?? (fullStr.length - innerText.length) / 2;
+      const markEndLen = closeLen ?? markStartLen;
 
       tokens.push({
         type,
@@ -118,7 +124,7 @@ export function parseLineWikiText(lineText: string, lineFrom: number): SyntaxTok
         to: endPos,
         markStartFrom: startPos,
         markStartTo: startPos + markStartLen,
-        markEndFrom: endPos - markStartLen,
+        markEndFrom: endPos - markEndLen,
         markEndTo: endPos,
       });
     }
@@ -188,7 +194,9 @@ export function parseLineWikiText(lineText: string, lineFrom: number): SyntaxTok
   }
 
   // 7. 嵌入 Transclusion {{Title}}
-  const transRegex = /\{\{((?:(?!\}\}).)+)\}\}/g;
+  // (?<!\{)\{\{(?!\{)：排除 {{{...}}}（三花括号行内代码）——此前 transclusion 正则
+  // 会在 {{{code}}} 上移位匹配出 {{{code}}} 并与其重叠、漏藏尾括号
+  const transRegex = /(?<!\{)\{\{(?!\{)((?:(?!\}\}).)+)\}\}/g;
   let trMatch: RegExpExecArray | null;
   while ((trMatch = transRegex.exec(lineText)) !== null) {
     const fullStr = trMatch[0];
@@ -207,10 +215,10 @@ export function parseLineWikiText(lineText: string, lineFrom: number): SyntaxTok
   }
 
   // 8. HTML 经典内联标签识别 <b>, <i>, <u>, <s>
-  matchPairs(/<b>((?:(?!<\/b>).)+)<\/b>/gi, 'bold');
-  matchPairs(/<i>((?:(?!<\/i>).)+)<\/i>/gi, 'italic');
-  matchPairs(/<u>((?:(?!<\/u>).)+)<\/u>/gi, 'underline');
-  matchPairs(/<s>((?:(?!<\/s>).)+)<\/s>/gi, 'strikethrough');
+  matchPairs(/<b>((?:(?!<\/b>).)+)<\/b>/gi, 'bold', 3, 4);
+  matchPairs(/<i>((?:(?!<\/i>).)+)<\/i>/gi, 'italic', 3, 4);
+  matchPairs(/<u>((?:(?!<\/u>).)+)<\/u>/gi, 'underline', 3, 4);
+  matchPairs(/<s>((?:(?!<\/s>).)+)<\/s>/gi, 'strikethrough', 3, 4);
 
   return tokens;
 }

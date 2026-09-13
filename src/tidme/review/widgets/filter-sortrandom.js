@@ -25,6 +25,9 @@ Filter operator for return a random title in the list.
       results[j] = tmp;
     }
 
+    // TW 约定：前缀 `-` 反转结果（此前 -sortrandom[] 与 sortrandom[] 等价）
+    if (operator.prefix === '-') results.reverse();
+
     return results;
   };
 })();

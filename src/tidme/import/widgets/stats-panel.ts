@@ -18,9 +18,8 @@ const docOps = require('$:/plugins/keepone/tidme/core/doc-ops.js');
 const config = require('$:/plugins/keepone/tidme/core/config.js');
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
-function lingo(wiki: any, key: string, fallback: string): string {
-  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
-}
+// 文案查询唯一实现 = core/lingo（require 结果恒真值，无死防御分支）
+const lingo = lingoMod.lingo;
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;

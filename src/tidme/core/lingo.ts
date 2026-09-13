@@ -10,6 +10,9 @@ declare function require(module: string): any;
  * @param wiki TiddlyWiki wiki 实例
  * @param key 键名，例如 "startstudy"、"manager.all"
  * @param fallback 兜底默认英文字符串
+ *
+ * 词典值中的 `\n` 转义统一在此还原为换行（multids 单行格式无法直接承载换行；
+ * 调用方兜底串是 JS 字面量，已由 JS 解析为真实换行，无需再转）。
  */
 export function lingo(wiki: any, key: string, fallback?: string): string {
   if (!wiki || typeof wiki.getTiddlerText !== 'function') {
@@ -18,7 +21,7 @@ export function lingo(wiki: any, key: string, fallback?: string): string {
   const title = '$:/language/tidme/' + key;
   const val = wiki.getTiddlerText(title);
   if (val !== undefined && val !== null && val.trim() !== '') {
-    return val.trim();
+    return val.trim().replace(/\\n/g, '\n');
   }
   return fallback ?? key;
 }

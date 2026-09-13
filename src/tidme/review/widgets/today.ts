@@ -21,9 +21,8 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const sessionMod = require('$:/plugins/keepone/tidme/core/session.js');
 const drill = require('$:/plugins/keepone/tidme/core/drill.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
-function lingo(wiki: any, key: string, fallback: string): string {
-  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
-}
+// 文案查询唯一实现 = core/lingo（本地不再包一层防御——require 结果恒真值）
+const lingo = lingoMod.lingo;
 const primitives = require('$:/plugins/keepone/tidme/ui/components/ui-primitives.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
@@ -166,17 +165,17 @@ function makeTodayRecent(): WidgetCtor {
       container.textContent = '';
 
       container.appendChild(el(doc, 'div', 'tm-today-section-title', lingo(wiki, 'read.recent', 'Recent Reading')));
-      const docs = wiki.filterTiddlers('[tag[tidme-doc]]');
+      const docs = wiki.filterTiddlers(`[tag[${ns.DOC_TAG}]]`);
       // 最近打开时间：全局续读点所属书置顶（每次打开阅读卡都会刷新全局续读点）；
       // 其余书回退各自续读点的写入时间（制卡/设续读点时更新）
       const globalFields = wiki.getTiddler(docOps.GLOBAL_READPOINT)?.fields || {};
       const globalCard = wiki.getTiddler(String(globalFields.text || ''));
       const globalDoc = String(globalCard?.fields?.['tidme.doc'] || '');
-      const globalTime = globalFields.modified ? new Date(globalFields.modified).getTime() : 0;
+      // modified → 毫秒一律走 core/session.modifiedMs（兼容 Date/17 位串/数字；解析失败回 0）
+      const globalTime = sessionMod.modifiedMs(globalFields.modified);
       const lastOpen = (docId: string): number => {
         if (docId && docId === globalDoc) return globalTime;
-        const m = wiki.getTiddler(docOps.READPOINT_PREFIX + docId)?.fields?.modified;
-        return m ? new Date(m).getTime() : 0;
+        return sessionMod.modifiedMs(wiki.getTiddler(docOps.READPOINT_PREFIX + docId)?.fields?.modified);
       };
       const rows: { title: string; label: string; done: number; total: number; last: number; text?: string }[] = [];
       for (const d of docs) {

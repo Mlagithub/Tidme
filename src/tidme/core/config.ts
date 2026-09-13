@@ -107,7 +107,6 @@ export function writeSemanticSplit(wiki: any, patch: Record<string, any>): void 
 export const QUEUE_MIX_DEFAULT = '4:1';
 const QUEUE_MODE_TITLE = ns.QUEUE_MODE_TITLE;
 const QUEUE_MIX_TITLE = ns.QUEUE_MIX_TITLE;
-const QUEUE_ORDERS = ['due-new', 'new-due', 'random'];
 
 /** 交错比例默认值：与 QUEUE_MIX_DEFAULT 同源解析（改默认值只改那一处字符串） */
 function defaultMix(): { item: number; topic: number } {

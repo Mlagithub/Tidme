@@ -150,7 +150,7 @@ export function gradeCard(wiki: any, opts: GradeOptions): GradeResult {
 
   // 兄弟卡搁置（Bury Siblings）
   let newlyBuried: string[] = [];
-  if (config && typeof config.readBurySiblings === 'function' && config.readBurySiblings(wiki)) {
+  if (config.readBurySiblings(wiki)) {
     const siblings = sched.findSiblings(wiki, opts.title);
     if (siblings.length) {
       newlyBuried = sched.buryCards(wiki, siblings, learningDay);
@@ -308,8 +308,6 @@ export function undoLastGrade(wiki: any, now: Date = new Date()): { ok: boolean;
 
   // 4. 回滚每日配额（按记账时的同一类别；learn 不记账即无操作）
   sched.rollbackDailyQuota(wiki, snapshot.quotaKind, snapshot.at);
-
-  // 5. 更新撤销状态镜像
 
   return { ok: true, title: snapshot.title };
 }

@@ -158,3 +158,22 @@ test('cleanContaminatedHtmlToWikiText: strong/em/mark 与孤立标签清理、�
   assert.equal(cleanContaminatedHtmlToWikiText('<p>高亮<span>杂</span></p>'), '高亮杂', '孤立标签被清除');
   assert.equal(cleanContaminatedHtmlToWikiText('<p>a</p><p></p><p>b</p>'), 'a\n\nb', '空段不产生三连空行');
 });
+
+test('parseLineWikiText: HTML 不对称标记不再均分偏移（回归：<b> 开 3 闭 4）', () => {
+  // <b>粗体</b> 全长 9：旧算法 markStartLen=(9-2)/2=3.5 小数偏移；现开 3 闭 4
+  const even = parseLineWikiText('<b>粗体</b>', 0);
+  assert.equal(even[0].markStartTo, 3, '<b> 宽 3');
+  assert.equal(even[0].markEndFrom, 5, '</b> 前缘 = 9-4');
+  // <b>ab</b> 全长 9：旧算法 markStartLen=(9-2)/2=3.5；偶数内容曾吃掉内容首字符
+  const odd = parseLineWikiText('<b>ab</b>', 0);
+  assert.equal(odd[0].markStartTo, 3);
+  assert.equal(odd[0].markEndFrom, 5, '</b> 前缘 = 9-4');
+});
+
+test('parseLineWikiText: transclusion 不再与三花括号行内代码重叠（回归）', () => {
+  const tokens = parseLineWikiText('{{{code}}}', 0);
+  assert.deepEqual(tokens.map((t) => t.type), ['inline-code'], '只命中 inline-code 一条正则');
+  // 混排：token 顺序 = 匹配器调用序（inline-code 匹配器先于 transclusion）
+  const mixed = parseLineWikiText('{{某条目}}与{{{code}}}', 0);
+  assert.deepEqual(mixed.map((t) => t.type), ['inline-code', 'transclusion']);
+});

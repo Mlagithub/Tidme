@@ -25,15 +25,30 @@ export interface CardQueryContext {
   now?: Date;
   /** 学习日换天时刻（is:due/is:buried 的当日埋卡判定用），缺省 = 4（与全局默认一致） */
   rolloverHour?: number;
+  /** leech 阈值（is:leech 用），缺省 = scheduler.DECK_PARAM_DEFAULTS.leechThreshold */
+  leechThreshold?: number;
 }
 
 declare function require(module: string): any;
 // 日期解析唯一产地 = core/schema（勿内联第二份解析——17 位串语义漂移过一次）
 const schema = require('$:/plugins/keepone/tidme/core/schema.js');
+const sched = require('$:/plugins/keepone/tidme/core/scheduler.js');
 const parseDate = (v: unknown): number | null => {
   const d = schema.tryParseTwDate(v);
   return d ? d.getTime() : null;
 };
+
+/** leech 判定唯一产地（is:leech 搜索与卡片管理器视图共用）：显式 tidme.leech 标记、
+ *  leech 标签、或失误数达阈值。阈值缺省取 scheduler.DECK_PARAM_DEFAULTS.leechThreshold，
+ *  调用方可传所属牌组的 leech_threshold（多牌组取最小值，口径见调用方）。 */
+export function isLeechCard(fields: Record<string, any> | null | undefined, threshold = sched.DECK_PARAM_DEFAULTS.leechThreshold): boolean {
+  if (!fields) return false;
+  if (fields['tidme.leech'] === 'yes') return true;
+  const tags = Array.isArray(fields.tags) ? fields.tags : String(fields.tags || '').split(/\s+/);
+  if (tags.includes('leech')) return true;
+  const lapses = Number(fields.lapses);
+  return Number.isFinite(lapses) && lapses >= threshold;
+}
 
 export interface CardQuery {
   /** 原始查询串（回显/保存用） */
@@ -122,7 +137,8 @@ export function parseCardQuery(text: string): CardQuery {
         q.parent = value;
         break;
       case 'due': {
-        const c = cmpValue(value.replace(/^<=/, '<=')); // due:7 视为 due:<=7（"7 天内到期"）
+        // due:7 视为 due:<=7（"7 天内到期"）；`>`/`>=`（下界语义）暂不支持，静默忽略该条件
+        const c = cmpValue(value);
         if (c) q.dueNotLaterThanDays = c.op === '>=' || c.op === '>' ? q.dueNotLaterThanDays : c.value;
         break;
       }
@@ -182,7 +198,7 @@ export function matchCardQuery(
   };
   const now = ctx.now || new Date();
   const rolloverHour = ctx.rolloverHour ?? 4;
-  const state = String(f.state ?? '0').trim() || '0';
+  const state = sched.stateOf(f);
   // 埋卡字段存的是「埋入时的学习日」，次日自动失效——只有等于当前学习日才算埋着。
   // 曾按「字段存在即埋着」判定：昨天埋的卡早已回队，is:due 却永远查不到它（真实踩坑）。
   const buried = String(f['tidme.buried'] ?? '') === schema.learningDayOf(now, rolloverHour);
@@ -210,7 +226,7 @@ export function matchCardQuery(
       : s === 'due'
       ? (state === '2' && !done && !buried && (() => {
         const due = parseDate(f.due);
-        return due !== null && due <= (ctx.now || new Date()).getTime();
+        return due !== null && due <= now.getTime();
       })())
       : s === 'suspended'
       ? f['tidme.suspended'] === 'yes'
@@ -221,7 +237,7 @@ export function matchCardQuery(
       : s === 'buried'
       ? buried
       : s === 'leech'
-      ? (f['tidme.leech'] === 'yes' || (num(f.lapses) ?? 0) >= 8)
+      ? isLeechCard(f, ctx.leechThreshold)
       : false;
     if (!ok) return false;
   }
@@ -229,7 +245,7 @@ export function matchCardQuery(
   if (query.dueNotLaterThanDays !== undefined) {
     const due = parseDate(f.due);
     if (due === null) return false;
-    const limit = (ctx.now || new Date()).getTime() + query.dueNotLaterThanDays * 86400000;
+    const limit = now.getTime() + query.dueNotLaterThanDays * 86400000;
     if (due > limit) return false;
   }
   const checks: Array<[number | undefined, number | undefined, number | null]> = [

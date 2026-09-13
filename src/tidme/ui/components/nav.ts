@@ -12,9 +12,8 @@ const ns = require('$:/plugins/keepone/tidme/core/ns.js');
 const lingoMod = require('$:/plugins/keepone/tidme/core/lingo.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
-function lingo(wiki: any, key: string, fallback: string): string {
-  return lingoMod ? lingoMod.lingo(wiki, key, fallback) : fallback;
-}
+// 文案查询唯一实现 = core/lingo（require 结果恒真值，无死防御分支）
+const lingo = lingoMod.lingo;
 
 const NAV: [string, string, string][] = [
   [ns.PAGE_INCREMENTAL_LEARNING, 'nav.incrementallearning', 'Incremental Learning'],
@@ -25,7 +24,7 @@ const NAV: [string, string, string][] = [
   [ns.PAGE_SETTINGS, 'nav.settings', 'Settings'],
 ];
 
-// 共享 DOM 工具（实现收敛于 core/dom）
+// 共享 DOM 工具（实现收敛于 ui/base/dom）
 const el = dom.el;
 
 function makeNav(): any {

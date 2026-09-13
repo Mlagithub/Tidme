@@ -706,3 +706,19 @@ import.pdf.phase.store: 写入书库
 import.status: 导入状态
 pdf.reattach.encoding: 正在编码 PDF
 workflow.hero.tip: 复习今日到期和新增的知识卡片（挖空 / 问答）
+ai.splitfailed.msg: 切分后字数与原文偏差过大，已自动拦截以保护原文完整性。
+import.server.tip: 适合大文件：解析在服务端后台执行，不阻塞页面；需要 TiddlyWeb 服务端
+manager.readinglist.deleteconfirm: 删除《$(doc)$》的阅读材料？
+manager.readinglist.deleteconfirm.detail: 将删除文档页与全部普通节卡（含大纲手动插入的新节）。已提取的知识（摘录/挖空/问答/手动卡）会保留，不受影响。此操作不可恢复。
+manager.deck.delete.subset.confirm: 《$(deck)$》是子集牌组。\n连成员卡一起删除？\n（确定 = 连卡删；取消 = 仅删牌组定义）
+manager.deck.delete.subset.withcards: 删除子集牌组及其成员卡？
+manager.deck.delete.subset.defonly: 删除子集牌组定义（卡片保留）？
+manager.deck.delete.normal: 删除牌组「$(deck)$」的定义？\n成员卡会保留（挖空/问答卡仍由全局队列「全部卡片」收录）。
+manager.params.baddue: 到期日必须是 YYYY-MM-DD 格式
+manager.params.badpri: 优先级必须是 0-100 的数字
+import.nodoc: 文档页已从大纲中移除，没有可导入的内容。
+pdf.missing: 缺少 PDF 数据（无关联的 PDF 文件）
+manager.autopostpone.summary: ✓ 逾期: $(overdue)$ · 已顺延: $(postponed)$ · 保留: $(kept)$
+manager.cards: 张
+manager.processed: 已处理
+qa: 问答卡

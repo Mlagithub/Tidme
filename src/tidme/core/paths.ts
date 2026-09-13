@@ -27,7 +27,13 @@ paths.ts — tiddler 命名空间路径生成（章节隔离）
 title 的真实位置派生（兼容带后缀 folder），不经本模块。
 */
 
-import { NS_DECKS, NS_DOCS, TITLE_UNSAFE_CHARS as NS_UNSAFE_CHARS } from './ns.ts';
+// core 内跨模块引用一律显式 require（ES import 会被 esbuild 内联复制成第二份实现；
+// ids.ts 直测例外见其头注释，本模块无直测消费方，走标准 require）
+declare function require(module: string): any;
+const ns = require('$:/plugins/keepone/tidme/core/ns.js');
+const NS_DECKS = ns.NS_DECKS;
+const NS_DOCS = ns.NS_DOCS;
+const NS_UNSAFE_CHARS = ns.TITLE_UNSAFE_CHARS;
 
 // 保留 TW 系统 tiddler 段
 const RESERVED = new Set([

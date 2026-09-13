@@ -92,13 +92,20 @@ function makeSettings(): any {
               title: l('settings.reading.mix', 'Interleaving Ratio (Items:Topics)'),
               desc: l('settings.reading.mix.desc', 'When topics are mixed in, insert 1 topic card per N item cards'),
               type: 'select',
-              options: [
-                // 默认值来自单一产地（config.QUEUE_MIX_DEFAULT），改默认比例不必再来这里改
-                [config.QUEUE_MIX_DEFAULT, `${config.QUEUE_MIX_DEFAULT} (Default)`],
-                ['3:1', '3:1'],
-                ['2:1', '2:1'],
-                ['1:1', '1:1'],
-              ],
+              options: (() => {
+                // 默认值来自单一产地（config.QUEUE_MIX_DEFAULT），改默认比例不必再来这里改；
+                // 当前值不在预设档位时动态补入，否则 select 显示空白、改动会覆盖成错误比例
+                const opts: [string, string][] = [
+                  [config.QUEUE_MIX_DEFAULT, `${config.QUEUE_MIX_DEFAULT} (Default)`],
+                  ['3:1', '3:1'],
+                  ['2:1', '2:1'],
+                  ['1:1', '1:1'],
+                ];
+                const q = queueOpts();
+                const cur = `${q.itemRatio}:${q.topicRatio}`;
+                if (!opts.some((o) => o[0] === cur)) opts.unshift([cur, cur]);
+                return opts;
+              })(),
               getValue: () => {
                 const q = queueOpts();
                 return `${q.itemRatio}:${q.topicRatio}`;

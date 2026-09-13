@@ -19,6 +19,7 @@ const configMod = require('$:/plugins/keepone/tidme/core/config.js');
 const dom = require('$:/plugins/keepone/tidme/ui/base/dom.js');
 const dialog = require('$:/plugins/keepone/tidme/ui/base/dialog.js');
 const display = require('$:/plugins/keepone/tidme/core/display.js');
+const reactive = require('$:/plugins/keepone/tidme/core/reactive.js');
 const Widget = require('$:/core/modules/widgets/widget.js').widget;
 
 const el = dom.el;
@@ -216,16 +217,26 @@ function makeDeckDelete(): WidgetCtor {
         if (subset) {
           also = await dialog.confirmDialog(doc, {
             title: lingo(wiki, 'deck.subset', 'Subset Deck'),
-            message: `《${captionText(wiki, d.fields.caption || d.name, this) || d.name}》是子集牌组。
-连成员卡一起删除？
-（确定 = 连卡删；取消 = 仅删牌组定义）`,
+            // 弹窗文案走语言包（此前中文写死，i18n 破口）
+            message: lingo(
+              wiki,
+              'manager.deck.delete.subset.confirm',
+              '《$(deck)$》 is a subset deck.\nDelete its member cards too?\n(OK = delete cards as well; Cancel = deck definition only)',
+            )
+              .replace('$(deck)$', captionText(wiki, d.fields.caption || d.name, this) || d.name).replace('${deck}', captionText(wiki, d.fields.caption || d.name, this) || d.name),
             confirmLabel: lingo(wiki, 'deck.deletecards', 'Delete Cards'),
             danger: true,
           });
         }
+        const deckName = captionText(wiki, d.fields.caption || d.name, this) || d.name;
         const msg = subset
-          ? `删除子集牌组${also ? '及其成员卡' : '（卡片保留）'}？`
-          : `删除牌组「${captionText(wiki, d.fields.caption || d.name, this) || d.name}」的定义？\n成员卡会保留（挖空/问答卡仍由全局队列「全部卡片」收录）。`;
+          ? lingo(
+            wiki,
+            also ? 'manager.deck.delete.subset.withcards' : 'manager.deck.delete.subset.defonly',
+            also ? 'Delete subset deck and its member cards?' : 'Delete subset deck definition? (cards kept)',
+          )
+          : lingo(wiki, 'manager.deck.delete.normal', "Delete deck 「$(deck)$」's definition?\nMember cards are kept (cloze / Q&A cards remain in the global All Cards queue).")
+            .replace('$(deck)$', deckName).replace('${deck}', deckName);
         if (
           !(await dialog.confirmDialog(doc, {
             title: lingo(wiki, 'deck.delete', 'Delete Deck'),
@@ -307,7 +318,9 @@ function makeDeckBadges(): WidgetCtor {
 
     refresh(changedTiddlers: any) {
       const changed = this.computeAttributes();
-      if (changed.deck || Object.keys(changedTiddlers || {}).length > 0) {
+      // 徽章读的是卡数据（due/新增计数）：走 reactive 宽谓词——
+      // 此前按"任何 tiddler 变化"重建，$:/temp 等无关写入也触发全量重建
+      if (changed.deck || reactive.hasRelevantChange(this.wiki, changedTiddlers)) {
         this.refreshSelf();
         return true;
       }

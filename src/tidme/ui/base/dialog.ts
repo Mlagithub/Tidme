@@ -5,6 +5,8 @@ ui/base/dialog.ts — 统一确认/提示/输入弹窗（替换原生 confirm/al
 - confirmDialog：双按钮（确定/取消），danger 时确认键红色
 - alertDialog：单按钮（纯提示）
 - promptDialog：单行输入（确定回传字符串，取消回 null）；用于"保存搜索名""设定到期/间隔/易度"等
+统一键盘/遮罩语义（与 card-modal 的 Esc 行为一致）：Escape 一律按"取消/关闭"结算，
+点击遮罩空白区同理（document 级监听，与焦点无关；关闭即解绑，无泄漏）。
 无状态 DOM 工具（同 ui/base/dom 章位）；不写库、不路由。
 */
 
@@ -21,6 +23,31 @@ export interface ConfirmOptions {
   danger?: boolean;
 }
 
+/** 弹窗统一关闭语义：Escape（document 级捕获，与焦点无关）与遮罩空白点击。
+ *  返回解绑函数；对话框任一结算路径必须调用一次（重复调用安全）。 */
+function attachDismissHandlers(doc: Document, overlay: HTMLElement, onDismiss: () => void): () => void {
+  let closed = false;
+  const settle = () => {
+    if (closed) return;
+    closed = true;
+    detach();
+    onDismiss();
+  };
+  const onKey = (e: any) => {
+    if (e && e.key === 'Escape') settle();
+  };
+  const onClick = (e: any) => {
+    if (e && e.target === overlay) settle();
+  };
+  const detach = () => {
+    doc.removeEventListener?.('keydown', onKey, true);
+    overlay.removeEventListener?.('click', onClick);
+  };
+  doc.addEventListener?.('keydown', onKey, true);
+  overlay.addEventListener?.('click', onClick);
+  return detach;
+}
+
 function buildModal(
   doc: Document,
   opts: { title?: string; message: string; okLabel: string; cancelLabel?: string; danger?: boolean; withCancel: boolean },
@@ -34,8 +61,10 @@ function buildModal(
     msg.appendChild(el(doc, 'div', 'tm-dialog-line', line));
   }
   modal.appendChild(msg);
+  let detachDismiss: () => void = () => {}; // 本弹窗的 Esc/遮罩解绑（done 时调用一次）
   const actions = el(doc, 'div', 'tm-card-modal-actions');
   const done = (v: boolean) => {
+    detachDismiss();
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
     resolve(v);
   };
@@ -50,6 +79,8 @@ function buildModal(
   modal.appendChild(actions);
   overlay.appendChild(modal);
   doc.body.appendChild(overlay);
+  // Esc / 遮罩点击 = 取消（alert 无取消键，二者等同"关闭"）
+  detachDismiss = attachDismissHandlers(doc, overlay, () => done(opts.withCancel ? false : true));
   setTimeout(() => okBtn.focus(), 50);
   return overlay;
 }
@@ -107,8 +138,10 @@ export function promptDialog(doc: Document, opts: PromptOptions): Promise<string
     input.value = opts.defaultValue ?? '';
     if (opts.placeholder) input.placeholder = opts.placeholder;
     modal.appendChild(input);
+    let detachDismiss: () => void = () => {}; // 本弹窗的 Esc/遮罩解绑
     const actions = el(doc, 'div', 'tm-card-modal-actions');
     const done = (v: string | null) => {
+      detachDismiss();
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       resolve(v);
     };
@@ -121,10 +154,12 @@ export function promptDialog(doc: Document, opts: PromptOptions): Promise<string
     modal.appendChild(actions);
     overlay.appendChild(modal);
     input.addEventListener('keydown', (e: any) => {
+      // Escape 不在此处理：统一走 attachDismissHandlers（document 级，焦点在哪都能关）
       if (e && e.key === 'Enter') done(String(input.value ?? '').trim());
-      if (e && e.key === 'Escape') done(null);
     });
     doc.body.appendChild(overlay);
+    // Esc / 遮罩点击 = 取消（回 null），此前仅 input 聚焦时 Esc 才生效
+    detachDismiss = attachDismissHandlers(doc, overlay, () => done(null));
     setTimeout(() => input.focus(), 50);
   });
 }

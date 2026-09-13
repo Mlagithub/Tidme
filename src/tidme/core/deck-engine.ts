@@ -161,7 +161,7 @@ export function composeGlobalLearningQueue(
   evaluate: (filter: string) => string[],
   opts: GlobalQueueOptions = {},
 ): string[] {
-  const defaultDeckFilters = composeDeckFilters(DECK_PREFIX + 'default');
+  const defaultDeckFilters = composeDeckFilters(ns.DEFAULT_DECK_TITLE);
   const mode = opts.mode || 'interleaved';
   const includeTopics = opts.topics === true;
 

@@ -20,7 +20,12 @@ Export our filter function
     var results = [];
     source(function(tiddler, title) {
       if (tiddler) {
-        results.push(coreFsrs.repeat(tiddler.fields, { p: operator.operand }));
+        try {
+          results.push(coreFsrs.repeat(tiddler.fields, { p: operator.operand }));
+        } catch (e) {
+          // 单卡字段异常不炸整个过滤器（坏卡返回空串占位）
+          results.push('');
+        }
       } else {
         results.push('');
       }
