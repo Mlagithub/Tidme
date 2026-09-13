@@ -429,9 +429,9 @@ import.edittitle.tip: 双击可编辑标题
 import.subsplit: 二次切分
 import.subsplittip: 使用 LLM 语义分析将本偏长章节切分为带主题的子切片
 import.splitting: 🤖 LLM 切片中...
-import.selectfile: 选择文件上传 (.epub / .md / .txt)
+import.selectfile: 选择文件上传 (.epub / .pdf / .md / .txt / .html)
 import.dragdrop.hint: 或者：直接将文件拖拽到此页面的任意位置即可导入。
-import.dragoverlay: 释放文件以导入到 Tidme (.epub / .md / .txt)
+import.dragoverlay: 释放文件以导入到 Tidme (.epub / .pdf / .md / .txt / .html)
 import.importall: ✔ 全部导入
 import.serverprocess.desc: 上传到服务端后台处理（适合大文件，解析不阻塞页面；需要 TiddlyWeb 服务端）
 import.serverprocess: 高级：上传到服务端后台处理（TiddlyWeb）

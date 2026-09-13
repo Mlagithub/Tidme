@@ -334,16 +334,21 @@ function makeFileWidget(): WidgetCtor {
       const wrap = el(doc, 'div', 'tm-import-widget');
 
       // 选择文件上传按钮与说明
-      const btnSelect = el(doc, 'button', 'tm-btn tm-btn--primary tm-import-select-btn', lingo(this.wiki, 'import.selectfile', 'Select File to Upload (.epub / .md / .txt)'));
+      const btnSelect = el(
+        doc,
+        'button',
+        'tm-btn tm-btn--primary tm-import-select-btn',
+        lingo(this.wiki, 'import.selectfile', 'Select File to Upload (.epub / .pdf / .md / .txt / .html)'),
+      );
       const input = doc.createElement('input');
       input.type = 'file';
       input.multiple = true;
-      input.accept = '.epub,.pdf,.md,.markdown,.txt';
+      input.accept = '.epub,.pdf,.md,.markdown,.txt,.html,.htm';
       input.style.display = 'none';
       const hint = el(doc, 'div', 'tm-import-hint', lingo(this.wiki, 'import.dragdrop.hint', 'Or: Drag and drop files anywhere onto this page to import.'));
 
       // 全页面拖放覆盖层
-      const overlay = el(doc, 'div', 'tm-import-drag-overlay', lingo(this.wiki, 'import.dragoverlay', 'Drop files to import into Tidme (.epub / .md / .txt)'));
+      const overlay = el(doc, 'div', 'tm-import-drag-overlay', lingo(this.wiki, 'import.dragoverlay', 'Drop files to import into Tidme (.epub / .pdf / .md / .txt / .html)'));
       overlay.style.display = 'none';
 
       // 预览容器 + 操作按钮
@@ -529,7 +534,7 @@ function makeFileWidget(): WidgetCtor {
       });
 
       const handleFiles = async (files: File[]) => {
-        const accepted = files.filter((f) => /\.(epub|pdf|md|markdown|txt)$/i.test(f.name));
+        const accepted = files.filter((f) => /\.(epub|pdf|md|markdown|txt|html?)$/i.test(f.name));
         if (!accepted.length) {
           this.dispatchEvent({ type: 'tm-notify', param: ns.NOTIFY_UNSUPPORTED });
           return;

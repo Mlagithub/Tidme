@@ -429,9 +429,9 @@ import.edittitle.tip: Double click to edit title
 import.subsplit: Sub-split
 import.subsplittip: Use LLM semantic analysis to split this overlong chapter into sub-topics
 import.splitting: 🤖 Splitting...
-import.selectfile: Select File to Upload (.epub / .md / .txt)
+import.selectfile: Select File to Upload (.epub / .pdf / .md / .txt / .html)
 import.dragdrop.hint: Or: Drag and drop files anywhere onto this page to import.
-import.dragoverlay: Drop files to import into Tidme (.epub / .md / .txt)
+import.dragoverlay: Drop files to import into Tidme (.epub / .pdf / .md / .txt / .html)
 import.importall: ✔ Import All
 import.serverprocess.desc: Upload to server for background processing (TiddlyWeb)
 import.serverprocess: Advanced: Server-side Background Processing (TiddlyWeb)

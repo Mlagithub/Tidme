@@ -144,7 +144,7 @@ export async function runImport(bytes: Uint8Array, fileName: string, options: Im
   // 注意：.pdf 不在此入口（PDF 是二进制，文本解码会损坏）——浏览器走 import/widgets/pdf-import，
   // 服务端 importer 白名单也不含 .pdf。此处只收纯文本格式。
   if (/\.(md|markdown|txt|html?)$/.test(lower)) return importTextBytes(bytes, fileName, options);
-  throw new Error(`不支持的格式：${fileName}（支持 .epub / .md / .txt / .html）`);
+  throw new Error(`不支持的格式：${fileName}（支持 .epub / .pdf / .md / .txt / .html）`);
 }
 
 /**

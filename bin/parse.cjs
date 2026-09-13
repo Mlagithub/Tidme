@@ -3179,8 +3179,9 @@ var fromElements = (elements) => {
   const parts = nodeToParts(parentNode);
   for (const [index, node] of indexChildNodes(parentNode).entries()) {
     const el = elements[results.length];
-    if (node === el)
+    if (node === el) {
       results.push(toString([parts.concat({ id: el.id, index })]));
+    }
   }
   return results;
 };
@@ -3303,7 +3304,7 @@ var replaceSeries = (str, regex, f) => __async(void 0, null, function* () {
 });
 var regexEscape = (str) => str.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 var tidy = (obj) => {
-  for (const [key, val] of Object.entries(obj))
+  for (const [key, val] of Object.entries(obj)) {
     if (val == null)
       delete obj[key];
     else if (Array.isArray(val)) {
@@ -3317,6 +3318,7 @@ var tidy = (obj) => {
       if (!Object.keys(val).length)
         delete obj[key];
     }
+  }
   const keys = Object.keys(obj);
   if (keys.length === 1 && keys[0] === "name")
     return obj[keys[0]];
@@ -3325,9 +3327,10 @@ var tidy = (obj) => {
 var getPrefixes = (doc) => {
   const map = new Map(Object.entries(PREFIX));
   const value = doc.documentElement.getAttributeNS(NS.EPUB, "prefix") || doc.documentElement.getAttribute("prefix");
-  if (value)
+  if (value) {
     for (const [, prefix, url] of value.matchAll(/(.+): +(.+)[ \t\r\n]*/g))
       map.set(prefix, url);
+  }
   return map;
 };
 var getPropertyURL = (value, prefixes) => {
@@ -3356,7 +3359,9 @@ var getMetadata = (opf) => {
       lang: el.getAttribute("xml:lang"),
       value: getElementText(el),
       props: getProperties(el),
-      attrs: Object.fromEntries(Array.from(el.attributes).filter((attr) => attr.namespaceURI === NS.OPF).map((attr) => [attr.localName, attr.value]))
+      attrs: Object.fromEntries(
+        Array.from(el.attributes).filter((attr) => attr.namespaceURI === NS.OPF).map((attr) => [attr.localName, attr.value])
+      )
     };
   };
   const refines = Map.groupBy((_c = els.meta) != null ? _c : [], (el) => el.getAttribute("refines"));
@@ -3366,7 +3371,9 @@ var getMetadata = (opf) => {
       return null;
     return Object.groupBy(els2.map(parse2), (x) => x.property);
   };
-  const dc = Object.fromEntries(Object.entries(Object.groupBy(els.dc || [], (el) => el.localName)).map(([name, els2]) => [name, els2.map(parse2)]));
+  const dc = Object.fromEntries(
+    Object.entries(Object.groupBy(els.dc || [], (el) => el.localName)).map(([name, els2]) => [name, els2.map(parse2)])
+  );
   const properties = (_d = getProperties()) != null ? _d : {};
   const legacyMeta = Object.fromEntries((_f = (_e = els.legacyMeta) == null ? void 0 : _e.map((el) => [el.getAttribute("name"), el.getAttribute("content")])) != null ? _f : []);
   const one = (x) => {
@@ -3432,10 +3439,7 @@ var getMetadata = (opf) => {
     }
     return value;
   };
-  const belongsTo = Object.groupBy(
-    (_g = properties["belongs-to-collection"]) != null ? _g : [],
-    (x) => prop(x, "collection-type") === "series" ? "series" : "collection"
-  );
+  const belongsTo = Object.groupBy((_g = properties["belongs-to-collection"]) != null ? _g : [], (x) => prop(x, "collection-type") === "series" ? "series" : "collection");
   const mainTitle = (_j = (_h = dc.title) == null ? void 0 : _h.find((x) => prop(x, "title-type") === "main")) != null ? _j : (_i = dc.title) == null ? void 0 : _i[0];
   const metadata = {
     identifier: getIdentifier(opf),
@@ -3470,22 +3474,26 @@ var getMetadata = (opf) => {
   for (const [keys, val] of [].concat(
     (_H = (_G = (_F = dc.creator) == null ? void 0 : _F.map(makeContributor)) == null ? void 0 : _G.map(remapContributor("author"))) != null ? _H : [],
     (_K = (_J = (_I = dc.contributor) == null ? void 0 : _I.map(makeContributor)) == null ? void 0 : _J.map(remapContributor("contributor"))) != null ? _K : []
-  ))
-    for (const key of keys)
+  )) {
+    for (const key of keys) {
       if (metadata[key])
         metadata[key].push(val);
       else
         metadata[key] = [val];
+    }
+  }
   tidy(metadata);
-  if (metadata.altIdentifier === metadata.identifier)
+  if (metadata.altIdentifier === metadata.identifier) {
     delete metadata.altIdentifier;
+  }
   const rendition = {};
   const media = {};
   for (const [key, val] of Object.entries(properties)) {
-    if (key.startsWith(PREFIX.rendition))
+    if (key.startsWith(PREFIX.rendition)) {
       rendition[camel(key.replace(PREFIX.rendition, ""))] = one(val);
-    else if (key.startsWith(PREFIX.media))
+    } else if (key.startsWith(PREFIX.media)) {
       media[camel(key.replace(PREFIX.media, ""))] = one(val);
+    }
   }
   if (media.duration)
     media.duration = parseClock(media.duration);
@@ -3518,12 +3526,13 @@ var parseNav = (doc, resolve = (f) => f) => {
       pageList != null ? pageList : pageList = parseNav2($nav);
     else if (type.includes("landmarks"))
       landmarks != null ? landmarks : landmarks = parseNav2($nav, true);
-    else
+    else {
       others.push({
         label: getElementText($nav.firstElementChild),
         type,
         list: parseNav2($nav)
       });
+    }
   }
   return { toc, pageList, landmarks, others };
 };
@@ -3612,8 +3621,9 @@ var MediaOverlay = class extends EventTarget {
       for (let i = 0; i < __privateGet(this, _entries).length; i++) {
         const { items } = __privateGet(this, _entries)[i];
         for (let j = 0; j < items.length; j++) {
-          if (items[j].text.split("#")[0] === href && filter(items[j], j, items))
+          if (items[j].text.split("#")[0] === href && filter(items[j], j, items)) {
             return __privateMethod(this, _play, play_fn).call(this, i, j).catch((e) => __privateMethod(this, _error, error_fn).call(this, e));
+          }
         }
       }
     });
@@ -3637,8 +3647,9 @@ var MediaOverlay = class extends EventTarget {
       __privateMethod(this, _play, play_fn).call(this, __privateGet(this, _audioIndex), __privateGet(this, _itemIndex) - 1);
     else if (__privateGet(this, _audioIndex) > 0)
       __privateMethod(this, _play, play_fn).call(this, __privateGet(this, _audioIndex) - 1, __privateGet(this, _entries)[__privateGet(this, _audioIndex) - 1].items.length - 1);
-    else if (__privateGet(this, _sectionIndex) > 0)
+    else if (__privateGet(this, _sectionIndex) > 0) {
       this.start(__privateGet(this, _sectionIndex) - 1, (_, i, items) => i === items.length - 1);
+    }
   }
   next() {
     __privateMethod(this, _play, play_fn).call(this, __privateGet(this, _audioIndex), __privateGet(this, _itemIndex) + 1);
@@ -3759,13 +3770,14 @@ play_fn = function(audioIndex, itemIndex) {
     if (__privateGet(this, _state) === "paused") {
       __privateMethod(this, _highlight, highlight_fn).call(this);
       audio.currentTime = (_b = __privateGet(this, _activeItem, activeItem_get).begin) != null ? _b : 0;
-    } else
+    } else {
       audio.addEventListener("canplaythrough", () => {
         var _a2;
         audio.currentTime = (_a2 = __privateGet(this, _activeItem, activeItem_get).begin) != null ? _a2 : 0;
         __privateSet(this, _state, "playing");
         audio.play().catch((e) => __privateMethod(this, _error, error_fn).call(this, e));
       }, { once: true });
+    }
   });
 };
 _stop = new WeakSet();
@@ -3806,7 +3818,9 @@ var WebCryptoSHA1 = (str) => __async(void 0, null, function* () {
 });
 var deobfuscators = (sha1 = WebCryptoSHA1) => ({
   "http://www.idpf.org/2008/embedding": {
-    key: (opf) => sha1(getIdentifier(opf).replaceAll(/[\u0020\u0009\u000d\u000a]/g, "")),
+    key: (opf) => sha1(
+      getIdentifier(opf).replaceAll(/[\u0020\u0009\u000d\u000a]/g, "")
+    ),
     decode: (key, blob) => deobfuscate(key, 1040, blob)
   },
   "http://ns.adobe.com/pdf/enc#RC": {
@@ -3883,13 +3897,18 @@ var Resources = class {
     this.navPath = (_a = this.getItemByProperty("nav")) == null ? void 0 : _a.href;
     this.ncxPath = (_c = (_b = this.getItemByID($spine.getAttribute("toc"))) != null ? _b : this.manifest.find((item) => item.mediaType === MIME.NCX)) == null ? void 0 : _c.href;
     const $guide = $(opf.documentElement, "guide");
-    if ($guide)
+    if ($guide) {
       this.guide = $$($guide, "reference").map(getAttributes("type", "title", "href")).map(({ type, title, href }) => ({
         label: title,
         type: type.split(/\s/),
         href: resolveHref(href)
       }));
-    this.cover = (_i = (_f = (_e = this.getItemByProperty("cover-image")) != null ? _e : this.getItemByID((_d = $$$(opf, "meta").find(filterAttribute("name", "cover"))) == null ? void 0 : _d.getAttribute("content"))) != null ? _f : this.manifest.find((item) => item.href.includes("cover") && item.mediaType.startsWith("image"))) != null ? _i : this.getItemByHref((_h = (_g = this.guide) == null ? void 0 : _g.find((ref) => ref.type.includes("cover"))) == null ? void 0 : _h.href);
+    }
+    this.cover = (_i = (_f = (_e = this.getItemByProperty("cover-image")) != null ? _e : this.getItemByID((_d = $$$(opf, "meta").find(filterAttribute("name", "cover"))) == null ? void 0 : _d.getAttribute("content"))) != null ? _f : this.manifest.find(
+      (item) => item.href.includes("cover") && item.mediaType.startsWith("image")
+    )) != null ? _i : this.getItemByHref(
+      (_h = (_g = this.guide) == null ? void 0 : _g.find((ref) => ref.type.includes("cover"))) == null ? void 0 : _h.href
+    );
     this.cfis = fromElements($$itemref);
   }
   getItemByID(id) {
@@ -4035,11 +4054,7 @@ var Loader = class {
           let child = doc.firstChild;
           while (child instanceof ProcessingInstruction) {
             if (child.data) {
-              const replacedData = yield replaceSeries(
-                child.data,
-                /(?:^|\s*)(href\s*=\s*['"])([^'"]*)(['"])/i,
-                (_, p1, p2, p3) => this.loadHref(p2, href, parents).then((p22) => `${p1}${p22}${p3}`)
-              );
+              const replacedData = yield replaceSeries(child.data, /(?:^|\s*)(href\s*=\s*['"])([^'"]*)(['"])/i, (_, p1, p2, p3) => this.loadHref(p2, href, parents).then((p22) => `${p1}${p22}${p3}`));
               child.replaceWith(doc.createProcessingInstruction(
                 child.target,
                 replacedData
@@ -4049,10 +4064,7 @@ var Loader = class {
           }
         }
         const replace = (el, attr) => __async(this, null, function* () {
-          return el.setAttribute(
-            attr,
-            yield this.loadHref(el.getAttribute(attr), href, parents)
-          );
+          return el.setAttribute(attr, yield this.loadHref(el.getAttribute(attr), href, parents));
         });
         for (const el of doc.querySelectorAll("link[href]"))
           yield replace(el, "href");
@@ -4062,20 +4074,24 @@ var Loader = class {
           yield replace(el, "poster");
         for (const el of doc.querySelectorAll("object[data]"))
           yield replace(el, "data");
-        for (const el of doc.querySelectorAll("[*|href]:not([href])"))
-          el.setAttributeNS(NS.XLINK, "href", yield this.loadHref(
-            el.getAttributeNS(NS.XLINK, "href"),
-            href,
-            parents
-          ));
-        for (const el of doc.querySelectorAll("style"))
+        for (const el of doc.querySelectorAll("[*|href]:not([href])")) {
+          el.setAttributeNS(
+            NS.XLINK,
+            "href",
+            yield this.loadHref(
+              el.getAttributeNS(NS.XLINK, "href"),
+              href,
+              parents
+            )
+          );
+        }
+        for (const el of doc.querySelectorAll("style")) {
           if (el.textContent)
             el.textContent = yield this.replaceCSS(el.textContent, href, parents);
-        for (const el of doc.querySelectorAll("[style]"))
-          el.setAttribute(
-            "style",
-            yield this.replaceCSS(el.getAttribute("style"), href, parents)
-          );
+        }
+        for (const el of doc.querySelectorAll("[style]")) {
+          el.setAttribute("style", yield this.replaceCSS(el.getAttribute("style"), href, parents));
+        }
         const result2 = new XMLSerializer().serializeToString(doc);
         return this.createURL(href, result2, item.mediaType, parent);
       }
@@ -4085,16 +4101,8 @@ var Loader = class {
   }
   replaceCSS(_0, _1) {
     return __async(this, arguments, function* (str, href, parents = []) {
-      const replacedUrls = yield replaceSeries(
-        str,
-        /url\(\s*["']?([^'"\n]*?)\s*["']?\s*\)/gi,
-        (_, url) => this.loadHref(url, href, parents).then((url2) => `url("${url2}")`)
-      );
-      return replaceSeries(
-        replacedUrls,
-        /@import\s*["']([^"'\n]*?)["']/gi,
-        (_, url) => this.loadHref(url, href, parents).then((url2) => `@import "${url2}"`)
-      );
+      const replacedUrls = yield replaceSeries(str, /url\(\s*["']?([^'"\n]*?)\s*["']?\s*\)/gi, (_, url) => this.loadHref(url, href, parents).then((url2) => `url("${url2}")`));
+      return replaceSeries(replacedUrls, /@import\s*["']([^"'\n]*?)["']/gi, (_, url) => this.loadHref(url, href, parents).then((url2) => `@import "${url2}"`));
     });
   }
   replaceString(str, href, parents = []) {
@@ -4115,10 +4123,7 @@ var Loader = class {
       return str;
     const regex = new RegExp(urls.map(regexEscape).join("|"), "g");
     return replaceSeries(str, regex, (match) => __async(this, null, function* () {
-      return this.loadItem(
-        assetMap.get(match.replace(/^\//, "")),
-        parents.concat(href)
-      );
+      return this.loadItem(assetMap.get(match.replace(/^\//, "")), parents.concat(href));
     }));
   }
   unloadItem(item) {
@@ -4138,10 +4143,12 @@ var getHTMLFragment = (doc, id) => {
 };
 var getPageSpread = (properties) => {
   for (const p of properties) {
-    if (p === "page-spread-left" || p === "rendition:page-spread-left")
+    if (p === "page-spread-left" || p === "rendition:page-spread-left") {
       return "left";
-    if (p === "page-spread-right" || p === "rendition:page-spread-right")
+    }
+    if (p === "page-spread-right" || p === "rendition:page-spread-right") {
       return "right";
+    }
     if (p === "rendition:page-spread-center")
       return "center";
   }
@@ -4215,7 +4222,7 @@ var EPUB = class {
         };
       }).filter((s) => s);
       const { navPath, ncxPath } = this.resources;
-      if (navPath)
+      if (navPath) {
         try {
           const resolve = (url) => resolveURL(url, navPath);
           const nav = parseNav(yield __privateMethod(this, _loadXML, loadXML_fn).call(this, navPath), resolve);
@@ -4225,7 +4232,8 @@ var EPUB = class {
         } catch (e) {
           console.warn(e);
         }
-      if (!this.toc && ncxPath)
+      }
+      if (!this.toc && ncxPath) {
         try {
           const resolve = (url) => resolveURL(url, ncxPath);
           const ncx = parseNCX(yield __privateMethod(this, _loadXML, loadXML_fn).call(this, ncxPath), resolve);
@@ -4234,6 +4242,7 @@ var EPUB = class {
         } catch (e) {
           console.warn(e);
         }
+      }
       (_a = this.landmarks) != null ? _a : this.landmarks = this.resources.guide;
       const { metadata, rendition, media } = getMetadata(opf);
       this.metadata = metadata;
@@ -4244,10 +4253,12 @@ var EPUB = class {
         (_b = yield __privateMethod(this, _loadXML, loadXML_fn).call(this, "META-INF/com.apple.ibooks.display-options.xml")) != null ? _b : yield __privateMethod(this, _loadXML, loadXML_fn).call(this, "META-INF/com.kobobooks.display-options.xml")
       );
       if (displayOptions) {
-        if (displayOptions.fixedLayout === "true")
+        if (displayOptions.fixedLayout === "true") {
           (_d = (_c = this.rendition).layout) != null ? _d : _c.layout = "pre-paginated";
-        if (displayOptions.openToSpread === "false")
+        }
+        if (displayOptions.openToSpread === "false") {
           (_f = (_e = this.sections.find((section) => section.linear !== "no")).pageSpread) != null ? _f : _e.pageSpread = this.dir === "rtl" ? "left" : "right";
+        }
       }
       return this;
     });
@@ -4315,9 +4326,10 @@ loadXML_fn = function(uri) {
     if (!str)
       return null;
     const doc = this.parser.parseFromString(str, MIME.XML);
-    if (doc.querySelector("parsererror"))
+    if (doc.querySelector("parsererror")) {
       throw new Error(`XML parsing error: ${uri}
 ${doc.querySelector("parsererror").innerText}`);
+    }
     return doc;
   });
 };
