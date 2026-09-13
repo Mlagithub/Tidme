@@ -68,3 +68,26 @@ test('schema: assertCardFields 校验 kind 与 FSRS 九件套', () => {
   assert.throws(() => schema.assertCardFields({ ...good, 'tidme.kind': 'extract' }), /tidme\.kind/);
   assert.throws(() => schema.assertCardFields({ ...good, state: undefined }), /FSRS/);
 });
+
+test('ids: sha256HexBytes 纯 JS 兜底与 WebCrypto 字节一致（HTTP 不安全上下文回归）', async () => {
+  // 局域网 HTTP 页面是不安全上下文：crypto.subtle 为 undefined，导入指纹走纯 JS 实现。
+  // 常量表曾手误（K[58] 84c67178 → 应为 84c87814），用 node:crypto 作真值锁死。
+  const { createHash } = await import('node:crypto');
+  const enc = new TextEncoder();
+  const cases = [
+    '',
+    'abc',
+    '中文内容指纹测试',
+    'x'.repeat(55), // 填充边界：55 = 64 - 1(0x80) - 8
+    'y'.repeat(56),
+    'z'.repeat(63),
+    'w'.repeat(64),
+    'v'.repeat(65),
+    '长'.repeat(1000),
+  ];
+  for (const c of cases) {
+    const mine = ids.sha256HexBytes(enc.encode(c));
+    const ref = createHash('sha256').update(c, 'utf8').digest('hex');
+    assert.equal(mine, ref, `长度 ${c.length} 的摘要与 node:crypto 不一致`);
+  }
+});
