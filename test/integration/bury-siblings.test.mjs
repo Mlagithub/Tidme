@@ -169,10 +169,9 @@ test('cloze 家族构建：多挖 → 笔记 + 每挖一张兄弟卡（笔记不
   assert.equal(committed.length, 3, '三张兄弟卡落库');
   assert.ok(wiki.getTiddler(family.note.title), '笔记落库');
 
-  // 兄弟卡 title / caption 标注空号，管理器中可分辨兄弟
+  // 兄弟卡 title 标注空号（caption 是渲染面，不携带识别噪音）
   const [c1, c2] = family.cards;
   assert.ok(c1.title.endsWith('(c1)') && c2.title.endsWith('(c2)'));
-  assert.ok(String(c2.caption).includes('（c2）'));
 });
 
 test('cloze 家族兄弟契约：tidme.parent 统一指向笔记，findSiblings 对称可见', () => {
@@ -184,12 +183,17 @@ test('cloze 家族兄弟契约：tidme.parent 统一指向笔记，findSiblings 
   assert.deepEqual([...sched.findSiblings(wiki, c2.title)].sort(), [c1.title, c3.title].sort(), '反向查找对称');
 });
 
-test('cloze 家族文本变换：每张卡只保留本卡宏，其余挖空还原为纯文本（Anki：他空示文）', () => {
+test('cloze 家族渲染面契约：caption = 每卡宏文本（本空保留、他空还原），text 留空', () => {
+  // 挖空卡渲染面 = caption（buildCloze/buildStandaloneCard 同一契约）：宏必须放 caption
+  // 才能在复习模板 wikify 生效；此前宏放 text、caption 放纯文本预览 → 复习时空白不遮挡
   const { cards } = makeClozeFamily();
-  const t1 = wiki.getTiddler(cards[0].title).fields.text;
-  assert.ok(t1.includes('<<C "文本" "c1" "">>'), '保留本卡挖空');
-  assert.ok(t1.includes('太长了个挖空支持吗'), '其余挖空还原为纯文本');
-  assert.ok(!t1.includes('<<C "个挖" "c2"'), '不保留他卡宏');
+  const f1 = wiki.getTiddler(cards[0].title).fields;
+  assert.ok(String(f1.caption).includes('<<C "文本" "c1" "">>'), 'caption 保留本卡挖空宏（渲染面生效位）');
+  assert.ok(String(f1.caption).includes('太长了个挖空支持吗'), '其余挖空还原为纯文本');
+  assert.ok(!String(f1.caption).includes('<<C "个挖" "c2"'), '不保留他卡宏');
+  assert.equal(f1.text, '', 'text 留空（渲染面在 caption，契约同 buildCloze）');
+  const f2 = wiki.getTiddler(cards[1].title).fields;
+  assert.ok(String(f2.caption).includes('<<C "个挖" "c2" "">>'), 'c2 卡保留自己的宏');
 });
 
 test('cloze 家族挂现有调度：评分一张 → 其余兄弟当日搁置（bury siblings 全链路）', () => {

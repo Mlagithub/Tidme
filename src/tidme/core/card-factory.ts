@@ -493,18 +493,6 @@ export function nextClozeId(content: string): string {
   return `c${max + 1}`;
 }
 
-/** 挖空正文的纯文本视图（全部宏还原为挖空原文；还原 \" 转义） */
-export function clozePlainText(content: string): string {
-  let out = '';
-  let pos = 0;
-  for (const m of parseClozeMacros(String(content || ''))) {
-    out += String(content).slice(pos, m.start) + m.text;
-    pos = m.end;
-  }
-  out += String(content || '').slice(pos);
-  return out;
-}
-
 export interface ClozeFamilyOptions extends StandaloneCardOptions {
   clozeContent?: string;
 }
@@ -522,8 +510,11 @@ export interface ClozeFamily {
  * - 多挖 → 一张笔记 tiddler（title = 基名，持有完整原文）+ N 张兄弟卡：
  *   · 兄弟卡 tidme.parent 统一指向笔记 → 挂进现有 findSiblings/buryCards 兄弟搁置调度
  *     （评分一侧的 bury 由 core/grade 按 readBurySiblings 配置自动触发，无需新调度代码）
- *   · 每张卡正文只保留自己的 <<C>>，其余挖空还原为纯文本（Anki：他空示文，本空作答）
- *   · title = 基名 (cN)、caption = 纯文本预览 +（cN）——浏览器/管理器中可分辨兄弟
+ *   · 挖空卡渲染面 = caption（buildCloze/buildStandaloneCard 同一契约：宏放 caption、
+ *     text 留空，复习模板 wikify caption 使 <<C>> 生效）——兄弟卡 caption = 每卡宏变换
+ *     文本（本空保留宏、他空还原纯文本），不带（cN）后缀（caption 是渲染面，不能有识别噪音；
+ *     兄弟辨识靠 title 的 (cN) 后缀与空白位置本身）
+ *   · title = 基名 (cN)——浏览器/管理器中可分辨兄弟
  * @param pending 本批次已 build 但尚未落库的 title（连建制卡等窗口用，见 core/title） */
 export function buildClozeFamily(wiki: any, opts: ClozeFamilyOptions): ClozeFamily {
   const ids = parseClozeIds(opts.clozeContent || '');
@@ -539,26 +530,23 @@ export function buildClozeFamily(wiki: any, opts: ClozeFamilyOptions): ClozeFami
   const noteTitle = titleMod.freeTitle(wiki, paths.joinPath(deckDir, slug || 'Card'), pending);
   pending.add(noteTitle);
 
-  const plain = clozePlainText(content);
-  const baseCaption = (opts.title ? opts.title : plain.slice(0, 40) || 'Cloze Card').trim();
-
   const cards = ids.map((id) => {
-    // 本卡只保留自己的宏，其余挖空还原为纯文本
-    let text = '';
+    // 本卡渲染面：只保留自己的宏，其余挖空还原为纯文本（宏放 caption，text 留空）
+    let face = '';
     let pos = 0;
     for (const m of macros) {
       const seg = content.slice(pos, m.start);
-      text += seg + (m.id === id ? m.raw : m.text);
+      face += seg + (m.id === id ? m.raw : m.text);
       pos = m.end;
     }
-    text += content.slice(pos);
+    face += content.slice(pos);
     const title = titleMod.freeTitle(wiki, paths.joinPath(deckDir, `${slug} (${id})`), pending);
     pending.add(title);
     return {
       title,
       type: 'text/vnd.tiddlywiki',
-      caption: `${baseCaption}（${id}）`,
-      text,
+      caption: face,
+      text: '',
       ...schema.initialFsrsFields(new Date()),
       revision: '0',
       'tidme.deck': deckName,

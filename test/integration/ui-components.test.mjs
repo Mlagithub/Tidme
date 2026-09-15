@@ -476,8 +476,11 @@ test('omni-creator: 挖空一次多挖 —— 插入自动编号 + 提交生成�
   assert.ok(noteTitle, '笔记 tiddler 落库');
   const siblings = [...wiki.filterTiddlers(`[all[shadows+tiddlers]tidme.parent[${noteTitle}]]`)];
   assert.equal(siblings.length, 2, '两挖 → 两张兄弟卡');
-  const captions = siblings.map((t) => String(wiki.getTiddler(t).fields.caption));
-  assert.ok(captions.some((c) => c.includes('（c1）')) && captions.some((c) => c.includes('（c2）')), 'caption 标注空号');
+  // 渲染面契约：宏在 caption（复习模板 wikify caption 生效），text 留空
+  const faces = siblings.map((t) => String(wiki.getTiddler(t).fields.caption));
+  assert.ok(faces.some((c) => c.includes('<<C "文本" "c1" "">>')), 'c1 卡 caption 保留本卡宏');
+  assert.ok(faces.some((c) => c.includes('<<C "个挖" "c2" "">>')), 'c2 卡 caption 保留本卡宏');
+  assert.ok(siblings.every((t) => wiki.getTiddler(t).fields.text === ''), 'text 留空（渲染面在 caption）');
 });
 
 test('omni-creator: <$tidme-card-creator/> widget 在 TW 真实解析并渲染为 DOM 节点', () => {
